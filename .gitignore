@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debut.log*
+pnpm-debug.log*
+*.log
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+.env.local
+.env.*.local
