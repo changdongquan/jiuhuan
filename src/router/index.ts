@@ -13,9 +13,7 @@ export const constantRouterMap: AppRouteRecordRaw[] = [
     component: Layout,
     redirect: '/dashboard/analysis',
     name: 'Root',
-    meta: {
-      hidden: true
-    }
+    meta: {}
   },
   {
     path: '/redirect',
@@ -83,13 +81,10 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
   {
     path: '/sales-orders',
     component: Layout,
-    name: 'SalesOrders',
     redirect: '/sales-orders/index',
     meta: {
       title: t('router.salesOrders'),
-      icon: 'vi-ep:document',
-      alwaysShow: true,
-      roles: ['*']
+      icon: 'vi-ep:document'
     },
     children: [
       {
@@ -97,7 +92,228 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: 'SalesOrdersIndex',
         component: () => import('@/views/SalesOrders/index.vue'),
         meta: {
-          title: t('router.salesOrdersList'),
+          title: t('router.salesOrders'),
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/project-management',
+    component: Layout,
+    redirect: '/project-management/index',
+    meta: {
+      title: t('router.projectManagement'),
+      icon: 'vi-mdi:briefcase-outline'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'ProjectManagementIndex',
+        component: () => import('@/views/ProjectManagement/index.vue'),
+        meta: {
+          title: t('router.projectManagement'),
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/production-tasks',
+    component: Layout,
+    redirect: '/production-tasks/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'ProductionTasksIndex',
+        component: () => import('@/views/ProductionTasks/index.vue'),
+        meta: {
+          title: t('router.productionTasks'),
+          icon: 'vi-ep:operation',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/billing-documents',
+    component: Layout,
+    redirect: '/billing-documents/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'BillingDocumentsIndex',
+        component: () => import('@/views/BillingDocuments/index.vue'),
+        meta: {
+          title: t('router.billingDocuments'),
+          icon: 'vi-ep:document-checked',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/receivable-documents',
+    component: Layout,
+    redirect: '/receivable-documents/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'ReceivableDocumentsIndex',
+        component: () => import('@/views/ReceivableDocuments/index.vue'),
+        meta: {
+          title: t('router.receivableDocuments'),
+          icon: 'vi-ep:wallet',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/comprehensive-query',
+    component: Layout,
+    redirect: '/comprehensive-query/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'ComprehensiveQueryIndex',
+        component: () => import('@/views/ComprehensiveQuery/index.vue'),
+        meta: {
+          title: t('router.comprehensiveQuery'),
+          icon: 'vi-ep:data-analysis',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/customer-info',
+    component: Layout,
+    redirect: '/customer-info/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'CustomerInfoIndex',
+        component: () => import('@/views/CustomerInfo/index.vue'),
+        meta: {
+          title: t('router.customerInfo'),
+          icon: 'vi-ep:user',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/employee-info',
+    component: Layout,
+    redirect: '/employee-info/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'EmployeeInfoIndex',
+        component: () => import('@/views/EmployeeInfo/index.vue'),
+        meta: {
+          title: t('router.employeeInfo'),
+          icon: 'vi-ep:user-filled',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/procurement-outsourcing',
+    component: Layout,
+    redirect: '/procurement-outsourcing/index',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'ProcurementOutsourcingIndex',
+        component: () => import('@/views/ProcurementOutsourcing/index.vue'),
+        meta: {
+          title: t('router.procurementOutsourcing'),
+          icon: 'vi-ep:shopping-cart',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/inventory-management',
+    component: Layout,
+    redirect: '/inventory-management/overview',
+    meta: {
+      title: t('router.inventoryManagement'),
+      icon: 'vi-ep:box',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'overview',
+        name: 'InventoryManagementOverview',
+        component: () => import('@/views/InventoryManagement/index.vue'),
+        meta: {
+          title: t('router.inventoryOverview'),
+          icon: 'vi-ep:box',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
+        path: 'inbound',
+        name: 'InventoryInbound',
+        component: () => import('@/views/InventoryManagement/Inbound.vue'),
+        meta: {
+          title: t('router.inventoryInbound'),
+          icon: 'vi-ep:upload-filled',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
+        path: 'outbound',
+        name: 'InventoryOutbound',
+        component: () => import('@/views/InventoryManagement/Outbound.vue'),
+        meta: {
+          title: t('router.inventoryOutbound'),
+          icon: 'vi-ep:download',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
+        path: 'transfer',
+        name: 'InventoryTransfer',
+        component: () => import('@/views/InventoryManagement/Transfer.vue'),
+        meta: {
+          title: t('router.inventoryTransfer'),
+          icon: 'vi-ep:switch',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
+        path: 'stocktake',
+        name: 'InventoryStocktake',
+        component: () => import('@/views/InventoryManagement/Stocktake.vue'),
+        meta: {
+          title: t('router.inventoryStocktake'),
+          icon: 'vi-ep:scale-to-original',
           roles: ['*'],
           noCache: true
         }
@@ -757,10 +973,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHashHistory(),
   strict: true,
-  routes: [
-    ...(constantRouterMap as RouteRecordRaw[]),
-    ...(asyncRouterMap as RouteRecordRaw[])
-  ],
+  routes: [...(constantRouterMap as RouteRecordRaw[]), ...(asyncRouterMap as RouteRecordRaw[])],
   scrollBehavior: () => ({ left: 0, top: 0 })
 })
 
