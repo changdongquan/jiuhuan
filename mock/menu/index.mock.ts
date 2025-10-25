@@ -92,7 +92,8 @@ const businessMenus: MenuNode[] = [
         parentId: 10,
         title: 'router.salesOrders',
         meta: {
-          title: 'router.salesOrders'
+          title: 'router.salesOrders',
+          icon: 'vi-ep:document'
         }
       }
     ]
@@ -121,7 +122,8 @@ const businessMenus: MenuNode[] = [
         parentId: 12,
         title: 'router.projectManagement',
         meta: {
-          title: 'router.projectManagement'
+          title: 'router.projectManagement',
+          icon: 'vi-mdi:briefcase-outline'
         }
       }
     ]
@@ -158,23 +160,24 @@ const businessMenus: MenuNode[] = [
   },
   {
     id: 16,
-    path: '/billing-documents',
+    path: '/financial-management',
     component: '#',
-    redirect: '/billing-documents/index',
-    name: 'BillingDocuments',
+    redirect: '/financial-management/billing-documents',
+    name: 'FinancialManagement',
     status: 1,
     type: 0,
-    title: '开票单据',
+    title: '财务管理',
     meta: {
-      title: '开票单据',
-      icon: 'vi-ep:document-checked'
+      title: '财务管理',
+      icon: 'vi-ep:coin',
+      alwaysShow: true
     },
     children: [
       {
         id: 17,
-        path: 'index',
+        path: 'billing-documents',
         component: 'views/BillingDocuments/index',
-        name: 'BillingDocumentsIndex',
+        name: 'BillingDocuments',
         status: 1,
         type: 1,
         parentId: 16,
@@ -183,65 +186,193 @@ const businessMenus: MenuNode[] = [
           title: '开票单据',
           icon: 'vi-ep:document-checked'
         }
-      }
-    ]
-  },
-  {
-    id: 18,
-    path: '/receivable-documents',
-    component: '#',
-    redirect: '/receivable-documents/index',
-    name: 'ReceivableDocuments',
-    status: 1,
-    type: 0,
-    title: '回款单据',
-    meta: {
-      title: '回款单据',
-      icon: 'vi-ep:wallet'
-    },
-    children: [
+      },
       {
-        id: 19,
-        path: 'index',
+        id: 18,
+        path: 'receivable-documents',
         component: 'views/ReceivableDocuments/index',
-        name: 'ReceivableDocumentsIndex',
+        name: 'ReceivableDocuments',
         status: 1,
         type: 1,
-        parentId: 18,
+        parentId: 16,
         title: '回款单据',
         meta: {
           title: '回款单据',
           icon: 'vi-ep:wallet'
+        }
+      },
+      {
+        id: 19,
+        path: 'comprehensive-query',
+        component: 'views/ComprehensiveQuery/index',
+        name: 'ComprehensiveQuery',
+        status: 1,
+        type: 1,
+        parentId: 16,
+        title: '综合查询',
+        meta: {
+          title: '综合查询',
+          icon: 'vi-ep:data-analysis'
+        }
+      }
+    ]
+  },
+  {
+    id: 26,
+    path: '/procurement-outsourcing',
+    component: '#',
+    redirect: '/procurement-outsourcing/material-procurement',
+    name: 'ProcurementOutsourcing',
+    status: 1,
+    type: 0,
+    title: '采购外协',
+    meta: {
+      title: '采购外协',
+      icon: 'vi-ep:shopping-cart'
+    },
+    children: [
+      {
+        id: 27,
+        path: 'material-procurement',
+        component: 'views/ProcurementOutsourcing/MaterialProcurement',
+        name: 'MaterialProcurement',
+        status: 1,
+        type: 1,
+        parentId: 26,
+        title: '物料采购',
+        meta: {
+          title: '物料采购',
+          icon: 'vi-ep:goods'
+        }
+      },
+      {
+        id: 28,
+        path: 'process-outsourcing',
+        component: 'views/ProcurementOutsourcing/ProcessOutsourcing',
+        name: 'ProcessOutsourcing',
+        status: 1,
+        type: 1,
+        parentId: 26,
+        title: '工序外协',
+        meta: {
+          title: '工序外协',
+          icon: 'vi-ep:operation'
+        }
+      }
+    ]
+  },
+  {
+    id: 29,
+    path: '/inventory-management',
+    component: '#',
+    redirect: '/inventory-management/overview',
+    name: 'InventoryManagement',
+    status: 1,
+    type: 0,
+    title: 'router.inventoryManagement',
+    meta: {
+      title: 'router.inventoryManagement',
+      icon: 'vi-ep:box'
+    },
+    children: [
+      {
+        id: 30,
+        path: 'overview',
+        component: 'views/InventoryManagement/index',
+        name: 'InventoryManagementOverview',
+        status: 1,
+        type: 1,
+        parentId: 29,
+        title: 'router.inventoryOverview',
+        meta: {
+          title: 'router.inventoryOverview',
+          icon: 'vi-ep:box'
+        }
+      },
+      {
+        id: 31,
+        path: 'inbound',
+        component: 'views/InventoryManagement/Inbound',
+        name: 'InventoryInbound',
+        status: 1,
+        type: 1,
+        parentId: 29,
+        title: 'router.inventoryInbound',
+        meta: {
+          title: 'router.inventoryInbound',
+          icon: 'vi-ep:upload-filled'
+        }
+      },
+      {
+        id: 32,
+        path: 'outbound',
+        component: 'views/InventoryManagement/Outbound',
+        name: 'InventoryOutbound',
+        status: 1,
+        type: 1,
+        parentId: 29,
+        title: 'router.inventoryOutbound',
+        meta: {
+          title: 'router.inventoryOutbound',
+          icon: 'vi-ep:download'
+        }
+      },
+      {
+        id: 33,
+        path: 'transfer',
+        component: 'views/InventoryManagement/Transfer',
+        name: 'InventoryTransfer',
+        status: 1,
+        type: 1,
+        parentId: 29,
+        title: 'router.inventoryTransfer',
+        meta: {
+          title: 'router.inventoryTransfer',
+          icon: 'vi-ep:switch'
+        }
+      },
+      {
+        id: 34,
+        path: 'stocktake',
+        component: 'views/InventoryManagement/Stocktake',
+        name: 'InventoryStocktake',
+        status: 1,
+        type: 1,
+        parentId: 29,
+        title: 'router.inventoryStocktake',
+        meta: {
+          title: 'router.inventoryStocktake',
+          icon: 'vi-ep:scale-to-original'
         }
       }
     ]
   },
   {
     id: 20,
-    path: '/comprehensive-query',
+    path: '/project-info',
     component: '#',
-    redirect: '/comprehensive-query/index',
-    name: 'ComprehensiveQuery',
+    redirect: '/project-info/index',
+    name: 'ProjectInfo',
     status: 1,
     type: 0,
-    title: '综合查询',
+    title: '项目信息',
     meta: {
-      title: '综合查询',
-      icon: 'vi-ep:data-analysis'
+      title: '项目信息',
+      icon: 'vi-ep:folder-opened'
     },
     children: [
       {
         id: 21,
         path: 'index',
-        component: 'views/ComprehensiveQuery/index',
-        name: 'ComprehensiveQueryIndex',
+        component: 'views/ProjectInfo/index',
+        name: 'ProjectInfoIndex',
         status: 1,
         type: 1,
         parentId: 20,
-        title: '综合查询',
+        title: '项目信息',
         meta: {
-          title: '综合查询',
-          icon: 'vi-ep:data-analysis'
+          title: '项目信息',
+          icon: 'vi-ep:folder-opened'
         }
       }
     ]
@@ -277,6 +408,36 @@ const businessMenus: MenuNode[] = [
     ]
   },
   {
+    id: 42,
+    path: '/supplier-info',
+    component: '#',
+    redirect: '/supplier-info/index',
+    name: 'SupplierInfo',
+    status: 1,
+    type: 0,
+    title: '供方信息',
+    meta: {
+      title: '供方信息',
+      icon: 'vi-ep:user-filled'
+    },
+    children: [
+      {
+        id: 43,
+        path: 'index',
+        component: 'views/SupplierInfo/index',
+        name: 'SupplierInfoIndex',
+        status: 1,
+        type: 1,
+        parentId: 42,
+        title: '供方信息',
+        meta: {
+          title: '供方信息',
+          icon: 'vi-ep:user-filled'
+        }
+      }
+    ]
+  },
+  {
     id: 24,
     path: '/employee-info',
     component: '#',
@@ -307,123 +468,7 @@ const businessMenus: MenuNode[] = [
     ]
   },
   {
-    id: 26,
-    path: '/procurement-outsourcing',
-    component: '#',
-    redirect: '/procurement-outsourcing/index',
-    name: 'ProcurementOutsourcing',
-    status: 1,
-    type: 0,
-    title: '采购外协',
-    meta: {
-      title: '采购外协',
-      icon: 'vi-ep:shopping-cart'
-    },
-    children: [
-      {
-        id: 27,
-        path: 'index',
-        component: 'views/ProcurementOutsourcing/index',
-        name: 'ProcurementOutsourcingIndex',
-        status: 1,
-        type: 1,
-        parentId: 26,
-        title: '采购外协',
-        meta: {
-          title: '采购外协',
-          icon: 'vi-ep:shopping-cart'
-        }
-      }
-    ]
-  },
-  {
-    id: 28,
-    path: '/inventory-management',
-    component: '#',
-    redirect: '/inventory-management/overview',
-    name: 'InventoryManagement',
-    status: 1,
-    type: 0,
-    title: 'router.inventoryManagement',
-    meta: {
-      title: 'router.inventoryManagement',
-      icon: 'vi-ep:box'
-    },
-    children: [
-      {
-        id: 29,
-        path: 'overview',
-        component: 'views/InventoryManagement/index',
-        name: 'InventoryManagementOverview',
-        status: 1,
-        type: 1,
-        parentId: 28,
-        title: 'router.inventoryOverview',
-        meta: {
-          title: 'router.inventoryOverview',
-          icon: 'vi-ep:box'
-        }
-      },
-      {
-        id: 30,
-        path: 'inbound',
-        component: 'views/InventoryManagement/Inbound',
-        name: 'InventoryInbound',
-        status: 1,
-        type: 1,
-        parentId: 28,
-        title: 'router.inventoryInbound',
-        meta: {
-          title: 'router.inventoryInbound',
-          icon: 'vi-ep:upload-filled'
-        }
-      },
-      {
-        id: 31,
-        path: 'outbound',
-        component: 'views/InventoryManagement/Outbound',
-        name: 'InventoryOutbound',
-        status: 1,
-        type: 1,
-        parentId: 28,
-        title: 'router.inventoryOutbound',
-        meta: {
-          title: 'router.inventoryOutbound',
-          icon: 'vi-ep:download'
-        }
-      },
-      {
-        id: 32,
-        path: 'transfer',
-        component: 'views/InventoryManagement/Transfer',
-        name: 'InventoryTransfer',
-        status: 1,
-        type: 1,
-        parentId: 28,
-        title: 'router.inventoryTransfer',
-        meta: {
-          title: 'router.inventoryTransfer',
-          icon: 'vi-ep:switch'
-        }
-      },
-      {
-        id: 33,
-        path: 'stocktake',
-        component: 'views/InventoryManagement/Stocktake',
-        name: 'InventoryStocktake',
-        status: 1,
-        type: 1,
-        parentId: 28,
-        title: 'router.inventoryStocktake',
-        meta: {
-          title: 'router.inventoryStocktake',
-          icon: 'vi-ep:scale-to-original'
-        }
-      }
-    ]
-  },
-  {
-    id: 30,
+    id: 35,
     path: '/external-link',
     component: '#',
     name: 'ExternalLink',
@@ -436,16 +481,89 @@ const businessMenus: MenuNode[] = [
     },
     children: [
       {
-        id: 31,
+        id: 36,
         path: 'https://element-plus-admin-doc.cn/',
         component: '##',
         name: 'DocumentLink',
         status: 1,
         type: 1,
-        parentId: 30,
+        parentId: 35,
         title: '文档',
         meta: {
           title: '文档'
+        }
+      }
+    ]
+  },
+  {
+    id: 37,
+    path: '/authorization',
+    component: '#',
+    redirect: '/authorization/user',
+    name: 'Authorization',
+    status: 1,
+    type: 0,
+    title: 'router.authorization',
+    meta: {
+      title: 'router.authorization',
+      icon: 'vi-eos-icons:role-binding',
+      alwaysShow: true
+    },
+    children: [
+      {
+        id: 38,
+        path: 'department',
+        component: 'views/Authorization/Department/Department',
+        name: 'Department',
+        status: 1,
+        type: 1,
+        parentId: 37,
+        title: 'router.department',
+        meta: {
+          title: 'router.department',
+          noCache: true
+        }
+      },
+      {
+        id: 39,
+        path: 'user',
+        component: 'views/Authorization/User/User',
+        name: 'User',
+        status: 1,
+        type: 1,
+        parentId: 37,
+        title: 'router.user',
+        meta: {
+          title: 'router.user',
+          noCache: true
+        }
+      },
+      {
+        id: 40,
+        path: 'menu',
+        component: 'views/Authorization/Menu/Menu',
+        name: 'Menu',
+        status: 1,
+        type: 1,
+        parentId: 37,
+        title: 'router.menuManagement',
+        meta: {
+          title: 'router.menuManagement',
+          noCache: true
+        }
+      },
+      {
+        id: 41,
+        path: 'role',
+        component: 'views/Authorization/Role/Role',
+        name: 'Role',
+        status: 1,
+        type: 1,
+        parentId: 37,
+        title: 'router.role',
+        meta: {
+          title: 'router.role',
+          noCache: true
         }
       }
     ]

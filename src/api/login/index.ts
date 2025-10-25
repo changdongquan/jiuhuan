@@ -2,7 +2,7 @@ import request from '@/axios'
 import type { UserType } from './types'
 
 interface RoleParams {
-  roleName: string
+  role: string
 }
 
 export const loginApi = (data: UserType): Promise<IResponse<UserType>> => {
@@ -26,9 +26,11 @@ export const getUserListApi = ({ params }: AxiosConfig) => {
 export const getAdminRoleApi = (
   params: RoleParams
 ): Promise<IResponse<AppCustomRouteRecordRaw[]>> => {
-  return request.get({ url: '/mock/role/list', params })
+  return request.get({ url: '/mock/role/routes', params })
 }
 
-export const getTestRoleApi = (params: RoleParams): Promise<IResponse<string[]>> => {
-  return request.get({ url: '/mock/role/list2', params })
+export const getTestRoleApi = (
+  params: RoleParams
+): Promise<IResponse<AppCustomRouteRecordRaw[]>> => {
+  return request.get({ url: '/mock/role/routes', params })
 }

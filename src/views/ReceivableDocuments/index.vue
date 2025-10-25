@@ -7,16 +7,16 @@
       inline
       style="margin-bottom: 16px"
     >
-      <el-form-item label="项目编号">
-        <el-input v-model="queryForm.itemCode" placeholder="请输入项目编号" clearable />
+      <el-form-item label="回款单号">
+        <el-input v-model="queryForm.itemCode" placeholder="请输入回款单号" clearable />
       </el-form-item>
       <el-form-item label="客户名称">
         <el-input v-model="queryForm.customerName" placeholder="请输入客户名称" clearable />
       </el-form-item>
-      <el-form-item label="订单状态">
+      <el-form-item label="回款状态">
         <el-select
           v-model="queryForm.status"
-          placeholder="请选择状态"
+          placeholder="请选择回款状态"
           clearable
           style="width: 160px"
         >
@@ -28,9 +28,9 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="下单日期">
+      <el-form-item label="回款日期">
         <el-date-picker
-          v-model="queryForm.orderDateRange"
+          v-model="queryForm.receiptDateRange"
           type="daterange"
           range-separator="至"
           start-placeholder="开始日期"
@@ -59,61 +59,47 @@
         <template #default="{ row }">
           <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
             <el-table-column type="index" label="序号" width="50" />
-            <el-table-column prop="itemCode" label="项目编号" min-width="140" />
-            <el-table-column prop="productName" label="产品名称" min-width="160" />
-            <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-            <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-            <el-table-column label="数量" width="90" align="center">
-              <template #default="{ row: detail }">
-                {{ detail.quantity }}
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.unitPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="金额(元)" width="140" align="right">
+            <el-table-column prop="itemCode" label="批次编号" min-width="140" />
+            <el-table-column prop="productName" label="回款项目" min-width="160" />
+            <el-table-column prop="productDrawingNo" label="收款账户" min-width="150" />
+            <el-table-column prop="customerPartNo" label="付款方" min-width="150" />
+            <el-table-column label="回款金额" width="140" align="right">
               <template #default="{ row: detail }">
                 {{ formatAmount(detail.amount) }}
               </template>
             </el-table-column>
-            <el-table-column prop="deliveryDate" label="交付日期" width="140" />
+            <el-table-column prop="deliveryDate" label="到账日期" width="140" />
             <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
             <el-table-column
               prop="costSource"
-              label="费用出处"
+              label="备注信息"
               min-width="140"
               show-overflow-tooltip
             />
           </el-table>
         </template>
       </el-table-column>
-      <el-table-column prop="orderNo" label="订单编号" min-width="140" />
+      <el-table-column prop="receiptNo" label="回款单号" min-width="140" />
       <el-table-column prop="customerName" label="客户名称" min-width="160" />
-      <el-table-column label="产品项数" width="100" align="center">
+      <el-table-column label="回款批次" width="100" align="center">
         <template #default="{ row }">
           {{ row.details.length }}
         </template>
       </el-table-column>
-      <el-table-column label="总数量" width="100" align="center">
-        <template #default="{ row }">
-          {{ row.totalQuantity }}
-        </template>
-      </el-table-column>
-      <el-table-column label="总金额" width="140" align="right">
+      <el-table-column label="回款金额" width="140" align="right">
         <template #default="{ row }">
           {{ formatAmount(row.totalAmount) }}
         </template>
       </el-table-column>
-      <el-table-column label="订单状态" width="120" align="center">
+      <el-table-column label="回款状态" width="120" align="center">
         <template #default="{ row }">
           <el-tag :type="statusTagMap[row.status].type">
             {{ statusTagMap[row.status].label }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="orderDate" label="下单日期" width="140" />
+      <el-table-column prop="receiptDate" label="回款日期" width="140" />
+      <el-table-column prop="deliveryDate" label="到账日期" width="140" />
       <el-table-column prop="contractNo" label="合同编号" width="140" />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
@@ -152,16 +138,16 @@
       >
         <div class="dialog-form-columns">
           <div class="dialog-form-column dialog-form-column--left">
-            <el-form-item label="订单编号" prop="orderNo">
+            <el-form-item label="订单编号" prop="receiptNo">
               <el-input
-                v-model="dialogForm.orderNo"
+                v-model="dialogForm.receiptNo"
                 placeholder="请输入订单编号"
                 class="dialog-input"
               />
             </el-form-item>
             <el-form-item label="订单日期">
               <el-date-picker
-                v-model="dialogForm.orderDate"
+                v-model="dialogForm.receiptDate"
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择订单日期"
@@ -221,52 +207,35 @@
                 <el-input v-model="row.productName" placeholder="请输入产品名称" />
               </template>
             </el-table-column>
-            <el-table-column label="产品图号" min-width="130">
+            <el-table-column label="收款账户" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                <el-input v-model="row.productDrawingNo" placeholder="请输入收款账户" />
               </template>
             </el-table-column>
-            <el-table-column label="客户模号" min-width="130">
+            <el-table-column label="付款方" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                <el-input v-model="row.customerPartNo" placeholder="请输入付款方" />
               </template>
             </el-table-column>
-            <el-table-column label="数量" width="140" align="center">
+            <el-table-column label="回款金额" width="120" align="right">
               <template #default="{ row }">
                 <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
+                  v-model="row.amount"
                   :min="0"
                   :step="100"
                   :precision="2"
                   :controls="false"
                   style="width: 100%"
-                  @change="handleDetailUnitPriceChange(row)"
                 />
               </template>
             </el-table-column>
-            <el-table-column label="金额(元)" width="80" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="交付日期" width="150">
+            <el-table-column label="到账日期" width="150">
               <template #default="{ row }">
                 <el-date-picker
                   v-model="row.deliveryDate"
                   type="date"
                   value-format="YYYY-MM-DD"
-                  placeholder="请选择交付日期"
+                  placeholder="请选择到账日期"
                   style="width: 130px"
                 />
               </template>
@@ -276,9 +245,9 @@
                 <el-input v-model="row.remark" placeholder="备注" />
               </template>
             </el-table-column>
-            <el-table-column label="费用出处" min-width="145">
+            <el-table-column label="更多说明" min-width="145">
               <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="费用出处" />
+                <el-input v-model="row.costSource" placeholder="请输入说明" />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="55" fixed="right">
@@ -289,15 +258,12 @@
           </el-table>
 
           <div class="dialog-product-summary">
-            <el-button type="primary" plain @click="addDetailRow">新增明细行</el-button>
+            <el-button type="primary" plain @click="addDetailRow">新增回款批次</el-button>
             <div>
               <span class="dialog-product-summary__item"
-                >产品项数：{{ dialogForm.details.length }}</span
+                >批次数量：{{ dialogForm.details.length }}</span
               >
-              <span class="dialog-product-summary__item"
-                >总数量：{{ dialogTotals.totalQuantity }}</span
-              >
-              <span>总金额：{{ formatAmount(dialogTotals.totalAmount) }}</span>
+              <span>合计回款：{{ formatAmount(dialogTotals.totalAmount) }}</span>
             </div>
           </div>
         </div>
@@ -333,157 +299,155 @@ import {
   ElTag
 } from 'element-plus'
 
-type OrderStatus = 'open' | 'closed'
+type ReceiptStatus = 'pending' | 'received'
 
-interface OrderDetail {
+interface ReceiptDetail {
   id: number
   itemCode: string
   productName: string
   productDrawingNo: string
   customerPartNo: string
-  quantity: number
-  unitPrice: number
   amount: number
   deliveryDate: string
   remark: string
   costSource: string
 }
 
-interface Order {
+interface Receipt {
   id: number
-  orderNo: string
+  receiptNo: string
   customerName: string
   contractNo: string
-  status: OrderStatus
-  orderDate: string
+  status: ReceiptStatus
+  receiptDate: string
   deliveryDate: string
-  details: OrderDetail[]
+  details: ReceiptDetail[]
 }
 
-interface OrderQuery {
+interface ReceiptQuery {
   itemCode: string
   customerName: string
-  status: '' | OrderStatus
-  orderDateRange: string[]
+  status: '' | ReceiptStatus
+  receiptDateRange: string[]
 }
 
-interface ListOrdersParams {
+interface ListReceiptsParams {
   page: number
   size: number
   itemCode?: string
   customerName?: string
-  status?: OrderStatus
-  orderDateRange?: [string, string]
+  status?: ReceiptStatus
+  receiptDateRange?: [string, string]
 }
 
-interface PaginatedOrders {
-  list: Order[]
+interface PaginatedReceipts {
+  list: Receipt[]
   total: number
 }
 
-interface OrderTableRow extends Order {
-  totalQuantity: number
+interface ReceiptTableRow extends Receipt {
   totalAmount: number
 }
 
-type OrderPayload = Omit<Order, 'id'>
+type ReceiptPayload = Omit<Receipt, 'id'>
 
-const mockOrders = ref<Order[]>([
+const mockReceipts = ref<Receipt[]>([
   {
     id: 1,
-    orderNo: 'SO202401',
-    customerName: 'Acme Corp',
-    contractNo: 'HT2024-001',
-    status: 'open',
-    orderDate: '2024-01-05',
-    deliveryDate: '2024-01-22',
+    receiptNo: 'RCPT-202401',
+    customerName: '华东制造有限公司',
+    contractNo: 'HT-2023-001',
+    status: 'pending',
+    receiptDate: '2024-01-05',
+    deliveryDate: '2024-02-05',
     details: [
       {
         id: 1,
-        itemCode: 'JH01-25-796',
-        productName: '工业空调',
-        productDrawingNo: 'AC-001',
-        customerPartNo: 'ML01250482',
-        quantity: 2,
-        unitPrice: 15800.5,
-        amount: 31601,
-        deliveryDate: '2024-01-18',
-        remark: '首批交付',
-        costSource: '工程预算'
+        itemCode: 'BATCH-01',
+        productName: '首批货款',
+        productDrawingNo: '招商银行 6222****991',
+        customerPartNo: '宁波盛阳',
+        amount: 38000,
+        deliveryDate: '2024-01-12',
+        remark: '货物验收后到账',
+        costSource: '首批回款'
       },
       {
         id: 2,
-        itemCode: 'JH01-25-797',
-        productName: '空调控制器',
-        productDrawingNo: 'AC-CTRL-01',
-        customerPartNo: 'ML01250483',
-        quantity: 4,
-        unitPrice: 3800,
-        amount: 15200,
-        deliveryDate: '2024-01-22',
-        remark: '',
-        costSource: '工程预算'
+        itemCode: 'BATCH-02',
+        productName: '安装服务费',
+        productDrawingNo: '招商银行 6222****991',
+        customerPartNo: '宁波盛阳',
+        amount: 18000,
+        deliveryDate: '2024-02-03',
+        remark: '含税额 13%',
+        costSource: '服务结算'
       }
     ]
   },
   {
     id: 2,
-    orderNo: 'SO202402',
-    customerName: '凌峰电子',
-    contractNo: 'HT2024-002',
-    status: 'open',
-    orderDate: '2024-02-02',
-    deliveryDate: '2024-02-28',
+    receiptNo: 'RCPT-202402',
+    customerName: '远航国际贸易',
+    contractNo: 'HT-2023-017',
+    status: 'pending',
+    receiptDate: '2024-02-18',
+    deliveryDate: '2024-03-20',
     details: [
       {
         id: 3,
-        itemCode: 'JH01-25-798',
-        productName: '高性能服务器',
-        productDrawingNo: 'SRV-X900',
-        customerPartNo: 'ML01250484',
-        quantity: 2,
-        unitPrice: 32000,
-        amount: 64000,
-        deliveryDate: '2024-02-20',
-        remark: '需预装系统',
-        costSource: '项目A'
+        itemCode: 'BATCH-01',
+        productName: '货款到账',
+        productDrawingNo: '工行北京 9558****120',
+        customerPartNo: '远航国际',
+        amount: 214000,
+        deliveryDate: '2024-03-01',
+        remark: '美元结汇后转入',
+        costSource: '出口业务'
       },
       {
         id: 4,
-        itemCode: 'JH01-25-799',
-        productName: '存储扩展柜',
-        productDrawingNo: 'ST-BOX-04',
-        customerPartNo: 'ML01250485',
-        quantity: 1,
-        unitPrice: 18500,
-        amount: 18500,
-        deliveryDate: '2024-02-28',
-        remark: '',
-        costSource: '项目A'
+        itemCode: 'BATCH-02',
+        productName: '尾款',
+        productDrawingNo: '工行北京 9558****120',
+        customerPartNo: '远航国际',
+        amount: 18200,
+        deliveryDate: '2024-03-18',
+        remark: '含运费补差',
+        costSource: '出口业务'
       }
     ]
   },
   {
     id: 3,
-    orderNo: 'SO202403',
+    receiptNo: 'RCPT-202312',
     customerName: '星辰工业',
-    contractNo: 'HT2024-003',
-    status: 'closed',
-    orderDate: '2024-03-10',
-    deliveryDate: '2024-04-05',
+    contractNo: 'HT-2022-089',
+    status: 'received',
+    receiptDate: '2023-12-18',
+    deliveryDate: '2024-01-15',
     details: [
       {
         id: 5,
-        itemCode: 'JH01-25-800',
-        productName: '智能传感器',
-        productDrawingNo: 'SS-200',
-        customerPartNo: 'ML01250486',
-        quantity: 120,
-        unitPrice: 380,
-        amount: 45600,
-        deliveryDate: '2024-03-25',
-        remark: '按批次发货',
-        costSource: '项目B'
+        itemCode: 'BATCH-01',
+        productName: '阶段验收款',
+        productDrawingNo: '建设银行 6217****880',
+        customerPartNo: '星辰工业',
+        amount: 32000,
+        deliveryDate: '2023-12-25',
+        remark: '完成整改后支付',
+        costSource: '项目尾款'
+      },
+      {
+        id: 6,
+        itemCode: 'BATCH-02',
+        productName: '质保金结算',
+        productDrawingNo: '建设银行 6217****880',
+        customerPartNo: '星辰工业',
+        amount: 15000,
+        deliveryDate: '2024-01-10',
+        remark: '含质保金',
+        costSource: '项目尾款'
       }
     ]
   }
@@ -491,33 +455,31 @@ const mockOrders = ref<Order[]>([
 
 const detailIdSeed = ref(
   (() => {
-    const ids = mockOrders.value.flatMap((order) => order.details.map((detail) => detail.id))
+    const ids = mockReceipts.value.flatMap((receipt) => receipt.details.map((detail) => detail.id))
     return (ids.length ? Math.max(...ids) : 0) + 1
   })()
 )
 
 const createDetailId = () => detailIdSeed.value++
 
-const createEmptyDetail = (): OrderDetail => ({
+const createEmptyDetail = (): ReceiptDetail => ({
   id: createDetailId(),
   itemCode: '',
   productName: '',
   productDrawingNo: '',
   customerPartNo: '',
-  quantity: 1,
-  unitPrice: 0,
   amount: 0,
   deliveryDate: '',
   remark: '',
   costSource: ''
 })
 
-const createEmptyOrder = (): OrderPayload => ({
-  orderNo: '',
+const createEmptyReceipt = (): ReceiptPayload => ({
+  receiptNo: '',
   customerName: '',
   contractNo: '',
-  status: 'open',
-  orderDate: '',
+  status: 'pending',
+  receiptDate: '',
   deliveryDate: '',
   details: [createEmptyDetail()]
 })
@@ -527,39 +489,31 @@ const wait = (ms: number) =>
     globalThis.setTimeout(resolve, ms)
   })
 
-const normalizeDetails = (details: OrderDetail[]): OrderDetail[] =>
-  details.map((detail) => {
-    const quantity = Number(detail.quantity) || 0
-    const unitPrice = Number(detail.unitPrice) || 0
-    const amount = Number((quantity * unitPrice).toFixed(2))
-    return {
-      ...detail,
-      quantity,
-      unitPrice,
-      amount
-    }
-  })
+const normalizeDetails = (details: ReceiptDetail[]): ReceiptDetail[] =>
+  details.map((detail) => ({
+    ...detail,
+    amount: Number(detail.amount) || 0
+  }))
 
-const calculateSummary = (details: OrderDetail[]) =>
+const calculateSummary = (details: ReceiptDetail[]) =>
   details.reduce(
     (acc, item) => {
-      acc.totalQuantity += item.quantity
       acc.totalAmount += item.amount
       return acc
     },
-    { totalQuantity: 0, totalAmount: 0 }
+    { totalAmount: 0 }
   )
 
-const listOrders = async (params: ListOrdersParams): Promise<PaginatedOrders> => {
+const listReceipts = async (params: ListReceiptsParams): Promise<PaginatedReceipts> => {
   await wait(300)
-  const { page, size, itemCode, customerName, status, orderDateRange } = params
+  const { page, size, itemCode, customerName, status, receiptDateRange } = params
 
-  let filtered = [...mockOrders.value]
+  let filtered = [...mockReceipts.value]
 
   if (itemCode) {
     const value = itemCode.trim().toLowerCase()
-    filtered = filtered.filter((order) =>
-      order.details.some((detail) => {
+    filtered = filtered.filter((receipt) =>
+      receipt.details.some((detail) => {
         const code = detail.itemCode ? detail.itemCode.toLowerCase() : ''
         return code.includes(value)
       })
@@ -575,9 +529,9 @@ const listOrders = async (params: ListOrdersParams): Promise<PaginatedOrders> =>
     filtered = filtered.filter((item) => item.status === status)
   }
 
-  if (orderDateRange && orderDateRange.length === 2) {
-    const [start, end] = orderDateRange
-    filtered = filtered.filter((item) => item.orderDate >= start && item.orderDate <= end)
+  if (receiptDateRange && receiptDateRange.length === 2) {
+    const [start, end] = receiptDateRange
+    filtered = filtered.filter((item) => item.receiptDate >= start && item.receiptDate <= end)
   }
 
   const startIndex = (page - 1) * size
@@ -589,78 +543,78 @@ const listOrders = async (params: ListOrdersParams): Promise<PaginatedOrders> =>
   }
 }
 
-const getOrder = async (id: number): Promise<Order> => {
+const getReceipt = async (id: number): Promise<Receipt> => {
   await wait(200)
-  const target = mockOrders.value.find((item) => item.id === id)
+  const target = mockReceipts.value.find((item) => item.id === id)
   if (!target) {
     throw new Error('订单不存在')
   }
   return JSON.parse(JSON.stringify(target))
 }
 
-const createOrder = async (payload: OrderPayload): Promise<Order> => {
+const createReceipt = async (payload: ReceiptPayload): Promise<Receipt> => {
   await wait(300)
   const nextId =
-    mockOrders.value.length > 0 ? Math.max(...mockOrders.value.map((item) => item.id)) + 1 : 1
-  const orderToSave: Order = {
+    mockReceipts.value.length > 0 ? Math.max(...mockReceipts.value.map((item) => item.id)) + 1 : 1
+  const receiptToSave: Receipt = {
     id: nextId,
-    orderNo: payload.orderNo,
+    receiptNo: payload.receiptNo,
     customerName: payload.customerName,
     contractNo: payload.contractNo,
     status: payload.status,
-    orderDate: payload.orderDate,
+    receiptDate: payload.receiptDate,
     deliveryDate: payload.deliveryDate,
     details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
   }
-  mockOrders.value.unshift(orderToSave)
-  return JSON.parse(JSON.stringify(orderToSave))
+  mockReceipts.value.unshift(receiptToSave)
+  return JSON.parse(JSON.stringify(receiptToSave))
 }
 
-const updateOrder = async (id: number, payload: OrderPayload): Promise<Order> => {
+const updateReceipt = async (id: number, payload: ReceiptPayload): Promise<Receipt> => {
   await wait(300)
-  const index = mockOrders.value.findIndex((item) => item.id === id)
+  const index = mockReceipts.value.findIndex((item) => item.id === id)
   if (index === -1) {
     throw new Error('订单不存在')
   }
-  const updated: Order = {
+  const updated: Receipt = {
     id,
-    orderNo: payload.orderNo,
+    receiptNo: payload.receiptNo,
     customerName: payload.customerName,
     contractNo: payload.contractNo,
     status: payload.status,
-    orderDate: payload.orderDate,
+    receiptDate: payload.receiptDate,
     deliveryDate: payload.deliveryDate,
     details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
   }
-  mockOrders.value.splice(index, 1, updated)
+  mockReceipts.value.splice(index, 1, updated)
   return JSON.parse(JSON.stringify(updated))
 }
 
-const removeOrder = async (id: number): Promise<void> => {
+const removeReceipt = async (id: number): Promise<void> => {
   await wait(200)
-  const index = mockOrders.value.findIndex((item) => item.id === id)
+  const index = mockReceipts.value.findIndex((item) => item.id === id)
   if (index === -1) {
     throw new Error('订单不存在')
   }
-  mockOrders.value.splice(index, 1)
+  mockReceipts.value.splice(index, 1)
 }
 
-const statusTagMap: Record<OrderStatus, { label: string; type: string }> = {
-  open: { label: '开放', type: 'success' },
-  closed: { label: '已关闭', type: 'info' }
+const statusTagMap: Record<ReceiptStatus, { label: string; type: string }> = {
+  pending: { label: '待回款', type: 'warning' },
+  received: { label: '已到账', type: 'success' }
 }
 
-const statusOptions = (Object.keys(statusTagMap) as OrderStatus[]).map((value) => ({
+const statusOptions = (Object.keys(statusTagMap) as ReceiptStatus[]).map((value) => ({
   value,
   label: statusTagMap[value].label
 }))
 
 const queryFormRef = ref<FormInstance>()
-const queryForm = reactive<OrderQuery>({
+const queryForm = reactive<ReceiptQuery>({
   itemCode: '',
   customerName: '',
-  status: 'open',
-  orderDateRange: []
+  status: 'pending',
+  receiptDateRange: []
 })
 
 const pagination = reactive({
@@ -668,8 +622,8 @@ const pagination = reactive({
   size: 10
 })
 
-const tableRef = ref<InstanceType<typeof ElTable<OrderTableRow>>>()
-const tableData = ref<OrderTableRow[]>([])
+const tableRef = ref<InstanceType<typeof ElTable<ReceiptTableRow>>>()
+const tableData = ref<ReceiptTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
 
@@ -677,30 +631,29 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const dialogSubmitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
-const currentOrderId = ref<number | null>(null)
+const currentReceiptId = ref<number | null>(null)
 
-const dialogForm = reactive<OrderPayload>(createEmptyOrder())
+const dialogForm = reactive<ReceiptPayload>(createEmptyReceipt())
 
-const dialogRules: FormRules<OrderPayload> = {
-  orderNo: [{ required: true, message: '请输入订单编号', trigger: 'blur' }],
+const dialogRules: FormRules<ReceiptPayload> = {
+  receiptNo: [{ required: true, message: '请输入订单编号', trigger: 'blur' }],
   customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }]
 }
 
 const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
 
-const mapOrderToRow = (order: Order): OrderTableRow => {
-  const { totalAmount, totalQuantity } = calculateSummary(order.details)
+const mapReceiptToRow = (receipt: Receipt): ReceiptTableRow => {
+  const { totalAmount } = calculateSummary(receipt.details)
   return {
-    ...order,
-    totalAmount,
-    totalQuantity
+    ...receipt,
+    totalAmount
   }
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params: ListOrdersParams = {
+    const params: ListReceiptsParams = {
       page: pagination.page,
       size: pagination.size
     }
@@ -717,16 +670,16 @@ const loadData = async () => {
       params.status = queryForm.status
     }
 
-    if (queryForm.orderDateRange.length === 2) {
-      params.orderDateRange = [queryForm.orderDateRange[0], queryForm.orderDateRange[1]]
+    if (queryForm.receiptDateRange.length === 2) {
+      params.receiptDateRange = [queryForm.receiptDateRange[0], queryForm.receiptDateRange[1]]
     }
 
-    const { list, total: totalCount } = await listOrders(params)
-    tableData.value = list.map(mapOrderToRow)
+    const { list, total: totalCount } = await listReceipts(params)
+    tableData.value = list.map(mapReceiptToRow)
     total.value = totalCount
     await nextTick()
     const shouldExpand = Boolean(
-      params.itemCode || params.customerName || params.orderDateRange?.length === 2
+      params.itemCode || params.customerName || params.receiptDateRange?.length === 2
     )
     tableData.value.forEach((row) => {
       tableRef.value?.toggleRowExpansion(row, shouldExpand)
@@ -744,8 +697,8 @@ const handleSearch = () => {
 const handleReset = () => {
   queryForm.itemCode = ''
   queryForm.customerName = ''
-  queryForm.status = 'open'
-  queryForm.orderDateRange = []
+  queryForm.status = 'pending'
+  queryForm.receiptDateRange = []
   pagination.page = 1
   void loadData()
 }
@@ -761,12 +714,12 @@ const handleCurrentChange = (page: number) => {
   void loadData()
 }
 
-const assignDialogForm = (payload: OrderPayload) => {
-  dialogForm.orderNo = payload.orderNo
+const assignDialogForm = (payload: ReceiptPayload) => {
+  dialogForm.receiptNo = payload.receiptNo
   dialogForm.customerName = payload.customerName
   dialogForm.contractNo = payload.contractNo
   dialogForm.status = payload.status
-  dialogForm.orderDate = payload.orderDate
+  dialogForm.receiptDate = payload.receiptDate
   dialogForm.deliveryDate = payload.deliveryDate
   dialogForm.details.splice(
     0,
@@ -779,12 +732,12 @@ const assignDialogForm = (payload: OrderPayload) => {
 }
 
 const resetDialogForm = () => {
-  assignDialogForm(createEmptyOrder())
+  assignDialogForm(createEmptyReceipt())
 }
 
 const handleCreate = async () => {
   dialogTitle.value = '新增订单'
-  currentOrderId.value = null
+  currentReceiptId.value = null
   resetDialogForm()
   dialogVisible.value = true
   await nextTick()
@@ -793,10 +746,10 @@ const handleCreate = async () => {
 
 const openEditDialog = async (id: number) => {
   try {
-    const order = await getOrder(id)
-    const { id: _id, ...payload } = order
+    const receipt = await getReceipt(id)
+    const { id: _id, ...payload } = receipt
     dialogTitle.value = '编辑订单'
-    currentOrderId.value = id
+    currentReceiptId.value = id
     assignDialogForm(payload)
     dialogVisible.value = true
     await nextTick()
@@ -806,20 +759,12 @@ const openEditDialog = async (id: number) => {
   }
 }
 
-const handleEdit = (row: OrderTableRow) => {
+const handleEdit = (row: ReceiptTableRow) => {
   void openEditDialog(row.id)
 }
 
-const handleRowDblClick = (row: OrderTableRow) => {
+const handleRowDblClick = (row: ReceiptTableRow) => {
   void openEditDialog(row.id)
-}
-
-const recalculateDetail = (detail: OrderDetail) => {
-  const quantity = Number(detail.quantity) || 0
-  const unitPrice = Number(detail.unitPrice) || 0
-  detail.quantity = quantity
-  detail.unitPrice = unitPrice
-  detail.amount = Number((quantity * unitPrice).toFixed(2))
 }
 
 const addDetailRow = () => {
@@ -834,22 +779,14 @@ const removeDetailRow = (index: number) => {
   dialogForm.details.splice(index, 1)
 }
 
-const handleDetailQuantityChange = (detail: OrderDetail) => {
-  recalculateDetail(detail)
-}
-
-const handleDetailUnitPriceChange = (detail: OrderDetail) => {
-  recalculateDetail(detail)
-}
-
 const dialogTotals = computed(() => calculateSummary(dialogForm.details))
 
-const cloneOrderPayload = (source: OrderPayload): OrderPayload => ({
-  orderNo: source.orderNo,
+const cloneReceiptPayload = (source: ReceiptPayload): ReceiptPayload => ({
+  receiptNo: source.receiptNo,
   customerName: source.customerName,
   contractNo: source.contractNo,
   status: source.status,
-  orderDate: source.orderDate,
+  receiptDate: source.receiptDate,
   deliveryDate: source.deliveryDate,
   details: source.details.map((detail) => ({ ...detail }))
 })
@@ -881,16 +818,16 @@ const submitDialogForm = async () => {
     return
   }
 
-  const payload = cloneOrderPayload(dialogForm)
+  const payload = cloneReceiptPayload(dialogForm)
   dialogSubmitting.value = true
 
   try {
-    if (currentOrderId.value === null) {
-      await createOrder(payload)
+    if (currentReceiptId.value === null) {
+      await createReceipt(payload)
       pagination.page = 1
       ElMessage.success('新增成功')
     } else {
-      await updateOrder(currentOrderId.value, payload)
+      await updateReceipt(currentReceiptId.value, payload)
       ElMessage.success('更新成功')
     }
     dialogVisible.value = false
@@ -902,15 +839,15 @@ const submitDialogForm = async () => {
   }
 }
 
-const handleDelete = async (row: OrderTableRow) => {
+const handleDelete = async (row: ReceiptTableRow) => {
   try {
-    await ElMessageBox.confirm(`确认删除订单 ${row.orderNo} 吗？`, '提示', {
+    await ElMessageBox.confirm(`确认删除订单 ${row.receiptNo} 吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
 
-    await removeOrder(row.id)
+    await removeReceipt(row.id)
     if (tableData.value.length === 1 && pagination.page > 1) {
       pagination.page -= 1
     }
@@ -928,7 +865,7 @@ const handleDelete = async (row: OrderTableRow) => {
 
 const handleDialogClosed = () => {
   resetDialogForm()
-  currentOrderId.value = null
+  currentReceiptId.value = null
   dialogFormRef.value?.clearValidate()
 }
 

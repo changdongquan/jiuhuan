@@ -106,9 +106,23 @@ export default defineComponent({
         window.open(item.path)
         return
       }
+      const hasSingleChild =
+        Array.isArray(item.children) && item.children.length === 1 && !item.meta?.alwaysShow
       const newPath = item.children ? item.path : item.path.split('/')[0]
       const oldPath = unref(tabActive)
       tabActive.value = item.children ? item.path : item.path.split('/')[0]
+      if (hasSingleChild) {
+        const child = cloneDeep(item.children![0])
+        if (isUrl(child.path)) {
+          window.open(child.path)
+        } else {
+          const targetPath = pathResolve(unref(tabActive), child.path)
+          push(targetPath)
+        }
+        permissionStore.setMenuTabRouters([])
+        showMenu.value = false
+        return
+      }
       if (item.children) {
         if (newPath === oldPath || !unref(showMenu)) {
           // showMenu.value = unref(fixedMenu) ? true : !unref(showMenu)

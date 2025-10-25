@@ -20,7 +20,7 @@ const request = (option: AxiosConfig) => {
   })
 }
 
-export default {
+const axiosInstance = {
   get: <T = any>(option: AxiosConfig) => {
     return request({ method: 'get', ...option }) as Promise<IResponse<T>>
   },
@@ -40,3 +40,6 @@ export default {
     return service.cancelAllRequest()
   }
 }
+
+export { request }
+export default axiosInstance

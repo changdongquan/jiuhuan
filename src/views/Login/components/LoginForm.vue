@@ -272,9 +272,7 @@ const signIn = async () => {
 // 获取角色信息
 const getRole = async () => {
   const formData = await getFormData<UserType>()
-  const params = {
-    roleName: formData.username
-  }
+  const params = { role: formData.username }
   const res =
     appStore.getDynamicRouter && appStore.getServerDynamicRouter
       ? await getAdminRoleApi(params)

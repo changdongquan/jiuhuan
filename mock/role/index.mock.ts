@@ -56,6 +56,7 @@ const adminList = [
         name: 'SalesOrdersIndex',
         meta: {
           title: 'router.salesOrders',
+          icon: 'vi-ep:document',
           noCache: true
         }
       }
@@ -77,6 +78,7 @@ const adminList = [
         name: 'ProjectManagementIndex',
         meta: {
           title: 'router.projectManagement',
+          icon: 'vi-mdi:briefcase-outline',
           noCache: true
         }
       }
@@ -102,95 +104,43 @@ const adminList = [
     ]
   },
   {
-    path: '/billing-documents',
+    path: '/financial-management',
     component: '#',
-    redirect: '/billing-documents/index',
-    name: 'BillingDocuments',
-    meta: {},
+    redirect: '/financial-management/billing-documents',
+    name: 'FinancialManagement',
+    meta: {
+      title: '财务管理',
+      icon: 'vi-ep:coin',
+      alwaysShow: true
+    },
     children: [
       {
-        path: 'index',
+        path: 'billing-documents',
         component: 'views/BillingDocuments/index',
-        name: 'BillingDocumentsIndex',
+        name: 'BillingDocuments',
         meta: {
-          title: 'router.billingDocuments',
+          title: '开票单据',
           icon: 'vi-ep:document-checked',
           noCache: true
         }
-      }
-    ]
-  },
-  {
-    path: '/receivable-documents',
-    component: '#',
-    redirect: '/receivable-documents/index',
-    name: 'ReceivableDocuments',
-    meta: {},
-    children: [
+      },
       {
-        path: 'index',
+        path: 'receivable-documents',
         component: 'views/ReceivableDocuments/index',
-        name: 'ReceivableDocumentsIndex',
+        name: 'ReceivableDocuments',
         meta: {
-          title: 'router.receivableDocuments',
+          title: '回款单据',
           icon: 'vi-ep:wallet',
           noCache: true
         }
-      }
-    ]
-  },
-  {
-    path: '/comprehensive-query',
-    component: '#',
-    redirect: '/comprehensive-query/index',
-    name: 'ComprehensiveQuery',
-    meta: {},
-    children: [
+      },
       {
-        path: 'index',
+        path: 'comprehensive-query',
         component: 'views/ComprehensiveQuery/index',
-        name: 'ComprehensiveQueryIndex',
+        name: 'ComprehensiveQuery',
         meta: {
-          title: 'router.comprehensiveQuery',
+          title: '综合查询',
           icon: 'vi-ep:data-analysis',
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/customer-info',
-    component: '#',
-    redirect: '/customer-info/index',
-    name: 'CustomerInfo',
-    meta: {},
-    children: [
-      {
-        path: 'index',
-        component: 'views/CustomerInfo/index',
-        name: 'CustomerInfoIndex',
-        meta: {
-          title: 'router.customerInfo',
-          icon: 'vi-ep:user',
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/employee-info',
-    component: '#',
-    redirect: '/employee-info/index',
-    name: 'EmployeeInfo',
-    meta: {},
-    children: [
-      {
-        path: 'index',
-        component: 'views/EmployeeInfo/index',
-        name: 'EmployeeInfoIndex',
-        meta: {
-          title: 'router.employeeInfo',
-          icon: 'vi-ep:user-filled',
           noCache: true
         }
       }
@@ -199,7 +149,7 @@ const adminList = [
   {
     path: '/procurement-outsourcing',
     component: '#',
-    redirect: '/procurement-outsourcing/index',
+    redirect: '/procurement-outsourcing/material-procurement',
     name: 'ProcurementOutsourcing',
     meta: {
       title: 'router.procurementOutsourcing',
@@ -207,12 +157,22 @@ const adminList = [
     },
     children: [
       {
-        path: 'index',
-        component: 'views/ProcurementOutsourcing/index',
-        name: 'ProcurementOutsourcingIndex',
+        path: 'material-procurement',
+        component: 'views/ProcurementOutsourcing/MaterialProcurement',
+        name: 'MaterialProcurement',
         meta: {
-          title: 'router.procurementOutsourcing',
-          icon: 'vi-ep:shopping-cart',
+          title: 'router.materialProcurement',
+          icon: 'vi-ep:goods',
+          noCache: true
+        }
+      },
+      {
+        path: 'process-outsourcing',
+        component: 'views/ProcurementOutsourcing/ProcessOutsourcing',
+        name: 'ProcessOutsourcing',
+        meta: {
+          title: 'router.processOutsourcing',
+          icon: 'vi-ep:operation',
           noCache: true
         }
       }
@@ -276,6 +236,140 @@ const adminList = [
         meta: {
           title: 'router.inventoryStocktake',
           icon: 'vi-ep:scale-to-original',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/project-info',
+    component: '#',
+    redirect: '/project-info/index',
+    name: 'ProjectInfo',
+    meta: {
+      title: '项目信息',
+      icon: 'vi-ep:folder-opened'
+    },
+    children: [
+      {
+        path: 'index',
+        component: 'views/ProjectInfo/index',
+        name: 'ProjectInfoIndex',
+        meta: {
+          title: '项目信息',
+          icon: 'vi-ep:folder-opened',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/customer-info',
+    component: '#',
+    redirect: '/customer-info/index',
+    name: 'CustomerInfo',
+    meta: {
+      title: '客户信息',
+      icon: 'vi-ep:user'
+    },
+    children: [
+      {
+        path: 'index',
+        component: 'views/CustomerInfo/index',
+        name: 'CustomerInfoIndex',
+        meta: {
+          title: '客户信息',
+          icon: 'vi-ep:user',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/supplier-info',
+    component: '#',
+    redirect: '/supplier-info/index',
+    name: 'SupplierInfo',
+    meta: {
+      title: '供方信息',
+      icon: 'vi-ep:user-filled'
+    },
+    children: [
+      {
+        path: 'index',
+        component: 'views/SupplierInfo/index',
+        name: 'SupplierInfoIndex',
+        meta: {
+          title: '供方信息',
+          icon: 'vi-ep:user-filled',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/employee-info',
+    component: '#',
+    redirect: '/employee-info/index',
+    name: 'EmployeeInfo',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        component: 'views/EmployeeInfo/index',
+        name: 'EmployeeInfoIndex',
+        meta: {
+          title: 'router.employeeInfo',
+          icon: 'vi-ep:user-filled',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/authorization',
+    component: '#',
+    redirect: '/authorization/user',
+    name: 'Authorization',
+    meta: {
+      title: 'router.authorization',
+      icon: 'vi-eos-icons:role-binding',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'department',
+        component: 'views/Authorization/Department/Department',
+        name: 'Department',
+        meta: {
+          title: 'router.department',
+          noCache: true
+        }
+      },
+      {
+        path: 'user',
+        component: 'views/Authorization/User/User',
+        name: 'User',
+        meta: {
+          title: 'router.user',
+          noCache: true
+        }
+      },
+      {
+        path: 'menu',
+        component: 'views/Authorization/Menu/Menu',
+        name: 'Menu',
+        meta: {
+          title: 'router.menuManagement',
+          noCache: true
+        }
+      },
+      {
+        path: 'role',
+        component: 'views/Authorization/Role/Role',
+        name: 'Role',
+        meta: {
+          title: 'router.role',
           noCache: true
         }
       }

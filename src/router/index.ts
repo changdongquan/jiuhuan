@@ -13,7 +13,9 @@ export const constantRouterMap: AppRouteRecordRaw[] = [
     component: Layout,
     redirect: '/dashboard/analysis',
     name: 'Root',
-    meta: {}
+    meta: {
+      hidden: true
+    }
   },
   {
     path: '/redirect',
@@ -82,6 +84,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     path: '/sales-orders',
     component: Layout,
     redirect: '/sales-orders/index',
+    name: 'SalesOrders',
     meta: {
       title: t('router.salesOrders'),
       icon: 'vi-ep:document'
@@ -93,6 +96,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         component: () => import('@/views/SalesOrders/index.vue'),
         meta: {
           title: t('router.salesOrders'),
+          icon: 'vi-ep:document',
           roles: ['*'],
           noCache: true
         }
@@ -103,6 +107,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     path: '/project-management',
     component: Layout,
     redirect: '/project-management/index',
+    name: 'ProjectManagement',
     meta: {
       title: t('router.projectManagement'),
       icon: 'vi-mdi:briefcase-outline'
@@ -114,6 +119,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         component: () => import('@/views/ProjectManagement/index.vue'),
         meta: {
           title: t('router.projectManagement'),
+          icon: 'vi-mdi:briefcase-outline',
           roles: ['*'],
           noCache: true
         }
@@ -124,6 +130,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     path: '/production-tasks',
     component: Layout,
     redirect: '/production-tasks/index',
+    name: 'ProductionTasks',
     meta: {},
     children: [
       {
@@ -140,94 +147,45 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
-    path: '/billing-documents',
+    path: '/financial-management',
     component: Layout,
-    redirect: '/billing-documents/index',
-    meta: {},
+    redirect: '/financial-management/billing-documents',
+    name: 'FinancialManagement',
+    meta: {
+      title: '财务管理',
+      icon: 'vi-ep:coin',
+      alwaysShow: true
+    },
     children: [
       {
-        path: 'index',
-        name: 'BillingDocumentsIndex',
+        path: 'billing-documents',
+        name: 'BillingDocuments',
         component: () => import('@/views/BillingDocuments/index.vue'),
         meta: {
-          title: t('router.billingDocuments'),
+          title: '开票单据',
           icon: 'vi-ep:document-checked',
           roles: ['*'],
           noCache: true
         }
-      }
-    ]
-  },
-  {
-    path: '/receivable-documents',
-    component: Layout,
-    redirect: '/receivable-documents/index',
-    meta: {},
-    children: [
+      },
       {
-        path: 'index',
-        name: 'ReceivableDocumentsIndex',
+        path: 'receivable-documents',
+        name: 'ReceivableDocuments',
         component: () => import('@/views/ReceivableDocuments/index.vue'),
         meta: {
-          title: t('router.receivableDocuments'),
+          title: '回款单据',
           icon: 'vi-ep:wallet',
           roles: ['*'],
           noCache: true
         }
-      }
-    ]
-  },
-  {
-    path: '/comprehensive-query',
-    component: Layout,
-    redirect: '/comprehensive-query/index',
-    meta: {},
-    children: [
+      },
       {
-        path: 'index',
-        name: 'ComprehensiveQueryIndex',
+        path: 'comprehensive-query',
+        name: 'ComprehensiveQuery',
         component: () => import('@/views/ComprehensiveQuery/index.vue'),
         meta: {
-          title: t('router.comprehensiveQuery'),
+          title: '综合查询',
           icon: 'vi-ep:data-analysis',
-          roles: ['*'],
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/customer-info',
-    component: Layout,
-    redirect: '/customer-info/index',
-    meta: {},
-    children: [
-      {
-        path: 'index',
-        name: 'CustomerInfoIndex',
-        component: () => import('@/views/CustomerInfo/index.vue'),
-        meta: {
-          title: t('router.customerInfo'),
-          icon: 'vi-ep:user',
-          roles: ['*'],
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/employee-info',
-    component: Layout,
-    redirect: '/employee-info/index',
-    meta: {},
-    children: [
-      {
-        path: 'index',
-        name: 'EmployeeInfoIndex',
-        component: () => import('@/views/EmployeeInfo/index.vue'),
-        meta: {
-          title: t('router.employeeInfo'),
-          icon: 'vi-ep:user-filled',
           roles: ['*'],
           noCache: true
         }
@@ -237,16 +195,32 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
   {
     path: '/procurement-outsourcing',
     component: Layout,
-    redirect: '/procurement-outsourcing/index',
-    meta: {},
+    redirect: '/procurement-outsourcing/material-procurement',
+    name: 'ProcurementOutsourcing',
+    meta: {
+      title: t('router.procurementOutsourcing'),
+      icon: 'vi-ep:shopping-cart',
+      alwaysShow: true
+    },
     children: [
       {
-        path: 'index',
-        name: 'ProcurementOutsourcingIndex',
-        component: () => import('@/views/ProcurementOutsourcing/index.vue'),
+        path: 'material-procurement',
+        name: 'MaterialProcurement',
+        component: () => import('@/views/ProcurementOutsourcing/MaterialProcurement.vue'),
         meta: {
-          title: t('router.procurementOutsourcing'),
-          icon: 'vi-ep:shopping-cart',
+          title: t('router.materialProcurement'),
+          icon: 'vi-ep:goods',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
+        path: 'process-outsourcing',
+        name: 'ProcessOutsourcing',
+        component: () => import('@/views/ProcurementOutsourcing/ProcessOutsourcing.vue'),
+        meta: {
+          title: t('router.processOutsourcing'),
+          icon: 'vi-ep:operation',
           roles: ['*'],
           noCache: true
         }
@@ -257,6 +231,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     path: '/inventory-management',
     component: Layout,
     redirect: '/inventory-management/overview',
+    name: 'InventoryManagement',
     meta: {
       title: t('router.inventoryManagement'),
       icon: 'vi-ep:box',
@@ -314,6 +289,95 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: {
           title: t('router.inventoryStocktake'),
           icon: 'vi-ep:scale-to-original',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/project-info',
+    component: Layout,
+    redirect: '/project-info/index',
+    name: 'ProjectInfo',
+    meta: {
+      title: '项目信息',
+      icon: 'vi-ep:folder-opened'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'ProjectInfoIndex',
+        component: () => import('@/views/ProjectInfo/index.vue'),
+        meta: {
+          title: '项目信息',
+          icon: 'vi-ep:folder-opened',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/customer-info',
+    component: Layout,
+    redirect: '/customer-info/index',
+    name: 'CustomerInfo',
+    meta: {
+      title: '客户信息',
+      icon: 'vi-ep:user'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'CustomerInfoIndex',
+        component: () => import('@/views/CustomerInfo/index.vue'),
+        meta: {
+          title: '客户信息',
+          icon: 'vi-ep:user',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/supplier-info',
+    component: Layout,
+    redirect: '/supplier-info/index',
+    name: 'SupplierInfo',
+    meta: {
+      title: '供方信息',
+      icon: 'vi-ep:user-filled'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'SupplierInfoIndex',
+        component: () => import('@/views/SupplierInfo/index.vue'),
+        meta: {
+          title: '供方信息',
+          icon: 'vi-ep:user-filled',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/employee-info',
+    component: Layout,
+    redirect: '/employee-info/index',
+    name: 'EmployeeInfo',
+    meta: {},
+    children: [
+      {
+        path: 'index',
+        name: 'EmployeeInfoIndex',
+        component: () => import('@/views/EmployeeInfo/index.vue'),
+        meta: {
+          title: t('router.employeeInfo'),
+          icon: 'vi-ep:user-filled',
           roles: ['*'],
           noCache: true
         }
