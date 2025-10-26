@@ -3,6 +3,10 @@ import request from '@/axios'
 // 项目信息类型定义
 export interface ProjectInfo {
   项目编号: string
+  产品名称?: string
+  产品图号?: string
+  productName?: string // 产品名称（从货物信息表获取）
+  productDrawing?: string // 产品图号（从货物信息表获取）
   客户ID?: number
   客户模号?: string
   产品材质?: string
@@ -65,7 +69,7 @@ export const getProjectListApi = (params?: ProjectQueryParams) => {
 
 // 获取单个项目信息
 export const getProjectDetailApi = (projectCode: string) => {
-  return request.get({ url: `/api/project/${projectCode}` })
+  return request.get({ url: `/api/project/detail`, params: { projectCode } })
 }
 
 // 新增项目信息
@@ -81,4 +85,9 @@ export const updateProjectApi = (projectCode: string, data: Partial<ProjectInfo>
 // 删除项目信息
 export const deleteProjectApi = (projectCode: string) => {
   return request.delete({ url: `/api/project/${projectCode}` })
+}
+
+// 根据项目编号获取货物信息
+export const getProjectGoodsApi = (projectCode: string) => {
+  return request.get({ url: `/api/project/goods/${projectCode}` })
 }

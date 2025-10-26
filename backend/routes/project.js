@@ -5,20 +5,25 @@ const router = express.Router()
 // 获取项目信息列表
 router.get('/list', async (req, res) => {
   try {
-    const { keyword, status, page = 1, pageSize = 10 } = req.query
+    const { keyword, status, category, page = 1, pageSize = 10 } = req.query
     
     let whereConditions = []
     let params = {}
     
     // 构建查询条件
     if (keyword) {
-      whereConditions.push(`(p.项目编号 LIKE @keyword OR p.项目名称 LIKE @keyword)`)
+      whereConditions.push(`(p.项目编号 LIKE @keyword OR p.项目名称 LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword OR p.客户模号 LIKE @keyword)`)
       params.keyword = `%${keyword}%`
     }
     
     if (status) {
       whereConditions.push(`p.项目状态 = @status`)
       params.status = status
+    }
+    
+    if (category) {
+      whereConditions.push(`g.分类 = @category`)
+      params.category = category
     }
     
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -30,6 +35,7 @@ router.get('/list', async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM 项目管理 p
+      LEFT JOIN 货物信息 g ON p.项目编号 = g.项目编号
       ${whereClause}
     `
     const countResult = await query(countQuery, params)
@@ -37,7 +43,12 @@ router.get('/list', async (req, res) => {
     
     // 查询数据
     const dataQuery = `
-      SELECT * FROM 项目管理 p
+      SELECT 
+        p.*,
+        g.产品名称 as productName,
+        g.产品图号 as productDrawing
+      FROM 项目管理 p
+      LEFT JOIN 货物信息 g ON p.项目编号 = g.项目编号
       ${whereClause}
       ORDER BY p.项目编号 DESC
       OFFSET ${offset} ROWS
@@ -66,10 +77,55 @@ router.get('/list', async (req, res) => {
   }
 })
 
-// 获取单个项目信息
-router.get('/:projectCode', async (req, res) => {
+// 根据项目编号获取货物信息（产品名称和产品图号）
+router.get('/goods/:projectCode', async (req, res) => {
   try {
     const { projectCode } = req.params
+    
+    const queryString = `
+      SELECT TOP 1
+        产品图号 as productDrawing,
+        产品名称 as productName
+      FROM 货物信息
+      WHERE 项目编号 = @projectCode
+    `
+    
+    const result = await query(queryString, { projectCode })
+    
+    if (result.length === 0) {
+      return res.json({
+        code: 0,
+        success: true,
+        data: null
+      })
+    }
+    
+    res.json({
+      code: 0,
+      success: true,
+      data: result[0]
+    })
+  } catch (error) {
+    console.error('获取货物信息失败:', error)
+    res.status(500).json({
+      success: false,
+      message: '获取货物信息失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取单个项目信息（使用 query 参数，避免项目编号包含斜杠的问题）
+router.get('/detail', async (req, res) => {
+  try {
+    const { projectCode } = req.query
+    
+    if (!projectCode) {
+      return res.status(400).json({
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
     
     const queryString = `SELECT * FROM 项目管理 WHERE 项目编号 = @projectCode`
     

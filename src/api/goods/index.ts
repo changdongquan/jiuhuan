@@ -70,3 +70,8 @@ export const batchDeleteGoodsApi = (ids: number[]) => {
 export const getMaxSerialApi = (category: string) => {
   return request.get({ url: `/api/goods/max-serial/${category}` })
 }
+
+// 根据项目编号获取货物信息
+export const getGoodsByProjectCodeApi = (projectCode: string) => {
+  return request.get({ url: `/api/goods/by-project/${projectCode}` })
+}
