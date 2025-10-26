@@ -1,17 +1,38 @@
 <template>
   <div class="p-4">
-    <el-form ref="queryFormRef" :model="queryForm" label-width="90px" inline style="margin-bottom: 16px">
+    <el-form
+      ref="queryFormRef"
+      :model="queryForm"
+      label-width="90px"
+      inline
+      style="margin-bottom: 16px"
+    >
       <el-form-item label="关键词">
-        <el-input v-model="queryForm.keyword" placeholder="项目编号/产品名称/产品图号/客户模号" clearable style="width: 280px" />
+        <el-input
+          v-model="queryForm.keyword"
+          placeholder="项目编号/产品名称/产品图号/客户模号"
+          clearable
+          style="width: 280px"
+        />
       </el-form-item>
       <el-form-item label="项目状态">
         <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
-          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-option
+            v-for="item in statusOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="分类">
         <el-select v-model="queryForm.category" placeholder="请选择" clearable style="width: 160px">
-          <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-option
+            v-for="item in categoryOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -20,7 +41,14 @@
       </el-form-item>
     </el-form>
 
-    <el-table ref="tableRef" v-loading="loading" :data="tableData" border height="calc(100vh - 320px)" @row-dblclick="handleView">
+    <el-table
+      ref="tableRef"
+      v-loading="loading"
+      :data="tableData"
+      border
+      height="calc(100vh - 320px)"
+      @row-dblclick="handleView"
+    >
       <el-table-column prop="项目编号" label="项目编号" width="130" show-overflow-tooltip />
       <el-table-column prop="productName" label="产品名称" width="130" show-overflow-tooltip />
       <el-table-column prop="productDrawing" label="产品图号" width="130" show-overflow-tooltip />
@@ -49,67 +77,197 @@
     </el-table>
 
     <div style="margin-top: 16px; display: flex; justify-content: flex-end">
-      <el-pagination background layout="total, sizes, prev, pager, next, jumper" 
-        :current-page="pagination.page" :page-size="pagination.size" 
-        :page-sizes="[10, 20, 30, 50]" :total="total" 
-        @size-change="handleSizeChange" @current-change="handleCurrentChange" />
+      <el-pagination
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        :current-page="pagination.page"
+        :page-size="pagination.size"
+        :page-sizes="[10, 20, 30, 50]"
+        :total="total"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+      />
     </div>
 
     <!-- 查看详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="项目详情" width="1200px">
       <div class="detail-grid">
         <div class="detail-grid-col">
-          <div class="detail-cell"><span class="detail-label">项目编号</span><span class="detail-value">{{ viewData.项目编号 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">项目状态</span><span class="detail-value"><el-tag :type="getStatusTagType(viewData.项目状态)">{{ viewData.项目状态 }}</el-tag></span></div>
-          <div class="detail-cell"><span class="detail-label">产品名称</span><span class="detail-value">{{ viewData.productName }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品图号</span><span class="detail-value">{{ viewData.productDrawing }}</span></div>
-          <div class="detail-cell"><span class="detail-label">客户模号</span><span class="detail-value">{{ viewData.客户模号 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品尺寸</span><span class="detail-value">{{ viewData.产品尺寸 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品重量</span><span class="detail-value">{{ viewData.产品重量 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品材质</span><span class="detail-value">{{ viewData.产品材质 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品颜色</span><span class="detail-value">{{ viewData.产品颜色 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">收缩率</span><span class="detail-value">{{ viewData.收缩率 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">料柄重量</span><span class="detail-value">{{ viewData.料柄重量 }}</span></div>
+          <div class="detail-cell"
+            ><span class="detail-label">项目编号</span
+            ><span class="detail-value">{{ viewData.项目编号 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">项目状态</span
+            ><span class="detail-value"
+              ><el-tag :type="getStatusTagType(viewData.项目状态)">{{
+                viewData.项目状态
+              }}</el-tag></span
+            ></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品名称</span
+            ><span class="detail-value">{{ viewData.productName }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品图号</span
+            ><span class="detail-value">{{ viewData.productDrawing }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">客户模号</span
+            ><span class="detail-value">{{ viewData.客户模号 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品尺寸</span
+            ><span class="detail-value">{{ viewData.产品尺寸 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品重量</span
+            ><span class="detail-value">{{ viewData.产品重量 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品材质</span
+            ><span class="detail-value">{{ viewData.产品材质 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品颜色</span
+            ><span class="detail-value">{{ viewData.产品颜色 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">收缩率</span
+            ><span class="detail-value">{{ viewData.收缩率 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">料柄重量</span
+            ><span class="detail-value">{{ viewData.料柄重量 }}</span></div
+          >
         </div>
         <div class="detail-grid-col">
-          <div class="detail-cell"><span class="detail-label">模具穴数</span><span class="detail-value">{{ viewData.模具穴数 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">模具尺寸</span><span class="detail-value">{{ viewData.模具尺寸 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">模具重量</span><span class="detail-value">{{ viewData.模具重量 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">前模材质</span><span class="detail-value">{{ viewData.前模材质 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">后模材质</span><span class="detail-value">{{ viewData.后模材质 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">滑块材质</span><span class="detail-value">{{ viewData.滑块材质 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">流道类型</span><span class="detail-value">{{ viewData.流道类型 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">流道数量</span><span class="detail-value">{{ viewData.流道数量 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">浇口类型</span><span class="detail-value">{{ viewData.浇口类型 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">浇口数量</span><span class="detail-value">{{ viewData.浇口数量 }}</span></div>
+          <div class="detail-cell"
+            ><span class="detail-label">模具穴数</span
+            ><span class="detail-value">{{ viewData.模具穴数 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">模具尺寸</span
+            ><span class="detail-value">{{ viewData.模具尺寸 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">模具重量</span
+            ><span class="detail-value">{{ viewData.模具重量 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">前模材质</span
+            ><span class="detail-value">{{ viewData.前模材质 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">后模材质</span
+            ><span class="detail-value">{{ viewData.后模材质 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">滑块材质</span
+            ><span class="detail-value">{{ viewData.滑块材质 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">流道类型</span
+            ><span class="detail-value">{{ viewData.流道类型 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">流道数量</span
+            ><span class="detail-value">{{ viewData.流道数量 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">浇口类型</span
+            ><span class="detail-value">{{ viewData.浇口类型 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">浇口数量</span
+            ><span class="detail-value">{{ viewData.浇口数量 }}</span></div
+          >
         </div>
         <div class="detail-grid-col">
-          <div class="detail-cell"><span class="detail-label">机台吨位</span><span class="detail-value">{{ viewData.机台吨位 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">锁模力</span><span class="detail-value">{{ viewData.锁模力 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">定位圈</span><span class="detail-value">{{ viewData.定位圈 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">容模量</span><span class="detail-value">{{ viewData.容模量 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">拉杆间距</span><span class="detail-value">{{ viewData.拉杆间距 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">成型周期</span><span class="detail-value">{{ viewData.成型周期 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">费用出处</span><span class="detail-value">{{ viewData.费用出处 }}</span></div>
+          <div class="detail-cell"
+            ><span class="detail-label">机台吨位</span
+            ><span class="detail-value">{{ viewData.机台吨位 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">锁模力</span
+            ><span class="detail-value">{{ viewData.锁模力 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">定位圈</span
+            ><span class="detail-value">{{ viewData.定位圈 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">容模量</span
+            ><span class="detail-value">{{ viewData.容模量 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">拉杆间距</span
+            ><span class="detail-value">{{ viewData.拉杆间距 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">成型周期</span
+            ><span class="detail-value">{{ viewData.成型周期 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">费用出处</span
+            ><span class="detail-value">{{ viewData.费用出处 }}</span></div
+          >
         </div>
         <div class="detail-grid-col">
-          <div class="detail-cell"><span class="detail-label">项目名称</span><span class="detail-value">{{ viewData.项目名称 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">设计师</span><span class="detail-value">{{ viewData.设计师 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">中标日期</span><span class="detail-value">{{ viewData.中标日期 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">产品3D确认</span><span class="detail-value">{{ viewData.产品3D确认 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">图纸下发时间</span><span class="detail-value">{{ viewData.图纸下发时间 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">计划首样日期</span><span class="detail-value">{{ viewData.计划首样日期 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">首次送样日期</span><span class="detail-value">{{ viewData.首次送样日期 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">移模日期</span><span class="detail-value">{{ viewData.移模日期 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">送样时间</span><span class="detail-value">{{ viewData.送样时间 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">制件厂家</span><span class="detail-value">{{ viewData.制件厂家 }}</span></div>
-          <div class="detail-cell"><span class="detail-label">进度影响原因</span><span class="detail-value">{{ viewData.进度影响原因 }}</span></div>
+          <div class="detail-cell"
+            ><span class="detail-label">项目名称</span
+            ><span class="detail-value">{{ viewData.项目名称 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">设计师</span
+            ><span class="detail-value">{{ viewData.设计师 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">中标日期</span
+            ><span class="detail-value">{{ viewData.中标日期 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">产品3D确认</span
+            ><span class="detail-value">{{ viewData.产品3D确认 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">图纸下发时间</span
+            ><span class="detail-value">{{ viewData.图纸下发时间 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">计划首样日期</span
+            ><span class="detail-value">{{ viewData.计划首样日期 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">首次送样日期</span
+            ><span class="detail-value">{{ viewData.首次送样日期 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">移模日期</span
+            ><span class="detail-value">{{ viewData.移模日期 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">送样时间</span
+            ><span class="detail-value">{{ viewData.送样时间 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">制件厂家</span
+            ><span class="detail-value">{{ viewData.制件厂家 }}</span></div
+          >
+          <div class="detail-cell"
+            ><span class="detail-label">进度影响原因</span
+            ><span class="detail-value">{{ viewData.进度影响原因 }}</span></div
+          >
         </div>
       </div>
       <div class="detail-row-remark">
-        <div class="detail-cell"><span class="detail-label">备注</span><span class="detail-value">{{ viewData.备注 }}</span></div>
+        <div class="detail-cell"
+          ><span class="detail-label">备注</span
+          ><span class="detail-value">{{ viewData.备注 }}</span></div
+        >
       </div>
-      
+
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
         <el-button type="primary" @click="handleEditFromView">编辑</el-button>
@@ -117,22 +275,48 @@
     </el-dialog>
 
     <!-- 编辑对话框 -->
-    <el-dialog v-model="editDialogVisible" :title="editTitle" width="1200px" align-center :close-on-click-modal="false" @closed="handleEditDialogClosed">
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="120px" class="edit-form-container">
+    <el-dialog
+      v-model="editDialogVisible"
+      :title="editTitle"
+      width="1200px"
+      align-center
+      :close-on-click-modal="false"
+      @closed="handleEditDialogClosed"
+    >
+      <el-form
+        ref="editFormRef"
+        :model="editForm"
+        :rules="editRules"
+        label-width="120px"
+        class="edit-form-container"
+      >
         <el-row :gutter="0" justify="center">
           <!-- 第1列：项目编号 产品名称 产品图号 客户模号 产品尺寸 产品重量 产品材质 产品颜色 收缩率 料柄重量 -->
           <el-col :span="6">
             <el-form-item label="项目编号" prop="项目编号">
-              <el-input v-model="editForm.项目编号" placeholder="项目编号" :disabled="!!currentProjectCode" @change="handleProjectCodeBlur" />
+              <el-input
+                v-model="editForm.项目编号"
+                placeholder="项目编号"
+                :disabled="!!currentProjectCode"
+                @change="handleProjectCodeBlur"
+              />
             </el-form-item>
             <el-form-item label="项目状态">
               <el-input v-model="editForm.项目状态" placeholder="项目状态" />
             </el-form-item>
             <el-form-item label="产品名称">
-              <el-input v-model="editForm.productName" placeholder="产品名称（自动填充）" readonly />
+              <el-input
+                v-model="editForm.productName"
+                placeholder="产品名称（自动填充）"
+                readonly
+              />
             </el-form-item>
             <el-form-item label="产品图号">
-              <el-input v-model="editForm.productDrawing" placeholder="产品图号（自动填充）" readonly />
+              <el-input
+                v-model="editForm.productDrawing"
+                placeholder="产品图号（自动填充）"
+                readonly
+              />
             </el-form-item>
             <el-form-item label="客户模号">
               <el-input v-model="editForm.客户模号" placeholder="客户模号" />
@@ -141,7 +325,13 @@
               <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
             </el-form-item>
             <el-form-item label="产品重量">
-              <el-input-number v-model="editForm.产品重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.产品重量"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="产品材质">
               <el-input v-model="editForm.产品材质" placeholder="产品材质" />
@@ -150,13 +340,25 @@
               <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
             </el-form-item>
             <el-form-item label="收缩率">
-              <el-input-number v-model="editForm.收缩率" :min="0" :precision="4" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.收缩率"
+                :min="0"
+                :precision="4"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="料柄重量">
-              <el-input-number v-model="editForm.料柄重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.料柄重量"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
-          
+
           <!-- 第2-4列：其他字段 -->
           <el-col :span="6">
             <el-form-item label="模具穴数">
@@ -166,7 +368,13 @@
               <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
             </el-form-item>
             <el-form-item label="模具重量">
-              <el-input-number v-model="editForm.模具重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.模具重量"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="前模材质">
               <el-input v-model="editForm.前模材质" placeholder="前模材质" />
@@ -181,33 +389,68 @@
               <el-input v-model="editForm.流道类型" placeholder="流道类型" />
             </el-form-item>
             <el-form-item label="流道数量">
-              <el-input-number v-model="editForm.流道数量" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.流道数量"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="浇口类型">
               <el-input v-model="editForm.浇口类型" placeholder="浇口类型" />
             </el-form-item>
             <el-form-item label="浇口数量">
-              <el-input-number v-model="editForm.浇口数量" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.浇口数量"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="机台吨位">
-              <el-input-number v-model="editForm.机台吨位" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.机台吨位"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="锁模力">
-              <el-input-number v-model="editForm.锁模力" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.锁模力"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="定位圈">
-              <el-input-number v-model="editForm.定位圈" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.定位圈"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="容模量">
               <el-input v-model="editForm.容模量" placeholder="容模量" />
             </el-form-item>
             <el-form-item label="拉杆间距">
-              <el-input-number v-model="editForm.拉杆间距" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.拉杆间距"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="成型周期">
-              <el-input-number v-model="editForm.成型周期" :min="0" :controls="false" style="width: 100%" />
+              <el-input-number
+                v-model="editForm.成型周期"
+                :min="0"
+                :controls="false"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="费用出处">
               <el-input v-model="editForm.费用出处" placeholder="费用出处" />
@@ -222,25 +465,67 @@
               <el-input v-model="editForm.设计师" placeholder="设计师" />
             </el-form-item>
             <el-form-item label="中标日期">
-              <el-date-picker v-model="editForm.中标日期" type="date" value-format="YYYY-MM-DD" placeholder="中标日期" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.中标日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="中标日期"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="产品3D确认">
-              <el-date-picker v-model="editForm.产品3D确认" type="date" value-format="YYYY-MM-DD" placeholder="产品3D确认" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.产品3D确认"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="产品3D确认"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="图纸下发时间">
-              <el-date-picker v-model="editForm.图纸下发时间" type="date" value-format="YYYY-MM-DD" placeholder="图纸下发时间" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.图纸下发时间"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="图纸下发时间"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="计划首样日期">
-              <el-date-picker v-model="editForm.计划首样日期" type="date" value-format="YYYY-MM-DD" placeholder="计划首样日期" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.计划首样日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="计划首样日期"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="首次送样日期">
-              <el-date-picker v-model="editForm.首次送样日期" type="date" value-format="YYYY-MM-DD" placeholder="首次送样日期" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.首次送样日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="首次送样日期"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="移模日期">
-              <el-date-picker v-model="editForm.移模日期" type="date" value-format="YYYY-MM-DD" placeholder="移模日期" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.移模日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="移模日期"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="送样时间">
-              <el-date-picker v-model="editForm.送样时间" type="date" value-format="YYYY-MM-DD" placeholder="送样时间" style="width: 100%" />
+              <el-date-picker
+                v-model="editForm.送样时间"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="送样时间"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="制件厂家">
               <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
@@ -256,7 +541,9 @@
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit">保存</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
+          >保存</el-button
+        >
       </template>
     </el-dialog>
   </div>
@@ -266,7 +553,15 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProjectListApi, getProjectDetailApi, createProjectApi, updateProjectApi, deleteProjectApi, getProjectGoodsApi, type ProjectInfo } from '@/api/project'
+import {
+  getProjectListApi,
+  getProjectDetailApi,
+  createProjectApi,
+  updateProjectApi,
+  deleteProjectApi,
+  getProjectGoodsApi,
+  type ProjectInfo
+} from '@/api/project'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -312,7 +607,7 @@ const loadData = async () => {
 
     const response: any = await getProjectListApi(params)
     console.log('API Response:', response)
-    
+
     if (response?.data?.data) {
       tableData.value = response.data.data.list || []
       total.value = response.data.data.total || 0
@@ -377,26 +672,29 @@ const handleEdit = (row: Partial<ProjectInfo>) => {
   editTitle.value = '编辑项目'
   currentProjectCode.value = row.项目编号 || ''
   Object.assign(editForm, row)
-  
+
   // 编辑时自动加载货物信息
   if (row.项目编号) {
     handleProjectCodeBlur()
   }
-  
+
   editDialogVisible.value = true
 }
 
 // 监听项目编号变化
-watch(() => editForm.项目编号, (newVal, oldVal) => {
-  if (newVal && newVal !== oldVal && !currentProjectCode.value) {
-    console.log('项目编号变化:', newVal)
-    handleProjectCodeBlur()
+watch(
+  () => editForm.项目编号,
+  (newVal, oldVal) => {
+    if (newVal && newVal !== oldVal && !currentProjectCode.value) {
+      console.log('项目编号变化:', newVal)
+      handleProjectCodeBlur()
+    }
   }
-})
+)
 
 const handleSubmitEdit = async () => {
   if (!editFormRef.value) return
-  
+
   try {
     await editFormRef.value.validate()
   } catch {
@@ -445,13 +743,13 @@ const handleProjectCodeBlur = async () => {
     console.log('项目编号为空')
     return
   }
-  
+
   console.log('开始获取货物信息，项目编号:', projectCode)
-  
+
   try {
     const response: any = await getProjectGoodsApi(projectCode)
     console.log('获取货物信息响应:', response)
-    
+
     // 兼容不同的响应结构
     let goodsData = null
     if (response?.data?.data) {
@@ -459,16 +757,16 @@ const handleProjectCodeBlur = async () => {
     } else if (response?.data) {
       goodsData = response.data
     }
-    
+
     console.log('提取的货物数据:', goodsData)
-    
+
     if (goodsData) {
       // 使用 Object.assign 确保响应式更新
       Object.assign(editForm, {
         productName: goodsData.productName || '',
         productDrawing: goodsData.productDrawing || ''
       } as Partial<ProjectInfo>)
-      
+
       console.log('填充后的 editForm:', editForm)
       console.log('productName:', editForm.productName, 'productDrawing:', editForm.productDrawing)
     } else {
@@ -486,7 +784,7 @@ const handleProjectCodeBlur = async () => {
 
 const handleEditDialogClosed = () => {
   editFormRef.value?.resetFields()
-  Object.keys(editForm).forEach(key => delete (editForm as any)[key])
+  Object.keys(editForm).forEach((key) => delete (editForm as any)[key])
   currentProjectCode.value = ''
 }
 
@@ -554,5 +852,4 @@ onMounted(() => loadData())
 .detail-row-remark .detail-cell {
   border-bottom: none;
 }
-
 </style>
