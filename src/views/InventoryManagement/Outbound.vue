@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('inventoryOutbound.documentNo')">
           <el-input
             v-model="queryForm.documentNo"
@@ -152,21 +146,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('inventoryOutbound.outboundList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchConfirm" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchConfirm"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Check /></el-icon>
               {{ t('inventoryOutbound.batchConfirm') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredOutbounds"
+        :data="paginatedOutbounds"
         border
         height="520"
         row-key="id"
@@ -176,12 +180,39 @@
         class="data-table"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column type="index" width="60" :label="t('inventoryOutbound.serial')" align="center" />
-        <el-table-column prop="documentNo" :label="t('inventoryOutbound.documentNo')" min-width="160" sortable="custom" show-overflow-tooltip />
-        <el-table-column prop="customer" :label="t('inventoryOutbound.customer')" min-width="160" show-overflow-tooltip />
+        <el-table-column
+          type="index"
+          width="60"
+          :label="t('inventoryOutbound.serial')"
+          align="center"
+        />
+        <el-table-column
+          prop="documentNo"
+          :label="t('inventoryOutbound.documentNo')"
+          min-width="160"
+          sortable="custom"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="customer"
+          :label="t('inventoryOutbound.customer')"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column prop="warehouse" :label="t('inventoryOutbound.warehouse')" width="120" />
-        <el-table-column prop="materialCount" :label="t('inventoryOutbound.materialCount')" width="120" align="right" sortable="custom" />
-        <el-table-column :label="t('inventoryOutbound.totalValue')" width="140" align="right" sortable="custom">
+        <el-table-column
+          prop="materialCount"
+          :label="t('inventoryOutbound.materialCount')"
+          width="120"
+          align="right"
+          sortable="custom"
+        />
+        <el-table-column
+          :label="t('inventoryOutbound.totalValue')"
+          width="140"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalValue) }} </template>
         </el-table-column>
         <el-table-column :label="t('inventoryOutbound.status')" width="120" align="center">
@@ -191,9 +222,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="outboundDate" :label="t('inventoryOutbound.outboundDate')" width="140" sortable="custom" />
+        <el-table-column
+          prop="outboundDate"
+          :label="t('inventoryOutbound.outboundDate')"
+          width="140"
+          sortable="custom"
+        />
         <el-table-column prop="operator" :label="t('inventoryOutbound.operator')" width="120" />
-        <el-table-column prop="remark" :label="t('inventoryOutbound.remark')" min-width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="remark"
+          :label="t('inventoryOutbound.remark')"
+          min-width="150"
+          show-overflow-tooltip
+        />
         <el-table-column :label="t('common.operation')" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
@@ -246,19 +287,28 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryOutbound.documentNo')" prop="documentNo">
-              <el-input v-model="formData.documentNo" :placeholder="t('inventoryOutbound.documentNoPlaceholder')" />
+              <el-input
+                v-model="formData.documentNo"
+                :placeholder="t('inventoryOutbound.documentNoPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventoryOutbound.customer')" prop="customer">
-              <el-input v-model="formData.customer" :placeholder="t('inventoryOutbound.customerPlaceholder')" />
+              <el-input
+                v-model="formData.customer"
+                :placeholder="t('inventoryOutbound.customerPlaceholder')"
+              />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryOutbound.warehouse')" prop="warehouse">
-              <el-select v-model="formData.warehouse" :placeholder="t('inventoryOutbound.warehousePlaceholder')">
+              <el-select
+                v-model="formData.warehouse"
+                :placeholder="t('inventoryOutbound.warehousePlaceholder')"
+              >
                 <el-option
                   v-for="item in warehouseOptions"
                   :key="item.value"
@@ -282,7 +332,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryOutbound.operator')" prop="operator">
-              <el-input v-model="formData.operator" :placeholder="t('inventoryOutbound.operatorPlaceholder')" />
+              <el-input
+                v-model="formData.operator"
+                :placeholder="t('inventoryOutbound.operatorPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -294,11 +347,11 @@
                   :label="item.label"
                   :value="item.value"
                 />
-          </el-select>
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 物料明细表格 -->
         <el-form-item :label="t('inventoryOutbound.materialDetails')">
           <div class="material-details">
@@ -309,12 +362,39 @@
               </el-button>
             </div>
             <el-table :data="formData.materialDetails" border class="material-table">
-              <el-table-column type="index" width="60" :label="t('inventoryOutbound.serial')" align="center" />
-              <el-table-column prop="materialCode" :label="t('inventoryOutbound.materialCode')" width="140" />
-              <el-table-column prop="materialName" :label="t('inventoryOutbound.materialName')" min-width="160" />
-              <el-table-column prop="specification" :label="t('inventoryOutbound.specification')" min-width="140" />
-              <el-table-column prop="unit" :label="t('inventoryOutbound.unit')" width="80" align="center" />
-              <el-table-column prop="quantity" :label="t('inventoryOutbound.quantity')" width="100" align="right">
+              <el-table-column
+                type="index"
+                width="60"
+                :label="t('inventoryOutbound.serial')"
+                align="center"
+              />
+              <el-table-column
+                prop="materialCode"
+                :label="t('inventoryOutbound.materialCode')"
+                width="140"
+              />
+              <el-table-column
+                prop="materialName"
+                :label="t('inventoryOutbound.materialName')"
+                min-width="160"
+              />
+              <el-table-column
+                prop="specification"
+                :label="t('inventoryOutbound.specification')"
+                min-width="140"
+              />
+              <el-table-column
+                prop="unit"
+                :label="t('inventoryOutbound.unit')"
+                width="80"
+                align="center"
+              />
+              <el-table-column
+                prop="quantity"
+                :label="t('inventoryOutbound.quantity')"
+                width="100"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.quantity"
@@ -325,7 +405,12 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="unitPrice" :label="t('inventoryOutbound.unitPrice')" width="120" align="right">
+              <el-table-column
+                prop="unitPrice"
+                :label="t('inventoryOutbound.unitPrice')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.unitPrice"
@@ -336,10 +421,13 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="totalPrice" :label="t('inventoryOutbound.totalPrice')" width="120" align="right">
-                <template #default="{ row }">
-                  ¥ {{ formatAmount(row.totalPrice) }}
-                </template>
+              <el-table-column
+                prop="totalPrice"
+                :label="t('inventoryOutbound.totalPrice')"
+                width="120"
+                align="right"
+              >
+                <template #default="{ row }"> ¥ {{ formatAmount(row.totalPrice) }} </template>
               </el-table-column>
               <el-table-column :label="t('common.operation')" width="80" align="center">
                 <template #default="{ $index }">
@@ -351,7 +439,7 @@
             </el-table>
           </div>
         </el-form-item>
-        
+
         <el-form-item :label="t('inventoryOutbound.totalValue')" prop="totalValue">
           <el-input v-model="formData.totalValue" readonly />
         </el-form-item>
@@ -532,10 +620,16 @@ const formData = reactive<Partial<OutboundRecord>>({
 
 // 表单验证规则
 const formRules: FormRules = {
-  documentNo: [{ required: true, message: t('inventoryOutbound.documentNoRequired'), trigger: 'blur' }],
+  documentNo: [
+    { required: true, message: t('inventoryOutbound.documentNoRequired'), trigger: 'blur' }
+  ],
   customer: [{ required: true, message: t('inventoryOutbound.customerRequired'), trigger: 'blur' }],
-  warehouse: [{ required: true, message: t('inventoryOutbound.warehouseRequired'), trigger: 'change' }],
-  outboundDate: [{ required: true, message: t('inventoryOutbound.outboundDateRequired'), trigger: 'change' }],
+  warehouse: [
+    { required: true, message: t('inventoryOutbound.warehouseRequired'), trigger: 'change' }
+  ],
+  outboundDate: [
+    { required: true, message: t('inventoryOutbound.outboundDateRequired'), trigger: 'change' }
+  ],
   operator: [{ required: true, message: t('inventoryOutbound.operatorRequired'), trigger: 'blur' }],
   status: [{ required: true, message: t('inventoryOutbound.statusRequired'), trigger: 'change' }]
 }
@@ -576,7 +670,7 @@ const outbounds = ref<OutboundRecord[]>([
     customer: '上海制造有限公司',
     warehouse: '成品仓',
     materialCount: 2,
-    totalValue: 9000.00,
+    totalValue: 9000.0,
     status: 'completed',
     outboundDate: '2024-03-18',
     operator: '王五',
@@ -588,8 +682,8 @@ const outbounds = ref<OutboundRecord[]>([
         specification: '机加工零件A',
         unit: '件',
         quantity: 200,
-        unitPrice: 45.00,
-        totalPrice: 9000.00
+        unitPrice: 45.0,
+        totalPrice: 9000.0
       }
     ]
   },
@@ -599,7 +693,7 @@ const outbounds = ref<OutboundRecord[]>([
     customer: '北京贸易公司',
     warehouse: '主仓库',
     materialCount: 1,
-    totalValue: 6000.00,
+    totalValue: 6000.0,
     status: 'confirmed',
     outboundDate: '2024-03-20',
     operator: '赵六',
@@ -611,8 +705,8 @@ const outbounds = ref<OutboundRecord[]>([
         specification: '304不锈钢 2mm厚',
         unit: '张',
         quantity: 50,
-        unitPrice: 120.00,
-        totalPrice: 6000.00
+        unitPrice: 120.0,
+        totalPrice: 6000.0
       }
     ]
   }
@@ -624,7 +718,7 @@ const dialogTitle = computed(() => {
 })
 
 const filteredOutbounds = computed(() => {
-  let result = outbounds.value.filter((outbound) => {
+  const result = outbounds.value.filter((outbound) => {
     const documentMatch = queryForm.documentNo
       ? outbound.documentNo.toLowerCase().includes(queryForm.documentNo.toLowerCase())
       : true
@@ -635,7 +729,8 @@ const filteredOutbounds = computed(() => {
     const statusMatch = queryForm.status ? outbound.status === queryForm.status : true
     const dateMatch =
       queryForm.outboundDateRange.length === 2 && outbound.outboundDate
-        ? outbound.outboundDate >= queryForm.outboundDateRange[0] && outbound.outboundDate <= queryForm.outboundDateRange[1]
+        ? outbound.outboundDate >= queryForm.outboundDateRange[0] &&
+          outbound.outboundDate <= queryForm.outboundDateRange[1]
         : true
     return documentMatch && customerMatch && warehouseMatch && statusMatch && dateMatch
   })
@@ -653,12 +748,24 @@ const filteredOutbounds = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedOutbounds = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredOutbounds.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredOutbounds,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -741,7 +848,7 @@ const handleDelete = async (row: OutboundRecord) => {
         type: 'warning'
       }
     )
-    const index = outbounds.value.findIndex(item => item.id === row.id)
+    const index = outbounds.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       outbounds.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -814,17 +921,17 @@ const calculateTotalValue = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = outbounds.value.findIndex(item => item.id === formData.id)
+      const index = outbounds.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         outbounds.value[index] = { ...formData } as OutboundRecord
       }
@@ -838,7 +945,7 @@ const handleSubmit = async () => {
       outbounds.value.unshift(newOutbound)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)

@@ -3,15 +3,22 @@ const config = require('./config')
 
 // 数据库连接池
 let pool = null
+let reconnectAttempts = 0
+const maxReconnectAttempts = 5
 
 // 初始化数据库连接
 const initDatabase = async () => {
   try {
+    if (pool && pool.connected) {
+      return pool
+    }
+    
     pool = await sql.connect(config)
     console.log('数据库连接成功')
+    reconnectAttempts = 0
     return pool
   } catch (err) {
-    console.error('数据库连接失败:', err)
+    console.error('数据库连接失败:', err.message)
     throw err
   }
 }
@@ -19,11 +26,17 @@ const initDatabase = async () => {
 // 获取数据库连接
 const getPool = async () => {
   if (!pool || pool.connected === false) {
-    console.log('数据库连接已断开，正在重新连接...')
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      throw new Error('数据库重连次数过多，请检查数据库服务状态')
+    }
+    
+    console.log(`数据库连接已断开，正在重新连接... (尝试 ${reconnectAttempts + 1}/${maxReconnectAttempts})`)
+    reconnectAttempts++
+    
     try {
       await initDatabase()
     } catch (err) {
-      console.error('重新连接数据库失败:', err)
+      console.error('重新连接数据库失败:', err.message)
       throw err
     }
   }

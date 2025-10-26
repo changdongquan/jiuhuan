@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('inventory.materialCode')">
           <el-input
             v-model="queryForm.materialCode"
@@ -155,21 +149,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('inventory.materialList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchAdjust" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchAdjust"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Edit /></el-icon>
               {{ t('inventory.batchAdjust') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredMaterials"
+        :data="paginatedMaterials"
         border
         height="520"
         row-key="id"
@@ -180,9 +184,25 @@
       >
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column type="index" width="60" :label="t('inventory.serial')" align="center" />
-        <el-table-column prop="materialCode" :label="t('inventory.materialCode')" width="140" sortable="custom" show-overflow-tooltip />
-        <el-table-column prop="materialName" :label="t('inventory.materialName')" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="specification" :label="t('inventory.specification')" min-width="160" show-overflow-tooltip />
+        <el-table-column
+          prop="materialCode"
+          :label="t('inventory.materialCode')"
+          width="140"
+          sortable="custom"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="materialName"
+          :label="t('inventory.materialName')"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="specification"
+          :label="t('inventory.specification')"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column prop="category" :label="t('inventory.category')" width="120" />
         <el-table-column prop="unit" :label="t('inventory.unit')" width="80" align="center" />
         <el-table-column
@@ -199,10 +219,20 @@
           align="right"
           sortable="custom"
         />
-        <el-table-column :label="t('inventory.unitPrice')" width="110" align="right" sortable="custom">
+        <el-table-column
+          :label="t('inventory.unitPrice')"
+          width="110"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.unitPrice) }} </template>
         </el-table-column>
-        <el-table-column :label="t('inventory.totalValue')" width="120" align="right" sortable="custom">
+        <el-table-column
+          :label="t('inventory.totalValue')"
+          width="120"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalValue) }} </template>
         </el-table-column>
         <el-table-column :label="t('inventory.status')" width="100" align="center">
@@ -214,7 +244,12 @@
         </el-table-column>
         <el-table-column prop="warehouse" :label="t('inventory.warehouse')" width="120" />
         <el-table-column prop="location" :label="t('inventory.location')" width="120" />
-        <el-table-column prop="lastUpdateTime" :label="t('inventory.lastUpdateTime')" width="140" sortable="custom" />
+        <el-table-column
+          prop="lastUpdateTime"
+          :label="t('inventory.lastUpdateTime')"
+          width="140"
+          sortable="custom"
+        />
         <el-table-column
           prop="remark"
           :label="t('inventory.remark')"
@@ -273,24 +308,36 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventory.materialCode')" prop="materialCode">
-              <el-input v-model="formData.materialCode" :placeholder="t('inventory.materialCodePlaceholder')" />
+              <el-input
+                v-model="formData.materialCode"
+                :placeholder="t('inventory.materialCodePlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventory.materialName')" prop="materialName">
-              <el-input v-model="formData.materialName" :placeholder="t('inventory.materialNamePlaceholder')" />
+              <el-input
+                v-model="formData.materialName"
+                :placeholder="t('inventory.materialNamePlaceholder')"
+              />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventory.specification')" prop="specification">
-              <el-input v-model="formData.specification" :placeholder="t('inventory.specificationPlaceholder')" />
+              <el-input
+                v-model="formData.specification"
+                :placeholder="t('inventory.specificationPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventory.category')" prop="category">
-              <el-select v-model="formData.category" :placeholder="t('inventory.categoryPlaceholder')">
+              <el-select
+                v-model="formData.category"
+                :placeholder="t('inventory.categoryPlaceholder')"
+              >
                 <el-option
                   v-for="item in categoryOptions"
                   :key="item.value"
@@ -369,7 +416,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventory.warehouse')" prop="warehouse">
-              <el-select v-model="formData.warehouse" :placeholder="t('inventory.warehousePlaceholder')">
+              <el-select
+                v-model="formData.warehouse"
+                :placeholder="t('inventory.warehousePlaceholder')"
+              >
                 <el-option
                   v-for="item in warehouseOptions"
                   :key="item.value"
@@ -381,7 +431,10 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventory.location')" prop="location">
-              <el-input v-model="formData.location" :placeholder="t('inventory.locationPlaceholder')" />
+              <el-input
+                v-model="formData.location"
+                :placeholder="t('inventory.locationPlaceholder')"
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -576,7 +629,9 @@ const formData = reactive<Partial<InventoryMaterial>>({
 const formRules: FormRules = {
   materialCode: [{ required: true, message: t('inventory.materialCodeRequired'), trigger: 'blur' }],
   materialName: [{ required: true, message: t('inventory.materialNameRequired'), trigger: 'blur' }],
-  specification: [{ required: true, message: t('inventory.specificationRequired'), trigger: 'blur' }],
+  specification: [
+    { required: true, message: t('inventory.specificationRequired'), trigger: 'blur' }
+  ],
   category: [{ required: true, message: t('inventory.categoryRequired'), trigger: 'change' }],
   unit: [{ required: true, message: t('inventory.unitRequired'), trigger: 'change' }],
   currentStock: [{ required: true, message: t('inventory.currentStockRequired'), trigger: 'blur' }],
@@ -647,8 +702,8 @@ const materials = ref<InventoryMaterial[]>([
     unit: '张',
     currentStock: 150,
     safetyStock: 50,
-    unitPrice: 120.00,
-    totalValue: 18000.00,
+    unitPrice: 120.0,
+    totalValue: 18000.0,
     status: 'normal',
     warehouse: '主仓库',
     location: 'A区-01',
@@ -665,7 +720,7 @@ const materials = ref<InventoryMaterial[]>([
     currentStock: 8,
     safetyStock: 20,
     unitPrice: 0.5,
-    totalValue: 4.00,
+    totalValue: 4.0,
     status: 'lowStock',
     warehouse: '辅料仓',
     location: 'B区-05',
@@ -681,8 +736,8 @@ const materials = ref<InventoryMaterial[]>([
     unit: '个',
     currentStock: 0,
     safetyStock: 10,
-    unitPrice: 25.00,
-    totalValue: 0.00,
+    unitPrice: 25.0,
+    totalValue: 0.0,
     status: 'outOfStock',
     warehouse: '辅料仓',
     location: 'B区-03',
@@ -698,8 +753,8 @@ const materials = ref<InventoryMaterial[]>([
     unit: '件',
     currentStock: 200,
     safetyStock: 30,
-    unitPrice: 45.00,
-    totalValue: 9000.00,
+    unitPrice: 45.0,
+    totalValue: 9000.0,
     status: 'normal',
     warehouse: '成品仓',
     location: 'C区-02',
@@ -715,8 +770,8 @@ const materials = ref<InventoryMaterial[]>([
     unit: '件',
     currentStock: 5,
     safetyStock: 0,
-    unitPrice: 30.00,
-    totalValue: 150.00,
+    unitPrice: 30.0,
+    totalValue: 150.0,
     status: 'discontinued',
     warehouse: '成品仓',
     location: 'C区-08',
@@ -731,7 +786,7 @@ const dialogTitle = computed(() => {
 })
 
 const filteredMaterials = computed(() => {
-  let result = materials.value.filter((material) => {
+  const result = materials.value.filter((material) => {
     const codeMatch = queryForm.materialCode
       ? material.materialCode.toLowerCase().includes(queryForm.materialCode.toLowerCase())
       : true
@@ -757,12 +812,24 @@ const filteredMaterials = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedMaterials = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredMaterials.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredMaterials,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -848,7 +915,7 @@ const handleDelete = async (row: InventoryMaterial) => {
         type: 'warning'
       }
     )
-    const index = materials.value.findIndex(item => item.id === row.id)
+    const index = materials.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       materials.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -894,17 +961,17 @@ const calculateTotalValue = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = materials.value.findIndex(item => item.id === formData.id)
+      const index = materials.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         materials.value[index] = { ...formData } as InventoryMaterial
       }
@@ -918,7 +985,7 @@ const handleSubmit = async () => {
       materials.value.unshift(newMaterial)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)

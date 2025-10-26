@@ -1,4 +1,3 @@
-import Mock from 'mockjs'
 import { SUCCESS_CODE } from '@/constants'
 import { toAnyString } from '@/utils'
 

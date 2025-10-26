@@ -208,7 +208,7 @@
         </el-row>
 
         <!-- 银行信息 -->
-        <el-divider content-position="left"></el-divider>
+        <el-divider content-position="left" />
         <el-row :gutter="16">
           <el-col :xs="24" :md="12">
             <el-form-item label="纳税人识别号" prop="纳税人识别号">
@@ -231,7 +231,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-
       </el-form>
 
       <template #footer>
@@ -266,11 +265,11 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick, reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  getSupplierList, 
-  getSupplierDetail, 
-  createSupplier, 
-  updateSupplier, 
+import {
+  getSupplierList,
+  getSupplierDetail,
+  createSupplier,
+  updateSupplier,
   deleteSupplier,
   getSupplierStatistics,
   type Supplier,
@@ -315,12 +314,15 @@ const statusTagMap: Record<SupplierStatus, { label: string; type: 'success' | 'i
   suspended: { label: '暂停', type: 'info' }
 }
 
-const categoryTagType: Record<SupplierCategory, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
-  '原料': 'primary',
-  '配件': 'success', 
-  '设备': 'warning',
-  '外协': 'danger',
-  '服务': 'info'
+const categoryTagType: Record<
+  SupplierCategory,
+  'primary' | 'success' | 'warning' | 'danger' | 'info'
+> = {
+  原料: 'primary',
+  配件: 'success',
+  设备: 'warning',
+  外协: 'danger',
+  服务: 'info'
 }
 
 const queryFormRef = ref<FormInstance>()
@@ -353,12 +355,8 @@ const dialogRules: FormRules<SupplierPayload> = {
   纳税人识别号: [
     { pattern: /^[0-9A-Z]{15,20}$/, message: '纳税人识别号格式不正确', trigger: 'blur' }
   ],
-  银行账号: [
-    { pattern: /^\d{16,19}$/, message: '银行账号格式不正确', trigger: 'blur' }
-  ],
-  银行行号: [
-    { pattern: /^\d{12}$/, message: '银行行号格式不正确', trigger: 'blur' }
-  ]
+  银行账号: [{ pattern: /^\d{16,19}$/, message: '银行账号格式不正确', trigger: 'blur' }],
+  银行行号: [{ pattern: /^\d{12}$/, message: '银行行号格式不正确', trigger: 'blur' }]
 }
 
 const dialogForm = reactive<SupplierPayload>(createEmptySupplier())
@@ -385,10 +383,10 @@ const loadData = async () => {
       category: queryForm.category,
       status: queryForm.status
     }
-    
-    const response = await getSupplierList(params)
+
+    const response = (await getSupplierList(params)) as any
     console.log('API响应:', response) // 调试日志
-    
+
     if (response && response.code === 200) {
       tableData.value = response.data.list
       total.value = response.data.total
@@ -406,9 +404,9 @@ const loadData = async () => {
 // 加载统计信息
 const loadStatistics = async () => {
   try {
-    const response = await getSupplierStatistics()
+    const response = (await getSupplierStatistics()) as any
     console.log('统计API响应:', response) // 调试日志
-    
+
     if (response && response.code === 200) {
       Object.assign(summary, response.data)
     }
@@ -460,7 +458,7 @@ const handleEdit = (row: SupplierTableRow) => {
 
 const openEditDialog = async (id: number) => {
   try {
-    const response = await getSupplierDetail(id)
+    const response = (await getSupplierDetail(id)) as any
     if (response.code === 200) {
       dialogTitle.value = '编辑供方'
       currentSupplierId.value = id
@@ -544,8 +542,8 @@ const submitDialogForm = async () => {
         银行行号: dialogForm.银行行号,
         创建人: 'system'
       }
-      
-      const response = await createSupplier(createData)
+
+      const response = (await createSupplier(createData)) as any
       if (response.code === 200) {
         ElMessage.success('新增供方成功')
         dialogVisible.value = false
@@ -575,8 +573,8 @@ const submitDialogForm = async () => {
         银行行号: dialogForm.银行行号,
         更新人: 'system'
       }
-      
-      const response = await updateSupplier(currentSupplierId.value, updateData)
+
+      const response = (await updateSupplier(currentSupplierId.value, updateData)) as any
       if (response.code === 200) {
         ElMessage.success('更新供方成功')
         dialogVisible.value = false
@@ -602,7 +600,7 @@ const handleDelete = async (row: SupplierTableRow) => {
       type: 'warning'
     })
 
-    const response = await deleteSupplier(row.供方ID)
+    const response = (await deleteSupplier(row.供方ID)) as any
     if (response.code === 200) {
       ElMessage.success('删除成功')
       await loadData()

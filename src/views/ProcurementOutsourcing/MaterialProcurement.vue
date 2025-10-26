@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('materialProcurement.supplierName')">
           <el-input
             v-model="queryForm.supplier"
@@ -146,21 +140,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('materialProcurement.orderList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchDelete" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchDelete"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Delete /></el-icon>
               {{ t('common.batchDelete') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredOrders"
+        :data="paginatedOrders"
         border
         height="520"
         row-key="id"
@@ -170,10 +174,31 @@
         class="data-table"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column type="index" width="60" :label="t('materialProcurement.serial')" align="center" />
-        <el-table-column prop="orderCode" :label="t('materialProcurement.orderCode')" min-width="140" sortable="custom" show-overflow-tooltip />
-        <el-table-column prop="supplier" :label="t('materialProcurement.supplierName')" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="specification" :label="t('materialProcurement.specification')" min-width="180" show-overflow-tooltip />
+        <el-table-column
+          type="index"
+          width="60"
+          :label="t('materialProcurement.serial')"
+          align="center"
+        />
+        <el-table-column
+          prop="orderCode"
+          :label="t('materialProcurement.orderCode')"
+          min-width="140"
+          sortable="custom"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="supplier"
+          :label="t('materialProcurement.supplierName')"
+          min-width="150"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="specification"
+          :label="t('materialProcurement.specification')"
+          min-width="180"
+          show-overflow-tooltip
+        />
         <el-table-column
           prop="quantity"
           :label="t('materialProcurement.quantity')"
@@ -181,10 +206,20 @@
           align="right"
           sortable="custom"
         />
-        <el-table-column :label="t('materialProcurement.unitPrice')" width="110" align="right" sortable="custom">
+        <el-table-column
+          :label="t('materialProcurement.unitPrice')"
+          width="110"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.unitPrice) }} </template>
         </el-table-column>
-        <el-table-column :label="t('materialProcurement.totalAmount')" width="120" align="right" sortable="custom">
+        <el-table-column
+          :label="t('materialProcurement.totalAmount')"
+          width="120"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalAmount) }} </template>
         </el-table-column>
         <el-table-column :label="t('materialProcurement.status')" width="100" align="center">
@@ -194,8 +229,17 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="orderDate" :label="t('materialProcurement.orderDate')" width="110" sortable="custom" />
-        <el-table-column prop="actualDelivery" :label="t('materialProcurement.actualDelivery')" width="110" />
+        <el-table-column
+          prop="orderDate"
+          :label="t('materialProcurement.orderDate')"
+          width="110"
+          sortable="custom"
+        />
+        <el-table-column
+          prop="actualDelivery"
+          :label="t('materialProcurement.actualDelivery')"
+          width="110"
+        />
         <el-table-column
           prop="remark"
           :label="t('materialProcurement.remark')"
@@ -254,12 +298,19 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.orderCode')" prop="orderCode">
-              <el-input v-model="formData.orderCode" :placeholder="t('materialProcurement.orderCodePlaceholder')" />
+              <el-input
+                v-model="formData.orderCode"
+                :placeholder="t('materialProcurement.orderCodePlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.supplierName')" prop="supplier">
-              <el-select v-model="formData.supplier" :placeholder="t('materialProcurement.supplierPlaceholder')" filterable>
+              <el-select
+                v-model="formData.supplier"
+                :placeholder="t('materialProcurement.supplierPlaceholder')"
+                filterable
+              >
                 <el-option
                   v-for="supplier in supplierOptions"
                   :key="supplier.value"
@@ -273,24 +324,36 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.materialCode')" prop="materialCode">
-              <el-input v-model="formData.materialCode" :placeholder="t('materialProcurement.materialCodePlaceholder')" />
+              <el-input
+                v-model="formData.materialCode"
+                :placeholder="t('materialProcurement.materialCodePlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.materialName')" prop="materialName">
-              <el-input v-model="formData.materialName" :placeholder="t('materialProcurement.materialNamePlaceholder')" />
+              <el-input
+                v-model="formData.materialName"
+                :placeholder="t('materialProcurement.materialNamePlaceholder')"
+              />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.specification')" prop="specification">
-              <el-input v-model="formData.specification" :placeholder="t('materialProcurement.specificationPlaceholder')" />
+              <el-input
+                v-model="formData.specification"
+                :placeholder="t('materialProcurement.specificationPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('materialProcurement.unit')" prop="unit">
-              <el-select v-model="formData.unit" :placeholder="t('materialProcurement.unitPlaceholder')">
+              <el-select
+                v-model="formData.unit"
+                :placeholder="t('materialProcurement.unitPlaceholder')"
+              >
                 <el-option
                   v-for="unit in unitOptions"
                   :key="unit.value"
@@ -342,7 +405,10 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item :label="t('materialProcurement.expectedDelivery')" prop="expectedDelivery">
+            <el-form-item
+              :label="t('materialProcurement.expectedDelivery')"
+              prop="expectedDelivery"
+            >
               <el-date-picker
                 v-model="formData.expectedDelivery"
                 type="date"
@@ -495,7 +561,13 @@ import { useI18n } from '@/hooks/web/useI18n'
 
 const { t } = useI18n()
 
-type MaterialProcurementStatus = 'pending' | 'ordered' | 'shipped' | 'delivered' | 'completed' | 'cancelled'
+type MaterialProcurementStatus =
+  | 'pending'
+  | 'ordered'
+  | 'shipped'
+  | 'delivered'
+  | 'completed'
+  | 'cancelled'
 
 interface MaterialProcurementOrder {
   id: number
@@ -567,15 +639,35 @@ const formData = reactive<Partial<MaterialProcurementOrder>>({
 
 // 表单验证规则
 const formRules: FormRules = {
-  orderCode: [{ required: true, message: t('materialProcurement.orderCodeRequired'), trigger: 'blur' }],
-  supplier: [{ required: true, message: t('materialProcurement.supplierRequired'), trigger: 'change' }],
-  materialCode: [{ required: true, message: t('materialProcurement.materialCodeRequired'), trigger: 'blur' }],
-  materialName: [{ required: true, message: t('materialProcurement.materialNameRequired'), trigger: 'blur' }],
-  quantity: [{ required: true, message: t('materialProcurement.quantityRequired'), trigger: 'blur' }],
+  orderCode: [
+    { required: true, message: t('materialProcurement.orderCodeRequired'), trigger: 'blur' }
+  ],
+  supplier: [
+    { required: true, message: t('materialProcurement.supplierRequired'), trigger: 'change' }
+  ],
+  materialCode: [
+    { required: true, message: t('materialProcurement.materialCodeRequired'), trigger: 'blur' }
+  ],
+  materialName: [
+    { required: true, message: t('materialProcurement.materialNameRequired'), trigger: 'blur' }
+  ],
+  quantity: [
+    { required: true, message: t('materialProcurement.quantityRequired'), trigger: 'blur' }
+  ],
   unit: [{ required: true, message: t('materialProcurement.unitRequired'), trigger: 'change' }],
-  unitPrice: [{ required: true, message: t('materialProcurement.unitPriceRequired'), trigger: 'blur' }],
-  orderDate: [{ required: true, message: t('materialProcurement.orderDateRequired'), trigger: 'change' }],
-  expectedDelivery: [{ required: true, message: t('materialProcurement.expectedDeliveryRequired'), trigger: 'change' }],
+  unitPrice: [
+    { required: true, message: t('materialProcurement.unitPriceRequired'), trigger: 'blur' }
+  ],
+  orderDate: [
+    { required: true, message: t('materialProcurement.orderDateRequired'), trigger: 'change' }
+  ],
+  expectedDelivery: [
+    {
+      required: true,
+      message: t('materialProcurement.expectedDeliveryRequired'),
+      trigger: 'change'
+    }
+  ],
   status: [{ required: true, message: t('materialProcurement.statusRequired'), trigger: 'change' }]
 }
 
@@ -632,8 +724,8 @@ const orders = ref<MaterialProcurementOrder[]>([
     specification: '3mm×2000mm×1000mm',
     quantity: 50,
     unit: '张',
-    unitPrice: 280.00,
-    totalAmount: 14000.00,
+    unitPrice: 280.0,
+    totalAmount: 14000.0,
     status: 'ordered',
     orderDate: '2024-03-15',
     expectedDelivery: '2024-03-25',
@@ -648,8 +740,8 @@ const orders = ref<MaterialProcurementOrder[]>([
     specification: '5mm×1500mm×800mm',
     quantity: 30,
     unit: '张',
-    unitPrice: 450.00,
-    totalAmount: 13500.00,
+    unitPrice: 450.0,
+    totalAmount: 13500.0,
     status: 'shipped',
     orderDate: '2024-03-10',
     expectedDelivery: '2024-03-20',
@@ -664,8 +756,8 @@ const orders = ref<MaterialProcurementOrder[]>([
     specification: '标准封装',
     quantity: 200,
     unit: '套',
-    unitPrice: 85.00,
-    totalAmount: 17000.00,
+    unitPrice: 85.0,
+    totalAmount: 17000.0,
     status: 'delivered',
     orderDate: '2024-03-05',
     expectedDelivery: '2024-03-15',
@@ -681,8 +773,8 @@ const orders = ref<MaterialProcurementOrder[]>([
     specification: 'M8×20mm',
     quantity: 1000,
     unit: '个',
-    unitPrice: 2.50,
-    totalAmount: 2500.00,
+    unitPrice: 2.5,
+    totalAmount: 2500.0,
     status: 'completed',
     orderDate: '2024-02-28',
     expectedDelivery: '2024-03-10',
@@ -698,8 +790,8 @@ const orders = ref<MaterialProcurementOrder[]>([
     specification: '颗粒状',
     quantity: 500,
     unit: 'kg',
-    unitPrice: 18.00,
-    totalAmount: 9000.00,
+    unitPrice: 18.0,
+    totalAmount: 9000.0,
     status: 'pending',
     orderDate: '2024-03-20',
     expectedDelivery: '2024-03-30',
@@ -713,7 +805,7 @@ const dialogTitle = computed(() => {
 })
 
 const filteredOrders = computed(() => {
-  let result = orders.value.filter((order) => {
+  const result = orders.value.filter((order) => {
     const supplierMatch = queryForm.supplier
       ? order.supplier.toLowerCase().includes(queryForm.supplier.toLowerCase())
       : true
@@ -745,12 +837,24 @@ const filteredOrders = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedOrders = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredOrders.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredOrders,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -837,7 +941,7 @@ const handleDelete = async (row: MaterialProcurementOrder) => {
         type: 'warning'
       }
     )
-    const index = orders.value.findIndex(item => item.id === row.id)
+    const index = orders.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       orders.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -858,8 +962,8 @@ const handleBatchDelete = async () => {
         type: 'warning'
       }
     )
-    selectedRows.value.forEach(row => {
-      const index = orders.value.findIndex(item => item.id === row.id)
+    selectedRows.value.forEach((row) => {
+      const index = orders.value.findIndex((item) => item.id === row.id)
       if (index > -1) {
         orders.value.splice(index, 1)
       }
@@ -903,17 +1007,17 @@ const calculateTotalAmount = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = orders.value.findIndex(item => item.id === formData.id)
+      const index = orders.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         orders.value[index] = { ...formData } as MaterialProcurementOrder
       }
@@ -927,7 +1031,7 @@ const handleSubmit = async () => {
       orders.value.unshift(newOrder)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)

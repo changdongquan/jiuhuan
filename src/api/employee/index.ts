@@ -45,7 +45,7 @@ export interface EmployeeStatistics {
 
 // 获取员工列表
 export const getEmployeeListApi = (params: EmployeeQueryParams = {}) => {
-  return request<EmployeeListResponse>({
+  return request({
     url: '/api/employee/list',
     method: 'get',
     params
@@ -54,7 +54,7 @@ export const getEmployeeListApi = (params: EmployeeQueryParams = {}) => {
 
 // 获取员工详情
 export const getEmployeeDetailApi = (id: number) => {
-  return request<EmployeeInfo>({
+  return request({
     url: `/api/employee/${id}`,
     method: 'get'
   })
@@ -62,7 +62,7 @@ export const getEmployeeDetailApi = (id: number) => {
 
 // 创建员工
 export const createEmployeeApi = (data: Omit<EmployeeInfo, 'id'>) => {
-  return request<EmployeeInfo>({
+  return request({
     url: '/api/employee',
     method: 'post',
     data
@@ -71,7 +71,7 @@ export const createEmployeeApi = (data: Omit<EmployeeInfo, 'id'>) => {
 
 // 更新员工
 export const updateEmployeeApi = (id: number, data: Partial<EmployeeInfo>) => {
-  return request<EmployeeInfo>({
+  return request({
     url: `/api/employee/${id}`,
     method: 'put',
     data
@@ -80,7 +80,7 @@ export const updateEmployeeApi = (id: number, data: Partial<EmployeeInfo>) => {
 
 // 删除员工
 export const deleteEmployeeApi = (id: number) => {
-  return request<{ message: string }>({
+  return request({
     url: `/api/employee/${id}`,
     method: 'delete'
   })
@@ -88,7 +88,7 @@ export const deleteEmployeeApi = (id: number) => {
 
 // 获取员工统计信息
 export const getEmployeeStatisticsApi = () => {
-  return request<EmployeeStatistics>({
+  return request({
     url: '/api/employee/statistics',
     method: 'get'
   })

@@ -622,7 +622,7 @@ const pagination = reactive({
   size: 10
 })
 
-const tableRef = ref<InstanceType<typeof ElTable<ReceiptTableRow>>>()
+const tableRef = ref<InstanceType<typeof ElTable>>()
 const tableData = ref<ReceiptTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -802,15 +802,13 @@ const submitDialogForm = async () => {
     return
   }
 
-  dialogForm.details.forEach(recalculateDetail)
-
   if (!dialogForm.details.length) {
     ElMessage.error('请至少添加一条产品明细')
     return
   }
 
   const invalidDetail = dialogForm.details.find(
-    (detail) => !detail.productName.trim() || detail.quantity <= 0
+    (detail) => !detail.productName.trim() || detail.amount <= 0
   )
 
   if (invalidDetail) {

@@ -89,7 +89,7 @@ export interface SupplierStatisticsResponse {
 
 // 获取供方信息列表
 export const getSupplierList = (params: SupplierQuery) => {
-  return request<SupplierListResponse>({
+  return request({
     url: '/api/supplier/list',
     method: 'get',
     params
@@ -98,7 +98,7 @@ export const getSupplierList = (params: SupplierQuery) => {
 
 // 获取供方信息详情
 export const getSupplierDetail = (id: number) => {
-  return request<SupplierDetailResponse>({
+  return request({
     url: `/api/supplier/detail/${id}`,
     method: 'get'
   })
@@ -132,7 +132,7 @@ export const deleteSupplier = (id: number) => {
 
 // 获取统计信息
 export const getSupplierStatistics = () => {
-  return request<SupplierStatisticsResponse>({
+  return request({
     url: '/api/supplier/statistics',
     method: 'get'
   })

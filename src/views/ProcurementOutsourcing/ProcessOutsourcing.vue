@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('processOutsourcing.orderNo')">
           <el-input
             v-model="queryForm.orderNo"
@@ -152,21 +146,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('processOutsourcing.orderList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchConfirm" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchConfirm"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Check /></el-icon>
               {{ t('processOutsourcing.batchConfirm') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredOrders"
+        :data="paginatedOrders"
         border
         height="520"
         row-key="id"
@@ -176,12 +180,43 @@
         class="data-table"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column type="index" width="60" :label="t('processOutsourcing.serial')" align="center" />
-        <el-table-column prop="orderNo" :label="t('processOutsourcing.orderNo')" min-width="160" sortable="custom" show-overflow-tooltip />
-        <el-table-column prop="supplier" :label="t('processOutsourcing.supplier')" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="processType" :label="t('processOutsourcing.processType')" width="120" />
-        <el-table-column prop="processCount" :label="t('processOutsourcing.processCount')" width="120" align="right" sortable="custom" />
-        <el-table-column :label="t('processOutsourcing.totalValue')" width="140" align="right" sortable="custom">
+        <el-table-column
+          type="index"
+          width="60"
+          :label="t('processOutsourcing.serial')"
+          align="center"
+        />
+        <el-table-column
+          prop="orderNo"
+          :label="t('processOutsourcing.orderNo')"
+          min-width="160"
+          sortable="custom"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="supplier"
+          :label="t('processOutsourcing.supplier')"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="processType"
+          :label="t('processOutsourcing.processType')"
+          width="120"
+        />
+        <el-table-column
+          prop="processCount"
+          :label="t('processOutsourcing.processCount')"
+          width="120"
+          align="right"
+          sortable="custom"
+        />
+        <el-table-column
+          :label="t('processOutsourcing.totalValue')"
+          width="140"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalValue) }} </template>
         </el-table-column>
         <el-table-column :label="t('processOutsourcing.status')" width="120" align="center">
@@ -191,9 +226,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="orderDate" :label="t('processOutsourcing.orderDate')" width="140" sortable="custom" />
+        <el-table-column
+          prop="orderDate"
+          :label="t('processOutsourcing.orderDate')"
+          width="140"
+          sortable="custom"
+        />
         <el-table-column prop="operator" :label="t('processOutsourcing.operator')" width="120" />
-        <el-table-column prop="remark" :label="t('processOutsourcing.remark')" min-width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="remark"
+          :label="t('processOutsourcing.remark')"
+          min-width="150"
+          show-overflow-tooltip
+        />
         <el-table-column :label="t('common.operation')" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
@@ -246,7 +291,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('processOutsourcing.orderNo')" prop="orderNo">
-              <el-input v-model="formData.orderNo" :placeholder="t('processOutsourcing.orderNoPlaceholder')" />
+              <el-input
+                v-model="formData.orderNo"
+                :placeholder="t('processOutsourcing.orderNoPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -263,12 +311,18 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('processOutsourcing.supplier')" prop="supplier">
-              <el-input v-model="formData.supplier" :placeholder="t('processOutsourcing.supplierPlaceholder')" />
+              <el-input
+                v-model="formData.supplier"
+                :placeholder="t('processOutsourcing.supplierPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('processOutsourcing.processType')" prop="processType">
-              <el-select v-model="formData.processType" :placeholder="t('processOutsourcing.processTypePlaceholder')">
+              <el-select
+                v-model="formData.processType"
+                :placeholder="t('processOutsourcing.processTypePlaceholder')"
+              >
                 <el-option
                   v-for="item in processTypeOptions"
                   :key="item.value"
@@ -282,7 +336,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('processOutsourcing.operator')" prop="operator">
-              <el-input v-model="formData.operator" :placeholder="t('processOutsourcing.operatorPlaceholder')" />
+              <el-input
+                v-model="formData.operator"
+                :placeholder="t('processOutsourcing.operatorPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -298,7 +355,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 工序明细表格 -->
         <el-form-item :label="t('processOutsourcing.processDetails')">
           <div class="process-details">
@@ -309,12 +366,39 @@
               </el-button>
             </div>
             <el-table :data="formData.processDetails" border class="process-table">
-              <el-table-column type="index" width="60" :label="t('processOutsourcing.serial')" align="center" />
-              <el-table-column prop="processCode" :label="t('processOutsourcing.processCode')" width="140" />
-              <el-table-column prop="processName" :label="t('processOutsourcing.processName')" min-width="160" />
-              <el-table-column prop="specification" :label="t('processOutsourcing.specification')" min-width="140" />
-              <el-table-column prop="unit" :label="t('processOutsourcing.unit')" width="80" align="center" />
-              <el-table-column prop="quantity" :label="t('processOutsourcing.quantity')" width="100" align="right">
+              <el-table-column
+                type="index"
+                width="60"
+                :label="t('processOutsourcing.serial')"
+                align="center"
+              />
+              <el-table-column
+                prop="processCode"
+                :label="t('processOutsourcing.processCode')"
+                width="140"
+              />
+              <el-table-column
+                prop="processName"
+                :label="t('processOutsourcing.processName')"
+                min-width="160"
+              />
+              <el-table-column
+                prop="specification"
+                :label="t('processOutsourcing.specification')"
+                min-width="140"
+              />
+              <el-table-column
+                prop="unit"
+                :label="t('processOutsourcing.unit')"
+                width="80"
+                align="center"
+              />
+              <el-table-column
+                prop="quantity"
+                :label="t('processOutsourcing.quantity')"
+                width="100"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.quantity"
@@ -325,7 +409,12 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="unitPrice" :label="t('processOutsourcing.unitPrice')" width="120" align="right">
+              <el-table-column
+                prop="unitPrice"
+                :label="t('processOutsourcing.unitPrice')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.unitPrice"
@@ -336,10 +425,13 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="totalPrice" :label="t('processOutsourcing.totalPrice')" width="120" align="right">
-                <template #default="{ row }">
-                  ¥ {{ formatAmount(row.totalPrice) }}
-                </template>
+              <el-table-column
+                prop="totalPrice"
+                :label="t('processOutsourcing.totalPrice')"
+                width="120"
+                align="right"
+              >
+                <template #default="{ row }"> ¥ {{ formatAmount(row.totalPrice) }} </template>
               </el-table-column>
               <el-table-column :label="t('common.operation')" width="80" align="center">
                 <template #default="{ $index }">
@@ -351,7 +443,7 @@
             </el-table>
           </div>
         </el-form-item>
-        
+
         <el-form-item :label="t('processOutsourcing.totalValue')" prop="totalValue">
           <el-input v-model="formData.totalValue" readonly />
         </el-form-item>
@@ -534,10 +626,18 @@ const formData = reactive<Partial<ProcessOrder>>({
 // 表单验证规则
 const formRules: FormRules = {
   orderNo: [{ required: true, message: t('processOutsourcing.orderNoRequired'), trigger: 'blur' }],
-  supplier: [{ required: true, message: t('processOutsourcing.supplierRequired'), trigger: 'blur' }],
-  processType: [{ required: true, message: t('processOutsourcing.processTypeRequired'), trigger: 'change' }],
-  orderDate: [{ required: true, message: t('processOutsourcing.orderDateRequired'), trigger: 'change' }],
-  operator: [{ required: true, message: t('processOutsourcing.operatorRequired'), trigger: 'blur' }],
+  supplier: [
+    { required: true, message: t('processOutsourcing.supplierRequired'), trigger: 'blur' }
+  ],
+  processType: [
+    { required: true, message: t('processOutsourcing.processTypeRequired'), trigger: 'change' }
+  ],
+  orderDate: [
+    { required: true, message: t('processOutsourcing.orderDateRequired'), trigger: 'change' }
+  ],
+  operator: [
+    { required: true, message: t('processOutsourcing.operatorRequired'), trigger: 'blur' }
+  ],
   status: [{ required: true, message: t('processOutsourcing.statusRequired'), trigger: 'change' }]
 }
 
@@ -579,7 +679,7 @@ const orders = ref<ProcessOrder[]>([
     supplier: '上海机加工有限公司',
     processType: '机加工',
     processCount: 2,
-    totalValue: 12000.00,
+    totalValue: 12000.0,
     status: 'completed',
     orderDate: '2024-03-15',
     operator: '张三',
@@ -591,8 +691,8 @@ const orders = ref<ProcessOrder[]>([
         specification: '精度±0.01mm',
         unit: '件',
         quantity: 100,
-        unitPrice: 80.00,
-        totalPrice: 8000.00
+        unitPrice: 80.0,
+        totalPrice: 8000.0
       },
       {
         processCode: 'P002',
@@ -600,8 +700,8 @@ const orders = ref<ProcessOrder[]>([
         specification: '表面粗糙度Ra1.6',
         unit: '件',
         quantity: 50,
-        unitPrice: 80.00,
-        totalPrice: 4000.00
+        unitPrice: 80.0,
+        totalPrice: 4000.0
       }
     ]
   },
@@ -611,7 +711,7 @@ const orders = ref<ProcessOrder[]>([
     supplier: '北京热处理厂',
     processType: '热处理',
     processCount: 1,
-    totalValue: 8000.00,
+    totalValue: 8000.0,
     status: 'inProgress',
     orderDate: '2024-03-20',
     operator: '李四',
@@ -623,8 +723,8 @@ const orders = ref<ProcessOrder[]>([
         specification: '硬度HRC45-50',
         unit: '件',
         quantity: 200,
-        unitPrice: 40.00,
-        totalPrice: 8000.00
+        unitPrice: 40.0,
+        totalPrice: 8000.0
       }
     ]
   }
@@ -636,18 +736,21 @@ const dialogTitle = computed(() => {
 })
 
 const filteredOrders = computed(() => {
-  let result = orders.value.filter((order) => {
+  const result = orders.value.filter((order) => {
     const orderNoMatch = queryForm.orderNo
       ? order.orderNo.toLowerCase().includes(queryForm.orderNo.toLowerCase())
       : true
     const supplierMatch = queryForm.supplier
       ? order.supplier.toLowerCase().includes(queryForm.supplier.toLowerCase())
       : true
-    const processTypeMatch = queryForm.processType ? order.processType === queryForm.processType : true
+    const processTypeMatch = queryForm.processType
+      ? order.processType === queryForm.processType
+      : true
     const statusMatch = queryForm.status ? order.status === queryForm.status : true
     const dateMatch =
       queryForm.orderDateRange.length === 2 && order.orderDate
-        ? order.orderDate >= queryForm.orderDateRange[0] && order.orderDate <= queryForm.orderDateRange[1]
+        ? order.orderDate >= queryForm.orderDateRange[0] &&
+          order.orderDate <= queryForm.orderDateRange[1]
         : true
     return orderNoMatch && supplierMatch && processTypeMatch && statusMatch && dateMatch
   })
@@ -665,12 +768,24 @@ const filteredOrders = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedOrders = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredOrders.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredOrders,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -753,7 +868,7 @@ const handleDelete = async (row: ProcessOrder) => {
         type: 'warning'
       }
     )
-    const index = orders.value.findIndex(item => item.id === row.id)
+    const index = orders.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       orders.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -826,17 +941,17 @@ const calculateTotalValue = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = orders.value.findIndex(item => item.id === formData.id)
+      const index = orders.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         orders.value[index] = { ...formData } as ProcessOrder
       }
@@ -850,7 +965,7 @@ const handleSubmit = async () => {
       orders.value.unshift(newOrder)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)

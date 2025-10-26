@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('inventoryTransfer.transferNo')">
           <el-input
             v-model="queryForm.transferNo"
@@ -158,21 +152,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('inventoryTransfer.transferList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchConfirm" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchConfirm"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Check /></el-icon>
               {{ t('inventoryTransfer.batchConfirm') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredTransfers"
+        :data="paginatedTransfers"
         border
         height="520"
         row-key="id"
@@ -182,12 +186,42 @@
         class="data-table"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column type="index" width="60" :label="t('inventoryTransfer.serial')" align="center" />
-        <el-table-column prop="transferNo" :label="t('inventoryTransfer.transferNo')" min-width="160" sortable="custom" show-overflow-tooltip />
-        <el-table-column prop="fromWarehouse" :label="t('inventoryTransfer.fromWarehouse')" width="120" />
-        <el-table-column prop="toWarehouse" :label="t('inventoryTransfer.toWarehouse')" width="120" />
-        <el-table-column prop="materialCount" :label="t('inventoryTransfer.materialCount')" width="120" align="right" sortable="custom" />
-        <el-table-column :label="t('inventoryTransfer.totalValue')" width="140" align="right" sortable="custom">
+        <el-table-column
+          type="index"
+          width="60"
+          :label="t('inventoryTransfer.serial')"
+          align="center"
+        />
+        <el-table-column
+          prop="transferNo"
+          :label="t('inventoryTransfer.transferNo')"
+          min-width="160"
+          sortable="custom"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="fromWarehouse"
+          :label="t('inventoryTransfer.fromWarehouse')"
+          width="120"
+        />
+        <el-table-column
+          prop="toWarehouse"
+          :label="t('inventoryTransfer.toWarehouse')"
+          width="120"
+        />
+        <el-table-column
+          prop="materialCount"
+          :label="t('inventoryTransfer.materialCount')"
+          width="120"
+          align="right"
+          sortable="custom"
+        />
+        <el-table-column
+          :label="t('inventoryTransfer.totalValue')"
+          width="140"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalValue) }} </template>
         </el-table-column>
         <el-table-column :label="t('inventoryTransfer.status')" width="120" align="center">
@@ -197,9 +231,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="transferDate" :label="t('inventoryTransfer.transferDate')" width="140" sortable="custom" />
+        <el-table-column
+          prop="transferDate"
+          :label="t('inventoryTransfer.transferDate')"
+          width="140"
+          sortable="custom"
+        />
         <el-table-column prop="operator" :label="t('inventoryTransfer.operator')" width="120" />
-        <el-table-column prop="remark" :label="t('inventoryTransfer.remark')" min-width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="remark"
+          :label="t('inventoryTransfer.remark')"
+          min-width="150"
+          show-overflow-tooltip
+        />
         <el-table-column :label="t('common.operation')" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
@@ -252,7 +296,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryTransfer.transferNo')" prop="transferNo">
-              <el-input v-model="formData.transferNo" :placeholder="t('inventoryTransfer.transferNoPlaceholder')" />
+              <el-input
+                v-model="formData.transferNo"
+                :placeholder="t('inventoryTransfer.transferNoPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -269,7 +316,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryTransfer.fromWarehouse')" prop="fromWarehouse">
-              <el-select v-model="formData.fromWarehouse" :placeholder="t('inventoryTransfer.fromWarehousePlaceholder')">
+              <el-select
+                v-model="formData.fromWarehouse"
+                :placeholder="t('inventoryTransfer.fromWarehousePlaceholder')"
+              >
                 <el-option
                   v-for="item in warehouseOptions"
                   :key="item.value"
@@ -281,7 +331,10 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventoryTransfer.toWarehouse')" prop="toWarehouse">
-              <el-select v-model="formData.toWarehouse" :placeholder="t('inventoryTransfer.toWarehousePlaceholder')">
+              <el-select
+                v-model="formData.toWarehouse"
+                :placeholder="t('inventoryTransfer.toWarehousePlaceholder')"
+              >
                 <el-option
                   v-for="item in warehouseOptions"
                   :key="item.value"
@@ -295,7 +348,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryTransfer.operator')" prop="operator">
-              <el-input v-model="formData.operator" :placeholder="t('inventoryTransfer.operatorPlaceholder')" />
+              <el-input
+                v-model="formData.operator"
+                :placeholder="t('inventoryTransfer.operatorPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -311,7 +367,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 物料明细表格 -->
         <el-form-item :label="t('inventoryTransfer.materialDetails')">
           <div class="material-details">
@@ -322,12 +378,39 @@
               </el-button>
             </div>
             <el-table :data="formData.materialDetails" border class="material-table">
-              <el-table-column type="index" width="60" :label="t('inventoryTransfer.serial')" align="center" />
-              <el-table-column prop="materialCode" :label="t('inventoryTransfer.materialCode')" width="140" />
-              <el-table-column prop="materialName" :label="t('inventoryTransfer.materialName')" min-width="160" />
-              <el-table-column prop="specification" :label="t('inventoryTransfer.specification')" min-width="140" />
-              <el-table-column prop="unit" :label="t('inventoryTransfer.unit')" width="80" align="center" />
-              <el-table-column prop="quantity" :label="t('inventoryTransfer.quantity')" width="100" align="right">
+              <el-table-column
+                type="index"
+                width="60"
+                :label="t('inventoryTransfer.serial')"
+                align="center"
+              />
+              <el-table-column
+                prop="materialCode"
+                :label="t('inventoryTransfer.materialCode')"
+                width="140"
+              />
+              <el-table-column
+                prop="materialName"
+                :label="t('inventoryTransfer.materialName')"
+                min-width="160"
+              />
+              <el-table-column
+                prop="specification"
+                :label="t('inventoryTransfer.specification')"
+                min-width="140"
+              />
+              <el-table-column
+                prop="unit"
+                :label="t('inventoryTransfer.unit')"
+                width="80"
+                align="center"
+              />
+              <el-table-column
+                prop="quantity"
+                :label="t('inventoryTransfer.quantity')"
+                width="100"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.quantity"
@@ -338,7 +421,12 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="unitPrice" :label="t('inventoryTransfer.unitPrice')" width="120" align="right">
+              <el-table-column
+                prop="unitPrice"
+                :label="t('inventoryTransfer.unitPrice')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.unitPrice"
@@ -349,10 +437,13 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="totalPrice" :label="t('inventoryTransfer.totalPrice')" width="120" align="right">
-                <template #default="{ row }">
-                  ¥ {{ formatAmount(row.totalPrice) }}
-                </template>
+              <el-table-column
+                prop="totalPrice"
+                :label="t('inventoryTransfer.totalPrice')"
+                width="120"
+                align="right"
+              >
+                <template #default="{ row }"> ¥ {{ formatAmount(row.totalPrice) }} </template>
               </el-table-column>
               <el-table-column :label="t('common.operation')" width="80" align="center">
                 <template #default="{ $index }">
@@ -364,7 +455,7 @@
             </el-table>
           </div>
         </el-form-item>
-        
+
         <el-form-item :label="t('inventoryTransfer.totalValue')" prop="totalValue">
           <el-input v-model="formData.totalValue" readonly />
         </el-form-item>
@@ -546,10 +637,18 @@ const formData = reactive<Partial<TransferRecord>>({
 
 // 表单验证规则
 const formRules: FormRules = {
-  transferNo: [{ required: true, message: t('inventoryTransfer.transferNoRequired'), trigger: 'blur' }],
-  fromWarehouse: [{ required: true, message: t('inventoryTransfer.fromWarehouseRequired'), trigger: 'change' }],
-  toWarehouse: [{ required: true, message: t('inventoryTransfer.toWarehouseRequired'), trigger: 'change' }],
-  transferDate: [{ required: true, message: t('inventoryTransfer.transferDateRequired'), trigger: 'change' }],
+  transferNo: [
+    { required: true, message: t('inventoryTransfer.transferNoRequired'), trigger: 'blur' }
+  ],
+  fromWarehouse: [
+    { required: true, message: t('inventoryTransfer.fromWarehouseRequired'), trigger: 'change' }
+  ],
+  toWarehouse: [
+    { required: true, message: t('inventoryTransfer.toWarehouseRequired'), trigger: 'change' }
+  ],
+  transferDate: [
+    { required: true, message: t('inventoryTransfer.transferDateRequired'), trigger: 'change' }
+  ],
   operator: [{ required: true, message: t('inventoryTransfer.operatorRequired'), trigger: 'blur' }],
   status: [{ required: true, message: t('inventoryTransfer.statusRequired'), trigger: 'change' }]
 }
@@ -590,7 +689,7 @@ const transfers = ref<TransferRecord[]>([
     fromWarehouse: '主仓库',
     toWarehouse: '成品仓',
     materialCount: 2,
-    totalValue: 9000.00,
+    totalValue: 9000.0,
     status: 'completed',
     transferDate: '2024-03-15',
     operator: '张三',
@@ -602,8 +701,8 @@ const transfers = ref<TransferRecord[]>([
         specification: '机加工零件A',
         unit: '件',
         quantity: 200,
-        unitPrice: 45.00,
-        totalPrice: 9000.00
+        unitPrice: 45.0,
+        totalPrice: 9000.0
       }
     ]
   },
@@ -613,7 +712,7 @@ const transfers = ref<TransferRecord[]>([
     fromWarehouse: '原料仓',
     toWarehouse: '主仓库',
     materialCount: 1,
-    totalValue: 6000.00,
+    totalValue: 6000.0,
     status: 'confirmed',
     transferDate: '2024-03-20',
     operator: '李四',
@@ -625,8 +724,8 @@ const transfers = ref<TransferRecord[]>([
         specification: '304不锈钢 2mm厚',
         unit: '张',
         quantity: 50,
-        unitPrice: 120.00,
-        totalPrice: 6000.00
+        unitPrice: 120.0,
+        totalPrice: 6000.0
       }
     ]
   }
@@ -638,16 +737,21 @@ const dialogTitle = computed(() => {
 })
 
 const filteredTransfers = computed(() => {
-  let result = transfers.value.filter((transfer) => {
+  const result = transfers.value.filter((transfer) => {
     const transferNoMatch = queryForm.transferNo
       ? transfer.transferNo.toLowerCase().includes(queryForm.transferNo.toLowerCase())
       : true
-    const fromWarehouseMatch = queryForm.fromWarehouse ? transfer.fromWarehouse === queryForm.fromWarehouse : true
-    const toWarehouseMatch = queryForm.toWarehouse ? transfer.toWarehouse === queryForm.toWarehouse : true
+    const fromWarehouseMatch = queryForm.fromWarehouse
+      ? transfer.fromWarehouse === queryForm.fromWarehouse
+      : true
+    const toWarehouseMatch = queryForm.toWarehouse
+      ? transfer.toWarehouse === queryForm.toWarehouse
+      : true
     const statusMatch = queryForm.status ? transfer.status === queryForm.status : true
     const dateMatch =
       queryForm.transferDateRange.length === 2 && transfer.transferDate
-        ? transfer.transferDate >= queryForm.transferDateRange[0] && transfer.transferDate <= queryForm.transferDateRange[1]
+        ? transfer.transferDate >= queryForm.transferDateRange[0] &&
+          transfer.transferDate <= queryForm.transferDateRange[1]
         : true
     return transferNoMatch && fromWarehouseMatch && toWarehouseMatch && statusMatch && dateMatch
   })
@@ -665,12 +769,24 @@ const filteredTransfers = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedTransfers = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredTransfers.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredTransfers,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -753,7 +869,7 @@ const handleDelete = async (row: TransferRecord) => {
         type: 'warning'
       }
     )
-    const index = transfers.value.findIndex(item => item.id === row.id)
+    const index = transfers.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       transfers.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -826,17 +942,17 @@ const calculateTotalValue = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = transfers.value.findIndex(item => item.id === formData.id)
+      const index = transfers.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         transfers.value[index] = { ...formData } as TransferRecord
       }
@@ -850,7 +966,7 @@ const handleSubmit = async () => {
       transfers.value.unshift(newTransfer)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)

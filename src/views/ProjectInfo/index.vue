@@ -4,9 +4,7 @@
       <template #header>
         <div class="flex justify-between items-center">
           <span class="text-lg font-bold">项目信息</span>
-          <el-button type="primary" @click="handleAdd">
-            新增项目
-          </el-button>
+          <el-button type="primary" @click="handleAdd"> 新增项目 </el-button>
         </div>
       </template>
 
@@ -34,37 +32,43 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleQuery">
-            查询
-          </el-button>
-          <el-button @click="handleReset">
-            重置
-          </el-button>
+          <el-button type="primary" @click="handleQuery"> 查询 </el-button>
+          <el-button @click="handleReset"> 重置 </el-button>
         </el-form-item>
       </el-form>
 
       <!-- 数据表格 -->
-      <el-table :data="tableData" border stripe v-loading="loading" @row-dblclick="handleRowDoubleClick">
+      <el-table
+        :data="tableData"
+        border
+        stripe
+        v-loading="loading"
+        @row-dblclick="handleRowDoubleClick"
+      >
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="projectCode" label="项目编号" min-width="160" show-overflow-tooltip />
+        <el-table-column
+          prop="projectCode"
+          label="项目编号"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column prop="productName" label="产品名称" width="240" />
         <el-table-column prop="productDrawing" label="产品图号" width="240" />
-        <el-table-column prop="customerModelNo" label="客户模号" width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="customerModelNo"
+          label="客户模号"
+          width="150"
+          show-overflow-tooltip
+        />
         <el-table-column prop="category" label="分类" width="120" />
         <el-table-column prop="customerName" label="客户名称" width="280" show-overflow-tooltip />
         <el-table-column prop="remarks" label="备注" width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
-              <el-button type="primary" size="small" @click="handleEdit(row)">
-                编辑
-              </el-button>
-              <el-button type="success" size="small" @click="handleView(row)">
-                查看
-              </el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)">
-                删除
-              </el-button>
+              <el-button type="primary" size="small" @click="handleEdit(row)"> 编辑 </el-button>
+              <el-button type="success" size="small" @click="handleView(row)"> 查看 </el-button>
+              <el-button type="danger" size="small" @click="handleDelete(row)"> 删除 </el-button>
             </div>
           </template>
         </el-table-column>
@@ -137,9 +141,9 @@
         <el-form-item label="项目编号" prop="projectCode">
           <div class="project-code-input">
             <span class="code-prefix">JH</span>
-            <el-select 
+            <el-select
               ref="projectCodeInputRef"
-              v-model="formData.projectCategory" 
+              v-model="formData.projectCategory"
               placeholder="类别"
               class="code-category"
               @change="onCategoryChange"
@@ -149,17 +153,17 @@
               <el-option label="05" value="05" />
             </el-select>
             <span class="code-separator">-</span>
-            <el-input 
-              v-model="formData.projectYear" 
+            <el-input
+              v-model="formData.projectYear"
               placeholder="年份"
               maxlength="2"
               class="code-year"
               @input="updateProjectCode"
             />
             <span class="code-separator">-</span>
-            <el-input 
+            <el-input
               ref="projectSerialInputRef"
-              v-model="formData.projectSerial" 
+              v-model="formData.projectSerial"
               placeholder="序号"
               maxlength="3"
               class="code-serial"
@@ -169,9 +173,9 @@
             />
             <template v-if="formData.projectCategory === '03'">
               <span class="code-separator">/</span>
-              <el-input 
+              <el-input
                 ref="partNumberInputRef"
-                v-model="formData.partNumber" 
+                v-model="formData.partNumber"
                 placeholder="零件"
                 maxlength="2"
                 class="code-part"
@@ -184,16 +188,21 @@
             </el-tag>
             <div v-if="showSerialTip && maxSerialInfo" class="serial-tip">
               <el-tag type="warning" size="small">
-                当前分类最大序号: {{ maxSerialInfo.maxSerial }}，建议使用: {{ maxSerialInfo.nextSerial }}
+                当前分类最大序号: {{ maxSerialInfo.maxSerial }}，建议使用:
+                {{ maxSerialInfo.nextSerial }}
               </el-tag>
             </div>
           </div>
         </el-form-item>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="产品名称" prop="projectName">
-              <el-input ref="projectNameInputRef" v-model="formData.projectName" placeholder="请输入产品名称" />
+              <el-input
+                ref="projectNameInputRef"
+                v-model="formData.projectName"
+                placeholder="请输入产品名称"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -210,9 +219,9 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="客户名称" prop="customerName">
-              <el-select 
-                v-model="formData.customerName" 
-                placeholder="请选择客户名称" 
+              <el-select
+                v-model="formData.customerName"
+                placeholder="请选择客户名称"
                 style="width: 100%"
                 filterable
                 clearable
@@ -247,19 +256,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { 
-  getGoodsListApi, 
-  createGoodsApi, 
-  updateGoodsApi, 
+import {
+  getGoodsListApi,
+  createGoodsApi,
+  updateGoodsApi,
   deleteGoodsApi,
   getMaxSerialApi,
   type GoodsInfo,
-  type GoodsQueryParams 
+  type GoodsQueryParams
 } from '@/api/goods'
-import { 
-  getCustomerListApi,
-  type CustomerInfo 
-} from '@/api/customer'
+import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import {
   ElButton,
   ElCard,
@@ -351,11 +357,13 @@ const getCategoryName = (category: string) => {
 }
 
 // 获取分类标签类型
-const getCategoryTagType = (category: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
+const getCategoryTagType = (
+  category: string
+): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
   const typeMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
-    '塑胶模具': 'primary',
-    '零件加工': 'success',
-    '修改模具': 'warning'
+    塑胶模具: 'primary',
+    零件加工: 'success',
+    修改模具: 'warning'
   }
   return typeMap[category] || 'info'
 }
@@ -363,27 +371,27 @@ const getCategoryTagType = (category: string): 'primary' | 'success' | 'warning'
 // 生成项目编号
 const updateProjectCode = () => {
   const { projectCategory, projectYear, projectSerial, partNumber } = formData
-  
+
   if (!projectCategory || !projectYear || !projectSerial) {
     formData.projectCode = ''
     return
   }
-  
+
   // 格式化年份（确保是2位数）
   const yearStr = projectYear.padStart(2, '0')
-  
+
   // 格式化序号（确保是3位数）
   const serialStr = projectSerial.padStart(3, '0')
-  
+
   // 基础编号格式：JH0X-YY-SSS
   let code = `JH${projectCategory}-${yearStr}-${serialStr}`
-  
+
   // 如果是03（零件加工）且有零件号，则添加零件号
   if (projectCategory === '03' && partNumber) {
     const partStr = partNumber.padStart(2, '0')
     code += `/${partStr}`
   }
-  
+
   formData.projectCode = code
 }
 
@@ -435,9 +443,9 @@ const fetchData = async () => {
       page: currentPage.value,
       pageSize: pageSize.value
     }
-    
+
     const response = await getGoodsListApi(params)
-    
+
     if (response && response.data) {
       tableData.value = response.data.list
       total.value = response.data.total
@@ -457,7 +465,7 @@ const fetchCustomerList = async () => {
   try {
     customerLoading.value = true
     const response = await getCustomerListApi()
-    
+
     if (response && response.data) {
       customerList.value = response.data
     } else {
@@ -475,7 +483,7 @@ const fetchCustomerList = async () => {
 const fetchMaxSerial = async (category: string) => {
   try {
     const response = await getMaxSerialApi(category)
-    
+
     if (response && response.data) {
       maxSerialInfo.value = response.data
       showSerialTip.value = true
@@ -506,7 +514,7 @@ const handleReset = () => {
 const handleAdd = async () => {
   editingId.value = null
   dialogTitle.value = '新增项目'
-  
+
   // 清空所有表单字段
   formData.projectCode = ''
   formData.projectCategory = ''
@@ -517,18 +525,18 @@ const handleAdd = async () => {
   formData.customerName = ''
   formData.projectManager = ''
   formData.description = ''
-  
+
   // 设置默认年份为当前年份的后两位
   const currentYear = new Date().getFullYear()
   formData.projectYear = String(currentYear).slice(-2)
-  
+
   // 清空序号提示
   showSerialTip.value = false
   maxSerialInfo.value = null
-  
+
   // 获取客户列表
   await fetchCustomerList()
-  
+
   dialogVisible.value = true
 }
 
@@ -536,7 +544,7 @@ const handleAdd = async () => {
 const handleEdit = async (row: any) => {
   editingId.value = row.id
   dialogTitle.value = '编辑项目'
-  
+
   // 映射数据库字段到表单字段
   formData.projectCode = row.projectCode
   formData.projectName = row.productName
@@ -544,7 +552,7 @@ const handleEdit = async (row: any) => {
   formData.customerName = row.customerName
   formData.customerModelNo = row.customerModelNo
   formData.description = row.remarks
-  
+
   // 解析项目编号
   if (row.projectCode) {
     const match = row.projectCode.match(/JH(\d{2})-(\d{2})-(\d{3})(\/(\d{2}))?/)
@@ -555,10 +563,10 @@ const handleEdit = async (row: any) => {
       formData.partNumber = match[5] || ''
     }
   }
-  
+
   // 获取客户列表
   await fetchCustomerList()
-  
+
   dialogVisible.value = true
 }
 
@@ -589,7 +597,7 @@ const handleDelete = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    
+
     await deleteGoodsApi(row.id)
     ElMessage.success('删除成功')
     // 刷新数据列表
@@ -606,16 +614,20 @@ const handleDelete = async (row: any) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
-    
+
     const goodsData = {
       projectCode: formData.projectCode,
       productDrawing: formData.projectManager,
       productName: formData.projectName,
-      category: formData.projectCategory === '01' ? '塑胶模具' : 
-                formData.projectCategory === '03' ? '零件加工' : '修改模具',
+      category:
+        formData.projectCategory === '01'
+          ? '塑胶模具'
+          : formData.projectCategory === '03'
+            ? '零件加工'
+            : '修改模具',
       remarks: formData.description
     }
-    
+
     if (editingId.value) {
       // 编辑模式
       await updateGoodsApi(editingId.value, goodsData)
@@ -625,7 +637,7 @@ const handleSubmit = async () => {
       await createGoodsApi(goodsData)
       ElMessage.success('新增项目成功')
     }
-    
+
     dialogVisible.value = false
     // 刷新数据列表
     await fetchData()
@@ -725,4 +737,3 @@ onMounted(() => {
   margin-left: 8px;
 }
 </style>
-

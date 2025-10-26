@@ -110,7 +110,7 @@
       v-else
       description="暂无客户数据"
       class="rounded-lg bg-[var(--el-bg-color-overlay)] py-16"
-      image-size="180"
+      :image-size="180"
     />
 
     <el-dialog
@@ -195,17 +195,15 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick, reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  getCustomerListApi, 
-  getCustomerDetailApi, 
-  createCustomerApi, 
-  updateCustomerApi, 
+import {
+  getCustomerListApi,
+  getCustomerDetailApi,
+  createCustomerApi,
+  updateCustomerApi,
   deleteCustomerApi,
   getCustomerStatisticsApi,
   type CustomerInfo,
-  type CustomerQueryParams,
-  type CustomerListResponse,
-  type CustomerStatistics
+  type CustomerQueryParams
 } from '@/api/customer'
 
 type CustomerStatus = 'active' | 'inactive'
@@ -249,12 +247,8 @@ const currentCustomerId = ref<number | null>(null)
 const dialogRules: FormRules<CustomerPayload> = {
   customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
   contact: [{ required: false, message: '请输入联系人', trigger: 'blur' }],
-  phone: [
-    { required: false, message: '请输入联系电话', trigger: 'blur' }
-  ],
-  email: [
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
-  ]
+  phone: [{ required: false, message: '请输入联系电话', trigger: 'blur' }],
+  email: [{ type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }]
 }
 
 // 移除模拟数据，使用真实API数据
@@ -279,11 +273,14 @@ const loadCustomerData = async () => {
       page: pagination.page,
       pageSize: pagination.size
     }
-    
+
     const response = await getCustomerListApi(params)
-    if (response.success) {
+
+    if (response.code === 0) {
       tableData.value = response.data.list
       total.value = response.data.total
+    } else {
+      ElMessage.error(response.message || '加载客户数据失败')
     }
   } catch (error) {
     console.error('加载客户数据失败:', error)
@@ -295,7 +292,8 @@ const loadCustomerData = async () => {
 const loadStatistics = async () => {
   try {
     const response = await getCustomerStatisticsApi()
-    if (response.success) {
+
+    if (response.code === 0) {
       summary.totalCustomers = response.data.totalCustomers
       summary.activeCustomers = response.data.activeCustomers
       summary.inactiveCustomers = response.data.inactiveCustomers
@@ -355,7 +353,7 @@ const handleEdit = (row: CustomerTableRow) => {
 const openEditDialog = async (id: number) => {
   try {
     const response = await getCustomerDetailApi(id)
-    if (response.success) {
+    if (response.code === 0) {
       dialogTitle.value = '编辑客户'
       currentCustomerId.value = id
       assignDialogForm(response.data)
@@ -460,8 +458,6 @@ const handleDialogClosed = () => {
   dialogFormRef.value?.clearValidate()
 }
 
-const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
-
 // 页面初始化
 onMounted(async () => {
   await refreshTable()
@@ -486,4 +482,3 @@ onMounted(async () => {
   color: var(--el-text-color-primary);
 }
 </style>
-

@@ -225,23 +225,17 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { computed, nextTick, reactive, ref, watch, onMounted } from 'vue'
+import { nextTick, reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useI18n } from '@/hooks/web/useI18n'
 import {
   getEmployeeListApi,
   getEmployeeDetailApi,
   createEmployeeApi,
   updateEmployeeApi,
   deleteEmployeeApi,
-  getEmployeeStatisticsApi,
   type EmployeeInfo,
-  type EmployeeQueryParams,
-  type EmployeeListResponse,
-  type EmployeeStatistics
+  type EmployeeQueryParams
 } from '@/api/employee'
-
-const { t } = useI18n()
 
 type EmployeePayload = Omit<EmployeeInfo, 'id'>
 
@@ -316,9 +310,9 @@ const loadEmployeeData = async () => {
       pageSize: pagination.size,
       ...queryForm
     }
-    const response = await getEmployeeListApi(params)
-    tableData.value = response.list
-    total.value = response.total
+    const response = (await getEmployeeListApi(params)) as any
+    tableData.value = response.data?.list || response.list
+    total.value = response.data?.total || response.total
   } catch (error) {
     console.error('加载员工数据失败:', error)
     ElMessage.error('加载员工数据失败')
@@ -371,10 +365,10 @@ const handleEdit = (row: EmployeeInfo) => {
 
 const openEditDialog = async (id: number) => {
   try {
-    const response = await getEmployeeDetailApi(id)
+    const response = (await getEmployeeDetailApi(id)) as any
     dialogTitle.value = '编辑员工'
     currentEmployeeId.value = id
-    assignDialogForm(response)
+    assignDialogForm(response.data || response)
     dialogVisible.value = true
     await nextTick()
     dialogFormRef.value?.clearValidate()

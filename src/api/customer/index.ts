@@ -3,13 +3,13 @@ import request from '@/axios'
 // 客户信息类型定义
 export interface CustomerInfo {
   id: number
-  customerName: string    // 客户名称
-  contact?: string       // 联系人
-  phone?: string         // 电话
-  address?: string       // 地址
-  email?: string         // 邮箱
-  status: 'active' | 'inactive'  // 客户状态
-  seqNumber: number       // 序号
+  customerName: string // 客户名称
+  contact?: string // 联系人
+  phone?: string // 电话
+  address?: string // 地址
+  email?: string // 邮箱
+  status: 'active' | 'inactive' // 客户状态
+  seqNumber: number // 序号
 }
 
 // 客户查询参数
@@ -39,7 +39,7 @@ export interface CustomerStatistics {
 
 // 获取客户信息列表
 export const getCustomerListApi = (params?: CustomerQueryParams) => {
-  return request.get({ 
+  return request.get({
     url: '/api/customer/list',
     params
   })

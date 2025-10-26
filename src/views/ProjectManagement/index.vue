@@ -682,7 +682,7 @@ const pagination = reactive({
   size: 10
 })
 
-const tableRef = ref<InstanceType<typeof ElTable<ProjectTableRow>>>()
+const tableRef = ref<InstanceType<typeof ElTable>>()
 const tableData = ref<ProjectTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)

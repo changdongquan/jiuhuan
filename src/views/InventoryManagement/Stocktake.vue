@@ -2,13 +2,7 @@
   <div class="p-4 space-y-4">
     <!-- 搜索表单 -->
     <el-card shadow="never" class="search-card">
-      <el-form
-        ref="queryFormRef"
-        :model="queryForm"
-        label-width="100px"
-        inline
-        class="search-form"
-      >
+      <el-form ref="queryFormRef" :model="queryForm" label-width="100px" inline class="search-form">
         <el-form-item :label="t('inventoryStocktake.stocktakeNo')">
           <el-input
             v-model="queryForm.stocktakeNo"
@@ -143,21 +137,31 @@
         <div class="card-header">
           <span class="card-title">{{ t('inventoryStocktake.stocktakeList') }}</span>
           <div class="card-actions">
-            <el-button type="primary" size="small" @click="handleBatchConfirm" :disabled="!selectedRows.length">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleBatchConfirm"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Check /></el-icon>
               {{ t('inventoryStocktake.batchConfirm') }}
             </el-button>
-            <el-button type="success" size="small" @click="handleBatchExport" :disabled="!selectedRows.length">
+            <el-button
+              type="success"
+              size="small"
+              @click="handleBatchExport"
+              :disabled="!selectedRows.length"
+            >
               <el-icon><Download /></el-icon>
               {{ t('common.batchExport') }}
             </el-button>
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
-        :data="filteredStocktakes"
+        :data="paginatedStocktakes"
         border
         height="520"
         row-key="id"
@@ -167,11 +171,33 @@
         class="data-table"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column type="index" width="60" :label="t('inventoryStocktake.serial')" align="center" />
-        <el-table-column prop="stocktakeNo" :label="t('inventoryStocktake.stocktakeNo')" min-width="160" sortable="custom" show-overflow-tooltip />
+        <el-table-column
+          type="index"
+          width="60"
+          :label="t('inventoryStocktake.serial')"
+          align="center"
+        />
+        <el-table-column
+          prop="stocktakeNo"
+          :label="t('inventoryStocktake.stocktakeNo')"
+          min-width="160"
+          sortable="custom"
+          show-overflow-tooltip
+        />
         <el-table-column prop="warehouse" :label="t('inventoryStocktake.warehouse')" width="120" />
-        <el-table-column prop="materialCount" :label="t('inventoryStocktake.materialCount')" width="120" align="right" sortable="custom" />
-        <el-table-column :label="t('inventoryStocktake.totalValue')" width="140" align="right" sortable="custom">
+        <el-table-column
+          prop="materialCount"
+          :label="t('inventoryStocktake.materialCount')"
+          width="120"
+          align="right"
+          sortable="custom"
+        />
+        <el-table-column
+          :label="t('inventoryStocktake.totalValue')"
+          width="140"
+          align="right"
+          sortable="custom"
+        >
           <template #default="{ row }"> ¥ {{ formatAmount(row.totalValue) }} </template>
         </el-table-column>
         <el-table-column :label="t('inventoryStocktake.status')" width="120" align="center">
@@ -181,9 +207,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="stocktakeDate" :label="t('inventoryStocktake.stocktakeDate')" width="140" sortable="custom" />
+        <el-table-column
+          prop="stocktakeDate"
+          :label="t('inventoryStocktake.stocktakeDate')"
+          width="140"
+          sortable="custom"
+        />
         <el-table-column prop="operator" :label="t('inventoryStocktake.operator')" width="120" />
-        <el-table-column prop="remark" :label="t('inventoryStocktake.remark')" min-width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="remark"
+          :label="t('inventoryStocktake.remark')"
+          min-width="150"
+          show-overflow-tooltip
+        />
         <el-table-column :label="t('common.operation')" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
@@ -236,7 +272,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryStocktake.stocktakeNo')" prop="stocktakeNo">
-              <el-input v-model="formData.stocktakeNo" :placeholder="t('inventoryStocktake.stocktakeNoPlaceholder')" />
+              <el-input
+                v-model="formData.stocktakeNo"
+                :placeholder="t('inventoryStocktake.stocktakeNoPlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -253,7 +292,10 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('inventoryStocktake.warehouse')" prop="warehouse">
-              <el-select v-model="formData.warehouse" :placeholder="t('inventoryStocktake.warehousePlaceholder')">
+              <el-select
+                v-model="formData.warehouse"
+                :placeholder="t('inventoryStocktake.warehousePlaceholder')"
+              >
                 <el-option
                   v-for="item in warehouseOptions"
                   :key="item.value"
@@ -265,7 +307,10 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('inventoryStocktake.operator')" prop="operator">
-              <el-input v-model="formData.operator" :placeholder="t('inventoryStocktake.operatorPlaceholder')" />
+              <el-input
+                v-model="formData.operator"
+                :placeholder="t('inventoryStocktake.operatorPlaceholder')"
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -288,7 +333,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 物料明细表格 -->
         <el-form-item :label="t('inventoryStocktake.materialDetails')">
           <div class="material-details">
@@ -299,17 +344,49 @@
               </el-button>
             </div>
             <el-table :data="formData.materialDetails" border class="material-table">
-              <el-table-column type="index" width="60" :label="t('inventoryStocktake.serial')" align="center" />
-              <el-table-column prop="materialCode" :label="t('inventoryStocktake.materialCode')" width="140" />
-              <el-table-column prop="materialName" :label="t('inventoryStocktake.materialName')" min-width="160" />
-              <el-table-column prop="specification" :label="t('inventoryStocktake.specification')" min-width="140" />
-              <el-table-column prop="unit" :label="t('inventoryStocktake.unit')" width="80" align="center" />
-              <el-table-column prop="bookQuantity" :label="t('inventoryStocktake.bookQuantity')" width="120" align="right">
+              <el-table-column
+                type="index"
+                width="60"
+                :label="t('inventoryStocktake.serial')"
+                align="center"
+              />
+              <el-table-column
+                prop="materialCode"
+                :label="t('inventoryStocktake.materialCode')"
+                width="140"
+              />
+              <el-table-column
+                prop="materialName"
+                :label="t('inventoryStocktake.materialName')"
+                min-width="160"
+              />
+              <el-table-column
+                prop="specification"
+                :label="t('inventoryStocktake.specification')"
+                min-width="140"
+              />
+              <el-table-column
+                prop="unit"
+                :label="t('inventoryStocktake.unit')"
+                width="80"
+                align="center"
+              />
+              <el-table-column
+                prop="bookQuantity"
+                :label="t('inventoryStocktake.bookQuantity')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row }">
                   {{ row.bookQuantity }}
                 </template>
               </el-table-column>
-              <el-table-column prop="actualQuantity" :label="t('inventoryStocktake.actualQuantity')" width="120" align="right">
+              <el-table-column
+                prop="actualQuantity"
+                :label="t('inventoryStocktake.actualQuantity')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.actualQuantity"
@@ -320,14 +397,28 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="difference" :label="t('inventoryStocktake.difference')" width="120" align="right">
+              <el-table-column
+                prop="difference"
+                :label="t('inventoryStocktake.difference')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row }">
-                  <span :class="row.difference > 0 ? 'text-success' : row.difference < 0 ? 'text-danger' : ''">
+                  <span
+                    :class="
+                      row.difference > 0 ? 'text-success' : row.difference < 0 ? 'text-danger' : ''
+                    "
+                  >
                     {{ row.difference > 0 ? '+' : '' }}{{ row.difference }}
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column prop="unitPrice" :label="t('inventoryStocktake.unitPrice')" width="120" align="right">
+              <el-table-column
+                prop="unitPrice"
+                :label="t('inventoryStocktake.unitPrice')"
+                width="120"
+                align="right"
+              >
                 <template #default="{ row, $index }">
                   <el-input-number
                     v-model="row.unitPrice"
@@ -338,10 +429,13 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="totalPrice" :label="t('inventoryStocktake.totalPrice')" width="120" align="right">
-                <template #default="{ row }">
-                  ¥ {{ formatAmount(row.totalPrice) }}
-                </template>
+              <el-table-column
+                prop="totalPrice"
+                :label="t('inventoryStocktake.totalPrice')"
+                width="120"
+                align="right"
+              >
+                <template #default="{ row }"> ¥ {{ formatAmount(row.totalPrice) }} </template>
               </el-table-column>
               <el-table-column :label="t('common.operation')" width="80" align="center">
                 <template #default="{ $index }">
@@ -353,7 +447,7 @@
             </el-table>
           </div>
         </el-form-item>
-        
+
         <el-form-item :label="t('inventoryStocktake.remark')" prop="remark">
           <el-input
             v-model="formData.remark"
@@ -528,10 +622,18 @@ const formData = reactive<Partial<StocktakeRecord>>({
 
 // 表单验证规则
 const formRules: FormRules = {
-  stocktakeNo: [{ required: true, message: t('inventoryStocktake.stocktakeNoRequired'), trigger: 'blur' }],
-  warehouse: [{ required: true, message: t('inventoryStocktake.warehouseRequired'), trigger: 'change' }],
-  stocktakeDate: [{ required: true, message: t('inventoryStocktake.stocktakeDateRequired'), trigger: 'change' }],
-  operator: [{ required: true, message: t('inventoryStocktake.operatorRequired'), trigger: 'blur' }],
+  stocktakeNo: [
+    { required: true, message: t('inventoryStocktake.stocktakeNoRequired'), trigger: 'blur' }
+  ],
+  warehouse: [
+    { required: true, message: t('inventoryStocktake.warehouseRequired'), trigger: 'change' }
+  ],
+  stocktakeDate: [
+    { required: true, message: t('inventoryStocktake.stocktakeDateRequired'), trigger: 'change' }
+  ],
+  operator: [
+    { required: true, message: t('inventoryStocktake.operatorRequired'), trigger: 'blur' }
+  ],
   status: [{ required: true, message: t('inventoryStocktake.statusRequired'), trigger: 'change' }]
 }
 
@@ -570,7 +672,7 @@ const stocktakes = ref<StocktakeRecord[]>([
     stocktakeNo: 'ST-240301',
     warehouse: '主仓库',
     materialCount: 2,
-    totalValue: 15000.00,
+    totalValue: 15000.0,
     status: 'completed',
     stocktakeDate: '2024-03-15',
     operator: '张三',
@@ -584,8 +686,8 @@ const stocktakes = ref<StocktakeRecord[]>([
         bookQuantity: 150,
         actualQuantity: 145,
         difference: -5,
-        unitPrice: 120.00,
-        totalPrice: 17400.00
+        unitPrice: 120.0,
+        totalPrice: 17400.0
       }
     ]
   },
@@ -594,7 +696,7 @@ const stocktakes = ref<StocktakeRecord[]>([
     stocktakeNo: 'ST-240302',
     warehouse: '成品仓',
     materialCount: 1,
-    totalValue: 9000.00,
+    totalValue: 9000.0,
     status: 'inProgress',
     stocktakeDate: '2024-03-20',
     operator: '李四',
@@ -608,8 +710,8 @@ const stocktakes = ref<StocktakeRecord[]>([
         bookQuantity: 200,
         actualQuantity: 200,
         difference: 0,
-        unitPrice: 45.00,
-        totalPrice: 9000.00
+        unitPrice: 45.0,
+        totalPrice: 9000.0
       }
     ]
   }
@@ -621,7 +723,7 @@ const dialogTitle = computed(() => {
 })
 
 const filteredStocktakes = computed(() => {
-  let result = stocktakes.value.filter((stocktake) => {
+  const result = stocktakes.value.filter((stocktake) => {
     const stocktakeNoMatch = queryForm.stocktakeNo
       ? stocktake.stocktakeNo.toLowerCase().includes(queryForm.stocktakeNo.toLowerCase())
       : true
@@ -629,7 +731,8 @@ const filteredStocktakes = computed(() => {
     const statusMatch = queryForm.status ? stocktake.status === queryForm.status : true
     const dateMatch =
       queryForm.stocktakeDateRange.length === 2 && stocktake.stocktakeDate
-        ? stocktake.stocktakeDate >= queryForm.stocktakeDateRange[0] && stocktake.stocktakeDate <= queryForm.stocktakeDateRange[1]
+        ? stocktake.stocktakeDate >= queryForm.stocktakeDateRange[0] &&
+          stocktake.stocktakeDate <= queryForm.stocktakeDateRange[1]
         : true
     return stocktakeNoMatch && warehouseMatch && statusMatch && dateMatch
   })
@@ -647,12 +750,24 @@ const filteredStocktakes = computed(() => {
     })
   }
 
-  // 分页
-  pagination.total = result.length
+  return result
+})
+
+// 分页计算
+const paginatedStocktakes = computed(() => {
   const start = (pagination.currentPage - 1) * pagination.pageSize
   const end = start + pagination.pageSize
-  return result.slice(start, end)
+  return filteredStocktakes.value.slice(start, end)
 })
+
+// 监听过滤结果变化，更新分页总数
+watch(
+  filteredStocktakes,
+  (newVal) => {
+    pagination.total = newVal.length
+  },
+  { immediate: true }
+)
 
 const summary = computed(() => {
   const result = {
@@ -733,7 +848,7 @@ const handleDelete = async (row: StocktakeRecord) => {
         type: 'warning'
       }
     )
-    const index = stocktakes.value.findIndex(item => item.id === row.id)
+    const index = stocktakes.value.findIndex((item) => item.id === row.id)
     if (index > -1) {
       stocktakes.value.splice(index, 1)
       ElMessage.success(t('common.deleteSuccess'))
@@ -809,17 +924,17 @@ const calculateTotalValue = () => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     submitLoading.value = true
-    
+
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     if (formData.id) {
       // 编辑
-      const index = stocktakes.value.findIndex(item => item.id === formData.id)
+      const index = stocktakes.value.findIndex((item) => item.id === formData.id)
       if (index > -1) {
         stocktakes.value[index] = { ...formData } as StocktakeRecord
       }
@@ -833,7 +948,7 @@ const handleSubmit = async () => {
       stocktakes.value.unshift(newStocktake)
       ElMessage.success(t('common.addSuccess'))
     }
-    
+
     dialogVisible.value = false
   } catch (error) {
     console.error('表单验证失败:', error)
