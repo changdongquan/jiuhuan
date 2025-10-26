@@ -281,8 +281,8 @@ const statusOptions = [
 ]
 const categoryOptions = [
   { label: '塑胶模具', value: '塑胶模具' },
-  { label: '压铸模具', value: '压铸模具' },
-  { label: '其他', value: '其他' }
+  { label: '零件加工', value: '零件加工' },
+  { label: '修改模具', value: '修改模具' }
 ]
 
 const viewDialogVisible = ref(false)
