@@ -1,750 +1,398 @@
 <template>
   <div class="p-4">
-    <el-form
-      ref="queryFormRef"
-      :model="queryForm"
-      label-width="90px"
-      inline
-      style="margin-bottom: 16px"
-    >
-      <el-form-item label="项目编号">
-        <el-input v-model="queryForm.itemCode" placeholder="请输入项目编号" clearable />
-      </el-form-item>
-      <el-form-item label="项目名称">
-        <el-input v-model="queryForm.projectName" placeholder="请输入项目名称" clearable />
+    <el-form ref="queryFormRef" :model="queryForm" label-width="90px" inline style="margin-bottom: 16px">
+      <el-form-item label="关键词">
+        <el-input v-model="queryForm.keyword" placeholder="项目编号/项目名称" clearable style="width: 200px" />
       </el-form-item>
       <el-form-item label="项目状态">
-        <el-select
-          v-model="queryForm.status"
-          placeholder="请选择项目状态"
-          clearable
-          style="width: 160px"
-        >
-          <el-option
-            v-for="item in statusOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
+        <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
+          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-      </el-form-item>
-      <el-form-item label="项目周期">
-        <el-date-picker
-          v-model="queryForm.projectPeriodRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          value-format="YYYY-MM-DD"
-          clearable
-        />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleCreate">新增</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="tableData"
-      border
-      height="calc(100vh - 320px)"
-      row-key="id"
-      @row-dblclick="handleRowDblClick"
-    >
-      <el-table-column type="expand">
+    <el-table ref="tableRef" v-loading="loading" :data="tableData" border height="calc(100vh - 320px)" @row-dblclick="handleView">
+      <el-table-column prop="项目编号" label="项目编号" min-width="100" show-overflow-tooltip />
+      <el-table-column prop="项目名称" label="项目名称" width="130" show-overflow-tooltip />
+      <el-table-column prop="客户模号" label="客户模号" width="110" show-overflow-tooltip />
+      <el-table-column prop="产品材质" label="产品材质" width="100" show-overflow-tooltip />
+      <el-table-column prop="模具穴数" label="模具穴数" width="80" align="center" />
+      <el-table-column prop="设计师" label="设计师" width="80" />
+      <el-table-column prop="项目状态" label="项目状态" width="90" align="center">
         <template #default="{ row }">
-          <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="50" />
-            <el-table-column prop="itemCode" label="阶段编号" min-width="140" />
-            <el-table-column prop="productName" label="阶段名称" min-width="160" />
-            <el-table-column prop="productDrawingNo" label="负责人" min-width="150" />
-            <el-table-column prop="customerPartNo" label="关键里程碑" min-width="150" />
-            <el-table-column label="计划数量" width="90" align="center">
-              <template #default="{ row: detail }">
-                {{ detail.quantity }}
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.unitPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="成本(元)" width="140" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="endDate" label="截止日期" width="140" />
-            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-            <el-table-column
-              prop="costSource"
-              label="资源来源"
-              min-width="140"
-              show-overflow-tooltip
-            />
-          </el-table>
+          <el-tag :type="getStatusTagType(row.项目状态)">{{ row.项目状态 || '-' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="projectCode" label="项目编号" min-width="140" />
-      <el-table-column prop="projectName" label="项目名称" min-width="160" />
-      <el-table-column label="阶段数量" width="100" align="center">
+      <el-table-column prop="中标日期" label="中标日期" width="100" />
+      <el-table-column prop="产品3D确认" label="产品3D确认" width="100" />
+      <el-table-column prop="图纸下发时间" label="图纸下发时间" width="110" />
+      <el-table-column prop="计划首样日期" label="计划首样日期" width="110" />
+      <el-table-column prop="首次送样日期" label="首次送样日期" width="110" />
+      <el-table-column prop="移模日期" label="移模日期" width="100" />
+      <el-table-column prop="制件厂家" label="制件厂家" width="110" show-overflow-tooltip />
+      <el-table-column prop="进度影响原因" label="进度影响原因" width="130" show-overflow-tooltip />
+      <el-table-column label="操作" width="150" fixed="right" align="center">
         <template #default="{ row }">
-          {{ row.details.length }}
-        </template>
-      </el-table-column>
-      <el-table-column label="计划总量" width="100" align="center">
-        <template #default="{ row }">
-          {{ row.totalQuantity }}
-        </template>
-      </el-table-column>
-      <el-table-column label="预算总额" width="140" align="right">
-        <template #default="{ row }">
-          {{ formatAmount(row.totalAmount) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="项目状态" width="120" align="center">
-        <template #default="{ row }">
-          <el-tag :type="statusTagMap[row.status].type">
-            {{ statusTagMap[row.status].label }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="startDate" label="开始日期" width="140" />
-      <el-table-column prop="endDate" label="结束日期" width="140" />
-      <el-table-column prop="contractNo" label="合同编号" width="140" />
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+          <el-button type="primary" link @click="handleView(row)">查看</el-button>
+          <el-button type="success" link @click="handleEdit(row)">编辑</el-button>
           <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <div style="margin-top: 16px; display: flex; justify-content: flex-end">
-      <el-pagination
-        background
-        layout="total, sizes, prev, pager, next, jumper"
-        :current-page="pagination.page"
-        :page-size="pagination.size"
-        :page-sizes="[10, 20, 30, 50]"
-        :total="total"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      />
+      <el-pagination background layout="total, sizes, prev, pager, next, jumper" 
+        :current-page="pagination.page" :page-size="pagination.size" 
+        :page-sizes="[10, 20, 30, 50]" :total="total" 
+        @size-change="handleSizeChange" @current-change="handleCurrentChange" />
     </div>
 
-    <el-dialog
-      v-model="dialogVisible"
-      :title="dialogTitle"
-      width="1500px"
-      :close-on-click-modal="false"
-      @closed="handleDialogClosed"
-    >
-      <el-form
-        ref="dialogFormRef"
-        :model="dialogForm"
-        :rules="dialogRules"
-        label-width="auto"
-        class="dialog-form-container"
-      >
-        <div class="dialog-form-columns">
-          <div class="dialog-form-column dialog-form-column--left">
-            <el-form-item label="项目编号" prop="projectCode">
-              <el-input
-                v-model="dialogForm.projectCode"
-                placeholder="请输入项目编号"
-                class="dialog-input"
-              />
-            </el-form-item>
-            <el-form-item label="开始日期">
-              <el-date-picker
-                v-model="dialogForm.startDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择开始日期"
-                class="dialog-date-picker"
-                style="width: 252px"
-              />
-            </el-form-item>
-            <el-form-item label="项目状态" class="dialog-status-item">
-              <el-select v-model="dialogForm.status" placeholder="请选择状态" class="dialog-input">
-                <el-option
-                  v-for="item in statusOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </div>
-          <div class="dialog-form-column dialog-form-column--right">
-            <el-form-item label="项目名称" prop="projectName">
-              <el-input
-                v-model="dialogForm.projectName"
-                placeholder="请输入项目名称"
-                class="dialog-input"
-              />
-            </el-form-item>
-            <el-form-item label="结束日期">
-              <el-date-picker
-                v-model="dialogForm.endDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择结束日期"
-                class="dialog-date-picker"
-                style="width: 252px"
-              />
-            </el-form-item>
-            <el-form-item label="合同编号">
-              <el-input
-                v-model="dialogForm.contractNo"
-                placeholder="请输入合同编号"
-                class="dialog-input"
-              />
-            </el-form-item>
-          </div>
-        </div>
+    <!-- 查看详情对话框 -->
+    <el-dialog v-model="viewDialogVisible" title="项目详情" width="1400px">
+      <el-descriptions :column="4" border :size="'small'">
+        <el-descriptions-item label="项目编号">{{ viewData.项目编号 }}</el-descriptions-item>
+        <el-descriptions-item label="项目名称">{{ viewData.项目名称 }}</el-descriptions-item>
+        <el-descriptions-item label="客户ID">{{ viewData.客户ID }}</el-descriptions-item>
+        <el-descriptions-item label="客户模号">{{ viewData.客户模号 }}</el-descriptions-item>
+        <el-descriptions-item label="产品材质">{{ viewData.产品材质 }}</el-descriptions-item>
+        <el-descriptions-item label="模具穴数">{{ viewData.模具穴数 }}</el-descriptions-item>
+        <el-descriptions-item label="设计师">{{ viewData.设计师 }}</el-descriptions-item>
+        <el-descriptions-item label="项目状态">
+          <el-tag :type="getStatusTagType(viewData.项目状态)">{{ viewData.项目状态 }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="中标日期">{{ viewData.中标日期 }}</el-descriptions-item>
+        <el-descriptions-item label="产品3D确认">{{ viewData.产品3D确认 }}</el-descriptions-item>
+        <el-descriptions-item label="图纸下发时间">{{ viewData.图纸下发时间 }}</el-descriptions-item>
+        <el-descriptions-item label="计划首样日期">{{ viewData.计划首样日期 }}</el-descriptions-item>
+        <el-descriptions-item label="首次送样日期">{{ viewData.首次送样日期 }}</el-descriptions-item>
+        <el-descriptions-item label="移模日期">{{ viewData.移模日期 }}</el-descriptions-item>
+        <el-descriptions-item label="送样时间">{{ viewData.送样时间 }}</el-descriptions-item>
+        <el-descriptions-item label="制件厂家">{{ viewData.制件厂家 }}</el-descriptions-item>
+        <el-descriptions-item label="进度影响原因" :span="4">{{ viewData.进度影响原因 }}</el-descriptions-item>
+        <el-descriptions-item label="模具尺寸">{{ viewData.模具尺寸 }}</el-descriptions-item>
+        <el-descriptions-item label="产品尺寸">{{ viewData.产品尺寸 }}</el-descriptions-item>
+        <el-descriptions-item label="产品重量">{{ viewData.产品重量 }}</el-descriptions-item>
+        <el-descriptions-item label="产品颜色">{{ viewData.产品颜色 }}</el-descriptions-item>
+        <el-descriptions-item label="模具重量">{{ viewData.模具重量 }}</el-descriptions-item>
+        <el-descriptions-item label="收缩率">{{ viewData.收缩率 }}</el-descriptions-item>
+        <el-descriptions-item label="前模材质">{{ viewData.前模材质 }}</el-descriptions-item>
+        <el-descriptions-item label="后模材质">{{ viewData.后模材质 }}</el-descriptions-item>
+        <el-descriptions-item label="滑块材质">{{ viewData.滑块材质 }}</el-descriptions-item>
+        <el-descriptions-item label="流道类型">{{ viewData.流道类型 }}</el-descriptions-item>
+        <el-descriptions-item label="流道数量">{{ viewData.流道数量 }}</el-descriptions-item>
+        <el-descriptions-item label="浇口类型">{{ viewData.浇口类型 }}</el-descriptions-item>
+        <el-descriptions-item label="浇口数量">{{ viewData.浇口数量 }}</el-descriptions-item>
+        <el-descriptions-item label="机台吨位">{{ viewData.机台吨位 }}</el-descriptions-item>
+        <el-descriptions-item label="锁模力">{{ viewData.锁模力 }}</el-descriptions-item>
+        <el-descriptions-item label="定位圈">{{ viewData.定位圈 }}</el-descriptions-item>
+        <el-descriptions-item label="容模量">{{ viewData.容模量 }}</el-descriptions-item>
+        <el-descriptions-item label="拉杆间距">{{ viewData.拉杆间距 }}</el-descriptions-item>
+        <el-descriptions-item label="成型周期">{{ viewData.成型周期 }}</el-descriptions-item>
+        <el-descriptions-item label="料柄重量">{{ viewData.料柄重量 }}</el-descriptions-item>
+        <el-descriptions-item label="总成本">{{ viewData.总成本 }}</el-descriptions-item>
+        <el-descriptions-item label="完成百分比">{{ viewData.完成百分比 }}%</el-descriptions-item>
+        <el-descriptions-item label="费用出处">{{ viewData.费用出处 }}</el-descriptions-item>
+        <el-descriptions-item label="是否归档" :span="4">
+          <el-tag v-if="viewData.是否归档" type="success">已归档</el-tag>
+          <el-tag v-else type="info">未归档</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="归档日期" :span="4">{{ viewData.归档日期 }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="4">{{ viewData.备注 }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleEditFromView">编辑</el-button>
+      </template>
+    </el-dialog>
 
-        <div class="dialog-product-section">
-          <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="阶段编号" min-width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.itemCode" placeholder="请输入阶段编号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="阶段名称" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.productName" placeholder="请输入阶段名称" />
-              </template>
-            </el-table-column>
-            <el-table-column label="负责人" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入负责人" />
-              </template>
-            </el-table-column>
-            <el-table-column label="关键里程碑" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入关键里程碑" />
-              </template>
-            </el-table-column>
-            <el-table-column label="计划数量" width="140" align="center">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="成本单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
-                  :min="0"
-                  :step="100"
-                  :precision="2"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="handleDetailUnitPriceChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="成本(元)" width="80" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="截止日期" width="150">
-              <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.endDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择截止日期"
-                  style="width: 130px"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.remark" placeholder="备注" />
-              </template>
-            </el-table-column>
-            <el-table-column label="资源来源" min-width="145">
-              <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="请输入资源来源" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="55" fixed="right">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <div class="dialog-product-summary">
-            <el-button type="primary" plain @click="addDetailRow">新增阶段</el-button>
-            <div>
-              <span class="dialog-product-summary__item"
-                >阶段数量：{{ dialogForm.details.length }}</span
-              >
-              <span class="dialog-product-summary__item"
-                >计划总量：{{ dialogTotals.totalQuantity }}</span
-              >
-              <span>预算总额：{{ formatAmount(dialogTotals.totalAmount) }}</span>
-            </div>
-          </div>
-        </div>
+    <!-- 编辑对话框 -->
+    <el-dialog v-model="editDialogVisible" :title="editTitle" width="1400px" :close-on-click-modal="false" @closed="handleEditDialogClosed">
+      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="120px" class="edit-form-container">
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="项目编号" prop="项目编号">
+              <el-input v-model="editForm.项目编号" placeholder="项目编号" :disabled="!!currentProjectCode" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="项目名称" prop="项目名称">
+              <el-input v-model="editForm.项目名称" placeholder="项目名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="客户ID">
+              <el-input-number v-model="editForm.客户ID" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="客户模号">
+              <el-input v-model="editForm.客户模号" placeholder="客户模号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="设计师">
+              <el-input v-model="editForm.设计师" placeholder="设计师" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="产品材质">
+              <el-input v-model="editForm.产品材质" placeholder="产品材质" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="模具穴数">
+              <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="模具尺寸">
+              <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="产品尺寸">
+              <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="产品重量">
+              <el-input-number v-model="editForm.产品重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="产品颜色">
+              <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="收缩率">
+              <el-input-number v-model="editForm.收缩率" :min="0" :precision="4" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="模具重量">
+              <el-input-number v-model="editForm.模具重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="前模材质">
+              <el-input v-model="editForm.前模材质" placeholder="前模材质" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="后模材质">
+              <el-input v-model="editForm.后模材质" placeholder="后模材质" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="滑块材质">
+              <el-input v-model="editForm.滑块材质" placeholder="滑块材质" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="流道类型">
+              <el-input v-model="editForm.流道类型" placeholder="流道类型" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="流道数量">
+              <el-input-number v-model="editForm.流道数量" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="浇口类型">
+              <el-input v-model="editForm.浇口类型" placeholder="浇口类型" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="浇口数量">
+              <el-input-number v-model="editForm.浇口数量" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="机台吨位">
+              <el-input-number v-model="editForm.机台吨位" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="锁模力">
+              <el-input-number v-model="editForm.锁模力" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="定位圈">
+              <el-input-number v-model="editForm.定位圈" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="容模量">
+              <el-input v-model="editForm.容模量" placeholder="容模量" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="拉杆间距">
+              <el-input-number v-model="editForm.拉杆间距" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="成型周期">
+              <el-input-number v-model="editForm.成型周期" :min="0" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="料柄重量">
+              <el-input-number v-model="editForm.料柄重量" :min="0" :precision="2" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="总成本">
+              <el-input-number v-model="editForm.总成本" :min="0" :precision="2" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="完成百分比">
+              <el-input-number v-model="editForm.完成百分比" :min="0" :max="100" :controls="false" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="费用出处">
+              <el-input v-model="editForm.费用出处" placeholder="费用出处" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="项目状态">
+              <el-input v-model="editForm.项目状态" placeholder="项目状态" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="中标日期">
+              <el-date-picker v-model="editForm.中标日期" type="date" value-format="YYYY-MM-DD" placeholder="中标日期" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="产品3D确认">
+              <el-date-picker v-model="editForm.产品3D确认" type="date" value-format="YYYY-MM-DD" placeholder="产品3D确认" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="图纸下发时间">
+              <el-date-picker v-model="editForm.图纸下发时间" type="date" value-format="YYYY-MM-DD" placeholder="图纸下发时间" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="计划首样日期">
+              <el-date-picker v-model="editForm.计划首样日期" type="date" value-format="YYYY-MM-DD" placeholder="计划首样日期" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="首次送样日期">
+              <el-date-picker v-model="editForm.首次送样日期" type="date" value-format="YYYY-MM-DD" placeholder="首次送样日期" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="移模日期">
+              <el-date-picker v-model="editForm.移模日期" type="date" value-format="YYYY-MM-DD" placeholder="移模日期" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="送样时间">
+              <el-date-picker v-model="editForm.送样时间" type="date" value-format="YYYY-MM-DD" placeholder="送样时间" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="制件厂家">
+              <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="进度影响原因">
+              <el-input v-model="editForm.进度影响原因" placeholder="进度影响原因" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="是否归档">
+              <el-switch v-model="editForm.是否归档" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="归档日期">
+              <el-date-picker v-model="editForm.归档日期" type="date" value-format="YYYY-MM-DD" placeholder="归档日期" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="备注">
+              <el-input v-model="editForm.备注" type="textarea" :rows="3" placeholder="备注" />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
-          保存
-        </el-button>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import {
-  ElButton,
-  ElDatePicker,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElInputNumber,
-  ElMessage,
-  ElMessageBox,
-  ElOption,
-  ElPagination,
-  ElSelect,
-  ElTable,
-  ElTableColumn,
-  ElTag
-} from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getProjectListApi, getProjectDetailApi, createProjectApi, updateProjectApi, deleteProjectApi, type ProjectInfo } from '@/api/project'
 
-type ProjectStatus = 'ongoing' | 'completed'
-
-interface ProjectPhase {
-  id: number
-  itemCode: string
-  productName: string
-  productDrawingNo: string
-  customerPartNo: string
-  quantity: number
-  unitPrice: number
-  amount: number
-  endDate: string
-  remark: string
-  costSource: string
-}
-
-interface Project {
-  id: number
-  projectCode: string
-  projectName: string
-  contractNo: string
-  status: ProjectStatus
-  startDate: string
-  endDate: string
-  details: ProjectPhase[]
-}
-
-interface ProjectQuery {
-  itemCode: string
-  projectName: string
-  status: '' | ProjectStatus
-  projectPeriodRange: string[]
-}
-
-interface ListProjectsParams {
-  page: number
-  size: number
-  itemCode?: string
-  projectName?: string
-  status?: ProjectStatus
-  projectPeriodRange?: [string, string]
-}
-
-interface PaginatedProjects {
-  list: Project[]
-  total: number
-}
-
-interface ProjectTableRow extends Project {
-  totalQuantity: number
-  totalAmount: number
-}
-
-type ProjectPayload = Omit<Project, 'id'>
-
-const mockProjects = ref<Project[]>([
-  {
-    id: 1,
-    projectCode: 'PRJ-202401',
-    projectName: '智慧工厂升级',
-    contractNo: 'XM-HT-001',
-    status: 'ongoing',
-    startDate: '2024-01-05',
-    endDate: '2024-04-30',
-    details: [
-      {
-        id: 1,
-        itemCode: 'PH-01',
-        productName: '需求调研',
-        productDrawingNo: '王强',
-        customerPartNo: '完成调研报告',
-        quantity: 1,
-        unitPrice: 18000,
-        amount: 18000,
-        endDate: '2024-01-20',
-        remark: '覆盖核心产线',
-        costSource: '项目预算'
-      },
-      {
-        id: 2,
-        itemCode: 'PH-02',
-        productName: '系统部署',
-        productDrawingNo: '刘月',
-        customerPartNo: '完成设备联网',
-        quantity: 1,
-        unitPrice: 42000,
-        amount: 42000,
-        endDate: '2024-03-15',
-        remark: '与供应商协同',
-        costSource: '项目预算'
-      }
-    ]
-  },
-  {
-    id: 2,
-    projectCode: 'PRJ-202402',
-    projectName: '海外仓建设',
-    contractNo: 'XM-HT-002',
-    status: 'ongoing',
-    startDate: '2024-02-01',
-    endDate: '2024-06-30',
-    details: [
-      {
-        id: 3,
-        itemCode: 'PH-01',
-        productName: '仓库规划',
-        productDrawingNo: '陈峰',
-        customerPartNo: '完成平面设计',
-        quantity: 1,
-        unitPrice: 25000,
-        amount: 25000,
-        endDate: '2024-02-28',
-        remark: '重点关注动线',
-        costSource: '自筹'
-      },
-      {
-        id: 4,
-        itemCode: 'PH-02',
-        productName: '土建施工',
-        productDrawingNo: '赵丽',
-        customerPartNo: '主体结构封顶',
-        quantity: 1,
-        unitPrice: 76000,
-        amount: 76000,
-        endDate: '2024-05-10',
-        remark: '使用本地施工队',
-        costSource: '自筹'
-      }
-    ]
-  },
-  {
-    id: 3,
-    projectCode: 'PRJ-202403',
-    projectName: 'MES 系统升级',
-    contractNo: 'XM-HT-003',
-    status: 'completed',
-    startDate: '2023-11-15',
-    endDate: '2024-03-20',
-    details: [
-      {
-        id: 5,
-        itemCode: 'PH-01',
-        productName: '蓝图设计',
-        productDrawingNo: '黄倩',
-        customerPartNo: '确认系统蓝图',
-        quantity: 1,
-        unitPrice: 22000,
-        amount: 22000,
-        endDate: '2023-12-10',
-        remark: '完成流程梳理',
-        costSource: '项目预算'
-      },
-      {
-        id: 6,
-        itemCode: 'PH-02',
-        productName: '试运行',
-        productDrawingNo: '李敏',
-        customerPartNo: '通过 UAT',
-        quantity: 1,
-        unitPrice: 30000,
-        amount: 30000,
-        endDate: '2024-03-05',
-        remark: '现场培训完成',
-        costSource: '项目预算'
-      }
-    ]
-  }
-])
-
-const detailIdSeed = ref(
-  (() => {
-    const ids = mockProjects.value.flatMap((project) => project.details.map((detail) => detail.id))
-    return (ids.length ? Math.max(...ids) : 0) + 1
-  })()
-)
-
-const createDetailId = () => detailIdSeed.value++
-
-const createEmptyDetail = (): ProjectPhase => ({
-  id: createDetailId(),
-  itemCode: '',
-  productName: '',
-  productDrawingNo: '',
-  customerPartNo: '',
-  quantity: 1,
-  unitPrice: 0,
-  amount: 0,
-  endDate: '',
-  remark: '',
-  costSource: ''
-})
-
-const createEmptyProject = (): ProjectPayload => ({
-  projectCode: '',
-  projectName: '',
-  contractNo: '',
-  status: 'ongoing',
-  startDate: '',
-  endDate: '',
-  details: [createEmptyDetail()]
-})
-
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    globalThis.setTimeout(resolve, ms)
-  })
-
-const normalizeDetails = (details: ProjectPhase[]): ProjectPhase[] =>
-  details.map((detail) => {
-    const quantity = Number(detail.quantity) || 0
-    const unitPrice = Number(detail.unitPrice) || 0
-    const amount = Number((quantity * unitPrice).toFixed(2))
-    return {
-      ...detail,
-      quantity,
-      unitPrice,
-      amount
-    }
-  })
-
-const calculateSummary = (details: ProjectPhase[]) =>
-  details.reduce(
-    (acc, item) => {
-      acc.totalQuantity += item.quantity
-      acc.totalAmount += item.amount
-      return acc
-    },
-    { totalQuantity: 0, totalAmount: 0 }
-  )
-
-const listProjects = async (params: ListProjectsParams): Promise<PaginatedProjects> => {
-  await wait(300)
-  const { page, size, itemCode, projectName, status, projectPeriodRange } = params
-
-  let filtered = [...mockProjects.value]
-
-  if (itemCode) {
-    const value = itemCode.trim().toLowerCase()
-    filtered = filtered.filter((project) =>
-      project.details.some((detail) => {
-        const code = detail.itemCode ? detail.itemCode.toLowerCase() : ''
-        return code.includes(value)
-      })
-    )
-  }
-
-  if (projectName) {
-    const value = projectName.trim().toLowerCase()
-    filtered = filtered.filter((item) => item.projectName.toLowerCase().includes(value))
-  }
-
-  if (status) {
-    filtered = filtered.filter((item) => item.status === status)
-  }
-
-  if (projectPeriodRange && projectPeriodRange.length === 2) {
-    const [start, end] = projectPeriodRange
-    filtered = filtered.filter((item) => item.startDate >= start && item.startDate <= end)
-  }
-
-  const startIndex = (page - 1) * size
-  const list = filtered.slice(startIndex, startIndex + size)
-
-  return {
-    list,
-    total: filtered.length
-  }
-}
-
-const getProject = async (id: number): Promise<Project> => {
-  await wait(200)
-  const target = mockProjects.value.find((item) => item.id === id)
-  if (!target) {
-    throw new Error('项目不存在')
-  }
-  return JSON.parse(JSON.stringify(target))
-}
-
-const createProject = async (payload: ProjectPayload): Promise<Project> => {
-  await wait(300)
-  const nextId =
-    mockProjects.value.length > 0 ? Math.max(...mockProjects.value.map((item) => item.id)) + 1 : 1
-  const projectToSave: Project = {
-    id: nextId,
-    projectCode: payload.projectCode,
-    projectName: payload.projectName,
-    contractNo: payload.contractNo,
-    status: payload.status,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
-    details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
-  }
-  mockProjects.value.unshift(projectToSave)
-  return JSON.parse(JSON.stringify(projectToSave))
-}
-
-const updateProject = async (id: number, payload: ProjectPayload): Promise<Project> => {
-  await wait(300)
-  const index = mockProjects.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('项目不存在')
-  }
-  const updated: Project = {
-    id,
-    projectCode: payload.projectCode,
-    projectName: payload.projectName,
-    contractNo: payload.contractNo,
-    status: payload.status,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
-    details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
-  }
-  mockProjects.value.splice(index, 1, updated)
-  return JSON.parse(JSON.stringify(updated))
-}
-
-const removeProject = async (id: number): Promise<void> => {
-  await wait(200)
-  const index = mockProjects.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('项目不存在')
-  }
-  mockProjects.value.splice(index, 1)
-}
-
-const statusTagMap: Record<ProjectStatus, { label: string; type: string }> = {
-  ongoing: { label: '进行中', type: 'success' },
-  completed: { label: '已完成', type: 'info' }
-}
-
-const statusOptions = (Object.keys(statusTagMap) as ProjectStatus[]).map((value) => ({
-  value,
-  label: statusTagMap[value].label
-}))
-
-const queryFormRef = ref<FormInstance>()
-const queryForm = reactive<ProjectQuery>({
-  itemCode: '',
-  projectName: '',
-  status: 'ongoing',
-  projectPeriodRange: []
-})
-
-const pagination = reactive({
-  page: 1,
-  size: 10
-})
-
-const tableRef = ref<InstanceType<typeof ElTable>>()
-const tableData = ref<ProjectTableRow[]>([])
-const total = ref(0)
 const loading = ref(false)
+const tableData = ref<Partial<ProjectInfo>[]>([])
+const total = ref(0)
+const pagination = reactive({ page: 1, size: 10 })
 
-const dialogVisible = ref(false)
-const dialogTitle = ref('')
-const dialogSubmitting = ref(false)
-const dialogFormRef = ref<FormInstance>()
-const currentProjectId = ref<number | null>(null)
+const queryForm = reactive({ keyword: '', status: '' })
+const statusOptions = [
+  { label: '进行中', value: '进行中' },
+  { label: '已完成', value: '已完成' },
+  { label: '已暂停', value: '已暂停' }
+]
 
-const dialogForm = reactive<ProjectPayload>(createEmptyProject())
+const viewDialogVisible = ref(false)
+const viewData = ref<Partial<ProjectInfo>>({})
 
-const dialogRules: FormRules<ProjectPayload> = {
-  projectCode: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
-  projectName: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
-}
+const editDialogVisible = ref(false)
+const editTitle = ref('编辑项目')
+const editFormRef = ref<FormInstance>()
+const editForm = reactive<Partial<ProjectInfo>>({})
+const editSubmitting = ref(false)
+const currentProjectCode = ref('')
 
-const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
-
-const mapProjectToRow = (project: Project): ProjectTableRow => {
-  const { totalAmount, totalQuantity } = calculateSummary(project.details)
-  return {
-    ...project,
-    totalAmount,
-    totalQuantity
-  }
+const editRules: FormRules = {
+  项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }]
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params: ListProjectsParams = {
+    const params: any = {
       page: pagination.page,
-      size: pagination.size
+      pageSize: pagination.size
     }
+    if (queryForm.keyword) params.keyword = queryForm.keyword
+    if (queryForm.status) params.status = queryForm.status
 
-    if (queryForm.itemCode.trim()) {
-      params.itemCode = queryForm.itemCode.trim()
+    const response: any = await getProjectListApi(params)
+    console.log('API Response:', response)
+    
+    if (response?.data?.data) {
+      tableData.value = response.data.data.list || []
+      total.value = response.data.data.total || 0
+    } else if (response?.data) {
+      tableData.value = response.data.list || []
+      total.value = response.data.total || 0
     }
-
-    if (queryForm.projectName.trim()) {
-      params.projectName = queryForm.projectName.trim()
-    }
-
-    if (queryForm.status) {
-      params.status = queryForm.status
-    }
-
-    if (queryForm.projectPeriodRange.length === 2) {
-      params.projectPeriodRange = [queryForm.projectPeriodRange[0], queryForm.projectPeriodRange[1]]
-    }
-
-    const { list, total: totalCount } = await listProjects(params)
-    tableData.value = list.map(mapProjectToRow)
-    total.value = totalCount
-    await nextTick()
-    const shouldExpand = Boolean(
-      params.itemCode || params.projectName || params.projectPeriodRange?.length === 2
-    )
-    tableData.value.forEach((row) => {
-      tableRef.value?.toggleRowExpansion(row, shouldExpand)
-    })
+  } catch (error: any) {
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取数据失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -752,290 +400,120 @@ const loadData = async () => {
 
 const handleSearch = () => {
   pagination.page = 1
-  void loadData()
+  loadData()
 }
 
 const handleReset = () => {
-  queryForm.itemCode = ''
-  queryForm.projectName = ''
-  queryForm.status = 'ongoing'
-  queryForm.projectPeriodRange = []
-  pagination.page = 1
-  void loadData()
+  queryForm.keyword = ''
+  queryForm.status = ''
+  handleSearch()
 }
 
 const handleSizeChange = (size: number) => {
   pagination.size = size
   pagination.page = 1
-  void loadData()
+  loadData()
 }
 
 const handleCurrentChange = (page: number) => {
   pagination.page = page
-  void loadData()
+  loadData()
 }
 
-const assignDialogForm = (payload: ProjectPayload) => {
-  dialogForm.projectCode = payload.projectCode
-  dialogForm.projectName = payload.projectName
-  dialogForm.contractNo = payload.contractNo
-  dialogForm.status = payload.status
-  dialogForm.startDate = payload.startDate
-  dialogForm.endDate = payload.endDate
-  dialogForm.details.splice(
-    0,
-    dialogForm.details.length,
-    ...payload.details.map((detail) => ({ ...detail }))
-  )
-  if (!dialogForm.details.length) {
-    dialogForm.details.push(createEmptyDetail())
-  }
+const getStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  if (status.includes('完成')) return 'success'
+  if (status.includes('暂停')) return 'warning'
+  return 'primary'
 }
 
-const resetDialogForm = () => {
-  assignDialogForm(createEmptyProject())
-}
-
-const handleCreate = async () => {
-  dialogTitle.value = '新增项目'
-  currentProjectId.value = null
-  resetDialogForm()
-  dialogVisible.value = true
-  await nextTick()
-  dialogFormRef.value?.clearValidate()
-}
-
-const openEditDialog = async (id: number) => {
+const handleView = async (row: Partial<ProjectInfo>) => {
   try {
-    const project = await getProject(id)
-    const { id: _id, ...payload } = project
-    dialogTitle.value = '编辑项目'
-    currentProjectId.value = id
-    assignDialogForm(payload)
-    dialogVisible.value = true
-    await nextTick()
-    dialogFormRef.value?.clearValidate()
-  } catch (error) {
-    ElMessage.error((error as Error).message || '加载项目失败')
+    const response: any = await getProjectDetailApi(row.项目编号 || '')
+    viewData.value = response.data?.data || response.data || row
+    viewDialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error('获取详情失败')
   }
 }
 
-const handleEdit = (row: ProjectTableRow) => {
-  void openEditDialog(row.id)
+const handleEditFromView = () => {
+  viewDialogVisible.value = false
+  setTimeout(() => handleEdit(viewData.value), 100)
 }
 
-const handleRowDblClick = (row: ProjectTableRow) => {
-  void openEditDialog(row.id)
+const handleEdit = (row: Partial<ProjectInfo>) => {
+  editTitle.value = '编辑项目'
+  currentProjectCode.value = row.项目编号 || ''
+  Object.assign(editForm, row)
+  editDialogVisible.value = true
 }
 
-const recalculateDetail = (detail: ProjectPhase) => {
-  const quantity = Number(detail.quantity) || 0
-  const unitPrice = Number(detail.unitPrice) || 0
-  detail.quantity = quantity
-  detail.unitPrice = unitPrice
-  detail.amount = Number((quantity * unitPrice).toFixed(2))
-}
-
-const addDetailRow = () => {
-  dialogForm.details.push(createEmptyDetail())
-}
-
-const removeDetailRow = (index: number) => {
-  if (dialogForm.details.length <= 1) {
-    ElMessage.warning('至少保留一条产品明细')
-    return
-  }
-  dialogForm.details.splice(index, 1)
-}
-
-const handleDetailQuantityChange = (detail: ProjectPhase) => {
-  recalculateDetail(detail)
-}
-
-const handleDetailUnitPriceChange = (detail: ProjectPhase) => {
-  recalculateDetail(detail)
-}
-
-const dialogTotals = computed(() => calculateSummary(dialogForm.details))
-
-const cloneProjectPayload = (source: ProjectPayload): ProjectPayload => ({
-  projectCode: source.projectCode,
-  projectName: source.projectName,
-  contractNo: source.contractNo,
-  status: source.status,
-  startDate: source.startDate,
-  endDate: source.endDate,
-  details: source.details.map((detail) => ({ ...detail }))
-})
-
-const submitDialogForm = async () => {
-  if (!dialogFormRef.value) {
-    return
-  }
-
+const handleSubmitEdit = async () => {
+  if (!editFormRef.value) return
+  
   try {
-    await dialogFormRef.value.validate()
+    await editFormRef.value.validate()
   } catch {
     return
   }
 
-  dialogForm.details.forEach(recalculateDetail)
-
-  if (!dialogForm.details.length) {
-    ElMessage.error('请至少添加一条产品明细')
-    return
-  }
-
-  const invalidDetail = dialogForm.details.find(
-    (detail) => !detail.productName.trim() || detail.quantity <= 0
-  )
-
-  if (invalidDetail) {
-    ElMessage.error('请完善产品名称并确保数量大于 0')
-    return
-  }
-
-  const payload = cloneProjectPayload(dialogForm)
-  dialogSubmitting.value = true
-
+  editSubmitting.value = true
   try {
-    if (currentProjectId.value === null) {
-      await createProject(payload)
-      pagination.page = 1
-      ElMessage.success('新增成功')
-    } else {
-      await updateProject(currentProjectId.value, payload)
+    if (currentProjectCode.value) {
+      await updateProjectApi(currentProjectCode.value, editForm)
       ElMessage.success('更新成功')
+    } else {
+      // 确保项目编号存在
+      if (!editForm.项目编号) {
+        ElMessage.error('项目编号不能为空')
+        return
+      }
+      await createProjectApi(editForm as ProjectInfo)
+      ElMessage.success('创建成功')
     }
-    dialogVisible.value = false
-    await loadData()
-  } catch (error) {
-    ElMessage.error((error as Error).message || '保存失败')
+    editDialogVisible.value = false
+    loadData()
+  } catch (error: any) {
+    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {
-    dialogSubmitting.value = false
+    editSubmitting.value = false
   }
 }
 
-const handleDelete = async (row: ProjectTableRow) => {
+const handleDelete = async (row: Partial<ProjectInfo>) => {
   try {
-    await ElMessageBox.confirm(`确认删除项目 ${row.projectCode} 吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    await removeProject(row.id)
-    if (tableData.value.length === 1 && pagination.page > 1) {
-      pagination.page -= 1
-    }
-    await loadData()
+    await ElMessageBox.confirm('确认删除该项目？', '提示', { type: 'warning' })
+    await deleteProjectApi(row.项目编号 || '')
     ElMessage.success('删除成功')
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') {
-      return
-    }
-    if (error instanceof Error) {
-      ElMessage.error(error.message || '删除失败')
+    loadData()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
     }
   }
 }
 
-const handleDialogClosed = () => {
-  resetDialogForm()
-  currentProjectId.value = null
-  dialogFormRef.value?.clearValidate()
+const handleEditDialogClosed = () => {
+  editFormRef.value?.resetFields()
+  Object.keys(editForm).forEach(key => delete (editForm as any)[key])
+  currentProjectCode.value = ''
 }
 
-onMounted(() => {
-  void loadData()
-})
+onMounted(() => loadData())
 </script>
 
 <style scoped>
-.dialog-form-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.edit-form-container {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
-.dialog-form-columns {
-  display: flex;
-  gap: 38px;
-  width: 100%;
+:deep(.el-descriptions__table) {
+  table-layout: fixed;
 }
 
-.dialog-form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 9.6px;
-}
-
-.dialog-form-column :deep(.el-form-item) {
-  margin: 0;
-}
-
-.dialog-form-column--left :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.dialog-form-column--left :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
-}
-
-.dialog-form-column--left :deep(.el-form-item__content) {
-  margin-left: 0 !important;
-}
-
-.dialog-form-column--right :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.dialog-form-column--right :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
-  text-align: right;
-}
-
-.dialog-form-column--right :deep(.el-form-item__content) {
-  margin-left: 0 !important;
-}
-
-.dialog-input {
-  width: 252px;
-}
-
-.dialog-date-picker {
-  width: 252px !important;
-}
-
-.dialog-date-picker :deep(.el-input),
-.dialog-date-picker :deep(.el-input__wrapper),
-.dialog-date-picker :deep(.el-input__inner) {
-  width: 100%;
-}
-
-.dialog-status-item :deep(.el-form-item__label::before) {
-  content: '';
-}
-
-.dialog-product-section {
-  margin-top: 24px;
-}
-
-.dialog-product-summary {
-  margin-top: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.dialog-product-summary__item {
-  margin-right: 16px;
+:deep(.el-descriptions__table .el-descriptions__cell) {
+  width: 25%;
 }
 </style>
