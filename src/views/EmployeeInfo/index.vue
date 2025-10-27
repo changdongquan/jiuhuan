@@ -193,6 +193,21 @@
               />
             </el-form-item>
           </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="银行名称" prop="bankName">
+              <el-input v-model="dialogForm.bankName" placeholder="请输入银行名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="银行账号" prop="bankAccount">
+              <el-input v-model="dialogForm.bankAccount" placeholder="请输入银行账号" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="开户行" prop="bankBranch">
+              <el-input v-model="dialogForm.bankBranch" placeholder="请输入开户行" />
+            </el-form-item>
+          </el-col>
         </el-row>
       </el-form>
 
@@ -279,7 +294,10 @@ const createEmptyEmployee = (): EmployeePayload => ({
   phone: '',
   emergencyContact: '',
   status: '在职',
-  confirmDate: ''
+  confirmDate: '',
+  bankName: '',
+  bankAccount: '',
+  bankBranch: ''
 })
 
 const dialogForm = reactive<EmployeePayload>(createEmptyEmployee())
@@ -311,8 +329,15 @@ const loadEmployeeData = async () => {
       ...queryForm
     }
     const response = (await getEmployeeListApi(params)) as any
-    tableData.value = response.data?.list || response.list
-    total.value = response.data?.total || response.total
+    // 处理统一响应格式：{ code: 0, data: { list, total, page, pageSize } }
+    if (response.code === 0 && response.data) {
+      tableData.value = response.data.list || []
+      total.value = response.data.total || 0
+    } else {
+      // 兼容旧格式
+      tableData.value = response.list || []
+      total.value = response.total || 0
+    }
   } catch (error) {
     console.error('加载员工数据失败:', error)
     ElMessage.error('加载员工数据失败')
@@ -379,18 +404,21 @@ const openEditDialog = async (id: number) => {
 }
 
 const assignDialogForm = (payload: EmployeePayload) => {
-  dialogForm.employeeName = payload.employeeName
-  dialogForm.employeeNumber = payload.employeeNumber
-  dialogForm.gender = payload.gender
-  dialogForm.level = payload.level
-  dialogForm.entryDate = payload.entryDate
-  dialogForm.idCard = payload.idCard
-  dialogForm.department = payload.department
-  dialogForm.position = payload.position
-  dialogForm.phone = payload.phone
-  dialogForm.emergencyContact = payload.emergencyContact
-  dialogForm.status = payload.status
-  dialogForm.confirmDate = payload.confirmDate
+  dialogForm.employeeName = payload.employeeName || ''
+  dialogForm.employeeNumber = payload.employeeNumber || 0
+  dialogForm.gender = typeof payload.gender === 'string' ? payload.gender : ''
+  dialogForm.level = payload.level || 0
+  dialogForm.entryDate = payload.entryDate || ''
+  dialogForm.idCard = payload.idCard || ''
+  dialogForm.department = payload.department || ''
+  dialogForm.position = payload.position || ''
+  dialogForm.phone = payload.phone || ''
+  dialogForm.emergencyContact = payload.emergencyContact || ''
+  dialogForm.status = payload.status || '在职'
+  dialogForm.confirmDate = payload.confirmDate || ''
+  dialogForm.bankName = payload.bankName || ''
+  dialogForm.bankAccount = payload.bankAccount || ''
+  dialogForm.bankBranch = payload.bankBranch || ''
 }
 
 const submitDialogForm = async () => {

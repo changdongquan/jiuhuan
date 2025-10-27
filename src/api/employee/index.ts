@@ -15,6 +15,9 @@ export interface EmployeeInfo {
   emergencyContact: string
   status: string
   confirmDate?: string
+  bankName?: string
+  bankAccount?: string
+  bankBranch?: string
 }
 
 // 员工查询参数
