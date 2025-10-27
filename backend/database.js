@@ -49,9 +49,27 @@ const query = async (queryString, params = {}) => {
     const pool = await getPool()
     const request = pool.request()
     
-    // 绑定参数
+    // 绑定参数，自动推断类型
     Object.keys(params).forEach(key => {
-      request.input(key, params[key])
+      const value = params[key]
+      if (value === null || value === undefined) {
+        request.input(key, sql.NVarChar, null)
+      } else if (typeof value === 'number') {
+        // 判断是整数还是浮点数
+        if (Number.isInteger(value)) {
+          request.input(key, sql.Int, value)
+        } else {
+          // 使用 BigInt 或 Decimal 类型处理浮点数
+          request.input(key, sql.Float, value)
+        }
+      } else if (typeof value === 'boolean') {
+        request.input(key, sql.Bit, value)
+      } else if (value instanceof Date) {
+        request.input(key, sql.DateTime2, value)
+      } else {
+        // 字符串类型
+        request.input(key, sql.NVarChar, value)
+      }
     })
     
     const result = await request.query(queryString)

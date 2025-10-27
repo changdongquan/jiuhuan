@@ -79,12 +79,12 @@ export const createProjectApi = (data: ProjectInfo) => {
 
 // 更新项目信息
 export const updateProjectApi = (projectCode: string, data: Partial<ProjectInfo>) => {
-  return request.put({ url: `/api/project/${projectCode}`, data })
+  return request.put({ url: `/api/project/update`, data: { ...data, projectCode } })
 }
 
 // 删除项目信息
 export const deleteProjectApi = (projectCode: string) => {
-  return request.delete({ url: `/api/project/${projectCode}` })
+  return request.delete({ url: `/api/project/delete`, params: { projectCode } })
 }
 
 // 根据项目编号获取货物信息

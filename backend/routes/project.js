@@ -164,7 +164,8 @@ router.post('/', async (req, res) => {
     const params = {}
     
     Object.keys(data).forEach(key => {
-      if (data[key] !== undefined && data[key] !== null && data[key] !== '') {
+      // 过滤掉 SSMA_TimeStamp 字段（这是数据库迁移字段，不应通过API修改）
+      if (key !== 'SSMA_TimeStamp' && data[key] !== undefined && data[key] !== null && data[key] !== '') {
         fields.push(`[${key}]`)
         values.push(`@${key}`)
         params[key] = data[key]
@@ -200,20 +201,28 @@ router.post('/', async (req, res) => {
   }
 })
 
-// 更新项目信息
-router.put('/:projectCode', async (req, res) => {
+// 更新项目信息（使用 body 中的 projectCode，避免路径参数包含斜杠的问题）
+router.put('/update', async (req, res) => {
   try {
-    const { projectCode } = req.params
-    const data = req.body
+    const { projectCode, ...data } = req.body
+    
+    if (!projectCode) {
+      return res.status(400).json({
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
     
     // 构建动态更新字段
     const updates = []
     const params = { projectCode }
     
     Object.keys(data).forEach(key => {
-      if (key !== '项目编号' && data[key] !== undefined && data[key] !== null) {
+      const value = data[key]
+      // 过滤掉项目编号字段、SSMA_TimeStamp 字段，以及 undefined 和 null（允许空字符串和数字0）
+      if (key !== '项目编号' && key !== 'SSMA_TimeStamp' && value !== undefined && value !== null) {
         updates.push(`[${key}] = @${key}`)
-        params[key] = data[key]
+        params[key] = value
       }
     })
     
@@ -247,10 +256,17 @@ router.put('/:projectCode', async (req, res) => {
   }
 })
 
-// 删除项目信息
-router.delete('/:projectCode', async (req, res) => {
+// 删除项目信息（使用 query 参数，避免路径参数包含斜杠的问题）
+router.delete('/delete', async (req, res) => {
   try {
-    const { projectCode } = req.params
+    const { projectCode } = req.query
+    
+    if (!projectCode) {
+      return res.status(400).json({
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
     
     const queryString = `DELETE FROM 项目管理 WHERE 项目编号 = @projectCode`
     

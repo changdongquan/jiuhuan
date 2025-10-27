@@ -47,7 +47,7 @@
       :data="tableData"
       border
       height="calc(100vh - 320px)"
-      @row-dblclick="handleView"
+      @row-dblclick="handleEdit"
     >
       <el-table-column prop="项目编号" label="项目编号" width="130" show-overflow-tooltip />
       <el-table-column prop="productName" label="产品名称" width="130" show-overflow-tooltip />
@@ -60,17 +60,41 @@
           <el-tag :type="getStatusTagType(row.项目状态)">{{ row.项目状态 || '-' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="中标日期" label="中标日期" width="100" />
-      <el-table-column prop="产品3D确认" label="产品3D确认" width="100" />
-      <el-table-column prop="图纸下发时间" label="图纸下发时间" width="110" />
-      <el-table-column prop="计划首样日期" label="计划首样日期" width="110" />
-      <el-table-column prop="首次送样日期" label="首次送样日期" width="110" />
-      <el-table-column prop="移模日期" label="移模日期" width="100" />
+      <el-table-column prop="中标日期" label="中标日期" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.中标日期) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="产品3D确认" label="产品3D确认" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.产品3D确认) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="图纸下发时间" label="图纸下发时间" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.图纸下发时间) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="计划首样日期" label="计划首样日期" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.计划首样日期) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="首次送样日期" label="首次送样日期" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.首次送样日期) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="移模日期" label="移模日期" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.移模日期) }}
+        </template>
+      </el-table-column>
       <el-table-column prop="进度影响原因" label="进度影响原因" width="130" show-overflow-tooltip />
       <el-table-column label="操作" width="180" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link @click="handleView(row)">查看</el-button>
           <el-button type="success" link @click="handleEdit(row)">编辑</el-button>
+          <el-button type="primary" link @click="handleView(row)">查看</el-button>
           <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -225,31 +249,31 @@
           >
           <div class="detail-cell"
             ><span class="detail-label">中标日期</span
-            ><span class="detail-value">{{ viewData.中标日期 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.中标日期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品3D确认</span
-            ><span class="detail-value">{{ viewData.产品3D确认 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.产品3D确认) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">图纸下发时间</span
-            ><span class="detail-value">{{ viewData.图纸下发时间 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.图纸下发时间) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">计划首样日期</span
-            ><span class="detail-value">{{ viewData.计划首样日期 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.计划首样日期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">首次送样日期</span
-            ><span class="detail-value">{{ viewData.首次送样日期 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.首次送样日期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">移模日期</span
-            ><span class="detail-value">{{ viewData.移模日期 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.移模日期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">送样时间</span
-            ><span class="detail-value">{{ viewData.送样时间 }}</span></div
+            ><span class="detail-value">{{ formatDate(viewData.送样时间) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">制件厂家</span
@@ -562,6 +586,7 @@ import {
   getProjectGoodsApi,
   type ProjectInfo
 } from '@/api/project'
+import type { GoodsInfo } from '@/api/goods'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -653,6 +678,23 @@ const getStatusTagType = (status?: string) => {
   return 'primary'
 }
 
+// 格式化日期，只显示年月日
+const formatDate = (date?: string | null) => {
+  if (!date) return '-'
+  
+  // 处理 ISO 格式: 2025-10-02T00:00:00.000Z
+  if (date.includes('T')) {
+    return date.split('T')[0]
+  }
+  
+  // 处理带时间的格式: 2024-01-01 12:00:00
+  if (date.includes(' ')) {
+    return date.split(' ')[0]
+  }
+  
+  return date
+}
+
 const handleView = async (row: Partial<ProjectInfo>) => {
   try {
     const response: any = await getProjectDetailApi(row.项目编号 || '')
@@ -704,7 +746,9 @@ const handleSubmitEdit = async () => {
   editSubmitting.value = true
   try {
     if (currentProjectCode.value) {
-      await updateProjectApi(currentProjectCode.value, editForm)
+      // 过滤掉 productName 和 productDrawing，这两个字段不属于项目管理表
+      const { productName, productDrawing, ...updateData } = editForm
+      await updateProjectApi(currentProjectCode.value, updateData)
       ElMessage.success('更新成功')
     } else {
       // 确保项目编号存在
@@ -712,7 +756,9 @@ const handleSubmitEdit = async () => {
         ElMessage.error('项目编号不能为空')
         return
       }
-      await createProjectApi(editForm as ProjectInfo)
+      // 过滤掉 productName 和 productDrawing
+      const { productName, productDrawing, ...createData } = editForm
+      await createProjectApi(createData as ProjectInfo)
       ElMessage.success('创建成功')
     }
     editDialogVisible.value = false
@@ -751,7 +797,7 @@ const handleProjectCodeBlur = async () => {
     console.log('获取货物信息响应:', response)
 
     // 兼容不同的响应结构
-    let goodsData = null
+    let goodsData: GoodsInfo | null = null
     if (response?.data?.data) {
       goodsData = response.data.data
     } else if (response?.data) {
