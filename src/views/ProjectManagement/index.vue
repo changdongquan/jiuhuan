@@ -18,7 +18,7 @@
       <el-form-item label="项目状态">
         <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
           <el-option
-            v-for="item in statusOptions"
+            v-for="item in projectStatusOptions"
             :key="item.value"
             :label="item.label"
             :value="item.value"
@@ -91,11 +91,10 @@
         </template>
       </el-table-column>
       <el-table-column prop="进度影响原因" label="进度影响原因" width="130" show-overflow-tooltip />
-      <el-table-column label="操作" width="180" fixed="right" align="center">
+      <el-table-column label="操作" width="120" fixed="right" align="center">
         <template #default="{ row }">
           <el-button type="success" link @click="handleEdit(row)">编辑</el-button>
           <el-button type="primary" link @click="handleView(row)">查看</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -119,133 +118,133 @@
         <div class="detail-grid-col">
           <div class="detail-cell"
             ><span class="detail-label">项目编号</span
-            ><span class="detail-value">{{ viewData.项目编号 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.项目编号) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">项目状态</span
             ><span class="detail-value"
               ><el-tag :type="getStatusTagType(viewData.项目状态)">{{
-                viewData.项目状态
+                formatValue(viewData.项目状态)
               }}</el-tag></span
             ></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品名称</span
-            ><span class="detail-value">{{ viewData.productName }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.productName) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品图号</span
-            ><span class="detail-value">{{ viewData.productDrawing }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.productDrawing) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">客户模号</span
-            ><span class="detail-value">{{ viewData.客户模号 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.客户模号) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品尺寸</span
-            ><span class="detail-value">{{ viewData.产品尺寸 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.产品尺寸) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品重量</span
-            ><span class="detail-value">{{ viewData.产品重量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.产品重量) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品材质</span
-            ><span class="detail-value">{{ viewData.产品材质 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.产品材质) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">产品颜色</span
-            ><span class="detail-value">{{ viewData.产品颜色 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.产品颜色) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">收缩率</span
-            ><span class="detail-value">{{ viewData.收缩率 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.收缩率) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">料柄重量</span
-            ><span class="detail-value">{{ viewData.料柄重量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.料柄重量) }}</span></div
           >
         </div>
         <div class="detail-grid-col">
           <div class="detail-cell"
             ><span class="detail-label">模具穴数</span
-            ><span class="detail-value">{{ viewData.模具穴数 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.模具穴数) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">模具尺寸</span
-            ><span class="detail-value">{{ viewData.模具尺寸 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.模具尺寸) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">模具重量</span
-            ><span class="detail-value">{{ viewData.模具重量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.模具重量) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">前模材质</span
-            ><span class="detail-value">{{ viewData.前模材质 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.前模材质) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">后模材质</span
-            ><span class="detail-value">{{ viewData.后模材质 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.后模材质) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">滑块材质</span
-            ><span class="detail-value">{{ viewData.滑块材质 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.滑块材质) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">流道类型</span
-            ><span class="detail-value">{{ viewData.流道类型 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.流道类型) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">流道数量</span
-            ><span class="detail-value">{{ viewData.流道数量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.流道数量) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">浇口类型</span
-            ><span class="detail-value">{{ viewData.浇口类型 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.浇口类型) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">浇口数量</span
-            ><span class="detail-value">{{ viewData.浇口数量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.浇口数量) }}</span></div
           >
         </div>
         <div class="detail-grid-col">
           <div class="detail-cell"
             ><span class="detail-label">机台吨位</span
-            ><span class="detail-value">{{ viewData.机台吨位 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.机台吨位) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">锁模力</span
-            ><span class="detail-value">{{ viewData.锁模力 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.锁模力) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">定位圈</span
-            ><span class="detail-value">{{ viewData.定位圈 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.定位圈) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">容模量</span
-            ><span class="detail-value">{{ viewData.容模量 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.容模量) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">拉杆间距</span
-            ><span class="detail-value">{{ viewData.拉杆间距 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.拉杆间距) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">成型周期</span
-            ><span class="detail-value">{{ viewData.成型周期 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.成型周期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">费用出处</span
-            ><span class="detail-value">{{ viewData.费用出处 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.费用出处) }}</span></div
           >
         </div>
         <div class="detail-grid-col">
           <div class="detail-cell"
             ><span class="detail-label">项目名称</span
-            ><span class="detail-value">{{ viewData.项目名称 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.项目名称) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">设计师</span
-            ><span class="detail-value">{{ viewData.设计师 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.设计师) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">中标日期</span
@@ -277,18 +276,18 @@
           >
           <div class="detail-cell"
             ><span class="detail-label">制件厂家</span
-            ><span class="detail-value">{{ viewData.制件厂家 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.制件厂家) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">进度影响原因</span
-            ><span class="detail-value">{{ viewData.进度影响原因 }}</span></div
+            ><span class="detail-value">{{ formatValue(viewData.进度影响原因) }}</span></div
           >
         </div>
       </div>
       <div class="detail-row-remark">
         <div class="detail-cell"
           ><span class="detail-label">备注</span
-          ><span class="detail-value">{{ viewData.备注 }}</span></div
+          ><span class="detail-value">{{ formatValue(viewData.备注) }}</span></div
         >
       </div>
 
@@ -326,7 +325,19 @@
               />
             </el-form-item>
             <el-form-item label="项目状态">
-              <el-input v-model="editForm.项目状态" placeholder="项目状态" />
+              <el-select
+                v-model="editForm.项目状态"
+                placeholder="请选择项目状态"
+                clearable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in projectStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
             <el-form-item label="产品名称">
               <el-input
@@ -576,13 +587,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
   getProjectListApi,
   getProjectDetailApi,
   createProjectApi,
   updateProjectApi,
-  deleteProjectApi,
   getProjectGoodsApi,
   type ProjectInfo
 } from '@/api/project'
@@ -594,15 +604,17 @@ const total = ref(0)
 const pagination = reactive({ page: 1, size: 10 })
 
 const queryForm = reactive({ keyword: '', status: '', category: '塑胶模具' })
-const statusOptions = [
-  { label: '进行中', value: '进行中' },
-  { label: '已完成', value: '已完成' },
-  { label: '已暂停', value: '已暂停' }
-]
 const categoryOptions = [
   { label: '塑胶模具', value: '塑胶模具' },
   { label: '零件加工', value: '零件加工' },
   { label: '修改模具', value: '修改模具' }
+]
+const projectStatusOptions = [
+  { label: 'T0', value: 'T0' },
+  { label: '设计中', value: '设计中' },
+  { label: '加工中', value: '加工中' },
+  { label: '表面处理', value: '表面处理' },
+  { label: '已经移模', value: '已经移模' }
 ]
 
 const viewDialogVisible = ref(false)
@@ -681,18 +693,25 @@ const getStatusTagType = (status?: string) => {
 // 格式化日期，只显示年月日
 const formatDate = (date?: string | null) => {
   if (!date) return '-'
-  
+
   // 处理 ISO 格式: 2025-10-02T00:00:00.000Z
   if (date.includes('T')) {
     return date.split('T')[0]
   }
-  
+
   // 处理带时间的格式: 2024-01-01 12:00:00
   if (date.includes(' ')) {
     return date.split(' ')[0]
   }
-  
+
   return date
+}
+
+// 格式化值，处理空值显示
+const formatValue = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'number' && value === 0) return '-'
+  return value
 }
 
 const handleView = async (row: Partial<ProjectInfo>) => {
@@ -770,19 +789,6 @@ const handleSubmitEdit = async () => {
   }
 }
 
-const handleDelete = async (row: Partial<ProjectInfo>) => {
-  try {
-    await ElMessageBox.confirm('确认删除该项目？', '提示', { type: 'warning' })
-    await deleteProjectApi(row.项目编号 || '')
-    ElMessage.success('删除成功')
-    loadData()
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
-}
-
 const handleProjectCodeBlur = async () => {
   const projectCode = editForm.项目编号
   if (!projectCode) {
@@ -854,48 +860,139 @@ onMounted(() => loadData())
 .detail-grid {
   display: flex;
   gap: 0;
-  border: 1px solid #ebeef5;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  background: #fff;
 }
 
 .detail-grid-col {
   flex: 1;
-  border-right: 1px solid #ebeef5;
+  border-right: 1px solid #e4e7ed;
+  background: linear-gradient(180deg, #fafbfc 0%, #ffffff 100%);
 }
 
 .detail-grid-col:last-child {
   border-right: none;
 }
 
+.detail-grid-col:nth-child(odd) {
+  background: linear-gradient(180deg, #f5f7fa 0%, #ffffff 100%);
+}
+
 .detail-cell {
   display: flex;
-  border-bottom: 1px solid #ebeef5;
-  padding: 8px 12px;
-  min-height: 40px;
+  border-bottom: 1px solid #f0f2f5;
+  padding: 12px 16px;
+  min-height: 48px;
   align-items: center;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.detail-cell:hover {
+  background-color: #f5f7fa;
+  transform: translateX(2px);
 }
 
 .detail-cell:last-child {
   border-bottom: none;
 }
 
+.detail-cell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #409eff 0%, #66b1ff 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.detail-cell:hover::before {
+  opacity: 1;
+}
+
 .detail-label {
   flex: 0 0 100px;
-  font-weight: 500;
+  font-weight: 600;
   color: #606266;
-  padding-right: 10px;
+  padding-right: 12px;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  position: relative;
+}
+
+.detail-label::after {
+  content: ':';
+  margin-left: 2px;
+  color: #c0c4cc;
 }
 
 .detail-value {
   flex: 1;
   color: #303133;
+  font-size: 14px;
+  word-break: break-word;
+  min-height: 20px;
+}
+
+.detail-value:empty::before {
+  content: '-';
+  color: #c0c4cc;
+  font-style: italic;
 }
 
 .detail-row-remark {
-  border: 1px solid #ebeef5;
+  border: 1px solid #e4e7ed;
   border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: #fff;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
 }
 
 .detail-row-remark .detail-cell {
   border-bottom: none;
+  min-height: 60px;
+  align-items: flex-start;
+  padding-top: 16px;
+}
+
+.detail-row-remark .detail-label {
+  padding-top: 4px;
+}
+
+/* 空值显示优化 */
+.detail-value:empty::before {
+  content: '-';
+  color: #c0c4cc;
+  font-style: italic;
+}
+
+/* 标签样式优化 */
+:deep(.el-tag) {
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 响应式优化 */
+@media (max-width: 1200px) {
+  .detail-grid {
+    flex-direction: column;
+  }
+  
+  .detail-grid-col {
+    border-right: none;
+    border-bottom: 1px solid #e4e7ed;
+  }
+  
+  .detail-grid-col:last-child {
+    border-bottom: none;
+  }
 }
 </style>
