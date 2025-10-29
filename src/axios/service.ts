@@ -9,9 +9,19 @@ export const PATH_URL = import.meta.env.VITE_API_BASE_PATH
 
 const abortControllerMap: Map<string, AbortController> = new Map()
 
+// 处理 baseURL：开发环境下强制使用相对路径以利用 Vite 代理
+const getBaseURL = () => {
+  // 开发环境下（vite dev模式），强制使用相对路径走代理
+  if (import.meta.env.DEV || import.meta.env.MODE === 'base') {
+    return '/'
+  }
+  // 生产环境使用配置的 baseURL
+  return PATH_URL || '/'
+}
+
 const axiosInstance: AxiosInstance = axios.create({
   timeout: REQUEST_TIMEOUT,
-  baseURL: PATH_URL
+  baseURL: getBaseURL()
 })
 
 axiosInstance.interceptors.request.use((res: InternalAxiosRequestConfig) => {

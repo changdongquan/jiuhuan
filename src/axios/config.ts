@@ -21,7 +21,17 @@ const defaultRequestInterceptors = (config: InternalAxiosRequestConfig) => {
   }
   if (config.method === 'get' && config.params) {
     let url = config.url as string
-    url += '?'
+    // 确保使用相对路径（如果是完整URL，说明baseURL可能被覆盖）
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // 如果是完整URL，只保留路径部分
+      try {
+        const urlObj = new URL(url)
+        url = urlObj.pathname + urlObj.search
+      } catch (e) {
+        // 如果解析失败，保持原样
+      }
+    }
+    url += url.includes('?') ? '&' : '?'
     const keys = Object.keys(config.params)
     for (const key of keys) {
       if (config.params[key] !== void 0 && config.params[key] !== null) {

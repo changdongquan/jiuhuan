@@ -7,6 +7,7 @@ const supplierRoutes = require('./routes/supplier')
 const employeeRoutes = require('./routes/employee')
 const databaseRoutes = require('./routes/database')
 const projectRoutes = require('./routes/project')
+const salesOrdersRoutes = require('./routes/sales-orders')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -23,6 +24,7 @@ app.use('/api/supplier', supplierRoutes)
 app.use('/api/employee', employeeRoutes)
 app.use('/api/database', databaseRoutes)
 app.use('/api/project', projectRoutes)
+app.use('/api/sales-orders', salesOrdersRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {

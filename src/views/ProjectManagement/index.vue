@@ -985,12 +985,12 @@ onMounted(() => loadData())
   .detail-grid {
     flex-direction: column;
   }
-  
+
   .detail-grid-col {
     border-right: none;
     border-bottom: 1px solid #e4e7ed;
   }
-  
+
   .detail-grid-col:last-child {
     border-bottom: none;
   }
