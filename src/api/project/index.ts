@@ -42,7 +42,7 @@ export interface ProjectInfo {
   定位圈?: number
   容模量?: string
   拉杆间距?: number
-  送样时间?: string
+  封样时间?: string
   浇口类型?: string
   浇口数量?: number
   料柄重量?: number

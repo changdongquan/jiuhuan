@@ -99,7 +99,7 @@
       </el-table-column>
     </el-table>
 
-    <div style="margin-top: 16px; display: flex; justify-content: flex-end">
+    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -271,8 +271,8 @@
             ><span class="detail-value">{{ formatDate(viewData.移模日期) }}</span></div
           >
           <div class="detail-cell"
-            ><span class="detail-label">送样时间</span
-            ><span class="detail-value">{{ formatDate(viewData.送样时间) }}</span></div
+            ><span class="detail-label">封样时间</span
+            ><span class="detail-value">{{ formatDate(viewData.封样时间) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">制件厂家</span
@@ -553,12 +553,12 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="送样时间">
+            <el-form-item label="封样时间">
               <el-date-picker
-                v-model="editForm.送样时间"
+                v-model="editForm.封样时间"
                 type="date"
                 value-format="YYYY-MM-DD"
-                placeholder="送样时间"
+                placeholder="封样时间"
                 style="width: 100%"
               />
             </el-form-item>
@@ -844,6 +844,24 @@ onMounted(() => loadData())
 </script>
 
 <style scoped>
+
+
+/* 响应式优化 */
+@media (width <= 1200px) {
+  .detail-grid {
+    flex-direction: column;
+  }
+
+  .detail-grid-col {
+    border-right: none;
+    border-bottom: 1px solid #e4e7ed;
+  }
+
+  .detail-grid-col:last-child {
+    border-bottom: none;
+  }
+}
+
 .edit-form-container {
   max-height: 70vh;
   overflow-y: auto;
@@ -859,18 +877,18 @@ onMounted(() => loadData())
 
 .detail-grid {
   display: flex;
-  gap: 0;
+  overflow: hidden;
+  background: #fff;
   border: 1px solid #e4e7ed;
   border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
-  background: #fff;
+  box-shadow: 0 2px 12px 0 rgb(0 0 0 / 8%);
+  gap: 0;
 }
 
 .detail-grid-col {
-  flex: 1;
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
   border-right: 1px solid #e4e7ed;
-  background: linear-gradient(180deg, #fafbfc 0%, #ffffff 100%);
+  flex: 1;
 }
 
 .detail-grid-col:last-child {
@@ -878,17 +896,17 @@ onMounted(() => loadData())
 }
 
 .detail-grid-col:nth-child(odd) {
-  background: linear-gradient(180deg, #f5f7fa 0%, #ffffff 100%);
+  background: linear-gradient(180deg, #f5f7fa 0%, #fff 100%);
 }
 
 .detail-cell {
-  display: flex;
-  border-bottom: 1px solid #f0f2f5;
-  padding: 12px 16px;
-  min-height: 48px;
-  align-items: center;
-  transition: all 0.3s ease;
   position: relative;
+  display: flex;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  transition: all 0.3s ease;
+  align-items: center;
 }
 
 .detail-cell:hover {
@@ -901,13 +919,13 @@ onMounted(() => loadData())
 }
 
 .detail-cell::before {
-  content: '';
   position: absolute;
-  left: 0;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 3px;
   background: linear-gradient(180deg, #409eff 0%, #66b1ff 100%);
+  content: '';
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -917,48 +935,48 @@ onMounted(() => loadData())
 }
 
 .detail-label {
-  flex: 0 0 100px;
-  font-weight: 600;
-  color: #606266;
+  position: relative;
   padding-right: 12px;
   font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0.3px;
-  position: relative;
+  color: #606266;
+  flex: 0 0 100px;
 }
 
 .detail-label::after {
-  content: ':';
   margin-left: 2px;
   color: #c0c4cc;
+  content: ':';
 }
 
 .detail-value {
-  flex: 1;
-  color: #303133;
-  font-size: 14px;
-  word-break: break-word;
   min-height: 20px;
+  font-size: 14px;
+  color: #303133;
+  word-break: break-word;
+  flex: 1;
 }
 
 .detail-value:empty::before {
-  content: '-';
-  color: #c0c4cc;
   font-style: italic;
+  color: #c0c4cc;
+  content: '-';
 }
 
 .detail-row-remark {
+  background: #fff;
   border: 1px solid #e4e7ed;
   border-top: none;
   border-radius: 0 0 8px 8px;
-  background: #fff;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px 0 rgb(0 0 0 / 8%);
 }
 
 .detail-row-remark .detail-cell {
-  border-bottom: none;
   min-height: 60px;
-  align-items: flex-start;
   padding-top: 16px;
+  border-bottom: none;
+  align-items: flex-start;
 }
 
 .detail-row-remark .detail-label {
@@ -967,32 +985,16 @@ onMounted(() => loadData())
 
 /* 空值显示优化 */
 .detail-value:empty::before {
-  content: '-';
-  color: #c0c4cc;
   font-style: italic;
+  color: #c0c4cc;
+  content: '-';
 }
 
 /* 标签样式优化 */
 :deep(.el-tag) {
-  border-radius: 4px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-/* 响应式优化 */
-@media (max-width: 1200px) {
-  .detail-grid {
-    flex-direction: column;
-  }
-
-  .detail-grid-col {
-    border-right: none;
-    border-bottom: 1px solid #e4e7ed;
-  }
-
-  .detail-grid-col:last-child {
-    border-bottom: none;
-  }
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
 }
 </style>
