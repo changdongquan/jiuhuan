@@ -99,7 +99,7 @@
       </el-table-column>
     </el-table>
 
-    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
+    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -544,21 +544,21 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="移模日期">
-              <el-date-picker
-                v-model="editForm.移模日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="移模日期"
-                style="width: 100%"
-              />
-            </el-form-item>
             <el-form-item label="封样时间">
               <el-date-picker
                 v-model="editForm.封样时间"
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="封样时间"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <el-form-item label="移模日期">
+              <el-date-picker
+                v-model="editForm.移模日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="移模日期"
                 style="width: 100%"
               />
             </el-form-item>
@@ -844,8 +844,6 @@ onMounted(() => loadData())
 </script>
 
 <style scoped>
-
-
 /* 响应式优化 */
 @media (width <= 1200px) {
   .detail-grid {
