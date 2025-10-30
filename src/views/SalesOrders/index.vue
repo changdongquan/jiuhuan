@@ -60,63 +60,67 @@
       height="calc(100vh - 320px)"
       row-key="orderNo"
       @row-dblclick="handleRowDblClick"
+      :row-class-name="rowClassName"
+      @expand-change="onExpandChange"
     >
       <el-table-column type="expand">
         <template #default="{ row }">
-          <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="50" />
-            <el-table-column prop="itemCode" label="项目编号" min-width="140" />
-            <el-table-column prop="productName" label="产品名称" min-width="160" />
-            <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-            <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-            <el-table-column label="数量" width="90" align="center">
-              <template #default="{ row: detail }">
-                {{ detail.quantity || 0 }}
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.unitPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="总金额(元)" width="140" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.totalAmount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="交货日期" width="140">
-              <template #default="{ row: detail }">
-                {{ formatDate(detail.deliveryDate) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-            <el-table-column
-              prop="costSource"
-              label="费用出处"
-              min-width="140"
-              show-overflow-tooltip
-            />
-            <el-table-column prop="handler" label="经办人" width="100" />
-            <el-table-column label="是否入库" width="100" align="center">
-              <template #default="{ row: detail }">
-                <el-tag :type="detail.isInStock ? 'success' : 'info'" size="small">
-                  {{ detail.isInStock ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="是否出运" width="100" align="center">
-              <template #default="{ row: detail }">
-                <el-tag :type="detail.isShipped ? 'success' : 'info'" size="small">
-                  {{ detail.isShipped ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="出运日期" width="140">
-              <template #default="{ row: detail }">
-                {{ formatDate(detail.shippingDate) }}
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="so-expanded-wrap">
+            <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
+              <el-table-column type="index" label="序号" width="50" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
+              <el-table-column prop="productName" label="产品名称" min-width="160" />
+              <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
+              <el-table-column label="数量" width="90" align="center">
+                <template #default="{ row: detail }">
+                  {{ detail.quantity || 0 }}
+                </template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="120" align="right">
+                <template #default="{ row: detail }">
+                  {{ formatAmount(detail.unitPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="总金额(元)" width="140" align="right">
+                <template #default="{ row: detail }">
+                  {{ formatAmount(detail.totalAmount) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="交货日期" width="140">
+                <template #default="{ row: detail }">
+                  {{ formatDate(detail.deliveryDate) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+              <el-table-column
+                prop="costSource"
+                label="费用出处"
+                min-width="140"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="handler" label="经办人" width="100" />
+              <el-table-column label="是否入库" width="100" align="center">
+                <template #default="{ row: detail }">
+                  <el-tag :type="detail.isInStock ? 'success' : 'info'" size="small">
+                    {{ detail.isInStock ? '是' : '否' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="是否出运" width="100" align="center">
+                <template #default="{ row: detail }">
+                  <el-tag :type="detail.isShipped ? 'success' : 'info'" size="small">
+                    {{ detail.isShipped ? '是' : '否' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="出运日期" width="140">
+                <template #default="{ row: detail }">
+                  {{ formatDate(detail.shippingDate) }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </template>
       </el-table-column>
       <el-table-column prop="orderNo" label="订单编号" min-width="120" />
@@ -160,7 +164,7 @@
       </el-table-column>
     </el-table>
 
-    <div style="margin-top: 16px; display: flex; justify-content: flex-end">
+    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -557,6 +561,17 @@ const dialogForm = reactive<any>({
 })
 const dialogRules = {}
 
+// 记录展开的订单编号集合，用于高亮展开行
+const expandedOrderNos = ref<Set<string>>(new Set())
+
+const onExpandChange = (_row: OrderTableRow, expandedRows: OrderTableRow[]) => {
+  expandedOrderNos.value = new Set(expandedRows.map((r) => r.orderNo))
+}
+
+const rowClassName = ({ row }: { row: OrderTableRow }) => {
+  return expandedOrderNos.value.has(row.orderNo) ? 'so-row--expanded' : ''
+}
+
 const formatAmount = (value: number | null | undefined): string => {
   return Number(value ?? 0).toFixed(2)
 }
@@ -795,122 +810,51 @@ const handleEdit = async (row: OrderTableRow) => {
 }
 
 const handleRowDblClick = (row: OrderTableRow) => {
-  // 双击展开/收起
-  if (tableRef.value) {
-    const expanded = (tableRef.value as any).store.states.expandRows.includes(row)
-    tableRef.value.toggleRowExpansion(row, !expanded)
-  }
+  // 双击打开编辑对话框
+  void handleEdit(row)
 }
 
 const handleDelete = async (row: OrderTableRow) => {
   try {
-    await ElMessageBox.confirm(`确认删除订单 ${row.orderNo} 的所有记录吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(`确定删除订单 ${row.orderNo} 吗？`, '提示', {
       type: 'warning'
     })
     ElMessage.info('删除功能待实现')
-  } catch (error) {
-    // 用户取消
+  } catch (err) {
+    // 用户取消，无需处理
   }
 }
 
-const handleDialogClosed = () => {
-  dialogFormRef.value?.clearValidate()
-  // 重置表单
-  dialogForm.orderNo = ''
-  dialogForm.orderDate = ''
-  dialogForm.signDate = ''
-  dialogForm.customerName = ''
-  dialogForm.customerId = null
-  dialogForm.contractNo = ''
-  dialogForm.details = []
-  currentOrderNo.value = null
+// 计算对话框内的合计
+const dialogTotals = computed(() => {
+  const totalQuantity = (dialogForm.details || []).reduce(
+    (sum: number, d: any) => sum + Number(d.quantity || 0),
+    0
+  )
+  const totalAmount = (dialogForm.details || []).reduce(
+    (sum: number, d: any) => sum + Number(d.totalAmount || 0),
+    0
+  )
+  return { totalQuantity, totalAmount }
+})
+
+const recalcDetailAmount = (detail: any) => {
+  const quantity = Number(detail.quantity || 0)
+  const unitPrice = Number(detail.unitPrice || 0)
+  detail.totalAmount = Number((quantity * unitPrice).toFixed(2))
 }
 
-// 对话框相关函数
-const submitDialogForm = async () => {
-  if (!dialogFormRef.value) {
-    return
-  }
+const handleDetailQuantityChange = (detail: any) => {
+  recalcDetailAmount(detail)
+}
 
-  try {
-    await dialogFormRef.value.validate()
-  } catch {
-    return
-  }
-
-  // 重新计算所有明细的总金额
-  dialogForm.details.forEach(recalculateDetail)
-
-  if (!dialogForm.details.length) {
-    ElMessage.error('请至少保留一条订单明细')
-    return
-  }
-
-  // 验证明细数据
-  const invalidDetail = dialogForm.details.find(
-    (detail: any) => !detail.itemCode?.trim() || detail.quantity <= 0 || detail.unitPrice <= 0
-  )
-
-  if (invalidDetail) {
-    ElMessage.error('请完善项目编号并确保数量和单价大于0')
-    return
-  }
-
-  // 过滤掉新增的明细行（临时ID），只提交现有的明细
-  const existingDetails = dialogForm.details.filter(
-    (detail: any) => typeof detail.id === 'number' && detail.id > 1000
-  )
-
-  if (existingDetails.length === 0) {
-    ElMessage.error('没有可保存的订单明细')
-    return
-  }
-
-  dialogSubmitting.value = true
-
-  try {
-    const payload: UpdateSalesOrderPayload = {
-      orderNo: dialogForm.orderNo,
-      orderDate: dialogForm.orderDate || undefined,
-      signDate: dialogForm.signDate || undefined,
-      contractNo: dialogForm.contractNo || undefined,
-      customerId: dialogForm.customerId || undefined,
-      details: existingDetails.map((detail: any) => ({
-        id: detail.id,
-        itemCode: detail.itemCode,
-        deliveryDate: detail.deliveryDate || null,
-        totalAmount: detail.totalAmount,
-        unitPrice: detail.unitPrice,
-        quantity: detail.quantity,
-        remark: detail.remark || null,
-        costSource: detail.costSource || null,
-        handler: detail.handler || null,
-        isInStock: detail.isInStock || false,
-        isShipped: detail.isShipped || false,
-        shippingDate: detail.shippingDate || null
-      }))
-    }
-
-    await updateSalesOrderApi(payload)
-    ElMessage.success('更新成功')
-    dialogVisible.value = false
-    await loadData()
-  } catch (error: any) {
-    console.error('保存失败:', error)
-    ElMessage.error(error?.message || '保存失败')
-  } finally {
-    dialogSubmitting.value = false
-  }
+const handleDetailUnitPriceChange = (detail: any) => {
+  recalcDetailAmount(detail)
 }
 
 const addDetailRow = () => {
-  if (!dialogForm.details) {
-    dialogForm.details = []
-  }
   dialogForm.details.push({
-    id: Date.now(), // 临时ID，新增的记录
+    id: Date.now(),
     itemCode: '',
     productName: '',
     productDrawingNo: '',
@@ -929,169 +873,132 @@ const addDetailRow = () => {
 }
 
 const removeDetailRow = (index: number) => {
-  if (dialogForm.details && dialogForm.details.length > index) {
-    dialogForm.details.splice(index, 1)
+  dialogForm.details.splice(index, 1)
+}
+
+const submitDialogForm = async () => {
+  try {
+    if (!dialogForm.orderNo) {
+      ElMessage.error('订单编号不能为空')
+      return
+    }
+    dialogSubmitting.value = true
+    const payload: UpdateSalesOrderPayload = {
+      orderNo: dialogForm.orderNo,
+      orderDate: dialogForm.orderDate || undefined,
+      signDate: dialogForm.signDate || undefined,
+      contractNo: dialogForm.contractNo || undefined,
+      customerId: dialogForm.customerId || undefined,
+      details: dialogForm.details.map((d: any) => ({
+        id: d.id,
+        itemCode: d.itemCode || undefined,
+        deliveryDate: d.deliveryDate || null,
+        totalAmount: Number(d.totalAmount || 0),
+        unitPrice: Number(d.unitPrice || 0),
+        quantity: Number(d.quantity || 0),
+        remark: d.remark || null,
+        costSource: d.costSource || null,
+        handler: d.handler || null,
+        isInStock: !!d.isInStock,
+        isShipped: !!d.isShipped,
+        shippingDate: d.shippingDate || null
+      }))
+    }
+
+    const resp = await updateSalesOrderApi(payload)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const success = pr?.success ?? pr?.code === 0
+    if (success) {
+      ElMessage.success(pr?.message || '保存成功')
+      dialogVisible.value = false
+      await loadData()
+    } else {
+      ElMessage.error(pr?.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败')
+  } finally {
+    dialogSubmitting.value = false
   }
 }
 
-// 重新计算明细金额
-const recalculateDetail = (detail: any) => {
-  const quantity = Number(detail.quantity || 0)
-  const unitPrice = Number(detail.unitPrice || 0)
-  detail.totalAmount = quantity * unitPrice
+const handleDialogClosed = () => {
+  dialogForm.orderNo = ''
+  dialogForm.orderDate = ''
+  dialogForm.signDate = ''
+  dialogForm.customerId = null
+  dialogForm.customerName = ''
+  dialogForm.contractNo = ''
+  dialogForm.details = []
 }
 
-const handleDetailQuantityChange = (detail: any) => {
-  recalculateDetail(detail)
-}
-
-const handleDetailUnitPriceChange = (detail: any) => {
-  recalculateDetail(detail)
-}
-
-const dialogTotals = computed(() => ({
-  totalQuantity:
-    dialogForm.details?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0,
-  totalAmount:
-    dialogForm.details?.reduce((sum: number, item: any) => sum + (item.totalAmount || 0), 0) || 0
-}))
-
-onMounted(() => {
-  void loadData()
-  void loadCustomerList()
+onMounted(async () => {
+  await Promise.all([loadCustomerList(), loadData()])
 })
 </script>
 
 <style scoped>
+.so-row--expanded {
+  background-color: #f0f2f5 !important;
+}
+
+:deep(.el-table__expanded-cell) .so-expanded-wrap {
+  padding: 8px;
+  background-color: #eef1f6 !important;
+}
+
+/* 展开行内明细表表头背景色 */
+:deep(.so-expanded-wrap) .el-table__header-wrapper th {
+  color: #333;
+  background-color: #e6ebf3 !important;
+}
+
 .dialog-form-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding-top: 6px;
 }
 
 .dialog-form-columns {
   display: flex;
-  gap: 38px;
-  width: 100%;
+  gap: 24px;
 }
 
 .dialog-form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 9.6px;
-}
-
-.dialog-form-column :deep(.el-form-item) {
-  margin: 0;
-}
-
-.dialog-form-column--left :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.dialog-form-column--left :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
-}
-
-.dialog-form-column--left :deep(.el-form-item__content) {
-  margin-left: 0 !important;
-}
-
-.dialog-form-column--right :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.dialog-form-column--right :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
-  text-align: right;
-}
-
-/* 查看对话框样式 */
-.view-dialog-container {
-  padding: 0 8px;
-}
-
-.view-dialog-section {
-  margin-bottom: 24px;
-}
-
-.view-dialog-section:last-child {
-  margin-bottom: 0;
-}
-
-.view-dialog-section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0 0 16px 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #e4e7ed;
-}
-
-.view-dialog-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px 32px;
-}
-
-.view-dialog-info-item {
-  display: flex;
-  align-items: center;
-}
-
-.view-dialog-info-label {
-  font-weight: 500;
-  color: #606266;
-  min-width: 100px;
-  margin-right: 8px;
-}
-
-.view-dialog-info-value {
-  color: #303133;
   flex: 1;
 }
 
-.dialog-form-column--right :deep(.el-form-item__content) {
-  margin-left: 0 !important;
-}
-
-.dialog-input {
-  width: 252px;
-}
-
-.dialog-date-picker {
-  width: 252px !important;
-}
-
-.dialog-date-picker :deep(.el-input),
-.dialog-date-picker :deep(.el-input__wrapper),
-.dialog-date-picker :deep(.el-input__inner) {
-  width: 100%;
-}
-
-.dialog-status-item :deep(.el-form-item__label::before) {
-  content: '';
-}
-
 .dialog-product-section {
-  margin-top: 24px;
+  margin-top: 12px;
 }
 
 .dialog-product-summary {
-  margin-top: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-top: 8px;
 }
 
 .dialog-product-summary__item {
   margin-right: 16px;
+}
+
+.view-dialog-section {
+  margin-bottom: 16px;
+}
+
+.view-dialog-section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.view-dialog-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px 16px;
+}
+
+.view-dialog-info-label {
+  color: #666;
 }
 </style>

@@ -280,7 +280,7 @@ const loadCustomerData = async () => {
       tableData.value = response.data.list
       total.value = response.data.total
     } else {
-      ElMessage.error(response.message || '加载客户数据失败')
+      ElMessage.error((response as any)?.message || '加载客户数据失败')
     }
   } catch (error) {
     console.error('加载客户数据失败:', error)
@@ -466,13 +466,13 @@ onMounted(async () => {
 
 <style scoped>
 .summary-card {
+  background: linear-gradient(145deg, rgb(64 158 255 / 8%), rgb(64 158 255 / 2%));
   border: none;
-  background: linear-gradient(145deg, rgba(64, 158, 255, 0.08), rgba(64, 158, 255, 0.02));
 }
 
 .summary-title {
-  color: var(--el-text-color-secondary);
   font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
 
 .summary-value {
