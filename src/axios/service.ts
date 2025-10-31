@@ -43,8 +43,9 @@ axiosInstance.interceptors.response.use(
     return res
   },
   (error: AxiosError) => {
-    console.log('err： ' + error) // for debug
-    ElMessage.error(error.message)
+    // 显示后端返回的具体错误消息，而不是通用的 HTTP 错误
+    const errorMessage = (error.response?.data as any)?.message || error.message
+    ElMessage.error(errorMessage)
     return Promise.reject(error)
   }
 )

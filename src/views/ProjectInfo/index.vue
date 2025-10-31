@@ -341,9 +341,7 @@ const formData = reactive({
 // 表单验证规则
 const rules = {
   projectCode: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
-  projectName: [{ required: true, message: '请输入产品名称', trigger: 'blur' }],
-  customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
-  projectManager: [{ required: true, message: '请输入产品图号', trigger: 'blur' }]
+  customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }]
 }
 
 // 获取分类名称
@@ -460,14 +458,19 @@ const fetchData = async () => {
   }
 }
 
-// 获取客户列表
+// 获取客户列表（仅获取未停用的客户，按 seqNumber 排序）
 const fetchCustomerList = async () => {
   try {
     customerLoading.value = true
-    const response = await getCustomerListApi()
+    const response = await getCustomerListApi({
+      status: 'active',
+      page: 1,
+      pageSize: 10000 // 设置一个足够大的数值以获取所有未停用的客户
+    })
 
-    if (response && response.data) {
-      customerList.value = response.data
+    if (response && response.data && response.data.list) {
+      // 后端已经按 SeqNumber ASC 排序，直接使用
+      customerList.value = response.data.list
     } else {
       ElMessage.error('获取客户列表失败')
     }
@@ -641,9 +644,8 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     // 刷新数据列表
     await fetchData()
-  } catch (error) {
-    console.error('提交失败:', error)
-    ElMessage.error('操作失败')
+  } catch (error: any) {
+    // 错误消息已由 axios 拦截器处理并显示
   }
 }
 
@@ -707,8 +709,8 @@ onMounted(() => {
 
 .code-separator {
   font-size: 16px;
-  color: #909399;
   font-weight: 500;
+  color: #909399;
   white-space: nowrap;
 }
 
