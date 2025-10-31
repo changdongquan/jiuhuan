@@ -473,6 +473,9 @@ router.post('/create', async (req, res) => {
       })
     }
 
+    // 收集所有项目编号，用于后续更新isNew字段
+    const itemCodes = []
+
     // 插入订单明细
     for (const detail of details) {
       const insertQuery = `
@@ -505,6 +508,35 @@ router.post('/create', async (req, res) => {
       }
 
       await query(insertQuery, insertParams)
+
+      // 记录项目编号
+      if (detail.itemCode) {
+        itemCodes.push(detail.itemCode)
+      }
+    }
+
+    // 更新货物信息表中的IsNew字段为0
+    if (itemCodes.length > 0) {
+      // 构建IN子句的参数
+      const placeholders = itemCodes.map((_, index) => `@itemCode${index}`).join(', ')
+      const updateQuery = `
+        UPDATE 货物信息 
+        SET IsNew = 0 
+        WHERE 项目编号 IN (${placeholders})
+      `
+
+      const updateParams = {}
+      itemCodes.forEach((code, index) => {
+        updateParams[`itemCode${index}`] = code
+      })
+
+      try {
+        await query(updateQuery, updateParams)
+        console.log(`已将 ${itemCodes.length} 个项目的IsNew更新为0`)
+      } catch (updateError) {
+        console.error('更新货物信息IsNew字段失败:', updateError)
+        // 不影响订单创建，仅记录错误
+      }
     }
 
     res.json({
@@ -655,6 +687,59 @@ router.put('/update', async (req, res) => {
       code: 500,
       success: false,
       message: '更新销售订单失败',
+      error: error.message
+    })
+  }
+})
+
+// 删除销售订单（按订单编号删除所有明细）
+router.delete('/delete/:orderNo', async (req, res) => {
+  try {
+    const { orderNo } = req.params
+
+    if (!orderNo) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '订单编号不能为空'
+      })
+    }
+
+    // 检查订单是否存在
+    const checkQuery = `
+      SELECT COUNT(*) as count 
+      FROM 销售订单 
+      WHERE 订单编号 = @orderNo
+    `
+    const checkResult = await query(checkQuery, { orderNo })
+
+    if (checkResult[0].count === 0) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '订单不存在'
+      })
+    }
+
+    // 删除该订单号下的所有明细记录
+    const deleteQuery = `
+      DELETE FROM 销售订单 
+      WHERE 订单编号 = @orderNo
+    `
+
+    await query(deleteQuery, { orderNo })
+
+    res.json({
+      code: 0,
+      success: true,
+      message: '删除销售订单成功'
+    })
+  } catch (error) {
+    console.error('删除销售订单失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除销售订单失败',
       error: error.message
     })
   }

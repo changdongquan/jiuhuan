@@ -372,10 +372,10 @@
           border-radius: 4px;
         "
       >
-        <span style=" font-weight: 500;color: #1890ff">
+        <span style="font-weight: 500; color: #1890ff">
           已限制客户：{{ selectedCustomerName }}
         </span>
-        <span style=" margin-left: 8px; font-size: 12px;color: #666">
+        <span style="margin-left: 8px; font-size: 12px; color: #666">
           （只能选择同一客户的货物）
         </span>
       </div>
@@ -574,6 +574,7 @@ import {
   updateSalesOrderApi,
   createSalesOrderApi,
   generateOrderNoApi,
+  deleteSalesOrderApi,
   type SalesOrder,
   type SalesOrderQueryParams,
   type UpdateSalesOrderPayload,
@@ -953,12 +954,31 @@ const handleRowDblClick = (row: OrderTableRow) => {
 
 const handleDelete = async (row: OrderTableRow) => {
   try {
-    await ElMessageBox.confirm(`确定删除订单 ${row.orderNo} 吗？`, '提示', {
-      type: 'warning'
+    await ElMessageBox.confirm(`确定删除订单 ${row.orderNo} 吗？删除后将无法恢复！`, '警告', {
+      type: 'warning',
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消'
     })
-    ElMessage.info('删除功能待实现')
-  } catch (err) {
-    // 用户取消，无需处理
+
+    loading.value = true
+    const resp = await deleteSalesOrderApi(row.orderNo)
+    const raw: any = resp
+    const success = raw?.success ?? raw?.code === 0
+
+    if (success) {
+      ElMessage.success(raw?.message || '删除成功')
+      await loadData()
+    } else {
+      ElMessage.error(raw?.message || '删除失败')
+    }
+  } catch (err: any) {
+    // 用户取消或发生错误
+    if (err !== 'cancel') {
+      console.error('删除订单失败:', err)
+      ElMessage.error('删除订单失败')
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -1070,14 +1090,14 @@ const submitDialogForm = async () => {
 
       const resp = await createSalesOrderApi(payload)
       const raw: any = resp
-      const pr: any = raw?.data ?? raw
-      const success = pr?.success ?? pr?.code === 0
+      // 响应格式：{code: 0, success: true, message: '...', data: {...}}
+      const success = raw?.success ?? raw?.code === 0
       if (success) {
-        ElMessage.success(pr?.message || '创建成功')
+        ElMessage.success(raw?.message || '创建成功')
         dialogVisible.value = false
         await loadData()
       } else {
-        ElMessage.error(pr?.message || '创建失败')
+        ElMessage.error(raw?.message || '创建失败')
       }
     } else {
       // 编辑模式

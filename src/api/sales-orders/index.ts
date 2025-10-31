@@ -179,6 +179,17 @@ export const updateSalesOrderApi = (data: UpdateSalesOrderPayload) => {
   })
 }
 
+// 删除销售订单
+export const deleteSalesOrderApi = (orderNo: string) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/sales-orders/delete/${encodeURIComponent(orderNo)}`
+  })
+}
+
 // 获取销售订单统计信息
 export const getSalesOrdersStatisticsApi = () => {
   return request.get<{

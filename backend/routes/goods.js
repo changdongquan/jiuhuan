@@ -3,7 +3,8 @@ const { query, getPool } = require('../database')
 const sql = require('mssql')
 const router = express.Router()
 
-// 获取新品货物列表（isNew=1）
+// 获取新品货物列表（IsNew=1）
+// 只返回在项目管理表中有记录的货物，避免外键约束错误
 router.get('/new-products', async (req, res) => {
   try {
     const dataQuery = `
@@ -17,9 +18,9 @@ router.get('/new-products', async (req, res) => {
         c.客户名称 as customerName,
         p.客户模号 as customerPartNo
       FROM 货物信息 g
-      LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
+      INNER JOIN 项目管理 p ON g.项目编号 = p.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
-      WHERE g.isNew = 1
+      WHERE g.IsNew = 1 AND g.项目编号 IS NOT NULL AND g.项目编号 != ''
       ORDER BY g.货物ID DESC
     `
 
