@@ -164,7 +164,7 @@
       </el-table-column>
     </el-table>
 
-    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
+    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
