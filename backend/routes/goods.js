@@ -3,6 +3,45 @@ const { query, getPool } = require('../database')
 const sql = require('mssql')
 const router = express.Router()
 
+// 获取新品货物列表（isNew=1）
+router.get('/new-products', async (req, res) => {
+  try {
+    const dataQuery = `
+      SELECT 
+        g.货物ID as id,
+        g.项目编号 as itemCode,
+        g.产品图号 as productDrawingNo,
+        g.产品名称 as productName,
+        g.分类 as category,
+        g.备注 as remarks,
+        c.客户名称 as customerName,
+        p.客户模号 as customerPartNo
+      FROM 货物信息 g
+      LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
+      LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+      WHERE g.isNew = 1
+      ORDER BY g.货物ID DESC
+    `
+
+    const data = await query(dataQuery)
+
+    res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: data
+      }
+    })
+  } catch (error) {
+    console.error('获取新品货物列表失败:', error)
+    res.status(500).json({
+      success: false,
+      message: '获取新品货物列表失败',
+      error: error.message
+    })
+  }
+})
+
 // 获取货物信息列表
 router.get('/list', async (req, res) => {
   try {

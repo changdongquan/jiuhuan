@@ -197,8 +197,8 @@
               <el-input
                 v-model="dialogForm.orderNo"
                 placeholder="订单编号"
-                class="dialog-input"
                 disabled
+                style="width: 280px"
               />
             </el-form-item>
             <el-form-item label="订单日期">
@@ -207,8 +207,7 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择订单日期"
-                class="dialog-date-picker"
-                style="width: 252px"
+                style="width: 280px"
               />
             </el-form-item>
           </div>
@@ -217,10 +216,10 @@
               <el-select
                 v-model="dialogForm.customerId"
                 placeholder="请选择客户"
-                class="dialog-input"
                 filterable
                 clearable
                 @change="handleCustomerChange"
+                style="width: 280px"
               >
                 <el-option
                   v-for="customer in customerList"
@@ -236,21 +235,25 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择签订日期"
-                class="dialog-date-picker"
-                style="width: 252px"
+                style="width: 280px"
               />
             </el-form-item>
             <el-form-item label="合同编号">
               <el-input
                 v-model="dialogForm.contractNo"
                 placeholder="请输入合同编号"
-                class="dialog-input"
+                style="width: 280px"
               />
             </el-form-item>
           </div>
         </div>
 
         <div class="dialog-product-section">
+          <div style="margin-bottom: 12px">
+            <el-button type="primary" size="small" @click="openNewProductDialog">
+              从新品中选择
+            </el-button>
+          </div>
           <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
             <el-table-column type="index" label="序号" width="45" />
             <el-table-column label="项目编号" min-width="140">
@@ -348,6 +351,83 @@
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
           保存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新品选择对话框 -->
+    <el-dialog
+      v-model="newProductDialogVisible"
+      title="选择新品货物"
+      width="1200px"
+      :close-on-click-modal="false"
+    >
+      <div
+        v-if="selectedCustomerName"
+        style="
+          padding: 8px;
+          margin-bottom: 12px;
+          background-color: #f0f9ff;
+          border: 1px solid #91d5ff;
+          border-radius: 4px;
+        "
+      >
+        <span style=" font-weight: 500;color: #1890ff">
+          已限制客户：{{ selectedCustomerName }}
+        </span>
+        <span style=" margin-left: 8px; font-size: 12px;color: #666">
+          （只能选择同一客户的货物）
+        </span>
+      </div>
+      <el-table
+        ref="newProductTableRef"
+        v-loading="newProductLoading"
+        :data="newProductList"
+        border
+        @selection-change="handleProductSelectionChange"
+        @select="handleProductSelect"
+        max-height="500px"
+        :row-class-name="getRowClassName"
+      >
+        <el-table-column type="selection" width="55" :selectable="checkSelectable" />
+        <el-table-column prop="itemCode" label="项目编号" min-width="140">
+          <template #default="{ row }">
+            <span :style="{ color: isItemCodeExists(row.itemCode) ? '#999' : '#333' }">
+              {{ row.itemCode || '-' }}
+              <el-tag
+                v-if="isItemCodeExists(row.itemCode)"
+                type="info"
+                size="small"
+                style="margin-left: 8px"
+              >
+                已添加
+              </el-tag>
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productName" label="产品名称" min-width="160" />
+        <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
+        <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
+        <el-table-column prop="customerName" label="客户名称" min-width="160">
+          <template #default="{ row }">
+            <span
+              :style="{ color: row.customerName === selectedCustomerName ? '#1890ff' : '#333' }"
+            >
+              {{ row.customerName || '-' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="category" label="分类" width="100" />
+        <el-table-column prop="remarks" label="备注" min-width="140" show-overflow-tooltip />
+      </el-table>
+      <template #footer>
+        <el-button @click="newProductDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          @click="fillSelectedProducts"
+          :disabled="selectedProducts.length === 0"
+        >
+          填充 ({{ selectedProducts.length }})
         </el-button>
       </template>
     </el-dialog>
@@ -469,7 +549,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, nextTick } from 'vue'
 import type { FormInstance } from 'element-plus'
 import {
   ElButton,
@@ -492,11 +572,15 @@ import {
   getSalesOrdersListApi,
   getSalesOrderByOrderNoApi,
   updateSalesOrderApi,
+  createSalesOrderApi,
+  generateOrderNoApi,
   type SalesOrder,
   type SalesOrderQueryParams,
-  type UpdateSalesOrderPayload
+  type UpdateSalesOrderPayload,
+  type CreateSalesOrderPayload
 } from '@/api/sales-orders'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
 
 interface OrderQuery {
   searchText: string
@@ -546,10 +630,19 @@ const dialogFormRef = ref<FormInstance>()
 const dialogSubmitting = ref(false)
 const currentOrderNo = ref<string | null>(null)
 const customerList = ref<CustomerInfo[]>([])
+const isCreateMode = ref(false) // 标识是新建模式还是编辑模式
 
 // 查看对话框相关变量
 const viewDialogVisible = ref(false)
 const viewOrderData = ref<SalesOrder | null>(null)
+
+// 新品选择对话框相关变量
+const newProductDialogVisible = ref(false)
+const newProductList = ref<NewProductInfo[]>([])
+const selectedProducts = ref<NewProductInfo[]>([])
+const newProductLoading = ref(false)
+const selectedCustomerName = ref<string>('')
+const newProductTableRef = ref<InstanceType<typeof ElTable>>()
 const dialogForm = reactive<any>({
   orderNo: '',
   orderDate: '',
@@ -668,7 +761,44 @@ const handleCurrentChange = (page: number) => {
 }
 
 const handleCreate = async () => {
-  ElMessage.info('新增功能待实现')
+  try {
+    isCreateMode.value = true
+    dialogTitle.value = '新建销售订单'
+    currentOrderNo.value = null
+
+    // 如果客户列表为空，先加载客户列表
+    if (customerList.value.length === 0) {
+      await loadCustomerList()
+    }
+
+    // 生成新的订单编号
+    loading.value = true
+    const response = await generateOrderNoApi()
+    const raw: any = response
+    const pr: any = raw?.data ?? raw
+    const newOrderNo = pr?.orderNo || ''
+
+    if (!newOrderNo) {
+      ElMessage.error('生成订单编号失败')
+      return
+    }
+
+    // 初始化表单
+    dialogForm.orderNo = newOrderNo
+    dialogForm.orderDate = formatDate(new Date())
+    dialogForm.signDate = ''
+    dialogForm.customerId = null
+    dialogForm.customerName = ''
+    dialogForm.contractNo = ''
+    dialogForm.details = []
+
+    dialogVisible.value = true
+  } catch (error) {
+    console.error('打开新建对话框失败:', error)
+    ElMessage.error('打开新建对话框失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleView = async (row: OrderTableRow) => {
@@ -743,6 +873,12 @@ const handleCustomerChange = (customerId: number | null) => {
   if (customerId) {
     const customer = customerList.value.find((c) => c.id === customerId)
     if (customer) {
+      // 检查是否已有明细，如果有明细需要验证客户是否一致
+      if (dialogForm.details.length > 0) {
+        ElMessage.warning('更改客户将清空已添加的明细，请谨慎操作')
+        // 可选：清空明细
+        // dialogForm.details = []
+      }
       dialogForm.customerName = customer.customerName
     }
   } else {
@@ -753,6 +889,7 @@ const handleCustomerChange = (customerId: number | null) => {
 
 const handleEdit = async (row: OrderTableRow) => {
   try {
+    isCreateMode.value = false
     currentOrderNo.value = row.orderNo
     dialogTitle.value = `编辑销售订单 - ${row.orderNo}`
     loading.value = true
@@ -882,39 +1019,101 @@ const submitDialogForm = async () => {
       ElMessage.error('订单编号不能为空')
       return
     }
-    dialogSubmitting.value = true
-    const payload: UpdateSalesOrderPayload = {
-      orderNo: dialogForm.orderNo,
-      orderDate: dialogForm.orderDate || undefined,
-      signDate: dialogForm.signDate || undefined,
-      contractNo: dialogForm.contractNo || undefined,
-      customerId: dialogForm.customerId || undefined,
-      details: dialogForm.details.map((d: any) => ({
-        id: d.id,
-        itemCode: d.itemCode || undefined,
-        deliveryDate: d.deliveryDate || null,
-        totalAmount: Number(d.totalAmount || 0),
-        unitPrice: Number(d.unitPrice || 0),
-        quantity: Number(d.quantity || 0),
-        remark: d.remark || null,
-        costSource: d.costSource || null,
-        handler: d.handler || null,
-        isInStock: !!d.isInStock,
-        isShipped: !!d.isShipped,
-        shippingDate: d.shippingDate || null
-      }))
+
+    if (!dialogForm.customerId) {
+      ElMessage.error('请选择客户')
+      return
     }
 
-    const resp = await updateSalesOrderApi(payload)
-    const raw: any = resp
-    const pr: any = raw?.data ?? raw
-    const success = pr?.success ?? pr?.code === 0
-    if (success) {
-      ElMessage.success(pr?.message || '保存成功')
-      dialogVisible.value = false
-      await loadData()
+    if (!dialogForm.details || dialogForm.details.length === 0) {
+      ElMessage.error('请至少添加一条订单明细')
+      return
+    }
+
+    // 验证明细行数量必填
+    const emptyQuantityRows: number[] = []
+    dialogForm.details.forEach((detail: any, index: number) => {
+      if (!detail.quantity || detail.quantity <= 0) {
+        emptyQuantityRows.push(index + 1)
+      }
+    })
+
+    if (emptyQuantityRows.length > 0) {
+      ElMessage.error(`第 ${emptyQuantityRows.join('、')} 行的数量不能为空或小于等于0`)
+      return
+    }
+
+    dialogSubmitting.value = true
+
+    if (isCreateMode.value) {
+      // 新建模式
+      const payload: CreateSalesOrderPayload = {
+        orderNo: dialogForm.orderNo,
+        orderDate: dialogForm.orderDate || undefined,
+        signDate: dialogForm.signDate || undefined,
+        contractNo: dialogForm.contractNo || undefined,
+        customerId: dialogForm.customerId,
+        details: dialogForm.details.map((d: any) => ({
+          itemCode: d.itemCode || undefined,
+          deliveryDate: d.deliveryDate || null,
+          totalAmount: Number(d.totalAmount || 0),
+          unitPrice: Number(d.unitPrice || 0),
+          quantity: Number(d.quantity || 0),
+          remark: d.remark || null,
+          costSource: d.costSource || null,
+          handler: d.handler || null,
+          isInStock: !!d.isInStock,
+          isShipped: !!d.isShipped,
+          shippingDate: d.shippingDate || null
+        }))
+      }
+
+      const resp = await createSalesOrderApi(payload)
+      const raw: any = resp
+      const pr: any = raw?.data ?? raw
+      const success = pr?.success ?? pr?.code === 0
+      if (success) {
+        ElMessage.success(pr?.message || '创建成功')
+        dialogVisible.value = false
+        await loadData()
+      } else {
+        ElMessage.error(pr?.message || '创建失败')
+      }
     } else {
-      ElMessage.error(pr?.message || '保存失败')
+      // 编辑模式
+      const payload: UpdateSalesOrderPayload = {
+        orderNo: dialogForm.orderNo,
+        orderDate: dialogForm.orderDate || undefined,
+        signDate: dialogForm.signDate || undefined,
+        contractNo: dialogForm.contractNo || undefined,
+        customerId: dialogForm.customerId || undefined,
+        details: dialogForm.details.map((d: any) => ({
+          id: d.id,
+          itemCode: d.itemCode || undefined,
+          deliveryDate: d.deliveryDate || null,
+          totalAmount: Number(d.totalAmount || 0),
+          unitPrice: Number(d.unitPrice || 0),
+          quantity: Number(d.quantity || 0),
+          remark: d.remark || null,
+          costSource: d.costSource || null,
+          handler: d.handler || null,
+          isInStock: !!d.isInStock,
+          isShipped: !!d.isShipped,
+          shippingDate: d.shippingDate || null
+        }))
+      }
+
+      const resp = await updateSalesOrderApi(payload)
+      const raw: any = resp
+      const pr: any = raw?.data ?? raw
+      const success = pr?.success ?? pr?.code === 0
+      if (success) {
+        ElMessage.success(pr?.message || '保存成功')
+        dialogVisible.value = false
+        await loadData()
+      } else {
+        ElMessage.error(pr?.message || '保存失败')
+      }
     }
   } catch (error) {
     console.error('保存失败:', error)
@@ -932,6 +1131,266 @@ const handleDialogClosed = () => {
   dialogForm.customerName = ''
   dialogForm.contractNo = ''
   dialogForm.details = []
+  isCreateMode.value = false
+  currentOrderNo.value = null
+}
+
+// 打开新品选择对话框
+const openNewProductDialog = async () => {
+  try {
+    newProductLoading.value = true
+    newProductDialogVisible.value = true
+    selectedProducts.value = []
+
+    // 检查订单是否已经选择了客户
+    let orderCustomerName = ''
+    if (dialogForm.customerId) {
+      // 从客户列表中获取客户名称
+      const customer = customerList.value.find((c) => c.id === dialogForm.customerId)
+      if (customer) {
+        orderCustomerName = customer.customerName
+        selectedCustomerName.value = orderCustomerName
+        ElMessage.info(`订单已选择客户"${orderCustomerName}"，只能选择该客户的货物`)
+      }
+    } else {
+      // 检查明细中是否已有货物（可能是手动输入的）
+      // 如果有明细，尝试从货物信息中获取客户
+      if (dialogForm.details.length > 0) {
+        // 从第一个明细的项目编号查找对应的客户
+        const firstDetail = dialogForm.details[0]
+        if (firstDetail.itemCode) {
+          // 暂时清空限制，后续可以通过itemCode查询
+          selectedCustomerName.value = ''
+        }
+      } else {
+        selectedCustomerName.value = ''
+      }
+    }
+
+    const response = await getNewProductsApi()
+    const raw: any = response
+    const pr: any = raw?.data ?? raw
+    const list = pr?.list ?? []
+
+    newProductList.value = list
+
+    // 如果有客户限制，过滤列表
+    if (orderCustomerName && list.length > 0) {
+      const filteredList = list.filter((item) => item.customerName === orderCustomerName)
+      if (filteredList.length === 0) {
+        ElMessage.warning(`没有客户"${orderCustomerName}"的新品货物`)
+      }
+    }
+
+    if (list.length === 0) {
+      ElMessage.info('暂无新品货物')
+    }
+  } catch (error) {
+    console.error('加载新品货物列表失败:', error)
+    ElMessage.error('加载新品货物列表失败')
+  } finally {
+    newProductLoading.value = false
+  }
+}
+
+// 检查项目编号是否已存在于明细中
+const isItemCodeExists = (itemCode: string) => {
+  if (!itemCode || !itemCode.trim()) return false
+  return dialogForm.details.some((d: any) => d.itemCode === itemCode)
+}
+
+// 检查行是否可选
+const checkSelectable = (row: NewProductInfo) => {
+  // 如果项目编号已存在，不可选
+  if (isItemCodeExists(row.itemCode)) {
+    return false
+  }
+  // 如果还没有选择任何客户，所有行都可选
+  if (!selectedCustomerName.value) {
+    return true
+  }
+  // 如果已选择客户，只有同一客户的行可选
+  return row.customerName === selectedCustomerName.value
+}
+
+// 获取行的class名称（用于样式）
+const getRowClassName = ({ row }: { row: NewProductInfo }) => {
+  if (isItemCodeExists(row.itemCode)) {
+    return 'row-disabled'
+  }
+  return ''
+}
+
+// 处理单行选择
+const handleProductSelect = (selection: NewProductInfo[], row: NewProductInfo) => {
+  const isSelecting = selection.some((item) => item.id === row.id)
+
+  if (isSelecting) {
+    // 正在选择这一行
+    if (!selectedCustomerName.value) {
+      // 第一次选择，记录客户名称
+      selectedCustomerName.value = row.customerName || ''
+    } else if (row.customerName !== selectedCustomerName.value) {
+      // 尝试选择不同客户的产品，阻止并提示
+      ElMessage.warning(`只能选择客户"${selectedCustomerName.value}"的货物`)
+      // 从选择中移除这个产品
+      const index = selection.findIndex((item) => item.id === row.id)
+      if (index > -1) {
+        selection.splice(index, 1)
+      }
+      return
+    }
+  }
+}
+
+// 处理新品选择变化
+const handleProductSelectionChange = async (selection: NewProductInfo[]) => {
+  // 检查是否所有选中的产品都是同一个客户
+  if (selection.length > 0) {
+    const firstCustomer = selection[0].customerName
+    const allSameCustomer = selection.every((item) => item.customerName === firstCustomer)
+
+    if (!allSameCustomer) {
+      // 如果有不同客户的产品，过滤掉不同客户的产品
+      ElMessage.warning(`只能选择同一个客户的货物`)
+
+      // 保留符合条件的产品
+      const validSelection = selection.filter((item) => {
+        return !selectedCustomerName.value || item.customerName === selectedCustomerName.value
+      })
+
+      // 更新表格选择状态
+      await nextTick()
+      if (newProductTableRef.value) {
+        newProductTableRef.value.clearSelection()
+        validSelection.forEach((row) => {
+          newProductTableRef.value?.toggleRowSelection(row, true)
+        })
+      }
+
+      selectedProducts.value = validSelection
+      return
+    }
+
+    // 更新已选客户
+    if (!selectedCustomerName.value) {
+      selectedCustomerName.value = firstCustomer || ''
+    }
+
+    selectedProducts.value = selection
+  } else {
+    // 如果取消所有选择，清空客户名称限制
+    selectedCustomerName.value = ''
+    selectedProducts.value = []
+  }
+}
+
+// 填充选中的产品到明细行
+const fillSelectedProducts = () => {
+  if (selectedProducts.value.length === 0) {
+    ElMessage.warning('请先选择需要添加的产品')
+    return
+  }
+
+  // 最终验证：确保所有选中产品都是同一个客户
+  const customerName = selectedProducts.value[0]?.customerName
+  const allSameCustomer = selectedProducts.value.every((item) => item.customerName === customerName)
+
+  if (!allSameCustomer) {
+    ElMessage.error('选中的产品必须是同一个客户，请重新选择')
+    return
+  }
+
+  // 检查订单是否已经有客户，并且是否与选中产品的客户一致
+  if (dialogForm.customerId) {
+    const orderCustomer = customerList.value.find((c) => c.id === dialogForm.customerId)
+    if (orderCustomer && orderCustomer.customerName !== customerName) {
+      ElMessage.error(`订单已选择客户"${orderCustomer.customerName}"，不能添加其他客户的货物`)
+      return
+    }
+  }
+
+  // 检查明细中已有货物的客户（通过已填充的货物推断）
+  if (dialogForm.details.length > 0) {
+    // 如果订单已经有客户，检查是否一致
+    if (dialogForm.customerId) {
+      const orderCustomer = customerList.value.find((c) => c.id === dialogForm.customerId)
+      if (orderCustomer && orderCustomer.customerName !== customerName) {
+        ElMessage.error(
+          `订单中已有客户"${orderCustomer.customerName}"的货物，不能添加其他客户的货物`
+        )
+        return
+      }
+    }
+  }
+
+  // 获取现有明细中的所有项目编号
+  const existingItemCodes = new Set(
+    dialogForm.details.map((d: any) => d.itemCode).filter((code: string) => code && code.trim())
+  )
+
+  // 检查要添加的产品中是否有重复的项目编号
+  const duplicateProducts: string[] = []
+  const validProducts: NewProductInfo[] = []
+
+  selectedProducts.value.forEach((product) => {
+    if (product.itemCode && existingItemCodes.has(product.itemCode)) {
+      duplicateProducts.push(product.itemCode)
+    } else {
+      validProducts.push(product)
+    }
+  })
+
+  // 如果有重复的项目编号，提示用户
+  if (duplicateProducts.length > 0) {
+    ElMessage.warning(`以下项目编号已存在，已自动跳过：${duplicateProducts.join('、')}`)
+  }
+
+  // 如果没有可添加的产品
+  if (validProducts.length === 0) {
+    ElMessage.error('所选产品的项目编号都已存在，无法添加')
+    return
+  }
+
+  // 自动填充客户信息
+  if (customerName && !dialogForm.customerId) {
+    // 根据客户名称查找客户ID
+    const customer = customerList.value.find((c) => c.customerName === customerName)
+    if (customer) {
+      dialogForm.customerId = customer.id
+      dialogForm.customerName = customer.customerName
+      ElMessage.success(`已自动选择客户：${customerName}`)
+    }
+  }
+
+  // 将有效的产品添加到明细列表
+  validProducts.forEach((product) => {
+    dialogForm.details.push({
+      id: Date.now() + Math.random(), // 生成唯一ID
+      itemCode: product.itemCode || '',
+      productName: product.productName || '',
+      productDrawingNo: product.productDrawingNo || '',
+      customerPartNo: product.customerPartNo || '',
+      quantity: 0,
+      unitPrice: 0,
+      totalAmount: 0,
+      deliveryDate: null,
+      remark: product.remarks || '',
+      costSource: '',
+      handler: '',
+      isInStock: false,
+      isShipped: false,
+      shippingDate: null
+    })
+  })
+
+  if (validProducts.length > 0) {
+    ElMessage.success(`已添加 ${validProducts.length} 条明细`)
+  }
+
+  newProductDialogVisible.value = false
+  selectedProducts.value = []
+  // 注意：不清空 selectedCustomerName，因为订单的客户已确定
 }
 
 onMounted(async () => {
@@ -1000,5 +1459,15 @@ onMounted(async () => {
 
 .view-dialog-info-label {
   color: #666;
+}
+
+/* 新品选择对话框 - 已添加的行样式 */
+:deep(.row-disabled) {
+  color: #999 !important;
+  background-color: #f5f5f5 !important;
+}
+
+:deep(.row-disabled):hover {
+  background-color: #f5f5f5 !important;
 }
 </style>

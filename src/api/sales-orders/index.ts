@@ -100,6 +100,51 @@ export const getSalesOrderByOrderNoApi = (orderNo: string) => {
   })
 }
 
+// 生成新的订单编号
+export const generateOrderNoApi = () => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: { orderNo: string }
+  }>({
+    url: '/api/sales-orders/generate-order-no'
+  })
+}
+
+// 创建销售订单
+export interface CreateSalesOrderPayload {
+  orderNo: string
+  orderDate?: string
+  signDate?: string
+  contractNo?: string
+  customerId: number
+  details: Array<{
+    itemCode?: string
+    deliveryDate?: string | null
+    totalAmount?: number
+    unitPrice?: number
+    quantity?: number
+    remark?: string | null
+    costSource?: string | null
+    handler?: string | null
+    isInStock?: boolean
+    isShipped?: boolean
+    shippingDate?: string | null
+  }>
+}
+
+export const createSalesOrderApi = (data: CreateSalesOrderPayload) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: { orderNo: string }
+  }>({
+    url: '/api/sales-orders/create',
+    data
+  })
+}
+
 // 更新销售订单
 export interface UpdateSalesOrderPayload {
   orderNo: string

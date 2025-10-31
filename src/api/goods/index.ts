@@ -75,3 +75,27 @@ export const getMaxSerialApi = (category: string) => {
 export const getGoodsByProjectCodeApi = (projectCode: string) => {
   return request.get({ url: `/api/goods/by-project/${projectCode}` })
 }
+
+// 获取新品货物列表（isNew=1）
+export interface NewProductInfo {
+  id: number
+  itemCode: string // 项目编号
+  productDrawingNo: string // 产品图号
+  productName: string // 产品名称
+  category: string // 分类
+  remarks: string // 备注
+  customerName?: string // 客户名称
+  customerPartNo?: string // 客户模号
+}
+
+export const getNewProductsApi = () => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: {
+      list: NewProductInfo[]
+    }
+  }>({
+    url: '/api/goods/new-products'
+  })
+}
