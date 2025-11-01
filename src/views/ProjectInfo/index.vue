@@ -599,21 +599,35 @@ const handleRowDoubleClick = async (row: any) => {
 // 删除
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm(`确定要删除项目"${row.productName}"吗？`, '警告', {
+    // 第一步：显示确认对话框，要求输入 Y
+    // 将提示信息分成两行，确保"请输入 Y 确认删除"始终在第二行
+    const message = `<div style="line-height: 1.8;">
+      <div>确定要删除项目"${row.productName}"吗？</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      type: 'warning'
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
     })
 
-    await deleteGoodsApi(row.id)
-    ElMessage.success('删除成功')
-    // 刷新数据列表
-    await fetchData()
+    // 如果用户输入了 Y（不区分大小写），执行删除
+    if (value && value.toUpperCase() === 'Y') {
+      await deleteGoodsApi(row.id)
+      ElMessage.success('删除成功')
+      // 刷新数据列表
+      await fetchData()
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
     }
+    // 用户取消操作时不显示错误
   }
 }
 

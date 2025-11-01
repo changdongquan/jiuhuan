@@ -1048,22 +1048,35 @@ const handleRowDblClick = (row: OrderTableRow) => {
 
 const handleDelete = async (row: OrderTableRow) => {
   try {
-    await ElMessageBox.confirm(`确定删除订单 ${row.orderNo} 吗？删除后将无法恢复！`, '警告', {
-      type: 'warning',
+    // 显示确认对话框，要求输入 Y
+    // 将提示信息分成两行，确保"请输入 Y 确认删除"始终在第二行
+    const message = `<div style="line-height: 1.8;">
+      <div>确定删除订单 ${row.orderNo} 吗？删除后将无法恢复！</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
       confirmButtonText: '确定删除',
-      cancelButtonText: '取消'
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
     })
 
-    loading.value = true
-    const resp = await deleteSalesOrderApi(row.orderNo)
-    const raw: any = resp
-    const success = raw?.success ?? raw?.code === 0
+    // 如果用户输入了 Y（不区分大小写），执行删除
+    if (value && value.toUpperCase() === 'Y') {
+      loading.value = true
+      const resp = await deleteSalesOrderApi(row.orderNo)
+      const raw: any = resp
+      const success = raw?.success ?? raw?.code === 0
 
-    if (success) {
-      ElMessage.success(raw?.message || '删除成功')
-      await Promise.all([loadData(), loadStatistics()])
-    } else {
-      ElMessage.error(raw?.message || '删除失败')
+      if (success) {
+        ElMessage.success(raw?.message || '删除成功')
+        await Promise.all([loadData(), loadStatistics()])
+      } else {
+        ElMessage.error(raw?.message || '删除失败')
+      }
     }
   } catch (err: any) {
     // 用户取消或发生错误
