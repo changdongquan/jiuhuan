@@ -93,7 +93,7 @@
     <!-- 统计卡片 -->
     <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card total">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-content">
             <div class="summary-icon">
               <el-icon><Switch /></el-icon>
@@ -106,7 +106,7 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card amount">
+        <el-card shadow="hover" class="summary-card summary-card--green">
           <div class="summary-content">
             <div class="summary-icon">
               <el-icon><Money /></el-icon>
@@ -119,7 +119,7 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card pending">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
           <div class="summary-content">
             <div class="summary-icon">
               <el-icon><Clock /></el-icon>
@@ -132,7 +132,7 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card completed">
+        <el-card shadow="hover" class="summary-card summary-card--gray">
           <div class="summary-content">
             <div class="summary-icon">
               <el-icon><Check /></el-icon>
@@ -985,8 +985,8 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 
 <style scoped>
 .search-card {
+  background: linear-gradient(145deg, rgb(64 158 255 / 5%), rgb(64 158 255 / 2%));
   border: none;
-  background: linear-gradient(145deg, rgba(64, 158, 255, 0.05), rgba(64, 158, 255, 0.02));
 }
 
 .search-form {
@@ -1000,23 +1000,59 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 
 .summary-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 25px rgb(0 0 0 / 10%);
 }
 
-.summary-card.total {
-  background: linear-gradient(145deg, rgba(64, 158, 255, 0.1), rgba(64, 158, 255, 0.05));
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
 }
 
-.summary-card.amount {
-  background: linear-gradient(145deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05));
+.summary-card--blue .summary-title {
+  color: #409eff;
 }
 
-.summary-card.pending {
-  background: linear-gradient(145deg, rgba(230, 162, 60, 0.1), rgba(230, 162, 60, 0.05));
+.summary-card--blue .summary-value {
+  color: #409eff;
 }
 
-.summary-card.completed {
-  background: linear-gradient(145deg, rgba(82, 196, 26, 0.1), rgba(82, 196, 26, 0.05));
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--green .summary-title {
+  color: #67c23a;
+}
+
+.summary-card--green .summary-value {
+  color: #67c23a;
+}
+
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--orange .summary-title {
+  color: #e6a23c;
+}
+
+.summary-card--orange .summary-value {
+  color: #e6a23c;
+}
+
+/* 第四个卡片 - 灰色 */
+.summary-card--gray {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--gray .summary-title {
+  color: #909399;
+}
+
+.summary-card--gray .summary-value {
+  color: #909399;
 }
 
 .summary-content {
@@ -1026,30 +1062,30 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 }
 
 .summary-icon {
+  display: flex;
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 24px;
   color: white;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
 }
 
-.summary-card.total .summary-icon {
+.summary-card--blue .summary-icon {
   background: linear-gradient(135deg, #409eff, #66b3ff);
 }
 
-.summary-card.amount .summary-icon {
+.summary-card--green .summary-icon {
   background: linear-gradient(135deg, #67c23a, #85ce61);
 }
 
-.summary-card.pending .summary-icon {
+.summary-card--orange .summary-icon {
   background: linear-gradient(135deg, #e6a23c, #f0c78a);
 }
 
-.summary-card.completed .summary-icon {
-  background: linear-gradient(135deg, #52c41a, #73d13d);
+.summary-card--gray .summary-icon {
+  background: linear-gradient(135deg, #909399, #b3b6b9);
 }
 
 .summary-info {
@@ -1057,9 +1093,9 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 }
 
 .summary-title {
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
   margin-bottom: 4px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
 
 .summary-value {
@@ -1090,8 +1126,8 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 }
 
 .data-table {
-  border-radius: 8px;
   overflow: hidden;
+  border-radius: 8px;
 }
 
 .pagination-container {
@@ -1112,9 +1148,9 @@ watch(() => formData.materialDetails, calculateTotalValue, { deep: true })
 }
 
 .material-details {
+  padding: 12px;
   border: 1px solid var(--el-border-color);
   border-radius: 6px;
-  padding: 12px;
 }
 
 .material-header {

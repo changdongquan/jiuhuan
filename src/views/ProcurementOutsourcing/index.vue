@@ -58,25 +58,25 @@
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-title">{{ t('procurement.totalOrders') }}</div>
           <div class="summary-value">{{ summary.totalOrders }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--green">
           <div class="summary-title">{{ t('procurement.pendingAmount') }}</div>
           <div class="summary-value">¥ {{ formatAmount(summary.pendingAmount) }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
           <div class="summary-title">{{ t('procurement.inProgressCount') }}</div>
           <div class="summary-value">{{ summary.inProgress }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--gray">
           <div class="summary-title">{{ t('procurement.delayedCount') }}</div>
           <div class="summary-value">{{ summary.delayed }}</div>
         </el-card>
@@ -293,13 +293,70 @@ const handleReset = () => {
 <style scoped>
 .summary-card {
   border: none;
-  background: linear-gradient(145deg, rgba(103, 194, 58, 0.14), rgba(103, 194, 58, 0.04));
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+}
+
+.summary-card--blue .summary-title {
+  color: #409eff;
+}
+
+.summary-card--blue .summary-value {
+  color: #409eff;
+}
+
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--green .summary-title {
+  color: #67c23a;
+}
+
+.summary-card--green .summary-value {
+  color: #67c23a;
+}
+
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--orange .summary-title {
+  color: #e6a23c;
+}
+
+.summary-card--orange .summary-value {
+  color: #e6a23c;
+}
+
+/* 第四个卡片 - 灰色 */
+.summary-card--gray {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--gray .summary-title {
+  color: #909399;
+}
+
+.summary-card--gray .summary-value {
+  color: #909399;
 }
 
 .summary-title {
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
   margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
 
 .summary-value {

@@ -38,25 +38,25 @@
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-title">客户总数</div>
           <div class="summary-value">{{ summary.totalCustomers }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--green">
           <div class="summary-title">启用客户</div>
           <div class="summary-value">{{ summary.activeCustomers }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
           <div class="summary-title">停用客户</div>
           <div class="summary-value">{{ summary.inactiveCustomers }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+        <el-card shadow="hover" class="summary-card summary-card--gray">
           <div class="summary-title">有联系方式</div>
           <div class="summary-value">{{ summary.withContact }}</div>
         </el-card>
@@ -466,19 +466,75 @@ onMounted(async () => {
 
 <style scoped>
 .summary-card {
-  background: linear-gradient(145deg, rgb(64 158 255 / 8%), rgb(64 158 255 / 2%));
   border: none;
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+}
+
+.summary-card--blue .summary-title {
+  color: #409eff;
+}
+
+.summary-card--blue .summary-value {
+  color: #409eff;
+}
+
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--green .summary-title {
+  color: #67c23a;
+}
+
+.summary-card--green .summary-value {
+  color: #67c23a;
+}
+
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--orange .summary-title {
+  color: #e6a23c;
+}
+
+.summary-card--orange .summary-value {
+  color: #e6a23c;
+}
+
+/* 第四个卡片 - 灰色 */
+.summary-card--gray {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--gray .summary-title {
+  color: #909399;
+}
+
+.summary-card--gray .summary-value {
+  color: #909399;
 }
 
 .summary-title {
   font-size: 14px;
-  color: var(--el-text-color-secondary);
+  font-weight: 500;
 }
 
 .summary-value {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
 }
 </style>

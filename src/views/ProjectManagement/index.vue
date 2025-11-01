@@ -1,11 +1,11 @@
 <template>
-  <div class="p-4">
+  <div class="p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
       label-width="90px"
       inline
-      style="margin-bottom: 16px"
+      class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
       <el-form-item label="关键词">
         <el-input
@@ -41,12 +41,39 @@
       </el-form-item>
     </el-form>
 
+    <el-row :gutter="16">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
+          <div class="summary-title">项目总数</div>
+          <div class="summary-value">{{ summary.totalProjects }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--green">
+          <div class="summary-title">设计中</div>
+          <div class="summary-value">{{ summary.designingProjects }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
+          <div class="summary-title">加工中</div>
+          <div class="summary-value">{{ summary.processingProjects }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--purple">
+          <div class="summary-title">已经移模</div>
+          <div class="summary-value">{{ summary.completedProjects }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-table
       ref="tableRef"
       v-loading="loading"
       :data="tableData"
       border
-      height="calc(100vh - 320px)"
+      height="calc(100vh - 480px)"
       @row-dblclick="handleEdit"
     >
       <el-table-column prop="项目编号" label="项目编号" width="130" show-overflow-tooltip />
@@ -594,6 +621,7 @@ import {
   createProjectApi,
   updateProjectApi,
   getProjectGoodsApi,
+  getProjectStatisticsApi,
   type ProjectInfo
 } from '@/api/project'
 import type { GoodsInfo } from '@/api/goods'
@@ -602,6 +630,14 @@ const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
 const total = ref(0)
 const pagination = reactive({ page: 1, size: 10 })
+const summary = reactive({
+  totalProjects: 0,
+  t0Projects: 0,
+  designingProjects: 0,
+  processingProjects: 0,
+  surfaceTreatingProjects: 0,
+  completedProjects: 0
+})
 
 const queryForm = reactive({ keyword: '', status: '', category: '塑胶模具' })
 const categoryOptions = [
@@ -660,9 +696,27 @@ const loadData = async () => {
   }
 }
 
+// 加载统计信息
+const loadStatistics = async () => {
+  try {
+    const response: any = await getProjectStatisticsApi()
+    if (response?.code === 0 && response?.data) {
+      summary.totalProjects = response.data.totalProjects || 0
+      summary.t0Projects = response.data.t0Projects || 0
+      summary.designingProjects = response.data.designingProjects || 0
+      summary.processingProjects = response.data.processingProjects || 0
+      summary.surfaceTreatingProjects = response.data.surfaceTreatingProjects || 0
+      summary.completedProjects = response.data.completedProjects || 0
+    }
+  } catch (error) {
+    console.error('加载统计信息失败:', error)
+  }
+}
+
 const handleSearch = () => {
   pagination.page = 1
   loadData()
+  loadStatistics()
 }
 
 const handleReset = () => {
@@ -685,9 +739,17 @@ const handleCurrentChange = (page: number) => {
 
 const getStatusTagType = (status?: string) => {
   if (!status) return 'info'
-  if (status.includes('完成')) return 'success'
-  if (status.includes('暂停')) return 'warning'
-  return 'primary'
+
+  // 为不同的项目状态分配不同的颜色
+  const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
+    T0: 'danger', // 红色 - T0阶段（试模）
+    设计中: 'warning', // 橙色 - 设计阶段
+    加工中: 'primary', // 蓝色 - 加工阶段
+    表面处理: 'info', // 灰色 - 表面处理阶段
+    已经移模: 'success' // 绿色 - 已完成
+  }
+
+  return statusMap[status] || 'info'
 }
 
 // 格式化日期，只显示年月日
@@ -840,7 +902,10 @@ const handleEditDialogClosed = () => {
   currentProjectCode.value = ''
 }
 
-onMounted(() => loadData())
+onMounted(() => {
+  loadData()
+  loadStatistics()
+})
 </script>
 
 <style scoped>
@@ -994,5 +1059,79 @@ onMounted(() => loadData())
   letter-spacing: 0.5px;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+/* 统计卡片样式 */
+.summary-card {
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+}
+
+.summary-card--blue .summary-title {
+  color: #409eff;
+}
+
+.summary-card--blue .summary-value {
+  color: #409eff;
+}
+
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--green .summary-title {
+  color: #67c23a;
+}
+
+.summary-card--green .summary-value {
+  color: #67c23a;
+}
+
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--orange .summary-title {
+  color: #e6a23c;
+}
+
+.summary-card--orange .summary-value {
+  color: #e6a23c;
+}
+
+/* 第四个卡片 - 紫色 */
+.summary-card--purple {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--purple .summary-title {
+  color: #909399;
+}
+
+.summary-card--purple .summary-value {
+  color: #909399;
+}
+
+.summary-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.summary-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 600;
 }
 </style>

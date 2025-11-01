@@ -91,3 +91,8 @@ export const deleteProjectApi = (projectCode: string) => {
 export const getProjectGoodsApi = (projectCode: string) => {
   return request.get({ url: `/api/project/goods/${projectCode}` })
 }
+
+// 获取项目统计信息
+export const getProjectStatisticsApi = () => {
+  return request.get({ url: '/api/project/statistics' })
+}

@@ -89,8 +89,17 @@
     </section>
 
     <el-row :gutter="16">
-      <el-col v-for="item in summaryCards" :key="item.key" :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card">
+      <el-col v-for="(item, index) in summaryCards" :key="item.key" :xs="24" :sm="12" :lg="6">
+        <el-card
+          shadow="hover"
+          :class="[
+            'summary-card',
+            index === 0 ? 'summary-card--blue' : '',
+            index === 1 ? 'summary-card--green' : '',
+            index === 2 ? 'summary-card--orange' : '',
+            index === 3 ? 'summary-card--gray' : ''
+          ]"
+        >
           <div class="summary-card__title">{{ item.title }}</div>
           <div class="summary-card__value">{{ item.value }}</div>
           <div class="summary-card__meta">{{ item.meta }}</div>
@@ -815,25 +824,91 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
+
+@media (width <= 768px) {
+  .insight-panel__item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
 .filter-form :deep(.el-form-item) {
   margin-bottom: 16px;
 }
 
 .summary-card {
   border: none;
-  background: linear-gradient(145deg, rgba(64, 158, 255, 0.08), rgba(64, 158, 255, 0.02));
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+}
+
+.summary-card--blue .summary-card__title {
+  color: #409eff;
+}
+
+.summary-card--blue .summary-card__value {
+  color: #409eff;
+}
+
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--green .summary-card__title {
+  color: #67c23a;
+}
+
+.summary-card--green .summary-card__value {
+  color: #67c23a;
+}
+
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--orange .summary-card__title {
+  color: #e6a23c;
+}
+
+.summary-card--orange .summary-card__value {
+  color: #e6a23c;
+}
+
+/* 第四个卡片 - 灰色 */
+.summary-card--gray {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--gray .summary-card__title {
+  color: #909399;
+}
+
+.summary-card--gray .summary-card__value {
+  color: #909399;
 }
 
 .summary-card__title {
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
   margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .summary-card__value {
   font-size: 24px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
 }
 
 .summary-card__meta {
@@ -843,12 +918,12 @@ onMounted(() => {
 }
 
 .insight-panel {
-  border-radius: 12px;
+  display: flex;
+  min-height: 260px;
+  padding: 16px;
   background-color: var(--el-fill-color-blank);
   border: 1px solid var(--el-border-color-light);
-  padding: 16px;
-  min-height: 260px;
-  display: flex;
+  border-radius: 12px;
   flex-direction: column;
   gap: 16px;
 }
@@ -868,18 +943,10 @@ onMounted(() => {
 
 .insight-panel__item {
   display: flex;
+  padding: 12px 16px;
+  background-color: rgb(64 158 255 / 8%);
+  border-radius: 12px;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background-color: rgba(64, 158, 255, 0.08);
-}
-
-@media (max-width: 768px) {
-  .insight-panel__item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
 }
 </style>
