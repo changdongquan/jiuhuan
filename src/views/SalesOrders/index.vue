@@ -12,7 +12,7 @@
           v-model="queryForm.searchText"
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
           clearable
-          style="width: 300px"
+          style="width: 200px"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -52,6 +52,33 @@
       </el-form-item>
     </el-form>
 
+    <el-row :gutter="16" style="margin-bottom: 16px">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--year">
+          <div class="summary-title">当年订单累计金额</div>
+          <div class="summary-value">{{ formatAmount(summary.yearTotalAmount) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--month">
+          <div class="summary-title">本月订单累计金额</div>
+          <div class="summary-value">{{ formatAmount(summary.monthTotalAmount) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--pending-in">
+          <div class="summary-title">待入库</div>
+          <div class="summary-value">{{ summary.pendingInStock || 0 }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--pending-out">
+          <div class="summary-title">待出运</div>
+          <div class="summary-value">{{ summary.pendingShipped || 0 }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-table
       ref="tableRef"
       v-loading="loading"
@@ -68,26 +95,26 @@
           <div class="so-expanded-wrap">
             <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
               <el-table-column type="index" label="序号" width="50" />
-              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
-              <el-table-column prop="productName" label="产品名称" min-width="160" />
-              <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-              <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-              <el-table-column label="数量" width="90" align="center">
+              <el-table-column prop="itemCode" label="项目编号" min-width="90" />
+              <el-table-column prop="productName" label="产品名称" min-width="100" />
+              <el-table-column prop="productDrawingNo" label="产品图号" min-width="100" />
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="100" />
+              <el-table-column label="数量" width="60" align="center">
                 <template #default="{ row: detail }">
                   {{ detail.quantity || 0 }}
                 </template>
               </el-table-column>
-              <el-table-column label="单价(元)" width="120" align="right">
+              <el-table-column label="单价(元)" width="100" align="right">
                 <template #default="{ row: detail }">
                   {{ formatAmount(detail.unitPrice) }}
                 </template>
               </el-table-column>
-              <el-table-column label="总金额(元)" width="140" align="right">
+              <el-table-column label="总金额(元)" width="100" align="right">
                 <template #default="{ row: detail }">
                   {{ formatAmount(detail.totalAmount) }}
                 </template>
               </el-table-column>
-              <el-table-column label="交货日期" width="140">
+              <el-table-column label="交货日期" width="100">
                 <template #default="{ row: detail }">
                   {{ formatDate(detail.deliveryDate) }}
                 </template>
@@ -96,10 +123,9 @@
               <el-table-column
                 prop="costSource"
                 label="费用出处"
-                min-width="140"
+                min-width="120"
                 show-overflow-tooltip
               />
-              <el-table-column prop="handler" label="经办人" width="100" />
               <el-table-column label="是否入库" width="100" align="center">
                 <template #default="{ row: detail }">
                   <el-tag :type="detail.isInStock ? 'success' : 'info'" size="small">
@@ -123,8 +149,8 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="orderNo" label="订单编号" min-width="120" />
-      <el-table-column prop="customerName" label="客户名称" min-width="176">
+      <el-table-column prop="orderNo" label="订单编号" min-width="90" />
+      <el-table-column prop="customerName" label="客户名称" min-width="200">
         <template #default="{ row }">
           {{ row.customerName || '-' }}
         </template>
@@ -220,6 +246,7 @@
                 clearable
                 @change="handleCustomerChange"
                 style="width: 280px"
+                :disabled="!isCreateMode"
               >
                 <el-option
                   v-for="customer in customerList"
@@ -249,7 +276,7 @@
         </div>
 
         <div class="dialog-product-section">
-          <div style="margin-bottom: 12px">
+          <div v-if="isCreateMode" style="margin-bottom: 12px">
             <el-button type="primary" size="small" @click="openNewProductDialog">
               从新品中选择
             </el-button>
@@ -258,22 +285,38 @@
             <el-table-column type="index" label="序号" width="45" />
             <el-table-column label="项目编号" min-width="140">
               <template #default="{ row }">
-                <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                <el-input
+                  v-model="row.itemCode"
+                  placeholder="请输入项目编号"
+                  :disabled="!isCreateMode"
+                />
               </template>
             </el-table-column>
             <el-table-column label="产品名称" min-width="150">
               <template #default="{ row }">
-                <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                <el-input
+                  v-model="row.productName"
+                  placeholder="请输入产品名称"
+                  :disabled="!isCreateMode"
+                />
               </template>
             </el-table-column>
             <el-table-column label="产品图号" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                <el-input
+                  v-model="row.productDrawingNo"
+                  placeholder="请输入产品图号"
+                  :disabled="!isCreateMode"
+                />
               </template>
             </el-table-column>
             <el-table-column label="客户模号" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                <el-input
+                  v-model="row.customerPartNo"
+                  placeholder="请输入客户模号"
+                  :disabled="!isCreateMode"
+                />
               </template>
             </el-table-column>
             <el-table-column label="数量" width="140" align="center">
@@ -326,7 +369,7 @@
                 <el-input v-model="row.costSource" placeholder="费用出处" />
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="55" fixed="right">
+            <el-table-column v-if="isCreateMode" label="操作" width="55" fixed="right">
               <template #default="{ $index }">
                 <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
               </template>
@@ -334,7 +377,9 @@
           </el-table>
 
           <div class="dialog-product-summary">
-            <el-button type="primary" plain @click="addDetailRow">新增明细行</el-button>
+            <el-button v-if="isCreateMode" type="primary" plain @click="addDetailRow"
+              >新增明细行</el-button
+            >
             <div>
               <span class="dialog-product-summary__item"
                 >产品项数：{{ dialogForm.details.length }}</span
@@ -553,6 +598,8 @@ import { computed, onMounted, reactive, ref, nextTick } from 'vue'
 import type { FormInstance } from 'element-plus'
 import {
   ElButton,
+  ElCard,
+  ElCol,
   ElDatePicker,
   ElDialog,
   ElForm,
@@ -562,6 +609,7 @@ import {
   ElMessage,
   ElMessageBox,
   ElPagination,
+  ElRow,
   ElSelect,
   ElOption,
   ElTable,
@@ -575,10 +623,12 @@ import {
   createSalesOrderApi,
   generateOrderNoApi,
   deleteSalesOrderApi,
+  getSalesOrdersStatisticsApi,
   type SalesOrder,
   type SalesOrderQueryParams,
   type UpdateSalesOrderPayload,
-  type CreateSalesOrderPayload
+  type CreateSalesOrderPayload,
+  type SalesOrderStatistics
 } from '@/api/sales-orders'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
@@ -624,6 +674,21 @@ const tableData = ref<OrderTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
 
+// 统计数据
+const summary = reactive<SalesOrderStatistics>({
+  totalOrders: 0,
+  totalAmount: 0,
+  totalQuantity: 0,
+  inStockCount: 0,
+  shippedCount: 0,
+  notInStockCount: 0,
+  notShippedCount: 0,
+  yearTotalAmount: 0,
+  monthTotalAmount: 0,
+  pendingInStock: 0,
+  pendingShipped: 0
+})
+
 // 对话框相关变量
 const dialogVisible = ref(false)
 const dialogTitle = ref('编辑销售订单')
@@ -667,7 +732,10 @@ const rowClassName = ({ row }: { row: OrderTableRow }) => {
 }
 
 const formatAmount = (value: number | null | undefined): string => {
-  return Number(value ?? 0).toFixed(2)
+  return Number(value ?? 0).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
 }
 
 const mapOrderToRow = (order: SalesOrder): OrderTableRow => {
@@ -759,6 +827,32 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (page: number) => {
   pagination.page = page
   void loadData()
+}
+
+// 加载统计信息
+const loadStatistics = async () => {
+  try {
+    const response = await getSalesOrdersStatisticsApi()
+    const raw: any = response
+    const pr: any = raw?.data ?? raw
+    const data = pr?.data ?? pr
+
+    if (data) {
+      summary.totalOrders = data.totalOrders || 0
+      summary.totalAmount = data.totalAmount || 0
+      summary.totalQuantity = data.totalQuantity || 0
+      summary.inStockCount = data.inStockCount || 0
+      summary.shippedCount = data.shippedCount || 0
+      summary.notInStockCount = data.notInStockCount || 0
+      summary.notShippedCount = data.notShippedCount || 0
+      summary.yearTotalAmount = data.yearTotalAmount || 0
+      summary.monthTotalAmount = data.monthTotalAmount || 0
+      summary.pendingInStock = data.pendingInStock || 0
+      summary.pendingShipped = data.pendingShipped || 0
+    }
+  } catch (error) {
+    console.error('加载统计信息失败:', error)
+  }
 }
 
 const handleCreate = async () => {
@@ -967,7 +1061,7 @@ const handleDelete = async (row: OrderTableRow) => {
 
     if (success) {
       ElMessage.success(raw?.message || '删除成功')
-      await loadData()
+      await Promise.all([loadData(), loadStatistics()])
     } else {
       ElMessage.error(raw?.message || '删除失败')
     }
@@ -1095,7 +1189,7 @@ const submitDialogForm = async () => {
       if (success) {
         ElMessage.success(raw?.message || '创建成功')
         dialogVisible.value = false
-        await loadData()
+        await Promise.all([loadData(), loadStatistics()])
       } else {
         ElMessage.error(raw?.message || '创建失败')
       }
@@ -1130,7 +1224,7 @@ const submitDialogForm = async () => {
       if (success) {
         ElMessage.success(pr?.message || '保存成功')
         dialogVisible.value = false
-        await loadData()
+        await Promise.all([loadData(), loadStatistics()])
       } else {
         ElMessage.error(pr?.message || '保存失败')
       }
@@ -1414,7 +1508,7 @@ const fillSelectedProducts = () => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadCustomerList(), loadData()])
+  await Promise.all([loadCustomerList(), loadData(), loadStatistics()])
 })
 </script>
 
@@ -1489,5 +1583,78 @@ onMounted(async () => {
 
 :deep(.row-disabled):hover {
   background-color: #f5f5f5 !important;
+}
+
+.summary-card {
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 当年订单累计金额 - 蓝色 */
+.summary-card--year {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+}
+
+.summary-card--year .summary-title {
+  color: #409eff;
+}
+
+.summary-card--year .summary-value {
+  color: #409eff;
+}
+
+/* 本月订单累计金额 - 绿色 */
+.summary-card--month {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+}
+
+.summary-card--month .summary-title {
+  color: #67c23a;
+}
+
+.summary-card--month .summary-value {
+  color: #67c23a;
+}
+
+/* 待入库 - 橙色 */
+.summary-card--pending-in {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+}
+
+.summary-card--pending-in .summary-title {
+  color: #e6a23c;
+}
+
+.summary-card--pending-in .summary-value {
+  color: #e6a23c;
+}
+
+/* 待出运 - 紫色 */
+.summary-card--pending-out {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+}
+
+.summary-card--pending-out .summary-title {
+  color: #909399;
+}
+
+.summary-card--pending-out .summary-value {
+  color: #909399;
+}
+
+.summary-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.summary-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 600;
 }
 </style>

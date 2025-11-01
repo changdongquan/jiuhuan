@@ -377,6 +377,71 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
   }
 })
 
+// 获取销售订单统计信息（必须在/:id之前，否则statistics会被当作id）
+router.get('/statistics', async (req, res) => {
+  try {
+    // 获取当前年份和月份
+    const currentYear = new Date().getFullYear()
+    const currentMonth = new Date().getMonth() + 1
+
+    // 构建当年和本月的日期范围
+    const yearStart = `${currentYear}-01-01`
+    const yearEnd = `${currentYear}-12-31`
+    const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
+    const monthEndDate = new Date(currentYear, currentMonth, 0).getDate()
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(monthEndDate).padStart(2, '0')}`
+
+    const queryString = `
+      SELECT 
+        -- 基础统计
+        COUNT(*) as totalOrders,
+        SUM(总金额) as totalAmount,
+        SUM(数量) as totalQuantity,
+        SUM(CASE WHEN 是否入库 = 1 THEN 1 ELSE 0 END) as inStockCount,
+        SUM(CASE WHEN 是否出运 = 1 THEN 1 ELSE 0 END) as shippedCount,
+        SUM(CASE WHEN 是否入库 = 0 THEN 1 ELSE 0 END) as notInStockCount,
+        SUM(CASE WHEN 是否出运 = 0 THEN 1 ELSE 0 END) as notShippedCount,
+        -- 当年订单累计金额
+        SUM(CASE 
+          WHEN 订单日期 >= @yearStart AND 订单日期 <= @yearEnd 
+          THEN 总金额 
+          ELSE 0 
+        END) as yearTotalAmount,
+        -- 本月订单累计金额
+        SUM(CASE 
+          WHEN 订单日期 >= @monthStart AND 订单日期 <= @monthEnd 
+          THEN 总金额 
+          ELSE 0 
+        END) as monthTotalAmount,
+        -- 待入库（未入库的数量）
+        SUM(CASE WHEN 是否入库 = 0 THEN 数量 ELSE 0 END) as pendingInStock,
+        -- 待出运（已入库但未出运的数量）
+        SUM(CASE WHEN 是否入库 = 1 AND 是否出运 = 0 THEN 数量 ELSE 0 END) as pendingShipped
+      FROM 销售订单
+    `
+
+    const result = await query(queryString, {
+      yearStart,
+      yearEnd,
+      monthStart,
+      monthEnd
+    })
+
+    res.json({
+      code: 0,
+      success: true,
+      data: result[0]
+    })
+  } catch (error) {
+    console.error('获取销售订单统计信息失败:', error)
+    res.status(500).json({
+      success: false,
+      message: '获取销售订单统计信息失败',
+      error: error.message
+    })
+  }
+})
+
 // 获取单个销售订单记录（按ID）
 router.get('/:id', async (req, res) => {
   try {
@@ -740,38 +805,6 @@ router.delete('/delete/:orderNo', async (req, res) => {
       code: 500,
       success: false,
       message: '删除销售订单失败',
-      error: error.message
-    })
-  }
-})
-
-// 获取销售订单统计信息
-router.get('/statistics', async (req, res) => {
-  try {
-    const queryString = `
-      SELECT 
-        COUNT(*) as totalOrders,
-        SUM(总金额) as totalAmount,
-        SUM(数量) as totalQuantity,
-        SUM(CASE WHEN 是否入库 = 1 THEN 1 ELSE 0 END) as inStockCount,
-        SUM(CASE WHEN 是否出运 = 1 THEN 1 ELSE 0 END) as shippedCount,
-        SUM(CASE WHEN 是否入库 = 0 THEN 1 ELSE 0 END) as notInStockCount,
-        SUM(CASE WHEN 是否出运 = 0 THEN 1 ELSE 0 END) as notShippedCount
-      FROM 销售订单
-    `
-
-    const result = await query(queryString)
-
-    res.json({
-      code: 0,
-      success: true,
-      data: result[0]
-    })
-  } catch (error) {
-    console.error('获取销售订单统计信息失败:', error)
-    res.status(500).json({
-      success: false,
-      message: '获取销售订单统计信息失败',
       error: error.message
     })
   }

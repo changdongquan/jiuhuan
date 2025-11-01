@@ -72,6 +72,10 @@ export interface SalesOrderStatistics {
   shippedCount: number
   notInStockCount: number
   notShippedCount: number
+  yearTotalAmount: number // 当年订单累计金额
+  monthTotalAmount: number // 本月订单累计金额
+  pendingInStock: number // 待入库数量
+  pendingShipped: number // 待出运数量
 }
 
 // 获取销售订单列表（按订单号分组）
@@ -200,3 +204,6 @@ export const getSalesOrdersStatisticsApi = () => {
     url: '/api/sales-orders/statistics'
   })
 }
+
+// 注意：这里导出时保持名称一致
+export const getSalesOrderStatisticsApi = getSalesOrdersStatisticsApi
