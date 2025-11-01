@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { loadEnv } from 'vite'
 import type { UserConfig, ConfigEnv } from 'vite'
+import { readFileSync } from 'fs'
 import Vue from '@vitejs/plugin-vue'
 import VueJsx from '@vitejs/plugin-vue-jsx'
 import progress from 'vite-plugin-progress'
@@ -99,7 +100,8 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
           })
         : undefined,
       ViteEjsPlugin({
-        title: env.VITE_APP_TITLE
+        title: env.VITE_APP_TITLE,
+        version: JSON.parse(readFileSync('./package.json', 'utf-8')).version
       }),
       UnoCSS()
     ],

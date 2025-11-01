@@ -2,6 +2,7 @@
 import { ref, watch, computed, onMounted, unref } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { useDesign } from '@/hooks/web/useDesign'
+import logoImg from '@/assets/imgs/logo.png'
 
 const { getPrefixCls } = useDesign()
 
@@ -16,6 +17,12 @@ const title = computed(() => appStore.getTitle)
 const layout = computed(() => appStore.getLayout)
 
 const collapse = computed(() => appStore.getCollapse)
+
+// 添加版本号避免缓存问题，Vite构建时会自动添加hash，这里添加版本号确保更新
+const logoUrl = computed(() => {
+  const version = import.meta.env.VITE_APP_VERSION || new Date().getTime()
+  return `${logoImg}?v=${version}`
+})
 
 onMounted(() => {
   if (unref(collapse)) show.value = false
@@ -59,7 +66,7 @@ watch(
       to="/"
     >
       <img
-        src="@/assets/imgs/logo.png"
+        :src="logoUrl"
         class="w-[calc(var(--logo-height)-10px)] h-[calc(var(--logo-height)-10px)]"
       />
       <div
