@@ -43,9 +43,19 @@ router.get('/list', async (req, res) => {
 
     // 构建查询条件
     if (keyword) {
-      whereConditions.push(
-        `(p.项目编号 LIKE @keyword OR p.项目名称 LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword OR p.客户模号 LIKE @keyword)`
-      )
+      // 关键词搜索：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
+      whereConditions.push(`(
+        p.项目编号 LIKE @keyword 
+        OR p.项目名称 LIKE @keyword 
+        OR p.客户模号 LIKE @keyword
+        OR EXISTS (
+          SELECT 1 
+          FROM 货物信息 g_search 
+          WHERE g_search.项目编号 = p.项目编号 
+            AND CAST(g_search.IsNew AS INT) != 1
+            AND (g_search.产品名称 LIKE @keyword OR g_search.产品图号 LIKE @keyword)
+        )
+      )`)
       params.keyword = `%${keyword}%`
     }
 
@@ -54,35 +64,60 @@ router.get('/list', async (req, res) => {
       params.status = status
     }
 
+    // 分类条件：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
     if (category) {
-      whereConditions.push(`g.分类 = @category`)
+      whereConditions.push(`EXISTS (
+        SELECT 1 
+        FROM 货物信息 g_cat 
+        WHERE g_cat.项目编号 = p.项目编号 
+          AND g_cat.分类 = @category
+          AND CAST(g_cat.IsNew AS INT) != 1
+      )`)
       params.category = category
     }
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
+    // 排除条件：不显示货物信息表中 IsNew = 1 的项目
+    // 使用 NOT EXISTS 子查询，排除在货物信息表中存在 IsNew = 1 记录的项目
+    const excludeCondition = `NOT EXISTS (
+      SELECT 1 
+      FROM 货物信息 g_exclude 
+      WHERE g_exclude.项目编号 = p.项目编号 
+        AND CAST(g_exclude.IsNew AS INT) = 1
+    )`
+
+    // 构建完整的 WHERE 子句
+    const allConditions = [...whereConditions, excludeCondition]
+    const finalWhereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : ''
 
     // 计算分页
     const offset = (page - 1) * pageSize
 
-    // 查询总数
+    // 查询总数（需要排除 IsNew = 1 的项目）
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM 项目管理 p
-      LEFT JOIN 货物信息 g ON p.项目编号 = g.项目编号
-      ${whereClause}
+      ${finalWhereClause}
     `
     const countResult = await query(countQuery, params)
     const total = countResult[0].total
 
-    // 查询数据
+    // 查询数据（需要排除 IsNew = 1 的项目）
+    // 使用 TOP 1 获取每个项目的第一条货物信息（排除 IsNew = 1 的记录）
     const dataQuery = `
       SELECT 
         p.*,
-        g.产品名称 as productName,
-        g.产品图号 as productDrawing
+        (SELECT TOP 1 g1.产品名称 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productName,
+        (SELECT TOP 1 g1.产品图号 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productDrawing
       FROM 项目管理 p
-      LEFT JOIN 货物信息 g ON p.项目编号 = g.项目编号
-      ${whereClause}
+      ${finalWhereClause}
       ORDER BY p.项目编号 DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
