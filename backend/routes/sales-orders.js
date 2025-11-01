@@ -1,17 +1,29 @@
 const express = require('express')
-const { query } = require('../database')
+const { query, getPool } = require('../database')
+const sql = require('mssql')
 const router = express.Router()
 
 // 生成新的订单编号
 // 格式：XS-YYYYMMDD-XXX
 // XS：销售订单前缀
-// YYYYMMDD：当前日期
+// YYYYMMDD：当前日期（使用东八区时间）
 // XXX：三位序列号（同一天内递增，跨天重置为001）
 router.get('/generate-order-no', async (req, res) => {
   try {
     const orderPrefix = 'XS'
-    const today = new Date()
-    const orderDate = today.toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
+    // 使用东八区（UTC+8）时间获取当前日期
+    // 无论服务器在什么时区，都统一使用东八区时间
+    const now = new Date()
+    // getTime() 返回的是UTC时间戳（毫秒）
+    // 直接加上8小时（东八区偏移）得到东八区时间戳
+    const chinaTimestamp = now.getTime() + 8 * 60 * 60 * 1000
+    // 创建东八区时间对象
+    const chinaTime = new Date(chinaTimestamp)
+    // 使用UTC方法获取年月日（因为时间戳已经加上了8小时偏移）
+    const year = chinaTime.getUTCFullYear()
+    const month = String(chinaTime.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(chinaTime.getUTCDate()).padStart(2, '0')
+    const orderDate = `${year}${month}${day}` // YYYYMMDD
 
     // 查询最新的订单编号
     const queryString = `
@@ -540,6 +552,10 @@ router.post('/create', async (req, res) => {
 
     // 收集所有项目编号，用于后续更新isNew字段
     const itemCodes = []
+    // 收集项目编号和客户模号的映射，用于更新项目管理表
+    const itemCodeToCustomerPartNo = new Map()
+
+    const pool = await getPool()
 
     // 插入订单明细
     for (const detail of details) {
@@ -577,6 +593,44 @@ router.post('/create', async (req, res) => {
       // 记录项目编号
       if (detail.itemCode) {
         itemCodes.push(detail.itemCode)
+        // 如果提供了客户模号（包括空字符串，表示清除），记录到映射中
+        // 使用最后一个非空值，如果最后一个是空字符串，也记录（表示清除）
+        if (detail.customerPartNo !== undefined && detail.customerPartNo !== null) {
+          // 如果已经有值，且新的值不为空，则更新；如果新的值为空字符串，也更新（清除）
+          const existingValue = itemCodeToCustomerPartNo.get(detail.itemCode)
+          if (!existingValue || detail.customerPartNo !== '') {
+            itemCodeToCustomerPartNo.set(detail.itemCode, detail.customerPartNo)
+          }
+        }
+      }
+    }
+
+    // 更新项目管理表中的客户模号
+    if (itemCodeToCustomerPartNo.size > 0) {
+      try {
+        for (const [itemCode, customerPartNo] of itemCodeToCustomerPartNo.entries()) {
+          const updateProjectRequest = pool.request()
+          updateProjectRequest.input('itemCode', sql.NVarChar, itemCode)
+          // 如果客户模号为空字符串，设置为NULL；否则设置为实际值
+          const customerPartNoValue = customerPartNo === '' ? null : customerPartNo
+          updateProjectRequest.input('customerPartNo', sql.NVarChar, customerPartNoValue)
+
+          await updateProjectRequest.query(`
+            UPDATE 项目管理 
+            SET 客户模号 = @customerPartNo
+            WHERE 项目编号 = @itemCode
+          `)
+          if (customerPartNoValue) {
+            console.log(
+              `[销售订单] 已更新项目管理记录，项目编号: ${itemCode}, 客户模号: ${customerPartNoValue}`
+            )
+          } else {
+            console.log(`[销售订单] 已清除项目管理记录中的客户模号，项目编号: ${itemCode}`)
+          }
+        }
+      } catch (updateError) {
+        console.error('更新项目管理表中的客户模号失败:', updateError)
+        // 不影响订单创建，仅记录错误
       }
     }
 

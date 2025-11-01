@@ -214,7 +214,11 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="客户模号" prop="customerModelNo">
-              <el-input v-model="formData.customerModelNo" placeholder="请输入客户模号" />
+              <el-input
+                v-model="formData.customerModelNo"
+                placeholder="请输入客户模号"
+                :disabled="true"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -628,7 +632,9 @@ const handleSubmit = async () => {
           : formData.projectCategory === '03'
             ? '零件加工'
             : '修改模具',
-      remarks: formData.description
+      remarks: formData.description,
+      customerName: formData.customerName,
+      customerModelNo: formData.customerModelNo
     }
 
     if (editingId.value) {

@@ -1169,6 +1169,7 @@ const submitDialogForm = async () => {
         customerId: dialogForm.customerId,
         details: dialogForm.details.map((d: any) => ({
           itemCode: d.itemCode || undefined,
+          customerPartNo: d.customerPartNo || null,
           deliveryDate: d.deliveryDate || null,
           totalAmount: Number(d.totalAmount || 0),
           unitPrice: Number(d.unitPrice || 0),

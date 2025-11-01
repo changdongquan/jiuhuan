@@ -176,11 +176,19 @@ router.get('/:id', async (req, res) => {
 // 新增货物信息
 router.post('/', async (req, res) => {
   try {
-    const { projectCode, productDrawing, productName, category, remarks } = req.body
+    const {
+      projectCode,
+      productDrawing,
+      productName,
+      category,
+      remarks,
+      customerName,
+      customerModelNo
+    } = req.body
 
     const pool = await getPool()
 
-    // 检查项目编号是否已存在
+    // 检查项目编号是否已在货物信息表中存在
     const checkRequest = pool.request()
     checkRequest.input('projectCode', sql.NVarChar, projectCode)
     const checkResult = await checkRequest.query(`
@@ -195,6 +203,74 @@ router.post('/', async (req, res) => {
         success: false,
         message: `项目编号 "${projectCode}" 已存在，不允许重复`
       })
+    }
+
+    // 根据客户名称查找客户ID（如果提供了客户名称）
+    let customerId = null
+    if (customerName) {
+      const customerQuery = pool.request()
+      customerQuery.input('customerName', sql.NVarChar, customerName)
+      const customerResult = await customerQuery.query(`
+        SELECT 客户ID as customerId
+        FROM 客户信息
+        WHERE 客户名称 = @customerName
+      `)
+
+      if (customerResult.recordset.length > 0) {
+        customerId = customerResult.recordset[0].customerId
+        console.log(`找到客户ID: ${customerId} (客户名称: ${customerName})`)
+      } else {
+        console.warn(`未找到客户: ${customerName}`)
+      }
+    }
+
+    // 检查项目编号是否在项目管理表中存在（外键约束要求）
+    // 如果不存在，自动创建一条记录以满足外键约束
+    // 如果存在，更新客户ID和客户模号
+    const checkProjectRequest = pool.request()
+    checkProjectRequest.input('projectCode', sql.NVarChar, projectCode)
+    const checkProjectResult = await checkProjectRequest.query(`
+      SELECT COUNT(*) as count 
+      FROM 项目管理 
+      WHERE 项目编号 = @projectCode
+    `)
+
+    if (checkProjectResult.recordset[0].count === 0) {
+      // 如果项目管理表中不存在，创建一条记录
+      const createProjectRequest = pool.request()
+      createProjectRequest.input('projectCode', sql.NVarChar, projectCode)
+
+      if (customerId) {
+        createProjectRequest.input('customerId', sql.Int, customerId)
+        createProjectRequest.input('customerModelNo', sql.NVarChar, customerModelNo || null)
+        await createProjectRequest.query(`
+          INSERT INTO 项目管理 (项目编号, 客户ID, 客户模号)
+          VALUES (@projectCode, @customerId, @customerModelNo)
+        `)
+        console.log(
+          `[自动创建] 已在项目管理表中创建项目编号: ${projectCode}, 客户ID: ${customerId}`
+        )
+      } else {
+        await createProjectRequest.query(`
+          INSERT INTO 项目管理 (项目编号)
+          VALUES (@projectCode)
+        `)
+        console.log(`[自动创建] 已在项目管理表中创建项目编号: ${projectCode}`)
+      }
+    } else {
+      // 如果项目管理表中已存在，更新客户ID和客户模号（如果提供了）
+      if (customerId !== null) {
+        const updateProjectRequest = pool.request()
+        updateProjectRequest.input('projectCode', sql.NVarChar, projectCode)
+        updateProjectRequest.input('customerId', sql.Int, customerId)
+        updateProjectRequest.input('customerModelNo', sql.NVarChar, customerModelNo || null)
+        await updateProjectRequest.query(`
+          UPDATE 项目管理 
+          SET 客户ID = @customerId, 客户模号 = @customerModelNo
+          WHERE 项目编号 = @projectCode
+        `)
+        console.log(`[更新] 已更新项目管理记录，项目编号: ${projectCode}, 客户ID: ${customerId}`)
+      }
     }
 
     // 第一步：插入数据（不指定 IsNew，允许为 NULL）
@@ -257,8 +333,38 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { projectCode, productDrawing, productName, category, remarks } = req.body
+    const {
+      projectCode,
+      productDrawing,
+      productName,
+      category,
+      remarks,
+      customerName,
+      customerModelNo
+    } = req.body
 
+    const pool = await getPool()
+
+    // 根据客户名称查找客户ID（如果提供了客户名称）
+    let customerId = null
+    if (customerName) {
+      const customerQuery = pool.request()
+      customerQuery.input('customerName', sql.NVarChar, customerName)
+      const customerResult = await customerQuery.query(`
+        SELECT 客户ID as customerId
+        FROM 客户信息
+        WHERE 客户名称 = @customerName
+      `)
+
+      if (customerResult.recordset.length > 0) {
+        customerId = customerResult.recordset[0].customerId
+        console.log(`[更新] 找到客户ID: ${customerId} (客户名称: ${customerName})`)
+      } else {
+        console.warn(`[更新] 未找到客户: ${customerName}`)
+      }
+    }
+
+    // 更新货物信息
     const queryString = `
       UPDATE 货物信息 SET
         项目编号 = @projectCode,
@@ -277,6 +383,32 @@ router.put('/:id', async (req, res) => {
       category,
       remarks
     })
+
+    // 更新项目管理表中的客户ID和客户模号
+    if (projectCode) {
+      const updateProjectRequest = pool.request()
+      updateProjectRequest.input('projectCode', sql.NVarChar, projectCode)
+
+      if (customerId !== null) {
+        // 如果有客户ID，更新客户ID和客户模号
+        updateProjectRequest.input('customerId', sql.Int, customerId)
+        updateProjectRequest.input('customerModelNo', sql.NVarChar, customerModelNo || null)
+        await updateProjectRequest.query(`
+          UPDATE 项目管理 
+          SET 客户ID = @customerId, 客户模号 = @customerModelNo
+          WHERE 项目编号 = @projectCode
+        `)
+        console.log(`[更新] 已更新项目管理记录，项目编号: ${projectCode}, 客户ID: ${customerId}`)
+      } else if (customerName === '' || customerName === null) {
+        // 如果客户名称为空，清除客户ID和客户模号
+        await updateProjectRequest.query(`
+          UPDATE 项目管理 
+          SET 客户ID = NULL, 客户模号 = NULL
+          WHERE 项目编号 = @projectCode
+        `)
+        console.log(`[更新] 已清除项目管理记录中的客户信息，项目编号: ${projectCode}`)
+      }
+    }
 
     res.json({
       code: 0,
