@@ -186,6 +186,15 @@ router.post('/', async (req, res) => {
       customerModelNo
     } = req.body
 
+    // 验证必填字段
+    if (!projectCode || !projectCode.trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
+
     const pool = await getPool()
 
     // 检查项目编号是否已在货物信息表中存在
@@ -273,7 +282,8 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // 第一步：插入数据（不指定 IsNew，允许为 NULL）
+    // 第一步：先插入货物信息（生产任务表的外键引用货物信息表，必须先插入货物信息）
+    // 插入数据（不指定 IsNew，允许为 NULL）
     const insertRequest = pool.request()
     insertRequest.input('projectCode', sql.NVarChar, projectCode)
     insertRequest.input('productDrawing', sql.NVarChar, productDrawing || null)
@@ -313,6 +323,37 @@ router.post('/', async (req, res) => {
       console.log('✅ IsNew 已成功设置为 1')
     }
 
+    // 第二步：在货物信息插入成功后，检查并创建生产任务记录（如果不存在）
+    // 因为生产任务表的外键引用货物信息表，所以必须先插入货物信息
+    try {
+      const checkProductionTaskRequest = pool.request()
+      checkProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
+      const checkProductionTaskResult = await checkProductionTaskRequest.query(`
+        SELECT COUNT(*) as count 
+        FROM 生产任务 
+        WHERE 项目编号 = @projectCode
+      `)
+
+      if (checkProductionTaskResult.recordset[0].count === 0) {
+        // 如果生产任务表中不存在，创建一条记录（只创建项目编号）
+        const createProductionTaskRequest = pool.request()
+        createProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
+
+        await createProductionTaskRequest.query(`
+          INSERT INTO 生产任务 (项目编号)
+          VALUES (@projectCode)
+        `)
+        console.log(`[自动创建] 已在生产任务表中创建项目编号: ${projectCode}`)
+      } else {
+        console.log(`[已存在] 生产任务表中已存在项目编号: ${projectCode}，跳过创建`)
+      }
+    } catch (productionTaskError) {
+      console.error('创建生产任务记录失败:', productionTaskError)
+      // 即使创建生产任务失败，也不影响货物信息的创建
+      // 只是记录警告，不抛出错误
+      console.warn('警告：无法创建生产任务记录，但货物信息已成功创建')
+    }
+
     res.json({
       code: 0,
       success: true,
@@ -321,10 +362,26 @@ router.post('/', async (req, res) => {
     })
   } catch (error) {
     console.error('新增货物信息失败:', error)
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      number: error.number,
+      originalError: error.originalError
+    })
     res.status(500).json({
+      code: 500,
       success: false,
       message: '新增货物信息失败',
-      error: error.message
+      error: error.message || '未知错误',
+      details:
+        process.env.NODE_ENV === 'development'
+          ? {
+              code: error.code,
+              number: error.number,
+              originalError: error.originalError
+            }
+          : undefined
     })
   }
 })
@@ -429,10 +486,54 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const pool = await getPool()
 
-    const queryString = `DELETE FROM 货物信息 WHERE 货物ID = @id`
+    // 首先获取要删除的货物信息的项目编号
+    const getProjectCodeRequest = pool.request()
+    getProjectCodeRequest.input('id', sql.Int, parseInt(id))
+    const goodsResult = await getProjectCodeRequest.query(`
+      SELECT 项目编号 
+      FROM 货物信息 
+      WHERE 货物ID = @id
+    `)
 
-    await query(queryString, { id: parseInt(id) })
+    if (goodsResult.recordset.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '货物信息不存在'
+      })
+    }
+
+    const projectCode = goodsResult.recordset[0].项目编号
+
+    // 检查该项目编号是否在生产任务表中存在（外键约束）
+    if (projectCode) {
+      const checkProductionTaskRequest = pool.request()
+      checkProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
+      const productionTaskResult = await checkProductionTaskRequest.query(`
+        SELECT COUNT(*) as count 
+        FROM 生产任务 
+        WHERE 项目编号 = @projectCode
+      `)
+
+      if (productionTaskResult.recordset[0].count > 0) {
+        // 如果存在生产任务记录，需要先删除生产任务记录（因为外键约束）
+        // 或者给出明确的错误提示
+        const deleteProductionTaskRequest = pool.request()
+        deleteProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
+        await deleteProductionTaskRequest.query(`
+          DELETE FROM 生产任务 
+          WHERE 项目编号 = @projectCode
+        `)
+        console.log(`[删除] 已删除生产任务记录，项目编号: ${projectCode}`)
+      }
+    }
+
+    // 删除货物信息
+    const deleteRequest = pool.request()
+    deleteRequest.input('id', sql.Int, parseInt(id))
+    await deleteRequest.query(`DELETE FROM 货物信息 WHERE 货物ID = @id`)
 
     res.json({
       code: 0,
@@ -441,10 +542,26 @@ router.delete('/:id', async (req, res) => {
     })
   } catch (error) {
     console.error('删除货物信息失败:', error)
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      number: error.number,
+      originalError: error.originalError
+    })
     res.status(500).json({
+      code: 500,
       success: false,
       message: '删除货物信息失败',
-      error: error.message
+      error: error.message || '未知错误',
+      details:
+        process.env.NODE_ENV === 'development'
+          ? {
+              code: error.code,
+              number: error.number,
+              originalError: error.originalError
+            }
+          : undefined
     })
   }
 })
@@ -456,20 +573,49 @@ router.delete('/batch', async (req, res) => {
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
+        code: 400,
         success: false,
         message: '请提供有效的ID列表'
       })
     }
 
+    const pool = await getPool()
+
+    // 首先获取要删除的所有货物信息的项目编号
     const placeholders = ids.map((_, index) => `@id${index}`).join(',')
-    const queryString = `DELETE FROM 货物信息 WHERE 货物ID IN (${placeholders})`
-
-    const params = {}
+    const getProjectCodesRequest = pool.request()
     ids.forEach((id, index) => {
-      params[`id${index}`] = parseInt(id)
+      getProjectCodesRequest.input(`id${index}`, sql.Int, parseInt(id))
     })
+    const goodsResult = await getProjectCodesRequest.query(`
+      SELECT DISTINCT 项目编号 
+      FROM 货物信息 
+      WHERE 货物ID IN (${placeholders}) AND 项目编号 IS NOT NULL AND 项目编号 != ''
+    `)
 
-    await query(queryString, params)
+    // 删除相关的生产任务记录（如果存在）
+    if (goodsResult.recordset.length > 0) {
+      const projectCodes = goodsResult.recordset.map((row) => row.项目编号).filter(Boolean)
+      if (projectCodes.length > 0) {
+        const projectCodePlaceholders = projectCodes.map((_, index) => `@pc${index}`).join(',')
+        const deleteProductionTaskRequest = pool.request()
+        projectCodes.forEach((projectCode, index) => {
+          deleteProductionTaskRequest.input(`pc${index}`, sql.NVarChar, projectCode)
+        })
+        await deleteProductionTaskRequest.query(`
+          DELETE FROM 生产任务 
+          WHERE 项目编号 IN (${projectCodePlaceholders})
+        `)
+        console.log(`[批量删除] 已删除 ${projectCodes.length} 条生产任务记录`)
+      }
+    }
+
+    // 删除货物信息
+    const deleteRequest = pool.request()
+    ids.forEach((id, index) => {
+      deleteRequest.input(`id${index}`, sql.Int, parseInt(id))
+    })
+    await deleteRequest.query(`DELETE FROM 货物信息 WHERE 货物ID IN (${placeholders})`)
 
     res.json({
       code: 0,
@@ -478,10 +624,26 @@ router.delete('/batch', async (req, res) => {
     })
   } catch (error) {
     console.error('批量删除货物信息失败:', error)
+    console.error('错误详情:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      number: error.number,
+      originalError: error.originalError
+    })
     res.status(500).json({
+      code: 500,
       success: false,
       message: '批量删除货物信息失败',
-      error: error.message
+      error: error.message || '未知错误',
+      details:
+        process.env.NODE_ENV === 'development'
+          ? {
+              code: error.code,
+              number: error.number,
+              originalError: error.originalError
+            }
+          : undefined
     })
   }
 })

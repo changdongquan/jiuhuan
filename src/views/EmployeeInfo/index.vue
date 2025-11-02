@@ -5,14 +5,14 @@
       :model="queryForm"
       label-width="90px"
       inline
-      class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
       <el-form-item label="员工姓名">
         <el-input
           v-model="queryForm.employeeName"
           placeholder="请输入员工姓名"
           clearable
-          style="width: 200px"
+          style="width: 140px"
         />
       </el-form-item>
       <el-form-item label="工号">
@@ -20,7 +20,7 @@
           v-model="queryForm.employeeNumber"
           placeholder="请输入工号"
           clearable
-          style="width: 200px"
+          style="width: 140px"
         />
       </el-form-item>
       <el-form-item label="部门">
@@ -28,7 +28,7 @@
           v-model="queryForm.department"
           placeholder="请输入部门"
           clearable
-          style="width: 200px"
+          style="width: 140px"
         />
       </el-form-item>
       <el-form-item label="在职状态">
@@ -491,4 +491,15 @@ onMounted(() => {
 })
 </script>
 
-<style scoped></style>
+<style scoped>
+/* 查询表单垂直居中对齐 */
+.query-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
+}
+</style>

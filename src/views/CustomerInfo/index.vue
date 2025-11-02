@@ -5,14 +5,14 @@
       :model="queryForm"
       label-width="90px"
       inline
-      class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
       <el-form-item label="客户名称">
         <el-input
           v-model="queryForm.customerName"
           placeholder="请输入客户名称"
           clearable
-          style="width: 200px"
+          style="width: 160px"
         />
       </el-form-item>
       <el-form-item label="联系人">
@@ -20,7 +20,7 @@
           v-model="queryForm.contact"
           placeholder="请输入联系人"
           clearable
-          style="width: 180px"
+          style="width: 140px"
         />
       </el-form-item>
       <el-form-item label="客户状态">
@@ -465,6 +465,17 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 查询表单垂直居中对齐 */
+.query-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
+}
+
 .summary-card {
   border: none;
   transition: all 0.3s ease;

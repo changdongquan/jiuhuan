@@ -1,18 +1,18 @@
 <template>
-  <div class="p-4">
+  <div class="p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
       label-width="90px"
       inline
-      style="margin-bottom: 16px"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
       <el-form-item label="综合搜索">
         <el-input
           v-model="queryForm.searchText"
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
           clearable
-          style="width: 200px"
+          style="width: 160px"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -21,7 +21,7 @@
           placeholder="请选择客户"
           clearable
           filterable
-          style="width: 200px"
+          style="width: 160px"
         >
           <el-option
             v-for="customer in customerList"
@@ -32,7 +32,12 @@
         </el-select>
       </el-form-item>
       <el-form-item label="合同号">
-        <el-input v-model="queryForm.contractNo" placeholder="请输入合同号" clearable />
+        <el-input
+          v-model="queryForm.contractNo"
+          placeholder="请输入合同号"
+          clearable
+          style="width: 140px"
+        />
       </el-form-item>
       <el-form-item label="下单日期">
         <el-date-picker
@@ -43,6 +48,7 @@
           end-placeholder="结束日期"
           value-format="YYYY-MM-DD"
           clearable
+          style="width: 240px"
         />
       </el-form-item>
       <el-form-item>
@@ -1527,6 +1533,17 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 查询表单垂直居中对齐 */
+.query-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
+}
+
 .so-row--expanded {
   background-color: #f0f2f5 !important;
 }

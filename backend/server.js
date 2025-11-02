@@ -8,6 +8,7 @@ const employeeRoutes = require('./routes/employee')
 const databaseRoutes = require('./routes/database')
 const projectRoutes = require('./routes/project')
 const salesOrdersRoutes = require('./routes/sales-orders')
+const productionTaskRoutes = require('./routes/production-task')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -25,12 +26,13 @@ app.use('/api/employee', employeeRoutes)
 app.use('/api/database', databaseRoutes)
 app.use('/api/project', projectRoutes)
 app.use('/api/sales-orders', salesOrdersRoutes)
+app.use('/api/production-task', productionTaskRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
-  res.json({ 
+  res.json({
     code: 0,
-    success: true, 
+    success: true,
     message: '服务运行正常',
     timestamp: new Date().toISOString()
   })
@@ -59,7 +61,7 @@ const startServer = async () => {
   try {
     // 初始化数据库连接
     await initDatabase()
-    
+
     // 启动HTTP服务器
     app.listen(PORT, () => {
       console.log(`服务器运行在端口 ${PORT}`)

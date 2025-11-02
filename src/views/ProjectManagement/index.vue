@@ -5,7 +5,7 @@
       :model="queryForm"
       label-width="90px"
       inline
-      class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
       <el-form-item label="关键词">
         <el-input
@@ -909,6 +909,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
+
 /* 响应式优化 */
 @media (width <= 1200px) {
   .detail-grid {
@@ -923,6 +925,16 @@ onMounted(() => {
   .detail-grid-col:last-child {
     border-bottom: none;
   }
+}
+
+.query-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
 }
 
 .edit-form-container {
@@ -1134,4 +1146,6 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 600;
 }
+
+/* 查询表单垂直居中对齐 */
 </style>

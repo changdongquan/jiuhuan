@@ -1,22 +1,24 @@
 <template>
-  <div class="p-4">
+  <div class="p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
       label-width="90px"
       inline
-      style="margin-bottom: 16px"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
     >
-      <el-form-item label="生产任务编号">
-        <el-input v-model="queryForm.itemCode" placeholder="请输入生产任务编号" clearable />
+      <el-form-item label="关键词">
+        <el-input
+          v-model="queryForm.keyword"
+          placeholder="项目编号/产品名称/产品图号/客户模号"
+          clearable
+          style="width: 280px"
+        />
       </el-form-item>
-      <el-form-item label="生产任务名称">
-        <el-input v-model="queryForm.taskName" placeholder="请输入生产任务名称" clearable />
-      </el-form-item>
-      <el-form-item label="生产任务状态">
+      <el-form-item label="生产状态">
         <el-select
           v-model="queryForm.status"
-          placeholder="请选择生产任务状态"
+          placeholder="请选择生产状态"
           clearable
           style="width: 160px"
         >
@@ -28,103 +30,111 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="生产任务周期">
-        <el-date-picker
-          v-model="queryForm.taskPeriodRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          value-format="YYYY-MM-DD"
-          clearable
-        />
-      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleCreate">新增</el-button>
       </el-form-item>
     </el-form>
+
+    <!-- 统计卡片 -->
+    <el-row :gutter="16">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
+          <div class="summary-title">总任务数</div>
+          <div class="summary-value">{{ statistics.total }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--green">
+          <div class="summary-title">进行中</div>
+          <div class="summary-value">{{ statistics.inProgress }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
+          <div class="summary-title">已完成</div>
+          <div class="summary-value">{{ statistics.completed }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--gray">
+          <div class="summary-title">待开始</div>
+          <div class="summary-value">{{ statistics.pending }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <el-table
       ref="tableRef"
       v-loading="loading"
       :data="tableData"
       border
-      height="calc(100vh - 320px)"
-      row-key="id"
+      max-height="calc(100vh - 450px)"
+      row-key="项目编号"
       @row-dblclick="handleRowDblClick"
     >
-      <el-table-column type="expand">
+      <!-- 生产任务表的所有19个字段 -->
+      <el-table-column
+        prop="项目编号"
+        label="项目编号"
+        width="140"
+        show-overflow-tooltip
+        fixed="left"
+      />
+      <el-table-column prop="productName" label="产品名称" width="140" show-overflow-tooltip />
+      <el-table-column prop="productDrawing" label="产品图号" width="140" show-overflow-tooltip />
+      <el-table-column prop="客户模号" label="客户模号" width="120" show-overflow-tooltip />
+      <el-table-column prop="负责人" label="负责人" width="100" />
+      <el-table-column prop="生产状态" label="生产状态" width="100" align="center">
         <template #default="{ row }">
-          <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="50" />
-            <el-table-column prop="itemCode" label="工序编号" min-width="140" />
-            <el-table-column prop="productName" label="工序名称" min-width="160" />
-            <el-table-column prop="productDrawingNo" label="负责人" min-width="150" />
-            <el-table-column prop="customerPartNo" label="关键里程碑" min-width="150" />
-            <el-table-column label="计划数量" width="90" align="center">
-              <template #default="{ row: detail }">
-                {{ detail.quantity }}
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.unitPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="成本(元)" width="140" align="right">
-              <template #default="{ row: detail }">
-                {{ formatAmount(detail.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="endDate" label="截止日期" width="140" />
-            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-            <el-table-column
-              prop="costSource"
-              label="资源来源"
-              min-width="140"
-              show-overflow-tooltip
-            />
-          </el-table>
+          <el-tag :type="getStatusTagType(row.生产状态)">{{ row.生产状态 || '-' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="taskCode" label="生产任务编号" min-width="140" />
-      <el-table-column prop="taskName" label="生产任务名称" min-width="160" />
-      <el-table-column label="工序数量" width="100" align="center">
+      <el-table-column prop="优先级" label="优先级" width="80" align="center" />
+      <el-table-column prop="开始日期" label="开始日期" width="110">
         <template #default="{ row }">
-          {{ row.details.length }}
+          {{ formatDate(row.开始日期) }}
         </template>
       </el-table-column>
-      <el-table-column label="计划总量" width="100" align="center">
+      <el-table-column prop="结束日期" label="结束日期" width="110">
         <template #default="{ row }">
-          {{ row.totalQuantity }}
+          {{ formatDate(row.结束日期) }}
         </template>
       </el-table-column>
-      <el-table-column label="预算总额" width="140" align="right">
+      <el-table-column prop="投产数量" label="投产数量" width="90" align="right">
         <template #default="{ row }">
-          {{ formatAmount(row.totalAmount) }}
+          {{ formatValue(row.投产数量) }}
         </template>
       </el-table-column>
-      <el-table-column label="生产任务状态" width="120" align="center">
+      <el-table-column prop="已完成数量" label="已完成数量" width="110" align="right">
         <template #default="{ row }">
-          <el-tag :type="statusTagMap[row.status].type">
-            {{ statusTagMap[row.status].label }}
-          </el-tag>
+          {{ formatValue(row.已完成数量) }}
         </template>
       </el-table-column>
-      <el-table-column prop="startDate" label="开始日期" width="140" />
-      <el-table-column prop="endDate" label="结束日期" width="140" />
-      <el-table-column prop="contractNo" label="合同编号" width="140" />
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column prop="批次完成数量" label="批次完成数量" width="120" align="right">
+        <template #default="{ row }">
+          {{ formatValue(row.批次完成数量) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="批次完成时间" label="批次完成时间" width="130">
+        <template #default="{ row }">
+          {{ formatDate(row.批次完成时间) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="下达日期" label="下达日期" width="110">
+        <template #default="{ row }">
+          {{ formatDate(row.下达日期) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="160" fixed="right" align="center">
         <template #default="{ row }">
           <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          <el-button type="info" link @click="handleView(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div style="margin-top: 16px; display: flex; justify-content: flex-end">
+    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -137,41 +147,111 @@
       />
     </div>
 
+    <!-- 编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="1500px"
+      width="1200px"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
+      <!-- 查看模式：表格化展示 -->
+      <div v-if="isViewMode" class="view-table-container">
+        <el-row :gutter="12">
+          <el-col
+            :span="12"
+            v-for="(section, sectionIndex) in viewTableSections"
+            :key="sectionIndex"
+            class="view-section-col"
+          >
+            <div class="view-section">
+              <div class="table-section-header">{{ section.title }}</div>
+              <!-- 工时信息特殊处理：两列显示 -->
+              <div v-if="section.title === '工时信息'" class="work-hours-container">
+                <el-row :gutter="6">
+                  <el-col :span="12">
+                    <el-table :data="section.data" border class="view-table" :show-header="false">
+                      <el-table-column width="110" align="right" class-name="label-column">
+                        <template #default="{ row }">
+                          <strong>{{ row.label }}</strong>
+                        </template>
+                      </el-table-column>
+                      <el-table-column class-name="value-column">
+                        <template #default="{ row }">
+                          <span>{{ row.value || '-' }}</span>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-table :data="section.data2" border class="view-table" :show-header="false">
+                      <el-table-column width="110" align="right" class-name="label-column">
+                        <template #default="{ row }">
+                          <strong>{{ row.label }}</strong>
+                        </template>
+                      </el-table-column>
+                      <el-table-column class-name="value-column">
+                        <template #default="{ row }">
+                          <span>{{ row.value || '-' }}</span>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </el-col>
+                </el-row>
+              </div>
+              <!-- 其他分组正常显示 -->
+              <el-table v-else :data="section.data" border class="view-table" :show-header="false">
+                <el-table-column width="150" align="right" class-name="label-column">
+                  <template #default="{ row }">
+                    <strong>{{ row.label }}</strong>
+                  </template>
+                </el-table-column>
+                <el-table-column class-name="value-column">
+                  <template #default="{ row }">
+                    <span v-if="row.tag">
+                      <el-tag :type="getStatusTagType(row.value)">{{ row.value || '-' }}</el-tag>
+                    </span>
+                    <span v-else>{{ row.value || '-' }}</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
+
+      <!-- 编辑模式：表单展示 -->
       <el-form
+        v-else
         ref="dialogFormRef"
         :model="dialogForm"
         :rules="dialogRules"
-        label-width="auto"
-        class="dialog-form-container"
+        label-width="120px"
+        class="production-task-form"
       >
-        <div class="dialog-form-columns">
-          <div class="dialog-form-column dialog-form-column--left">
-            <el-form-item label="生产任务编号" prop="taskCode">
-              <el-input
-                v-model="dialogForm.taskCode"
-                placeholder="请输入生产任务编号"
-                class="dialog-input"
-              />
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="项目编号" prop="项目编号">
+              <el-input v-model="dialogForm.项目编号" placeholder="项目编号" disabled />
             </el-form-item>
-            <el-form-item label="开始日期">
-              <el-date-picker
-                v-model="dialogForm.startDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择开始日期"
-                class="dialog-date-picker"
-                style="width: 252px"
-              />
+            <el-form-item label="产品名称">
+              <el-input v-model="dialogForm.productName" placeholder="产品名称" disabled />
             </el-form-item>
-            <el-form-item label="生产任务状态" class="dialog-status-item">
-              <el-select v-model="dialogForm.status" placeholder="请选择状态" class="dialog-input">
+            <el-form-item label="产品图号">
+              <el-input v-model="dialogForm.productDrawing" placeholder="产品图号" disabled />
+            </el-form-item>
+            <el-form-item label="客户模号">
+              <el-input v-model="dialogForm.客户模号" placeholder="客户模号" disabled />
+            </el-form-item>
+            <el-form-item label="负责人">
+              <el-input v-model="dialogForm.负责人" placeholder="负责人" />
+            </el-form-item>
+            <el-form-item label="生产状态">
+              <el-select
+                v-model="dialogForm.生产状态"
+                placeholder="请选择生产状态"
+                style="width: 100%"
+              >
                 <el-option
                   v-for="item in statusOptions"
                   :key="item.value"
@@ -180,132 +260,97 @@
                 />
               </el-select>
             </el-form-item>
-          </div>
-          <div class="dialog-form-column dialog-form-column--right">
-            <el-form-item label="生产任务名称" prop="taskName">
-              <el-input
-                v-model="dialogForm.taskName"
-                placeholder="请输入生产任务名称"
-                class="dialog-input"
+            <el-form-item label="优先级">
+              <el-select v-model="dialogForm.优先级" placeholder="请选择优先级" style="width: 100%">
+                <el-option label="高" value="高" />
+                <el-option label="中" value="中" />
+                <el-option label="低" value="低" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="开始日期">
+              <el-date-picker
+                v-model="dialogForm.开始日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="开始日期"
+                style="width: 100%"
               />
             </el-form-item>
             <el-form-item label="结束日期">
               <el-date-picker
-                v-model="dialogForm.endDate"
+                v-model="dialogForm.结束日期"
                 type="date"
                 value-format="YYYY-MM-DD"
-                placeholder="请选择结束日期"
-                class="dialog-date-picker"
-                style="width: 252px"
+                placeholder="结束日期"
+                style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="合同编号">
-              <el-input
-                v-model="dialogForm.contractNo"
-                placeholder="请输入合同编号"
-                class="dialog-input"
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="投产数量">
+              <el-input-number v-model="dialogForm.投产数量" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="已完成数量">
+              <el-input-number v-model="dialogForm.已完成数量" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="批次完成数量">
+              <el-input-number v-model="dialogForm.批次完成数量" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="批次完成时间">
+              <el-date-picker
+                v-model="dialogForm.批次完成时间"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="批次完成时间"
+                style="width: 100%"
               />
             </el-form-item>
-          </div>
-        </div>
-
-        <div class="dialog-product-section">
-          <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="工序编号" min-width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.itemCode" placeholder="请输入工序编号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="工序名称" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.productName" placeholder="请输入工序名称" />
-              </template>
-            </el-table-column>
-            <el-table-column label="负责人" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入负责人" />
-              </template>
-            </el-table-column>
-            <el-table-column label="关键里程碑" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入关键里程碑" />
-              </template>
-            </el-table-column>
-            <el-table-column label="计划数量" width="140" align="center">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="成本单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
-                  :min="0"
-                  :step="100"
-                  :precision="2"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="handleDetailUnitPriceChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="成本(元)" width="80" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="截止日期" width="150">
-              <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.endDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择截止日期"
-                  style="width: 130px"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.remark" placeholder="备注" />
-              </template>
-            </el-table-column>
-            <el-table-column label="资源来源" min-width="145">
-              <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="请输入资源来源" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="55" fixed="right">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <div class="dialog-product-summary">
-            <el-button type="primary" plain @click="addDetailRow">新增工序</el-button>
-            <div>
-              <span class="dialog-product-summary__item"
-                >工序数量：{{ dialogForm.details.length }}</span
-              >
-              <span class="dialog-product-summary__item"
-                >计划总量：{{ dialogTotals.totalQuantity }}</span
-              >
-              <span>预算总额：{{ formatAmount(dialogTotals.totalAmount) }}</span>
-            </div>
-          </div>
-        </div>
+            <el-form-item label="下达日期">
+              <el-date-picker
+                v-model="dialogForm.下达日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="下达日期"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <el-form-item label="放电工时">
+              <el-input-number v-model="dialogForm.放电工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="检验工时">
+              <el-input-number v-model="dialogForm.检验工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="编程工时">
+              <el-input-number v-model="dialogForm.编程工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="试模工时">
+              <el-input-number v-model="dialogForm.试模工时" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="机加工时">
+              <el-input-number v-model="dialogForm.机加工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="装配工时">
+              <el-input-number v-model="dialogForm.装配工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="加工中心工时">
+              <el-input-number v-model="dialogForm.加工中心工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="线切割工时">
+              <el-input-number v-model="dialogForm.线切割工时" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
+        <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
+        <el-button
+          v-if="!isViewMode"
+          type="primary"
+          :loading="dialogSubmitting"
+          @click="submitDialogForm"
+        >
           保存
         </el-button>
       </template>
@@ -314,437 +359,167 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
-  ElButton,
-  ElDatePicker,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElInputNumber,
-  ElMessage,
-  ElMessageBox,
-  ElOption,
-  ElPagination,
-  ElSelect,
-  ElTable,
-  ElTableColumn,
-  ElTag
-} from 'element-plus'
+  getProductionTaskListApi,
+  getProductionTaskDetailApi,
+  updateProductionTaskApi,
+  getProductionTaskStatisticsApi,
+  type ProductionTaskInfo
+} from '@/api/production-task'
 
-type TaskStatus = 'inProgress' | 'completed'
-
-interface TaskStep {
-  id: number
-  itemCode: string
-  productName: string
-  productDrawingNo: string
-  customerPartNo: string
-  quantity: number
-  unitPrice: number
-  amount: number
-  endDate: string
-  remark: string
-  costSource: string
-}
-
-interface Task {
-  id: number
-  taskCode: string
-  taskName: string
-  contractNo: string
-  status: TaskStatus
-  startDate: string
-  endDate: string
-  details: TaskStep[]
-}
-
-interface TaskQuery {
-  itemCode: string
-  taskName: string
-  status: '' | TaskStatus
-  taskPeriodRange: string[]
-}
-
-interface ListTasksParams {
-  page: number
-  size: number
-  itemCode?: string
-  taskName?: string
-  status?: TaskStatus
-  taskPeriodRange?: [string, string]
-}
-
-interface PaginatedTasks {
-  list: Task[]
-  total: number
-}
-
-interface TaskTableRow extends Task {
-  totalQuantity: number
-  totalAmount: number
-}
-
-type TaskPayload = Omit<Task, 'id'>
-
-const mockTasks = ref<Task[]>([
-  {
-    id: 1,
-    taskCode: 'TASK-202401',
-    taskName: '智能手表装配',
-    contractNo: 'SC-ZB-001',
-    status: 'inProgress',
-    startDate: '2024-01-08',
-    endDate: '2024-02-25',
-    details: [
-      {
-        id: 1,
-        itemCode: 'STEP-01',
-        productName: '原料准备',
-        productDrawingNo: '李明',
-        customerPartNo: '完成关键原件上架',
-        quantity: 1,
-        unitPrice: 12000,
-        amount: 12000,
-        endDate: '2024-01-15',
-        remark: '重点关注电池入库',
-        costSource: '生产部'
-      },
-      {
-        id: 2,
-        itemCode: 'STEP-02',
-        productName: '装配调试',
-        productDrawingNo: '王娟',
-        customerPartNo: '完成样机调试',
-        quantity: 1,
-        unitPrice: 26000,
-        amount: 26000,
-        endDate: '2024-02-10',
-        remark: '须同步质量验证',
-        costSource: '生产部'
-      }
-    ]
-  },
-  {
-    id: 2,
-    taskCode: 'TASK-202402',
-    taskName: '电机总成生产',
-    contractNo: 'SC-MTR-003',
-    status: 'inProgress',
-    startDate: '2024-02-12',
-    endDate: '2024-04-30',
-    details: [
-      {
-        id: 3,
-        itemCode: 'STEP-01',
-        productName: '线圈绕制',
-        productDrawingNo: '赵工',
-        customerPartNo: '完成 500 件线圈',
-        quantity: 500,
-        unitPrice: 45,
-        amount: 22500,
-        endDate: '2024-03-05',
-        remark: '增加夜班产量',
-        costSource: '制造部'
-      },
-      {
-        id: 4,
-        itemCode: 'STEP-02',
-        productName: '总成装配',
-        productDrawingNo: '刘工',
-        customerPartNo: '完成 300 套成品',
-        quantity: 300,
-        unitPrice: 80,
-        amount: 24000,
-        endDate: '2024-04-20',
-        remark: '需协调供应链备料',
-        costSource: '制造部'
-      }
-    ]
-  },
-  {
-    id: 3,
-    taskCode: 'TASK-202305',
-    taskName: '冲压模具翻新',
-    contractNo: 'SC-MD-011',
-    status: 'completed',
-    startDate: '2023-11-01',
-    endDate: '2024-01-20',
-    details: [
-      {
-        id: 5,
-        itemCode: 'STEP-01',
-        productName: '模具拆检',
-        productDrawingNo: '周师傅',
-        customerPartNo: '完成磨损评估',
-        quantity: 1,
-        unitPrice: 9000,
-        amount: 9000,
-        endDate: '2023-12-05',
-        remark: '记录维修视频',
-        costSource: '设备部'
-      },
-      {
-        id: 6,
-        itemCode: 'STEP-02',
-        productName: '复装调试',
-        productDrawingNo: '何师傅',
-        customerPartNo: '通过试生产',
-        quantity: 1,
-        unitPrice: 15000,
-        amount: 15000,
-        endDate: '2024-01-15',
-        remark: '产线试模通过',
-        costSource: '设备部'
-      }
-    ]
-  }
-])
-
-const detailIdSeed = ref(
-  (() => {
-    const ids = mockTasks.value.flatMap((task) => task.details.map((detail) => detail.id))
-    return (ids.length ? Math.max(...ids) : 0) + 1
-  })()
-)
-
-const createDetailId = () => detailIdSeed.value++
-
-const createEmptyDetail = (): TaskStep => ({
-  id: createDetailId(),
-  itemCode: '',
-  productName: '',
-  productDrawingNo: '',
-  customerPartNo: '',
-  quantity: 1,
-  unitPrice: 0,
-  amount: 0,
-  endDate: '',
-  remark: '',
-  costSource: ''
-})
-
-const createEmptyTask = (): TaskPayload => ({
-  taskCode: '',
-  taskName: '',
-  contractNo: '',
-  status: 'inProgress',
-  startDate: '',
-  endDate: '',
-  details: [createEmptyDetail()]
-})
-
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    globalThis.setTimeout(resolve, ms)
-  })
-
-const normalizeDetails = (details: TaskStep[]): TaskStep[] =>
-  details.map((detail) => {
-    const quantity = Number(detail.quantity) || 0
-    const unitPrice = Number(detail.unitPrice) || 0
-    const amount = Number((quantity * unitPrice).toFixed(2))
-    return {
-      ...detail,
-      quantity,
-      unitPrice,
-      amount
-    }
-  })
-
-const calculateSummary = (details: TaskStep[]) =>
-  details.reduce(
-    (acc, item) => {
-      acc.totalQuantity += item.quantity
-      acc.totalAmount += item.amount
-      return acc
-    },
-    { totalQuantity: 0, totalAmount: 0 }
-  )
-
-const listTasks = async (params: ListTasksParams): Promise<PaginatedTasks> => {
-  await wait(300)
-  const { page, size, itemCode, taskName, status, taskPeriodRange } = params
-
-  let filtered = [...mockTasks.value]
-
-  if (itemCode) {
-    const value = itemCode.trim().toLowerCase()
-    filtered = filtered.filter((task) =>
-      task.details.some((detail) => {
-        const code = detail.itemCode ? detail.itemCode.toLowerCase() : ''
-        return code.includes(value)
-      })
-    )
-  }
-
-  if (taskName) {
-    const value = taskName.trim().toLowerCase()
-    filtered = filtered.filter((item) => item.taskName.toLowerCase().includes(value))
-  }
-
-  if (status) {
-    filtered = filtered.filter((item) => item.status === status)
-  }
-
-  if (taskPeriodRange && taskPeriodRange.length === 2) {
-    const [start, end] = taskPeriodRange
-    filtered = filtered.filter((item) => item.startDate >= start && item.startDate <= end)
-  }
-
-  const startIndex = (page - 1) * size
-  const list = filtered.slice(startIndex, startIndex + size)
-
-  return {
-    list,
-    total: filtered.length
-  }
-}
-
-const getTask = async (id: number): Promise<Task> => {
-  await wait(200)
-  const target = mockTasks.value.find((item) => item.id === id)
-  if (!target) {
-    throw new Error('生产任务不存在')
-  }
-  return JSON.parse(JSON.stringify(target))
-}
-
-const createTask = async (payload: TaskPayload): Promise<Task> => {
-  await wait(300)
-  const nextId =
-    mockTasks.value.length > 0 ? Math.max(...mockTasks.value.map((item) => item.id)) + 1 : 1
-  const taskToSave: Task = {
-    id: nextId,
-    taskCode: payload.taskCode,
-    taskName: payload.taskName,
-    contractNo: payload.contractNo,
-    status: payload.status,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
-    details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
-  }
-  mockTasks.value.unshift(taskToSave)
-  return JSON.parse(JSON.stringify(taskToSave))
-}
-
-const updateTask = async (id: number, payload: TaskPayload): Promise<Task> => {
-  await wait(300)
-  const index = mockTasks.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('生产任务不存在')
-  }
-  const updated: Task = {
-    id,
-    taskCode: payload.taskCode,
-    taskName: payload.taskName,
-    contractNo: payload.contractNo,
-    status: payload.status,
-    startDate: payload.startDate,
-    endDate: payload.endDate,
-    details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
-  }
-  mockTasks.value.splice(index, 1, updated)
-  return JSON.parse(JSON.stringify(updated))
-}
-
-const removeTask = async (id: number): Promise<void> => {
-  await wait(200)
-  const index = mockTasks.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('生产任务不存在')
-  }
-  mockTasks.value.splice(index, 1)
-}
-
-const statusTagMap: Record<TaskStatus, { label: string; type: string }> = {
-  inProgress: { label: '生产中', type: 'warning' },
-  completed: { label: '已完成', type: 'success' }
-}
-
-const statusOptions = (Object.keys(statusTagMap) as TaskStatus[]).map((value) => ({
-  value,
-  label: statusTagMap[value].label
-}))
-
-const queryFormRef = ref<FormInstance>()
-const queryForm = reactive<TaskQuery>({
-  itemCode: '',
-  taskName: '',
-  status: 'inProgress',
-  taskPeriodRange: []
-})
-
-const pagination = reactive({
-  page: 1,
-  size: 10
-})
-
-const tableRef = ref<InstanceType<typeof ElTable>>()
-const tableData = ref<TaskTableRow[]>([])
-const total = ref(0)
 const loading = ref(false)
+const tableData = ref<Partial<ProductionTaskInfo>[]>([])
+const total = ref(0)
+const pagination = reactive({ page: 1, size: 10 })
+const statistics = reactive({
+  total: 0,
+  inProgress: 0,
+  completed: 0,
+  pending: 0
+})
+
+const queryForm = reactive({ keyword: '', status: '' })
+const statusOptions = [
+  { label: '待开始', value: '待开始' },
+  { label: '进行中', value: '进行中' },
+  { label: '已完成', value: '已完成' },
+  { label: '已暂停', value: '已暂停' },
+  { label: '已取消', value: '已取消' }
+]
 
 const dialogVisible = ref(false)
-const dialogTitle = ref('')
+const dialogTitle = ref('编辑生产任务')
 const dialogSubmitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
-const currentTaskId = ref<number | null>(null)
+const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
+const currentProjectCode = ref('')
+const isViewMode = ref(false)
 
-const dialogForm = reactive<TaskPayload>(createEmptyTask())
+// 查看模式的表格数据（分组展示）
+const viewTableSections = computed(() => {
+  if (!dialogForm || Object.keys(dialogForm).length === 0) return []
 
-const dialogRules: FormRules<TaskPayload> = {
-  taskCode: [{ required: true, message: '请输入生产任务编号', trigger: 'blur' }],
-  taskName: [{ required: true, message: '请输入生产任务名称', trigger: 'blur' }]
+  return [
+    {
+      title: '基本信息',
+      data: [
+        { label: '项目编号', value: dialogForm.项目编号 },
+        { label: '产品名称', value: dialogForm.productName },
+        { label: '产品图号', value: dialogForm.productDrawing },
+        { label: '客户模号', value: dialogForm.客户模号 },
+        { label: '负责人', value: dialogForm.负责人 },
+        { label: '生产状态', value: dialogForm.生产状态, tag: true },
+        { label: '优先级', value: dialogForm.优先级 }
+      ]
+    },
+    {
+      title: '数量信息',
+      data: [
+        { label: '投产数量', value: formatValue(dialogForm.投产数量) },
+        { label: '已完成数量', value: formatValue(dialogForm.已完成数量) },
+        { label: '批次完成数量', value: formatValue(dialogForm.批次完成数量) }
+      ]
+    },
+    {
+      title: '日期信息',
+      data: [
+        { label: '开始日期', value: formatDate(dialogForm.开始日期) },
+        { label: '结束日期', value: formatDate(dialogForm.结束日期) },
+        { label: '批次完成时间', value: formatDate(dialogForm.批次完成时间) },
+        { label: '下达日期', value: formatDate(dialogForm.下达日期) }
+      ]
+    },
+    {
+      title: '工时信息',
+      data: [
+        { label: '放电工时', value: formatValue(dialogForm.放电工时) },
+        { label: '检验工时', value: formatValue(dialogForm.检验工时) },
+        { label: '编程工时', value: formatValue(dialogForm.编程工时) },
+        { label: '试模工时', value: formatValue(dialogForm.试模工时) }
+      ],
+      data2: [
+        { label: '机加工时', value: formatValue(dialogForm.机加工时) },
+        { label: '装配工时', value: formatValue(dialogForm.装配工时) },
+        { label: '加工中心工时', value: formatValue(dialogForm.加工中心工时) },
+        { label: '线切割工时', value: formatValue(dialogForm.线切割工时) }
+      ]
+    }
+  ]
+})
+
+const dialogRules: FormRules = {
+  项目编号: [{ required: true, message: '项目编号不能为空', trigger: 'blur' }]
 }
 
-const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
+const formatDate = (date?: string | null) => {
+  if (!date) return '-'
+  if (date.includes('T')) {
+    return date.split('T')[0]
+  }
+  if (date.includes(' ')) {
+    return date.split(' ')[0]
+  }
+  return date
+}
 
-const mapTaskToRow = (task: Task): TaskTableRow => {
-  const { totalAmount, totalQuantity } = calculateSummary(task.details)
-  return {
-    ...task,
-    totalAmount,
-    totalQuantity
+const formatValue = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'number' && value === 0) return '-'
+  return value
+}
+
+const getStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+    待开始: 'info',
+    进行中: 'warning',
+    已完成: 'success',
+    已暂停: 'danger',
+    已取消: 'danger'
+  }
+  return statusMap[status] || 'info'
+}
+
+// 加载统计数据
+const loadStatistics = async () => {
+  try {
+    const response: any = await getProductionTaskStatisticsApi()
+    if (response?.code === 0 && response?.data) {
+      statistics.total = response.data.total || 0
+      statistics.inProgress = response.data.inProgress || 0
+      statistics.completed = response.data.completed || 0
+      statistics.pending = response.data.pending || 0
+    }
+  } catch (error: any) {
+    console.error('获取统计数据失败:', error)
   }
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params: ListTasksParams = {
+    const params: any = {
       page: pagination.page,
-      size: pagination.size
+      pageSize: pagination.size
     }
+    if (queryForm.keyword) params.keyword = queryForm.keyword
+    if (queryForm.status) params.status = queryForm.status
 
-    if (queryForm.itemCode.trim()) {
-      params.itemCode = queryForm.itemCode.trim()
+    const response: any = await getProductionTaskListApi(params)
+
+    if (response?.data?.data) {
+      tableData.value = response.data.data.list || []
+      total.value = response.data.data.total || 0
+    } else if (response?.data) {
+      tableData.value = response.data.list || []
+      total.value = response.data.total || 0
     }
-
-    if (queryForm.taskName.trim()) {
-      params.taskName = queryForm.taskName.trim()
-    }
-
-    if (queryForm.status) {
-      params.status = queryForm.status
-    }
-
-    if (queryForm.taskPeriodRange.length === 2) {
-      params.taskPeriodRange = [queryForm.taskPeriodRange[0], queryForm.taskPeriodRange[1]]
-    }
-
-    const { list, total: totalCount } = await listTasks(params)
-    tableData.value = list.map(mapTaskToRow)
-    total.value = totalCount
-    await nextTick()
-    const shouldExpand = Boolean(
-      params.itemCode || params.taskName || params.taskPeriodRange?.length === 2
-    )
-    tableData.value.forEach((row) => {
-      tableRef.value?.toggleRowExpansion(row, shouldExpand)
-    })
+  } catch (error: any) {
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取数据失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -752,126 +527,72 @@ const loadData = async () => {
 
 const handleSearch = () => {
   pagination.page = 1
-  void loadData()
+  loadData()
 }
 
 const handleReset = () => {
-  queryForm.itemCode = ''
-  queryForm.taskName = ''
-  queryForm.status = 'inProgress'
-  queryForm.taskPeriodRange = []
-  pagination.page = 1
-  void loadData()
+  queryForm.keyword = ''
+  queryForm.status = ''
+  handleSearch()
 }
 
 const handleSizeChange = (size: number) => {
   pagination.size = size
   pagination.page = 1
-  void loadData()
+  loadData()
 }
 
 const handleCurrentChange = (page: number) => {
   pagination.page = page
-  void loadData()
+  loadData()
 }
 
-const assignDialogForm = (payload: TaskPayload) => {
-  dialogForm.taskCode = payload.taskCode
-  dialogForm.taskName = payload.taskName
-  dialogForm.contractNo = payload.contractNo
-  dialogForm.status = payload.status
-  dialogForm.startDate = payload.startDate
-  dialogForm.endDate = payload.endDate
-  dialogForm.details.splice(
-    0,
-    dialogForm.details.length,
-    ...payload.details.map((detail) => ({ ...detail }))
-  )
-  if (!dialogForm.details.length) {
-    dialogForm.details.push(createEmptyDetail())
-  }
-}
-
-const resetDialogForm = () => {
-  assignDialogForm(createEmptyTask())
-}
-
-const handleCreate = async () => {
-  dialogTitle.value = '新增生产任务'
-  currentTaskId.value = null
-  resetDialogForm()
-  dialogVisible.value = true
-  await nextTick()
-  dialogFormRef.value?.clearValidate()
-}
-
-const openEditDialog = async (id: number) => {
+const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
   try {
-    const task = await getTask(id)
-    const { id: _id, ...payload } = task
     dialogTitle.value = '编辑生产任务'
-    currentTaskId.value = id
-    assignDialogForm(payload)
+    isViewMode.value = false
+    currentProjectCode.value = row.项目编号 || ''
+
+    // 获取详细信息
+    const response: any = await getProductionTaskDetailApi(row.项目编号 || '')
+    const detailData = response.data?.data || response.data || row
+
+    Object.keys(dialogForm).forEach((key) => {
+      delete dialogForm[key as keyof ProductionTaskInfo]
+    })
+    Object.assign(dialogForm, detailData)
     dialogVisible.value = true
-    await nextTick()
-    dialogFormRef.value?.clearValidate()
-  } catch (error) {
-    ElMessage.error((error as Error).message || '加载生产任务失败')
+  } catch (error: any) {
+    ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
 }
 
-const handleEdit = (row: TaskTableRow) => {
-  void openEditDialog(row.id)
-}
+const handleView = async (row: Partial<ProductionTaskInfo>) => {
+  try {
+    dialogTitle.value = '查看生产任务'
+    isViewMode.value = true
+    currentProjectCode.value = row.项目编号 || ''
 
-const handleRowDblClick = (row: TaskTableRow) => {
-  void openEditDialog(row.id)
-}
+    // 获取详细信息
+    const response: any = await getProductionTaskDetailApi(row.项目编号 || '')
+    const detailData = response.data?.data || response.data || row
 
-const recalculateDetail = (detail: TaskStep) => {
-  const quantity = Number(detail.quantity) || 0
-  const unitPrice = Number(detail.unitPrice) || 0
-  detail.quantity = quantity
-  detail.unitPrice = unitPrice
-  detail.amount = Number((quantity * unitPrice).toFixed(2))
-}
-
-const addDetailRow = () => {
-  dialogForm.details.push(createEmptyDetail())
-}
-
-const removeDetailRow = (index: number) => {
-  if (dialogForm.details.length <= 1) {
-    ElMessage.warning('至少保留一条产品明细')
-    return
+    Object.keys(dialogForm).forEach((key) => {
+      delete dialogForm[key as keyof ProductionTaskInfo]
+    })
+    Object.assign(dialogForm, detailData)
+    dialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
-  dialogForm.details.splice(index, 1)
 }
 
-const handleDetailQuantityChange = (detail: TaskStep) => {
-  recalculateDetail(detail)
+const handleRowDblClick = (row: Partial<ProductionTaskInfo>) => {
+  handleEdit(row)
 }
-
-const handleDetailUnitPriceChange = (detail: TaskStep) => {
-  recalculateDetail(detail)
-}
-
-const dialogTotals = computed(() => calculateSummary(dialogForm.details))
-
-const cloneTaskPayload = (source: TaskPayload): TaskPayload => ({
-  taskCode: source.taskCode,
-  taskName: source.taskName,
-  contractNo: source.contractNo,
-  status: source.status,
-  startDate: source.startDate,
-  endDate: source.endDate,
-  details: source.details.map((detail) => ({ ...detail }))
-})
 
 const submitDialogForm = async () => {
-  if (!dialogFormRef.value) {
-    return
-  }
+  if (!dialogFormRef.value) return
 
   try {
     await dialogFormRef.value.validate()
@@ -879,163 +600,214 @@ const submitDialogForm = async () => {
     return
   }
 
-  dialogForm.details.forEach(recalculateDetail)
-
-  if (!dialogForm.details.length) {
-    ElMessage.error('请至少添加一条产品明细')
-    return
-  }
-
-  const invalidDetail = dialogForm.details.find(
-    (detail) => !detail.productName.trim() || detail.quantity <= 0
-  )
-
-  if (invalidDetail) {
-    ElMessage.error('请完善产品名称并确保数量大于 0')
-    return
-  }
-
-  const payload = cloneTaskPayload(dialogForm)
   dialogSubmitting.value = true
-
   try {
-    if (currentTaskId.value === null) {
-      await createTask(payload)
-      pagination.page = 1
-      ElMessage.success('新增成功')
-    } else {
-      await updateTask(currentTaskId.value, payload)
-      ElMessage.success('更新成功')
-    }
+    // 过滤掉只读字段
+    const { 项目编号, productName, productDrawing, 客户模号, ...updateData } = dialogForm
+
+    await updateProductionTaskApi(currentProjectCode.value, updateData)
+    ElMessage.success('更新成功')
     dialogVisible.value = false
-    await loadData()
-  } catch (error) {
-    ElMessage.error((error as Error).message || '保存失败')
+    loadData()
+  } catch (error: any) {
+    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {
     dialogSubmitting.value = false
   }
 }
 
-const handleDelete = async (row: TaskTableRow) => {
-  try {
-    await ElMessageBox.confirm(`确认删除生产任务 ${row.taskCode} 吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    await removeTask(row.id)
-    if (tableData.value.length === 1 && pagination.page > 1) {
-      pagination.page -= 1
-    }
-    await loadData()
-    ElMessage.success('删除成功')
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') {
-      return
-    }
-    if (error instanceof Error) {
-      ElMessage.error(error.message || '删除失败')
-    }
-  }
-}
-
 const handleDialogClosed = () => {
-  resetDialogForm()
-  currentTaskId.value = null
+  isViewMode.value = false
+  Object.keys(dialogForm).forEach((key) => {
+    delete dialogForm[key as keyof ProductionTaskInfo]
+  })
+  currentProjectCode.value = ''
   dialogFormRef.value?.clearValidate()
 }
 
 onMounted(() => {
-  void loadData()
+  loadStatistics()
+  loadData()
 })
 </script>
 
 <style scoped>
-.dialog-form-container {
+/* 查询表单垂直居中对齐 */
+.query-form {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.dialog-form-columns {
-  display: flex;
-  gap: 38px;
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
+}
+
+.production-task-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+/* 查看表格样式 - 紧凑布局 */
+.view-table-container {
+  padding: 3px 0;
+}
+
+.view-section-col {
+  margin-bottom: 8px;
+}
+
+.view-section {
+  margin-bottom: 0;
+}
+
+.view-table :deep(.label-column) {
+  padding: 4px 8px !important;
+  font-weight: 500;
+  background-color: #f5f7fa;
+  border-right: 1px solid #e4e7ed;
+}
+
+.view-table :deep(.value-column) {
+  padding: 4px 8px !important;
+  background-color: #fff;
+}
+
+.view-table :deep(.el-table__row) {
+  transition: background-color 0.2s;
+}
+
+.view-table :deep(.el-table__row:hover) {
+  background-color: #f5f7fa;
+}
+
+.view-table :deep(.el-table__cell) {
+  padding: 0 !important;
+}
+
+.view-table :deep(.el-table--border) {
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+}
+
+.table-section-header {
+  padding: 4px 0;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #409eff;
+  border-bottom: 1px solid #409eff;
+}
+
+.view-table :deep(.label-column strong) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.view-table :deep(.value-column) {
+  font-size: 12px;
+  color: #303133;
+}
+
+.view-table :deep(.el-table__row) {
+  height: 28px;
+}
+
+.view-table :deep(.el-table__body tr:hover > td) {
+  background-color: #f5f7fa !important;
+}
+
+.view-table :deep(.el-table--border td) {
+  border-right: 1px solid #ebeef5;
+}
+
+.view-table :deep(.el-table__body) {
+  font-size: 12px;
+}
+
+.work-hours-container {
   width: 100%;
 }
 
-.dialog-form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 9.6px;
+/* 工时信息标签列加宽，防止换行 */
+.work-hours-container :deep(.label-column) {
+  width: 110px !important;
+  min-width: 110px;
 }
 
-.dialog-form-column :deep(.el-form-item) {
-  margin: 0;
+/* 统计卡片样式 */
+.summary-card {
+  border: none;
+  transition: all 0.3s ease;
 }
 
-.dialog-form-column--left :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
 }
 
-.dialog-form-column--left :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
+/* 第一个卡片 - 蓝色 */
+.summary-card--blue {
+  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
 }
 
-.dialog-form-column--left :deep(.el-form-item__content) {
-  margin-left: 0 !important;
+.summary-card--blue .summary-title {
+  color: #409eff;
 }
 
-.dialog-form-column--right :deep(.el-form-item) {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
+.summary-card--blue .summary-value {
+  color: #409eff;
 }
 
-.dialog-form-column--right :deep(.el-form-item__label) {
-  padding: 0;
-  margin: 0;
-  text-align: right;
+/* 第二个卡片 - 绿色 */
+.summary-card--green {
+  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
 }
 
-.dialog-form-column--right :deep(.el-form-item__content) {
-  margin-left: 0 !important;
+.summary-card--green .summary-title {
+  color: #67c23a;
 }
 
-.dialog-input {
-  width: 252px;
+.summary-card--green .summary-value {
+  color: #67c23a;
 }
 
-.dialog-date-picker {
-  width: 252px !important;
+/* 第三个卡片 - 橙色 */
+.summary-card--orange {
+  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
 }
 
-.dialog-date-picker :deep(.el-input),
-.dialog-date-picker :deep(.el-input__wrapper),
-.dialog-date-picker :deep(.el-input__inner) {
-  width: 100%;
+.summary-card--orange .summary-title {
+  color: #e6a23c;
 }
 
-.dialog-status-item :deep(.el-form-item__label::before) {
-  content: '';
+.summary-card--orange .summary-value {
+  color: #e6a23c;
 }
 
-.dialog-product-section {
-  margin-top: 24px;
+/* 第四个卡片 - 灰色 */
+.summary-card--gray {
+  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
 }
 
-.dialog-product-summary {
-  margin-top: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.summary-card--gray .summary-title {
+  color: #909399;
 }
 
-.dialog-product-summary__item {
-  margin-right: 16px;
+.summary-card--gray .summary-value {
+  color: #909399;
+}
+
+.summary-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.summary-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 600;
 }
 </style>
