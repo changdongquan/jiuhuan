@@ -1,0 +1,29 @@
+{
+  "name": "jh-craftsys-codespace",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "remoteUser": "node",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "postCreateCommand": "corepack enable && corepack prepare pnpm@10.20.0 --activate && pnpm -v",
+  "updateContentCommand": "pnpm install && cd backend && pnpm install",
+
+  "forwardPorts": [4000, 3001, 9229],
+  "portsAttributes": {
+    "4000": { "label": "vite", "onAutoForward": "notify" },
+    "3001": { "label": "api", "onAutoForward": "notify" },
+    "9229": { "label": "node-inspect", "onAutoForward": "silent" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
