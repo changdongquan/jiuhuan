@@ -106,6 +106,7 @@ router.get('/list', async (req, res) => {
     const dataQuery = `
       SELECT 
         p.*,
+        CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期_fmt,
         (SELECT TOP 1 g1.产品名称 
          FROM 货物信息 g1 
          WHERE g1.项目编号 = p.项目编号 
@@ -118,18 +119,33 @@ router.get('/list', async (req, res) => {
          ORDER BY g1.货物ID) as productDrawing
       FROM 项目管理 p
       ${finalWhereClause}
-      ORDER BY p.项目编号 DESC
+      ORDER BY 
+        CASE 
+          WHEN p.计划首样日期 IS NULL THEN 2 
+          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
+          ELSE 0 
+        END ASC,
+        p.计划首样日期 ASC,
+        p.项目编号 DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
     `
 
     const data = await query(dataQuery, params)
+    // 解决 p.* 与格式化列重名导致的数组问题：用格式化后的值覆盖
+    const mapped = (data || []).map((row) => {
+      if (row && row['图纸下发日期_fmt'] !== undefined) {
+        row['图纸下发日期'] = row['图纸下发日期_fmt']
+        delete row['图纸下发日期_fmt']
+      }
+      return row
+    })
 
     res.json({
       code: 0,
       success: true,
       data: {
-        list: data,
+        list: mapped,
         total: total,
         page: parseInt(page),
         pageSize: parseInt(pageSize)
@@ -195,9 +211,13 @@ router.get('/detail', async (req, res) => {
       })
     }
 
-    const queryString = `SELECT * FROM 项目管理 WHERE 项目编号 = @projectCode`
+    const queryString = `SELECT p.*, CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期_fmt FROM 项目管理 p WHERE p.项目编号 = @projectCode`
 
     const result = await query(queryString, { projectCode })
+    if (result && result[0] && result[0]['图纸下发日期_fmt'] !== undefined) {
+      result[0]['图纸下发日期'] = result[0]['图纸下发日期_fmt']
+      delete result[0]['图纸下发日期_fmt']
+    }
 
     if (result.length === 0) {
       return res.status(404).json({

@@ -24,6 +24,10 @@ router.get('/list', async (req, res) => {
     if (status) {
       whereConditions.push(`pt.生产状态 = @status`)
       params.status = status
+    } else {
+      // 默认排除已完成（保留状态为空的记录）
+      whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus) `)
+      params.excludeStatus = '已完成'
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -60,18 +64,29 @@ router.get('/list', async (req, res) => {
         pt.检验工时,
         pt.编程工时,
         pt.试模工时,
+        pt.抛光工时,
         pt.机加工时,
         pt.装配工时,
         pt.加工中心工时,
         pt.线切割工时,
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
-        p.客户模号 as 客户模号
+        p.客户模号 as 客户模号,
+        p.产品材质 as 产品材质,
+        CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
+        p.计划首样日期 as 计划首样日期
       FROM 生产任务 pt
       LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
       LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
       ${whereClause}
-      ORDER BY pt.项目编号 DESC
+      ORDER BY 
+        CASE 
+          WHEN p.计划首样日期 IS NULL THEN 2 
+          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
+          ELSE 0 
+        END ASC,
+        p.计划首样日期 ASC,
+        pt.项目编号 DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
     `
@@ -161,13 +176,17 @@ router.get('/detail', async (req, res) => {
         pt.检验工时,
         pt.编程工时,
         pt.试模工时,
+        pt.抛光工时,
         pt.机加工时,
         pt.装配工时,
         pt.加工中心工时,
         pt.线切割工时,
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
-        p.客户模号 as 客户模号
+        p.客户模号 as 客户模号,
+        p.产品材质 as 产品材质,
+        CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
+        p.计划首样日期 as 计划首样日期
       FROM 生产任务 pt
       LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
       LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
@@ -230,6 +249,7 @@ router.put('/update', async (req, res) => {
       '检验工时',
       '编程工时',
       '试模工时',
+      '抛光工时',
       '机加工时',
       '装配工时',
       '加工中心工时',

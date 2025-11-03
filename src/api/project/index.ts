@@ -15,7 +15,7 @@ export interface ProjectInfo {
   项目名称?: string
   中标日期?: string
   产品3D确认?: string
-  图纸下发时间?: string
+  图纸下发日期?: string
   计划首样日期?: string
   首次送样日期?: string
   项目状态?: string

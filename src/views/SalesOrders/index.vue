@@ -90,7 +90,7 @@
       v-loading="loading"
       :data="tableData"
       border
-      height="calc(100vh - 420px)"
+      max-height="calc(100vh - 450px)"
       row-key="orderNo"
       @row-dblclick="handleRowDblClick"
       :row-class-name="rowClassName"

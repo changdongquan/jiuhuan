@@ -41,7 +41,9 @@
       <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-title">总任务数</div>
-          <div class="summary-value">{{ statistics.total }}</div>
+          <div class="summary-value">{{
+            Math.max(0, (statistics.total || 0) - (statistics.completed || 0))
+          }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
@@ -77,20 +79,38 @@
       <el-table-column
         prop="项目编号"
         label="项目编号"
-        width="140"
+        width="145"
         show-overflow-tooltip
         fixed="left"
       />
       <el-table-column prop="productName" label="产品名称" width="140" show-overflow-tooltip />
       <el-table-column prop="productDrawing" label="产品图号" width="140" show-overflow-tooltip />
       <el-table-column prop="客户模号" label="客户模号" width="120" show-overflow-tooltip />
-      <el-table-column prop="负责人" label="负责人" width="100" />
-      <el-table-column prop="生产状态" label="生产状态" width="100" align="center">
+      <el-table-column prop="产品材质" label="产品材质" width="100" show-overflow-tooltip />
+      <el-table-column prop="图纸下发日期" label="图纸下发日期" width="115">
+        <template #default="{ row }">
+          {{ formatDate(row.图纸下发日期 as any) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="计划首样日期" label="计划首样日期" width="145">
+        <template #default="{ row }">
+          <span>{{ formatDate(row.计划首样日期 as any) }}</span>
+          <el-tag
+            v-if="isDueSoon(row.计划首样日期 as any)"
+            type="warning"
+            size="small"
+            effect="light"
+            style="margin-left: 6px"
+            >{{ daysUntil(row.计划首样日期 as any) }}天</el-tag
+          >
+        </template>
+      </el-table-column>
+      <el-table-column prop="负责人" label="负责人" width="80" />
+      <el-table-column prop="生产状态" label="生产状态" width="85" align="center">
         <template #default="{ row }">
           <el-tag :type="getStatusTagType(row.生产状态)">{{ row.生产状态 || '-' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="优先级" label="优先级" width="80" align="center" />
       <el-table-column prop="开始日期" label="开始日期" width="110">
         <template #default="{ row }">
           {{ formatDate(row.开始日期) }}
@@ -106,26 +126,12 @@
           {{ formatValue(row.投产数量) }}
         </template>
       </el-table-column>
-      <el-table-column prop="已完成数量" label="已完成数量" width="110" align="right">
+      <el-table-column prop="已完成数量" label="已完成数量" width="105" align="right">
         <template #default="{ row }">
           {{ formatValue(row.已完成数量) }}
         </template>
       </el-table-column>
-      <el-table-column prop="批次完成数量" label="批次完成数量" width="120" align="right">
-        <template #default="{ row }">
-          {{ formatValue(row.批次完成数量) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="批次完成时间" label="批次完成时间" width="130">
-        <template #default="{ row }">
-          {{ formatDate(row.批次完成时间) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="下达日期" label="下达日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.下达日期) }}
-        </template>
-      </el-table-column>
+
       <el-table-column label="操作" width="160" fixed="right" align="center">
         <template #default="{ row }">
           <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
@@ -134,7 +140,7 @@
       </el-table-column>
     </el-table>
 
-    <div style=" display: flex;margin-top: 16px; justify-content: flex-end">
+    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -243,30 +249,24 @@
             <el-form-item label="客户模号">
               <el-input v-model="dialogForm.客户模号" placeholder="客户模号" disabled />
             </el-form-item>
-            <el-form-item label="负责人">
-              <el-input v-model="dialogForm.负责人" placeholder="负责人" />
+            <el-form-item label="产品材质">
+              <el-input v-model="dialogForm.产品材质" placeholder="产品材质" disabled />
             </el-form-item>
-            <el-form-item label="生产状态">
-              <el-select
-                v-model="dialogForm.生产状态"
-                placeholder="请选择生产状态"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="item in statusOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
+            <el-form-item label="图纸下发日期">
+              <el-input
+                :model-value="formatDate(dialogForm.图纸下发日期 as any)"
+                placeholder="图纸下发日期"
+                disabled
+              />
             </el-form-item>
-            <el-form-item label="优先级">
-              <el-select v-model="dialogForm.优先级" placeholder="请选择优先级" style="width: 100%">
-                <el-option label="高" value="高" />
-                <el-option label="中" value="中" />
-                <el-option label="低" value="低" />
-              </el-select>
+            <el-form-item label="计划首样日期">
+              <el-input
+                :model-value="formatDate(dialogForm.计划首样日期 as any)"
+                placeholder="计划首样日期"
+                disabled
+              />
             </el-form-item>
+
             <el-form-item label="开始日期">
               <el-date-picker
                 v-model="dialogForm.开始日期"
@@ -285,8 +285,44 @@
                 style="width: 100%"
               />
             </el-form-item>
+            <el-form-item label="下达日期">
+              <el-date-picker
+                v-model="dialogForm.下达日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="下达日期"
+                style="width: 100%"
+              />
+            </el-form-item>
           </el-col>
           <el-col :span="6">
+            <el-form-item label="生产状态">
+              <el-select
+                v-model="dialogForm.生产状态"
+                placeholder="请选择生产状态"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in statusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="负责人">
+              <el-select v-model="dialogForm.负责人" placeholder="请选择负责人" style="width: 100%">
+                <el-option label="张晓龙" value="张晓龙" />
+                <el-option label="丁忠寻" value="丁忠寻" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="优先级">
+              <el-select v-model="dialogForm.优先级" placeholder="请选择优先级" style="width: 100%">
+                <el-option label="高" value="高" />
+                <el-option label="中" value="中" />
+                <el-option label="低" value="低" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="投产数量">
               <el-input-number v-model="dialogForm.投产数量" :min="0" style="width: 100%" />
             </el-form-item>
@@ -305,40 +341,28 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="下达日期">
-              <el-date-picker
-                v-model="dialogForm.下达日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="下达日期"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="放电工时">
-              <el-input-number v-model="dialogForm.放电工时" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="检验工时">
-              <el-input-number v-model="dialogForm.检验工时" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="编程工时">
-              <el-input-number v-model="dialogForm.编程工时" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="试模工时">
-              <el-input-number v-model="dialogForm.试模工时" :min="0" style="width: 100%" />
-            </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="机加工时">
-              <el-input-number v-model="dialogForm.机加工时" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="装配工时">
-              <el-input-number v-model="dialogForm.装配工时" :min="0" style="width: 100%" />
-            </el-form-item>
             <el-form-item label="加工中心工时">
               <el-input-number v-model="dialogForm.加工中心工时" :min="0" style="width: 100%" />
             </el-form-item>
             <el-form-item label="线切割工时">
               <el-input-number v-model="dialogForm.线切割工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="放电工时">
+              <el-input-number v-model="dialogForm.放电工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="机加工时">
+              <el-input-number v-model="dialogForm.机加工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="抛光工时">
+              <el-input-number v-model="dialogForm.抛光工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="装配工时">
+              <el-input-number v-model="dialogForm.装配工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="试模工时">
+              <el-input-number v-model="dialogForm.试模工时" :min="0" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -410,6 +434,9 @@ const viewTableSections = computed(() => {
         { label: '产品名称', value: dialogForm.productName },
         { label: '产品图号', value: dialogForm.productDrawing },
         { label: '客户模号', value: dialogForm.客户模号 },
+        { label: '产品材质', value: dialogForm.产品材质 },
+        { label: '图纸下发日期', value: formatDate(dialogForm.图纸下发日期 as any) },
+        { label: '计划首样日期', value: formatDate(dialogForm.计划首样日期 as any) },
         { label: '负责人', value: dialogForm.负责人 },
         { label: '生产状态', value: dialogForm.生产状态, tag: true },
         { label: '优先级', value: dialogForm.优先级 }
@@ -436,9 +463,8 @@ const viewTableSections = computed(() => {
       title: '工时信息',
       data: [
         { label: '放电工时', value: formatValue(dialogForm.放电工时) },
-        { label: '检验工时', value: formatValue(dialogForm.检验工时) },
-        { label: '编程工时', value: formatValue(dialogForm.编程工时) },
-        { label: '试模工时', value: formatValue(dialogForm.试模工时) }
+        { label: '试模工时', value: formatValue(dialogForm.试模工时) },
+        { label: '抛光工时', value: formatValue(dialogForm.抛光工时) }
       ],
       data2: [
         { label: '机加工时', value: formatValue(dialogForm.机加工时) },
@@ -456,12 +482,22 @@ const dialogRules: FormRules = {
 
 const formatDate = (date?: string | null) => {
   if (!date) return '-'
+
+  // 处理 ISO 格式: 2025-10-02T00:00:00.000Z
   if (date.includes('T')) {
     return date.split('T')[0]
   }
+
+  // 处理带时间的格式: 2024-01-01 12:00:00 或 2024-01-01 12:00:00.000
   if (date.includes(' ')) {
     return date.split(' ')[0]
   }
+
+  // 如果已经是 YYYY-MM-DD 格式，直接返回
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date
+  }
+
   return date
 }
 
@@ -469,6 +505,30 @@ const formatValue = (value?: string | number | null) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'number' && value === 0) return '-'
   return value
+}
+
+// 规范化为本地零点的日期，避免时区引起的天数误差
+const normalizeToLocalDate = (date?: string | null) => {
+  const ymd = formatDate(date)
+  if (!ymd || ymd === '-') return null
+  const [y, m, d] = ymd.split('-').map((v) => parseInt(v, 10))
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
+// 返回今天到目标日期的天数（目标 - 今天），向下取整
+const daysUntil = (date?: string | null) => {
+  const target = normalizeToLocalDate(date)
+  if (!target) return Infinity
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffMs = target.getTime() - today.getTime()
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000))
+}
+
+// 是否在未来7天内（含当天和第7天）
+const isDueSoon = (date?: string | null) => {
+  const d = daysUntil(date)
+  return d >= 0 && d <= 7
 }
 
 const getStatusTagType = (status?: string) => {
@@ -528,6 +588,7 @@ const loadData = async () => {
 const handleSearch = () => {
   pagination.page = 1
   loadData()
+  loadStatistics()
 }
 
 const handleReset = () => {
@@ -609,6 +670,7 @@ const submitDialogForm = async () => {
     ElMessage.success('更新成功')
     dialogVisible.value = false
     loadData()
+    loadStatistics()
   } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {

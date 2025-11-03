@@ -45,7 +45,9 @@
       <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-title">项目总数</div>
-          <div class="summary-value">{{ summary.totalProjects }}</div>
+          <div class="summary-value">{{
+            Math.max(0, (summary.totalProjects || 0) - (summary.completedProjects || 0))
+          }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
@@ -73,7 +75,7 @@
       v-loading="loading"
       :data="tableData"
       border
-      height="calc(100vh - 480px)"
+      max-height="calc(100vh - 450px)"
       @row-dblclick="handleEdit"
     >
       <el-table-column prop="项目编号" label="项目编号" width="130" show-overflow-tooltip />
@@ -97,14 +99,22 @@
           {{ formatDate(row.产品3D确认) }}
         </template>
       </el-table-column>
-      <el-table-column prop="图纸下发时间" label="图纸下发时间" width="110">
+      <el-table-column prop="图纸下发日期" label="图纸下发日期" width="110">
         <template #default="{ row }">
-          {{ formatDate(row.图纸下发时间) }}
+          {{ formatDate(row.图纸下发日期) }}
         </template>
       </el-table-column>
-      <el-table-column prop="计划首样日期" label="计划首样日期" width="110">
+      <el-table-column prop="计划首样日期" label="计划首样日期" width="150">
         <template #default="{ row }">
-          {{ formatDate(row.计划首样日期) }}
+          <span>{{ formatDate(row.计划首样日期) }}</span>
+          <el-tag
+            v-if="isDueSoon(row.计划首样日期)"
+            type="warning"
+            size="small"
+            effect="light"
+            style="margin-left: 6px"
+            >{{ daysUntil(row.计划首样日期) }}天</el-tag
+          >
         </template>
       </el-table-column>
       <el-table-column prop="首次送样日期" label="首次送样日期" width="110">
@@ -282,8 +292,8 @@
             ><span class="detail-value">{{ formatDate(viewData.产品3D确认) }}</span></div
           >
           <div class="detail-cell"
-            ><span class="detail-label">图纸下发时间</span
-            ><span class="detail-value">{{ formatDate(viewData.图纸下发时间) }}</span></div
+            ><span class="detail-label">图纸下发日期</span
+            ><span class="detail-value">{{ formatDate(viewData.图纸下发日期) }}</span></div
           >
           <div class="detail-cell"
             ><span class="detail-label">计划首样日期</span
@@ -544,12 +554,12 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="图纸下发时间">
+            <el-form-item label="图纸下发日期">
               <el-date-picker
-                v-model="editForm.图纸下发时间"
+                v-model="editForm.图纸下发日期"
                 type="date"
                 value-format="YYYY-MM-DD"
-                placeholder="图纸下发时间"
+                placeholder="图纸下发日期"
                 style="width: 100%"
               />
             </el-form-item>
@@ -761,9 +771,14 @@ const formatDate = (date?: string | null) => {
     return date.split('T')[0]
   }
 
-  // 处理带时间的格式: 2024-01-01 12:00:00
+  // 处理带时间的格式: 2024-01-01 12:00:00 或 2024-01-01 12:00:00.000
   if (date.includes(' ')) {
     return date.split(' ')[0]
+  }
+
+  // 如果已经是 YYYY-MM-DD 格式，直接返回
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date
   }
 
   return date
@@ -774,6 +789,30 @@ const formatValue = (value?: string | number | null) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'number' && value === 0) return '-'
   return value
+}
+
+// 规范化为本地零点的日期，避免时区引起的天数误差
+const normalizeToLocalDate = (date?: string | null) => {
+  const ymd = formatDate(date)
+  if (!ymd || ymd === '-') return null
+  const [y, m, d] = ymd.split('-').map((v) => parseInt(v, 10))
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
+// 返回今天到目标日期的天数（目标 - 今天），向下取整
+const daysUntil = (date?: string | null) => {
+  const target = normalizeToLocalDate(date)
+  if (!target) return Infinity
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffMs = target.getTime() - today.getTime()
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000))
+}
+
+// 是否在未来7天内（含当天和第7天）
+const isDueSoon = (date?: string | null) => {
+  const d = daysUntil(date)
+  return d >= 0 && d <= 7
 }
 
 const handleView = async (row: Partial<ProjectInfo>) => {
@@ -844,6 +883,7 @@ const handleSubmitEdit = async () => {
     }
     editDialogVisible.value = false
     loadData()
+    loadStatistics()
   } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {
@@ -909,8 +949,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-
 /* 响应式优化 */
 @media (width <= 1200px) {
   .detail-grid {
