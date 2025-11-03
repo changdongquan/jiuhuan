@@ -7,6 +7,7 @@ import { usePermissionStoreWithOut } from '@/store/modules/permission'
 import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
+import { autoLoginApi } from '@/api/login'
 
 const { start, done } = useNProgress()
 
@@ -31,11 +32,13 @@ router.beforeEach(async (to, from, next) => {
       const roleRouters = userStore.getRoleRouters || []
 
       // 是否使用动态路由
-      if (appStore.getDynamicRouter) {
+      // 如果动态路由为空，强制使用静态路由
+      if (appStore.getDynamicRouter && roleRouters.length > 0) {
         appStore.serverDynamicRouter
           ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
           : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
       } else {
+        // 使用静态路由（未启用动态路由，或动态路由列表为空）
         await permissionStore.generateRoutes('static')
       }
 
@@ -52,7 +55,68 @@ router.beforeEach(async (to, from, next) => {
     if (NO_REDIRECT_WHITE_LIST.indexOf(to.path) !== -1) {
       next()
     } else {
-      next(`/login?redirect=${to.path}`) // 否则全部重定向到登录页
+      // 未登录时，优先尝试一次 Windows 域自动登录（仅尝试一次）
+      if (!userStore.getAutoTried) {
+        // 标记已尝试，避免重复请求
+        userStore.setAutoTried(true)
+
+        try {
+          // 尝试自动登录
+          const res = await autoLoginApi()
+
+          if (res?.success && res?.data) {
+            // 自动登录成功，设置用户信息
+            userStore.setUserInfo({
+              username: res.data.username as any,
+              realName: res.data.displayName as any,
+              role: res.data.role as any,
+              roleId: res.data.roleId as any,
+              password: '',
+              roles: res.data.roles || ([] as any)
+            } as any)
+            userStore.setToken(res.token || 'SSO_AUTO_LOGIN')
+
+            // 重置标记，允许后续正常流程
+            userStore.setAutoTried(false)
+
+            // 加载路由（复用登录成功后的逻辑）
+            // 自动登录时，如果没有 roleRouters，使用静态路由
+            const roleRouters = userStore.getRoleRouters || []
+
+            if (appStore.getDynamicRouter && roleRouters.length > 0) {
+              appStore.serverDynamicRouter
+                ? await permissionStore.generateRoutes(
+                    'server',
+                    roleRouters as AppCustomRouteRecordRaw[]
+                  )
+                : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
+            } else {
+              // 使用静态路由（自动登录或动态路由为空时）
+              await permissionStore.generateRoutes('static')
+            }
+
+            permissionStore.getAddRouters.forEach((route) => {
+              router.addRoute(route as unknown as RouteRecordRaw)
+            })
+            permissionStore.setIsAddRouters(true)
+
+            // 重新触发路由守卫，导航到目标页面
+            router.replace(to.fullPath)
+            return
+          } else {
+            // 自动登录失败，跳转到登录页
+            next(`/login?redirect=${to.path}`)
+            return
+          }
+        } catch (error) {
+          // 自动登录失败（可能不在域环境中），跳转到登录页
+          next(`/login?redirect=${to.path}`)
+          return
+        }
+      }
+
+      // 已经尝试过自动登录，直接跳转到登录页
+      next(`/login?redirect=${to.path}`)
     }
   }
 })

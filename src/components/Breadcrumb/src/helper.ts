@@ -8,6 +8,10 @@ export const filterBreadcrumb = (
 
   for (const route of routes) {
     const meta = route?.meta
+    // 安全检查：如果 meta 不存在，跳过处理
+    if (!meta) {
+      continue
+    }
     if (meta.hidden && !meta.canTo) {
       continue
     }

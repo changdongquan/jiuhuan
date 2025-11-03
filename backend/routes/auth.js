@@ -1,0 +1,426 @@
+const express = require('express')
+const router = express.Router()
+const { query } = require('../database')
+
+// 检测是否是开发环境
+const isDev =
+  process.env.NODE_ENV === 'development' || !process.env.NODE_ENV || process.env.NODE_ENV === 'dev'
+
+// 尝试动态加载 ldapjs（用于域用户验证）
+let ldap = null
+try {
+  ldap = require('ldapjs')
+} catch (e) {
+  // ldapjs 未安装，将使用模拟验证（仅开发环境）
+  if (!isDev) {
+    console.warn('警告: ldapjs 未安装，域用户登录功能将不可用')
+  }
+}
+
+// LDAP 配置（生产环境需要配置）
+const LDAP_CONFIG = {
+  url: process.env.LDAP_URL || 'ldap://ad.yourdomain.com:389',
+  baseDN: process.env.LDAP_BASE_DN || 'DC=yourdomain,DC=com',
+  bindDN: process.env.LDAP_BIND_DN, // 可选：服务账号
+  bindPassword: process.env.LDAP_BIND_PASSWORD // 可选：服务账号密码
+}
+
+// 普通账号列表（从数据库查询，这里先硬编码，可以后续改为从数据库读取）
+const LOCAL_ACCOUNTS = ['admin', 'test']
+
+/**
+ * 解析用户名格式
+ * 支持：
+ * - domain\username
+ * - username@domain.com
+ * - username (普通账号)
+ */
+function parseUsername(input) {
+  if (!input) return { username: null, domain: null, isDomainUser: false }
+
+  // 格式：domain\username
+  // 尝试多种方式匹配反斜杠
+  // 1. 直接检查是否包含反斜杠字符（字面反斜杠）
+  const backslashIndex = input.indexOf('\\')
+  if (backslashIndex > 0 && backslashIndex < input.length - 1) {
+    // 找到了反斜杠，分割用户名和域名
+    const domain = input.substring(0, backslashIndex)
+    const username = input.substring(backslashIndex + 1)
+    return {
+      username: username,
+      domain: domain,
+      isDomainUser: true,
+      fullUsername: input
+    }
+  }
+
+  // 2. 使用正则表达式匹配（处理转义情况）
+  const backslashMatch = input.match(/^([^\\]+)\\([^\\]+)$/)
+  if (backslashMatch) {
+    return {
+      username: backslashMatch[2],
+      domain: backslashMatch[1],
+      isDomainUser: true,
+      fullUsername: input
+    }
+  }
+
+  // 格式：username@domain.com
+  if (input.includes('@')) {
+    const parts = input.split('@')
+    return {
+      username: parts[0],
+      domain: parts[1],
+      isDomainUser: true,
+      fullUsername: input
+    }
+  }
+
+  // 普通账号
+  return {
+    username: input,
+    domain: null,
+    isDomainUser: false,
+    fullUsername: input
+  }
+}
+
+/**
+ * LDAP 验证域用户（生产环境）
+ */
+async function verifyDomainUser(username, password, domain) {
+  if (!ldap) {
+    throw new Error('LDAP 库未安装')
+  }
+
+  return new Promise((resolve, reject) => {
+    const client = ldap.createClient({
+      url: LDAP_CONFIG.url
+    })
+
+    // 构建用户 DN（Distinguished Name）
+    // 格式：CN=username,CN=Users,DC=domain,DC=com
+    const userDN = `CN=${username},CN=Users,${LDAP_CONFIG.baseDN}`
+    // 或者尝试 UPN 格式：username@domain.com
+    const upn = domain
+      ? `${username}@${domain}`
+      : `${username}@${LDAP_CONFIG.baseDN.replace(/DC=/g, '').replace(/,/g, '.')}`
+
+    // 尝试绑定（验证密码）
+    client.bind(upn, password, (err) => {
+      client.unbind(() => {}) // 关闭连接
+
+      if (err) {
+        // 如果 UPN 失败，尝试 userDN
+        const client2 = ldap.createClient({ url: LDAP_CONFIG.url })
+        client2.bind(userDN, password, (err2) => {
+          client2.unbind(() => {})
+
+          if (err2) {
+            reject(new Error('域用户验证失败: ' + (err2.message || '用户名或密码错误')))
+          } else {
+            resolve({ username, domain, isValid: true })
+          }
+        })
+      } else {
+        resolve({ username, domain, isValid: true })
+      }
+    })
+  })
+}
+
+/**
+ * 模拟 LDAP 验证（开发环境）
+ */
+async function mockVerifyDomainUser(username, password) {
+  // 开发环境：模拟验证逻辑
+  // 这里可以设置一些测试账号
+  const mockDomainUsers = {
+    testuser: 'password123', // 支持 username 格式（最常用）
+    'domain\\testuser': 'password123', // 支持 domain\username 格式
+    'testuser@domain.com': 'password123' // 支持 username@domain.com 格式
+  }
+
+  console.log('[域用户验证] 开始验证:', {
+    username,
+    passwordLength: password ? password.length : 0
+  })
+
+  // 尝试多种匹配方式
+  let matchedKey = null
+
+  // 1. 直接匹配 username（最优先）
+  if (mockDomainUsers[username]) {
+    matchedKey = username
+    console.log('[域用户验证] 直接匹配成功:', { username, matchedKey })
+  }
+  // 2. 匹配用户名部分（提取用户名进行匹配）
+  else {
+    // 尝试匹配用户名部分（去掉域名后的部分）
+    matchedKey = Object.keys(mockDomainUsers).find((k) => {
+      // 提取用户名部分
+      let kUsername = k
+      if (k.includes('\\')) {
+        const parts = k.split('\\')
+        kUsername = parts[parts.length - 1] // 取最后一部分
+      } else if (k.includes('@')) {
+        kUsername = k.split('@')[0]
+      }
+
+      const usernameLower = username.toLowerCase()
+      const kUsernameLower = kUsername.toLowerCase()
+
+      // 精确匹配用户名部分
+      if (kUsernameLower === usernameLower) {
+        console.log('[域用户验证] 用户名部分匹配:', { k, kUsername, username })
+        return true
+      }
+      return false
+    })
+  }
+
+  if (matchedKey && mockDomainUsers[matchedKey] === password) {
+    console.log('[域用户验证] 验证成功:', { username, matchedKey, passwordMatch: true })
+    return { username, domain: 'DOMAIN', isValid: true }
+  }
+
+  console.log('[域用户验证] 验证失败:', {
+    username,
+    matchedKey,
+    passwordMatch: matchedKey ? mockDomainUsers[matchedKey] === password : false,
+    availableKeys: Object.keys(mockDomainUsers),
+    expectedPassword: matchedKey ? mockDomainUsers[matchedKey] : null
+  })
+  throw new Error('域用户验证失败: 用户名或密码错误（开发模式）')
+}
+
+/**
+ * 验证普通账号（从数据库查询）
+ */
+async function verifyLocalUser(username, password) {
+  try {
+    // 这里假设有一个用户表，如果没有可以先从员工表查询
+    // 先检查是否有专门的用户表
+    let result = null
+
+    try {
+      // 尝试查询用户表（如果存在）
+      result = await query(
+        `
+        SELECT username, password, role, roleId 
+        FROM users 
+        WHERE username = @username AND password = @password
+      `,
+        { username, password }
+      )
+    } catch (e) {
+      // 如果没有用户表，检查是否是 admin（硬编码验证）
+      if (username === 'admin' && password === 'admin') {
+        return {
+          username: 'admin',
+          role: 'admin',
+          roleId: '1',
+          isValid: true
+        }
+      }
+      if (username === 'test' && password === 'test') {
+        return {
+          username: 'test',
+          role: 'test',
+          roleId: '2',
+          isValid: true
+        }
+      }
+      throw new Error('用户名或密码错误')
+    }
+
+    if (result && result.length > 0) {
+      return {
+        username: result[0].username,
+        role: result[0].role,
+        roleId: result[0].roleId,
+        isValid: true
+      }
+    }
+
+    throw new Error('用户名或密码错误')
+  } catch (error) {
+    throw new Error(error.message || '验证失败')
+  }
+}
+
+/**
+ * 自动登录接口 - 从 Apache 传递的头部读取域用户名
+ * GET /api/auth/auto-login
+ */
+router.get('/auto-login', (req, res) => {
+  // 开发环境：返回模拟数据
+  if (isDev) {
+    console.log('[DEV] 模拟自动登录，返回测试用户')
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        username: 'dev-user',
+        displayName: '开发测试用户',
+        domain: 'DEV',
+        roles: [],
+        role: 'test',
+        roleId: '2'
+      },
+      token: 'DEV_AUTO_LOGIN'
+    })
+  }
+
+  // 生产环境：从 Apache 传递的头部读取真实域用户
+  const remoteUser = req.headers['x-remote-user'] || req.headers['remote-user']
+
+  if (!remoteUser) {
+    return res.status(401).json({
+      code: 401,
+      success: false,
+      message: '未获取到域用户信息，请确保已配置 Apache Kerberos 认证'
+    })
+  }
+
+  // 解析用户名
+  const parsed = parseUsername(remoteUser)
+
+  res.json({
+    code: 0,
+    success: true,
+    data: {
+      username: parsed.username,
+      displayName: parsed.username,
+      domain: parsed.domain || null,
+      roles: [],
+      role: 'user',
+      roleId: '3'
+    },
+    token: 'SSO_AUTO_LOGIN'
+  })
+})
+
+/**
+ * 手动登录接口 - 支持普通账号和域用户
+ * POST /api/auth/login
+ */
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body
+
+    // 开发环境调试日志
+    if (isDev) {
+      console.log('[登录请求] 收到登录请求:', {
+        username,
+        usernameType: typeof username,
+        usernameLength: username ? username.length : 0,
+        usernameCharCodes: username ? Array.from(username).map((c) => c.charCodeAt(0)) : [],
+        passwordLength: password ? password.length : 0,
+        body: req.body,
+        rawBody: JSON.stringify(req.body)
+      })
+    }
+
+    if (!username || !password) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '用户名和密码不能为空'
+      })
+    }
+
+    // 解析用户名格式
+    const parsed = parseUsername(username)
+
+    // 开发环境调试日志
+    if (isDev) {
+      console.log('[登录] 用户名解析:', {
+        input: username,
+        inputCharCodes: Array.from(username).map((c) => c.charCodeAt(0)),
+        parsed: parsed
+      })
+    }
+
+    let userInfo = null
+
+    if (parsed.isDomainUser) {
+      // 域用户：通过 LDAP 验证
+      try {
+        if (isDev) {
+          // 开发环境：模拟验证
+          console.log('[登录] 开始域用户验证:', {
+            parsedUsername: parsed.username,
+            parsedDomain: parsed.domain,
+            password: password
+          })
+          const verified = await mockVerifyDomainUser(parsed.username, password)
+          userInfo = {
+            username: parsed.fullUsername,
+            displayName: parsed.username,
+            domain: parsed.domain,
+            roles: [],
+            role: 'user',
+            roleId: '3',
+            isValid: true
+          }
+        } else {
+          // 生产环境：真实 LDAP 验证
+          await verifyDomainUser(parsed.username, password, parsed.domain)
+          userInfo = {
+            username: parsed.fullUsername,
+            displayName: parsed.username,
+            domain: parsed.domain,
+            roles: [],
+            role: 'user',
+            roleId: '3',
+            isValid: true
+          }
+        }
+      } catch (error) {
+        return res.status(401).json({
+          code: 401,
+          success: false,
+          message: error.message || '域用户验证失败'
+        })
+      }
+    } else {
+      // 普通账号：从数据库验证
+      try {
+        const verified = await verifyLocalUser(username, password)
+        userInfo = {
+          username: verified.username,
+          displayName: verified.username,
+          domain: null,
+          roles: [],
+          role: verified.role || 'user',
+          roleId: verified.roleId || '3',
+          isValid: true
+        }
+      } catch (error) {
+        return res.status(401).json({
+          code: 401,
+          success: false,
+          message: error.message || '用户名或密码错误'
+        })
+      }
+    }
+
+    // 返回用户信息和 token
+    res.json({
+      code: 0,
+      success: true,
+      data: userInfo,
+      token: parsed.isDomainUser ? 'DOMAIN_LOGIN' : 'LOCAL_LOGIN'
+    })
+  } catch (error) {
+    console.error('登录失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '登录处理失败: ' + error.message
+    })
+  }
+})
+
+module.exports = router

@@ -1,3 +1,10 @@
+// 加载环境变量（如果使用 .env 文件）
+try {
+  require('dotenv').config()
+} catch (e) {
+  // dotenv 未安装或 .env 文件不存在，使用系统环境变量
+}
+
 const express = require('express')
 const cors = require('cors')
 const { initDatabase } = require('./database')
@@ -9,6 +16,7 @@ const databaseRoutes = require('./routes/database')
 const projectRoutes = require('./routes/project')
 const salesOrdersRoutes = require('./routes/sales-orders')
 const productionTaskRoutes = require('./routes/production-task')
+const authRoutes = require('./routes/auth')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -27,6 +35,7 @@ app.use('/api/database', databaseRoutes)
 app.use('/api/project', projectRoutes)
 app.use('/api/sales-orders', salesOrdersRoutes)
 app.use('/api/production-task', productionTaskRoutes)
+app.use('/api/auth', authRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {

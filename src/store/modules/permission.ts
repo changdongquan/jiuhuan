@@ -45,10 +45,20 @@ export const usePermissionStore = defineStore('permission', {
         let routerMap: AppRouteRecordRaw[] = []
         if (type === 'server') {
           // 模拟后端过滤菜单
-          routerMap = generateRoutesByServer(routers as AppCustomRouteRecordRaw[])
+          // 如果路由列表为空，使用静态路由
+          if (!routers || (Array.isArray(routers) && routers.length === 0)) {
+            routerMap = cloneDeep(asyncRouterMap)
+          } else {
+            routerMap = generateRoutesByServer(routers as AppCustomRouteRecordRaw[])
+          }
         } else if (type === 'frontEnd') {
           // 模拟前端过滤菜单
-          routerMap = generateRoutesByFrontEnd(cloneDeep(asyncRouterMap), routers as string[])
+          // 如果路由列表为空，使用静态路由
+          if (!routers || (Array.isArray(routers) && routers.length === 0)) {
+            routerMap = cloneDeep(asyncRouterMap)
+          } else {
+            routerMap = generateRoutesByFrontEnd(cloneDeep(asyncRouterMap), routers as string[])
+          }
         } else {
           // 直接读取静态路由表
           routerMap = cloneDeep(asyncRouterMap)

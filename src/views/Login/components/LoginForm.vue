@@ -57,7 +57,7 @@ const schema = reactive<FormSchema[]>([
       span: 24
     },
     componentProps: {
-      placeholder: 'admin or test'
+      placeholder: 'admin 或 DOMAIN\\username 或 username@domain.com'
     }
   },
   {
@@ -72,7 +72,7 @@ const schema = reactive<FormSchema[]>([
       style: {
         width: '100%'
       },
-      placeholder: 'admin or test',
+      placeholder: '请输入密码',
       // 按下enter键触发登录
       onKeydown: (_e: any) => {
         if (_e.key === 'Enter') {
@@ -238,7 +238,13 @@ const signIn = async () => {
       try {
         const res = await loginApi(formData)
 
-        if (res) {
+        // 检查登录是否成功
+        if (!res || !res.success) {
+          // 错误信息已经在响应拦截器中显示
+          return
+        }
+
+        if (res && res.success) {
           // 是否记住我
           if (unref(remember)) {
             userStore.setLoginInfo({
@@ -249,10 +255,29 @@ const signIn = async () => {
             userStore.setLoginInfo(undefined)
           }
           userStore.setRememberMe(unref(remember))
-          userStore.setUserInfo(res.data)
+          // 设置用户信息，确保包含必要的字段
+          userStore.setUserInfo({
+            ...res.data,
+            password: '' // 不存储密码
+          } as any)
+          // 设置 token
+          if (res.token) {
+            userStore.setToken(res.token)
+          }
           // 是否使用动态路由
           if (appStore.getDynamicRouter) {
-            getRole()
+            try {
+              await getRole()
+            } catch (error) {
+              // 如果获取角色路由失败，回退到静态路由
+              console.warn('获取角色路由失败，使用静态路由:', error)
+              await permissionStore.generateRoutes('static').catch(() => {})
+              permissionStore.getAddRouters.forEach((route) => {
+                addRoute(route as RouteRecordRaw)
+              })
+              permissionStore.setIsAddRouters(true)
+              push({ path: redirect.value || permissionStore.addRouters[0].path })
+            }
           } else {
             await permissionStore.generateRoutes('static').catch(() => {})
             permissionStore.getAddRouters.forEach((route) => {
@@ -271,25 +296,42 @@ const signIn = async () => {
 
 // 获取角色信息
 const getRole = async () => {
-  const formData = await getFormData<UserType>()
-  const params = { role: formData.username }
+  // 使用用户信息中的 role，如果没有则使用 username
+  const userInfo = userStore.getUserInfo
+  const role = userInfo?.role || (await getFormData<UserType>()).username
+
+  const params = { role: role }
   const res =
     appStore.getDynamicRouter && appStore.getServerDynamicRouter
       ? await getAdminRoleApi(params)
       : await getTestRoleApi(params)
-  if (res) {
-    const routers = res.data || []
-    userStore.setRoleRouters(routers)
-    appStore.getDynamicRouter && appStore.getServerDynamicRouter
-      ? await permissionStore.generateRoutes('server', routers).catch(() => {})
-      : await permissionStore.generateRoutes('frontEnd', routers).catch(() => {})
 
-    permissionStore.getAddRouters.forEach((route) => {
-      addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
-    })
-    permissionStore.setIsAddRouters(true)
-    push({ path: redirect.value || permissionStore.addRouters[0].path })
+  if (!res) {
+    throw new Error('获取角色路由失败')
   }
+
+  const routers = res.data || []
+  userStore.setRoleRouters(routers)
+
+  // 如果路由为空，使用静态路由
+  if (routers.length === 0) {
+    console.warn('角色路由为空，使用静态路由')
+    await permissionStore.generateRoutes('static').catch(() => {})
+  } else {
+    if (appStore.getDynamicRouter && appStore.getServerDynamicRouter) {
+      await permissionStore.generateRoutes('server', routers).catch(() => {})
+    } else if (appStore.getDynamicRouter) {
+      await permissionStore.generateRoutes('frontEnd', routers).catch(() => {})
+    } else {
+      await permissionStore.generateRoutes('static').catch(() => {})
+    }
+  }
+
+  permissionStore.getAddRouters.forEach((route) => {
+    addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
+  })
+  permissionStore.setIsAddRouters(true)
+  push({ path: redirect.value || permissionStore.addRouters[0].path })
 }
 
 // 去注册页面

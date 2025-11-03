@@ -6,7 +6,11 @@ interface RoleParams {
 }
 
 export const loginApi = (data: UserType): Promise<IResponse<UserType>> => {
-  return request.post({ url: '/mock/user/login', data })
+  // 强制使用真实后端接口（域登录功能需要）
+  return request.post({
+    url: '/api/auth/login',
+    data
+  })
 }
 
 export const loginOutApi = (): Promise<IResponse> => {
@@ -33,4 +37,24 @@ export const getTestRoleApi = (
   params: RoleParams
 ): Promise<IResponse<AppCustomRouteRecordRaw[]>> => {
   return request.get({ url: '/mock/role/routes', params })
+}
+
+// Windows 域自动登录接口
+export const autoLoginApi = (): Promise<
+  IResponse<{
+    username: string
+    displayName: string
+    domain?: string
+    roles: string[]
+    role: string
+    roleId: string
+  }>
+> => {
+  return request.get({
+    url: '/api/auth/auto-login',
+    // 重要：需要携带凭据以触发 Kerberos 认证（如果配置了）
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
 }

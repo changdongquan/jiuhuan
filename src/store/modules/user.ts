@@ -14,6 +14,7 @@ interface UserState {
   roleRouters?: string[] | AppCustomRouteRecordRaw[]
   rememberMe: boolean
   loginInfo?: UserLoginType
+  autoTried: boolean
 }
 
 export const useUserStore = defineStore('user', {
@@ -25,7 +26,8 @@ export const useUserStore = defineStore('user', {
       roleRouters: undefined,
       // 记住我
       rememberMe: true,
-      loginInfo: undefined
+      loginInfo: undefined,
+      autoTried: false
     }
   },
   getters: {
@@ -46,6 +48,9 @@ export const useUserStore = defineStore('user', {
     },
     getLoginInfo(): UserLoginType | undefined {
       return this.loginInfo
+    },
+    getAutoTried(): boolean {
+      return this.autoTried
     }
   },
   actions: {
@@ -82,6 +87,7 @@ export const useUserStore = defineStore('user', {
       this.setToken('')
       this.setUserInfo(undefined)
       this.setRoleRouters([])
+      this.setAutoTried(false)
       router.replace('/login')
     },
     logout() {
@@ -92,6 +98,9 @@ export const useUserStore = defineStore('user', {
     },
     setLoginInfo(loginInfo: UserLoginType | undefined) {
       this.loginInfo = loginInfo
+    },
+    setAutoTried(tried: boolean) {
+      this.autoTried = tried
     }
   },
   persist: true

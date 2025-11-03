@@ -1,0 +1,24 @@
+[Unit]
+Description=久环后端API服务
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/jh-craftsys/source/backend
+Environment=NODE_ENV=production
+Environment=PORT=3001
+# 如果需要域用户登录，取消下面的注释并配置 LDAP 信息
+# Environment=LDAP_URL=ldap://your-ad-server.com:389
+# Environment=LDAP_BASE_DN=DC=yourdomain,DC=com
+# Environment=LDAP_BIND_DN=CN=service-account,CN=Users,DC=yourdomain,DC=com
+# Environment=LDAP_BIND_PASSWORD=your-password
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

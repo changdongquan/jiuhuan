@@ -37,7 +37,17 @@ export default defineComponent({
     })
 
     const getBreadcrumb = () => {
-      const currentPath = currentRoute.value.matched.slice(-1)[0].path
+      // 安全检查：确保路由信息完整
+      if (!currentRoute.value.matched || currentRoute.value.matched.length === 0) {
+        levelList.value = []
+        return
+      }
+      const lastMatched = currentRoute.value.matched.slice(-1)[0]
+      if (!lastMatched || !lastMatched.path) {
+        levelList.value = []
+        return
+      }
+      const currentPath = lastMatched.path
       levelList.value = filter<AppRouteRecordRaw>(unref(menuRouters), (node: AppRouteRecordRaw) => {
         return node.path === currentPath
       })

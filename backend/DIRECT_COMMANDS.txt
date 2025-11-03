@@ -1,0 +1,81 @@
+# ============================================
+# 直接执行配置命令（不需要创建脚本文件）
+# 在服务器终端逐行执行
+# ============================================
+
+# 步骤 1: 进入项目目录
+cd /opt/jh-craftsys/source/backend
+
+# 步骤 2: 使用 nano 编辑器创建服务文件（如果文件不存在）
+# 如果文件已存在，可以跳过这一步，直接到步骤 3
+nano jiuhuan-backend.service
+
+# 在 nano 编辑器中，粘贴以下内容（然后按 Ctrl+O 保存，Ctrl+X 退出）：
+# [Unit]
+# Description=久环后端API服务
+# After=network.target
+# 
+# [Service]
+# Type=simple
+# User=www-data
+# WorkingDirectory=/opt/jh-craftsys/source/backend
+# Environment=NODE_ENV=production
+# Environment=PORT=3001
+# ExecStart=/usr/bin/node server.js
+# Restart=always
+# RestartSec=10
+# StandardOutput=journal
+# StandardError=journal
+# 
+# [Install]
+# WantedBy=multi-user.target
+
+# 或者使用 cat 命令创建（如果上面的命令不行，用这个）：
+# cat > jiuhuan-backend.service << 'EOFMARKER'
+# [Unit]
+# Description=久环后端API服务
+# After=network.target
+# 
+# [Service]
+# Type=simple
+# User=www-data
+# WorkingDirectory=/opt/jh-craftsys/source/backend
+# Environment=NODE_ENV=production
+# Environment=PORT=3001
+# ExecStart=/usr/bin/node server.js
+# Restart=always
+# RestartSec=10
+# StandardOutput=journal
+# StandardError=journal
+# 
+# [Install]
+# WantedBy=multi-user.target
+# EOFMARKER
+
+# 步骤 3: 直接执行配置命令（不需要脚本文件）
+# 获取 Node.js 路径
+NODE_PATH=$(which node)
+
+# 更新服务文件中的 Node.js 路径
+sudo sed -i "s|ExecStart=.*node|ExecStart=$NODE_PATH|g" jiuhuan-backend.service
+
+# 复制服务文件到 systemd 目录
+sudo cp jiuhuan-backend.service /etc/systemd/system/
+
+# 重新加载 systemd
+sudo systemctl daemon-reload
+
+# 启用服务（开机自启）
+sudo systemctl enable jiuhuan-backend.service
+
+# 启动服务
+sudo systemctl start jiuhuan-backend.service
+
+# 检查服务状态
+sudo systemctl status jiuhuan-backend.service
+
+# 验证环境变量
+sudo systemctl show jiuhuan-backend.service | grep Environment
+
+# 完成！
+
