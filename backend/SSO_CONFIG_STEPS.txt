@@ -1,0 +1,234 @@
+# 域用户自动登录配置步骤（按顺序执行）
+
+## ✅ 已完成：Apache 模块已启用
+
+## 下一步：配置 Kerberos
+
+### 步骤 1：配置 Kerberos（需要知道域名和域控制器地址）
+
+编辑 Kerberos 配置文件：
+
+```bash
+sudo nano /etc/krb5.conf
+```
+
+配置内容（需要填入实际的域名和域控制器地址）：
+
+```ini
+[libdefaults]
+    default_realm = YOURDOMAIN.COM
+    dns_lookup_realm = true
+    dns_lookup_kdc = true
+    ticket_lifetime = 24h
+    renew_lifetime = 7d
+
+[realms]
+    YOURDOMAIN.COM = {
+        kdc = ad.yourdomain.com
+        admin_server = ad.yourdomain.com
+        default_domain = yourdomain.com
+    }
+
+[domain_realm]
+    .yourdomain.com = YOURDOMAIN.COM
+    yourdomain.com = YOURDOMAIN.COM
+```
+
+**需要修改的地方**：
+- `YOURDOMAIN.COM` → 改为实际的大写域名（例如：`COMPANY.COM`）
+- `ad.yourdomain.com` → 改为实际的域控制器地址（例如：`ad.company.com`）
+- `yourdomain.com` → 改为实际的小写域名（例如：`company.com`）
+
+**示例**（如果域名是 `company.local`）：
+```ini
+[libdefaults]
+    default_realm = COMPANY.LOCAL
+    dns_lookup_realm = true
+    dns_lookup_kdc = true
+    ticket_lifetime = 24h
+    renew_lifetime = 7d
+
+[realms]
+    COMPANY.LOCAL = {
+        kdc = ad.company.local
+        admin_server = ad.company.local
+        default_domain = company.local
+    }
+
+[domain_realm]
+    .company.local = COMPANY.LOCAL
+    company.local = COMPANY.LOCAL
+```
+
+保存后（Ctrl+O, Enter, Ctrl+X），继续下一步。
+
+## 步骤 2：获取 Keytab 文件（需要域管理员在 Windows 域控制器上操作）
+
+### 2.1 准备信息
+
+在开始之前，需要准备：
+1. **Ubuntu 服务器的完整主机名**（例如：`craftsys.company.local`）
+   - 查看方法：`hostname -f` 或 `hostname`
+2. **服务账号**（用于 Apache 认证，例如：`apache-jiuhuan@company.local`）
+   - 如果还没有，需要在 AD 中创建一个服务账号
+
+### 2.2 在域控制器上生成 Keytab
+
+在 Windows 域控制器上，以管理员身份打开 PowerShell，执行：
+
+```powershell
+# 替换为实际值
+$hostname = "craftsys.company.local"  # Ubuntu 服务器主机名
+$domain = "COMPANY.LOCAL"              # 大写域名
+$serviceAccount = "apache-jiuhuan@company.local"  # 服务账号
+$password = "YourServiceAccountPassword"  # 服务账号密码
+
+# 生成 keytab 文件
+ktpass -out C:\http.keytab `
+  -princ HTTP/$hostname@$domain `
+  -mapUser $serviceAccount `
+  -pass $password `
+  -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL
+```
+
+**重要**：
+- `HTTP/` 前缀不能省略
+- 主机名必须使用完整域名（FQDN）
+- 域名必须使用大写
+
+### 2.3 传输 Keytab 文件到 Ubuntu 服务器
+
+将生成的 `C:\http.keytab` 文件传输到 Ubuntu 服务器，然后执行：
+
+```bash
+# 创建目录
+sudo mkdir -p /etc/apache2/keytab
+
+# 移动文件（如果通过 scp 传输，文件可能在 /home/用户名/ 目录）
+sudo mv ~/http.keytab /etc/apache2/keytab/
+
+# 设置权限
+sudo chown root:www-data /etc/apache2/keytab/http.keytab
+sudo chmod 640 /etc/apache2/keytab/http.keytab
+
+# 验证权限
+ls -lh /etc/apache2/keytab/http.keytab
+```
+
+### 2.4 测试 Keytab 文件
+
+```bash
+# 测试 keytab 文件（替换为实际的主机名和域名）
+sudo kinit -k -t /etc/apache2/keytab/http.keytab HTTP/craftsys.company.local@COMPANY.LOCAL
+
+# 如果成功，应该没有错误输出
+# 查看票据
+klist
+```
+
+## 步骤 3：配置 Apache 站点
+
+### 3.1 创建站点配置文件
+
+```bash
+sudo nano /etc/apache2/sites-available/jiuhuan.conf
+```
+
+配置文件内容（根据实际情况修改）：
+
+```apache
+<VirtualHost *:80>
+    ServerName your-app.yourdomain.com
+
+    # 启用代理
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # Kerberos 认证 - 只对自动登录接口启用
+    <Location /api/auth/auto-login>
+        AuthType GSSAPI
+        AuthName "Windows Domain Authentication"
+        GssapiCredStore keytab:/etc/apache2/keytab/http.keytab
+        GssapiLocalName On
+        Require valid-user
+
+        # 将认证后的用户名传递给后端
+        RequestHeader set X-Remote-User "%{REMOTE_USER}e" env=REMOTE_USER
+    </Location>
+
+    # API 反向代理到 Node.js 后端
+    ProxyPass /api http://localhost:3001/api
+    ProxyPassReverse /api http://localhost:3001/api
+
+    # 日志
+    ErrorLog ${APACHE_LOG_DIR}/jiuhuan_error.log
+    CustomLog ${APACHE_LOG_DIR}/jiuhuan_access.log combined
+</VirtualHost>
+```
+
+**需要修改的地方**：
+- `ServerName your-app.yourdomain.com` → 改为实际的应用域名或 IP
+- `keytab:/etc/apache2/keytab/http.keytab` → Keytab 文件路径（如果已正确放置，无需修改）
+
+### 3.2 启用站点并测试配置
+
+```bash
+# 启用站点
+sudo a2ensite jiuhuan.conf
+
+# 禁用默认站点（如果需要）
+sudo a2dissite 000-default.conf
+
+# 测试配置
+sudo apache2ctl configtest
+
+# 如果测试通过，重启 Apache
+sudo systemctl restart apache2
+```
+
+## 步骤 4：验证配置
+
+### 4.1 检查 Apache 状态
+
+```bash
+sudo systemctl status apache2
+```
+
+### 4.2 查看日志
+
+```bash
+# 查看 Apache 错误日志
+sudo tail -f /var/log/apache2/jiuhuan_error.log
+
+# 查看后端日志
+sudo journalctl -u jiuhuan-backend.service -f
+```
+
+### 4.3 测试自动登录接口
+
+在域内的 Windows 电脑上，使用浏览器访问：
+
+```
+http://your-app.yourdomain.com/api/auth/auto-login
+```
+
+**预期结果**：
+- 如果配置正确，应该自动返回用户信息（JSON 格式）
+- 如果配置错误，可能会提示输入 Windows 凭据或返回 401 错误
+
+## 需要的信息
+
+在开始配置之前，请准备以下信息：
+
+1. **域名**（例如：`company.local` 或 `company.com`）
+2. **域控制器地址**（例如：`ad.company.local`）
+3. **Ubuntu 服务器完整主机名**（执行 `hostname -f` 查看）
+4. **服务账号**（用于 Apache 认证，例如：`apache-jiuhuan@company.local`）
+
+## 如果遇到问题
+
+1. 检查 Keytab 文件权限：`ls -lh /etc/apache2/keytab/http.keytab`
+2. 检查 Kerberos 配置：`cat /etc/krb5.conf`
+3. 检查 Apache 错误日志：`sudo tail -f /var/log/apache2/error.log`
+4. 检查后端日志：`sudo journalctl -u jiuhuan-backend.service -f`
+

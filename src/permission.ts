@@ -104,12 +104,18 @@ router.beforeEach(async (to, from, next) => {
             router.replace(to.fullPath)
             return
           } else {
-            // 自动登录失败，跳转到登录页
+            // 自动登录失败（可能不在域环境中或未配置 SSO），静默跳转到登录页
+            // 不显示错误提示，因为不在域环境中是正常情况
             next(`/login?redirect=${to.path}`)
             return
           }
-        } catch (error) {
-          // 自动登录失败（可能不在域环境中），跳转到登录页
+        } catch (error: any) {
+          // 自动登录失败（可能不在域环境中或未配置 SSO），静默跳转到登录页
+          // 不显示错误提示，因为不在域环境中是正常情况
+          // 只有真正的网络错误才记录日志
+          if (error?.code !== 'ERR_NETWORK' && error?.response?.status !== 401) {
+            console.warn('[SSO] 自动登录失败（可能不在域环境中）:', error?.message || error)
+          }
           next(`/login?redirect=${to.path}`)
           return
         }

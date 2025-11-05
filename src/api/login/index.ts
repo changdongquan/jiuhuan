@@ -53,6 +53,8 @@ export const autoLoginApi = (): Promise<
   return request.get({
     url: '/api/auth/auto-login',
     // 重要：需要携带凭据以触发 Kerberos 认证（如果配置了）
+    // withCredentials: true 允许浏览器发送 Kerberos 票据
+    withCredentials: true,
     headers: {
       'X-Requested-With': 'XMLHttpRequest'
     }

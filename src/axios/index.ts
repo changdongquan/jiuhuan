@@ -3,7 +3,7 @@ import { CONTENT_TYPE } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 
 const request = (option: AxiosConfig) => {
-  const { url, method, params, data, headers, responseType } = option
+  const { url, method, params, data, headers, responseType, withCredentials } = option
 
   const userStore = useUserStoreWithOut()
   return service.request({
@@ -12,6 +12,7 @@ const request = (option: AxiosConfig) => {
     params,
     data: data,
     responseType: responseType,
+    withCredentials: withCredentials, // 支持携带凭据（用于 Kerberos SSO）
     headers: {
       'Content-Type': CONTENT_TYPE,
       [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',

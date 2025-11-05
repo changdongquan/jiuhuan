@@ -1,0 +1,75 @@
+# PowerShell 命令：快速获取域信息
+
+## 方法 1：使用 ActiveDirectory 模块（推荐）
+
+```powershell
+# 获取域名
+(Get-ADDomain).DNSRoot
+
+# 获取域控制器
+Get-ADDomainController | Select-Object Name, IPv4Address
+
+# 获取完整域信息
+Get-ADDomain | Select-Object Name, DNSRoot, DistinguishedName
+```
+
+## 方法 2：使用 WMI（无需额外模块）
+
+```powershell
+# 获取域名
+(Get-WmiObject Win32_ComputerSystem).Domain
+
+# 获取当前电脑完整域名
+$computer = Get-WmiObject Win32_ComputerSystem
+"$($computer.Name).$($computer.Domain)"
+```
+
+## 方法 3：使用 nltest 命令
+
+```powershell
+# 获取域控制器
+nltest /dsgetdc:$env:USERDOMAIN
+
+# 获取域列表
+nltest /domain_trusts
+```
+
+## 方法 4：使用环境变量
+
+```powershell
+# 当前域名
+$env:USERDOMAIN
+
+# 当前用户域
+$env:USERDNSDOMAIN
+```
+
+## 快速查询脚本（复制到 PowerShell 执行）
+
+```powershell
+# 一行命令获取所有信息
+Write-Host "域名: $((Get-WmiObject Win32_ComputerSystem).Domain)"; Write-Host "域控制器: $((Get-ADDomainController).Name)" -ErrorAction SilentlyContinue; Write-Host "完整域名: $((Get-WmiObject Win32_ComputerSystem).Name).$((Get-WmiObject Win32_ComputerSystem).Domain)"
+```
+
+## 如果无法使用 Get-ADDomainController
+
+如果没有安装 ActiveDirectory 模块，可以使用：
+
+```powershell
+# 获取域控制器（方法1）
+nltest /dsgetdc:$env:USERDNSDOMAIN
+
+# 获取域控制器（方法2）
+$domain = (Get-WmiObject Win32_ComputerSystem).Domain
+Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.$domain" -Type SRV | Select-Object NameTarget
+```
+
+## 输出示例
+
+执行后，你应该看到类似输出：
+```
+域名: company.local
+域控制器: AD.company.local
+完整域名: WIN-SERVER.company.local
+```
+

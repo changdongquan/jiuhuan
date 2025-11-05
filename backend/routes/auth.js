@@ -276,10 +276,13 @@ router.get('/auto-login', (req, res) => {
   const remoteUser = req.headers['x-remote-user'] || req.headers['remote-user']
 
   if (!remoteUser) {
+    // 返回 401，但使用特殊的错误码，让前端知道这是正常的 SSO 失败（不在域环境中）
     return res.status(401).json({
       code: 401,
       success: false,
-      message: '未获取到域用户信息，请确保已配置 Apache Kerberos 认证'
+      message: '未获取到域用户信息，请确保已配置 Apache Kerberos 认证',
+      // 标记为 SSO 失败，前端可以据此判断是否显示错误提示
+      ssoFailed: true
     })
   }
 

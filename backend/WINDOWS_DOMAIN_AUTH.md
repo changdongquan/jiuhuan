@@ -48,7 +48,7 @@ NODE_ENV=production  # 生产环境设置为 production
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y apache2 libapache2-mod-auth-gssapi krb5-user libapache2-mod-proxy-html libapache2-mod-proxy-http
+sudo apt-get install -y apache2 libapache2-mod-auth-gssapi krb5-user
 ```
 
 ### 2. 配置 Kerberos

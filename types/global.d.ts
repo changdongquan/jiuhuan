@@ -43,6 +43,7 @@ declare global {
     method?: AxiosMethod
     headers?: RawAxiosRequestHeaders
     responseType?: AxiosResponseType
+    withCredentials?: boolean // 支持携带凭据（用于 Kerberos SSO）
   }
 
   declare interface IResponse<T = any> {

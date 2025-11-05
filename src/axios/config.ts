@@ -52,10 +52,17 @@ const defaultResponseInterceptors = (response: AxiosResponse) => {
   } else if (response.data.code === SUCCESS_CODE || response.data.code === 200) {
     return response.data
   } else {
-    ElMessage.error(response?.data?.message)
+    // 对于 SSO 自动登录接口的 401 错误，不显示错误提示（因为不在域环境中是正常情况）
+    const isAutoLoginApi = response.config.url?.includes('/api/auth/auto-login')
+    if (!isAutoLoginApi || response?.data?.code !== 401) {
+      ElMessage.error(response?.data?.message)
+    }
     if (response?.data?.code === 401) {
       const userStore = useUserStoreWithOut()
-      userStore.logout()
+      // 对于自动登录接口的 401，不执行 logout（因为可能只是不在域环境中）
+      if (!isAutoLoginApi) {
+        userStore.logout()
+      }
     }
     // 返回响应数据，让调用方处理
     return response.data
