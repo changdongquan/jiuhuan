@@ -11,3 +11,9 @@ pnpm-debug.log*
 .DS_Store
 .env.local
 .env.*.local
+
+# deployment artifacts
+backend/.env
+backend/*.bak.*
+dist-pro/
+stats.html
