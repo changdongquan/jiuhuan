@@ -19,8 +19,8 @@ try {
 
 // LDAP 配置（生产环境需要配置）
 const LDAP_CONFIG = {
-  url: process.env.LDAP_URL || 'ldap://ad.yourdomain.com:389',
-  baseDN: process.env.LDAP_BASE_DN || 'DC=yourdomain,DC=com',
+  url: process.env.LDAP_URL || 'ldap://AD2016-1.jiuhuan.local:389',
+  baseDN: process.env.LDAP_BASE_DN || 'DC=JIUHUAN,DC=LOCAL',
   bindDN: process.env.LDAP_BIND_DN, // 可选：服务账号
   bindPassword: process.env.LDAP_BIND_PASSWORD // 可选：服务账号密码
 }
@@ -273,6 +273,13 @@ router.get('/auto-login', (req, res) => {
   }
 
   // 生产环境：从 Apache 传递的头部读取真实域用户
+  console.log('[SSO] 收到自动登录请求头:', {
+    'x-remote-user': req.headers['x-remote-user'],
+    'remote-user': req.headers['remote-user'],
+    authorization: req.headers.authorization,
+    host: req.headers.host,
+    'user-agent': req.headers['user-agent']
+  })
   const remoteUser = req.headers['x-remote-user'] || req.headers['remote-user']
 
   if (!remoteUser) {
