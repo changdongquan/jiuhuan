@@ -25,7 +25,8 @@ const PORT = process.env.PORT || 3001
 const allowOriginList = [
   /\.jiuhuan\.local$/i,
   /^https?:\/\/10\.0\.0\.248$/i,
-  /^https?:\/\/craftsys\.jiuhuan\.local$/i
+  /^https?:\/\/craftsys\.jiuhuan\.local$/i,
+  /^https?:\/\/jiuhuan.net(:[0-9]+)?$/i
 ]
 
 const corsOptions = {
