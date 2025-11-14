@@ -17,6 +17,7 @@ const projectRoutes = require('./routes/project')
 const salesOrdersRoutes = require('./routes/sales-orders')
 const productionTaskRoutes = require('./routes/production-task')
 const authRoutes = require('./routes/auth')
+const analysisRoutes = require('./routes/analysis')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -68,6 +69,7 @@ app.use('/api/project', projectRoutes)
 app.use('/api/sales-orders', salesOrdersRoutes)
 app.use('/api/production-task', productionTaskRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/analysis', analysisRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {

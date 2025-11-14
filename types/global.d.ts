@@ -40,6 +40,7 @@ declare global {
     params?: any
     data?: any
     url?: string
+    baseURL?: string
     method?: AxiosMethod
     headers?: RawAxiosRequestHeaders
     responseType?: AxiosResponseType

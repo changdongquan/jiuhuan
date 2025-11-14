@@ -26,7 +26,7 @@ const pieOptionsData = reactive<EChartsOption>(pieOptions) as EChartsOption
 // 用户来源
 const getUserAccessSource = async () => {
   const res = await getUserAccessSourceApi().catch(() => {})
-  if (res) {
+  if (res && Array.isArray(res.data)) {
     set(
       pieOptionsData,
       'legend.data',
@@ -46,7 +46,7 @@ const barOptionsData = reactive<EChartsOption>(barOptions) as EChartsOption
 // 周活跃量
 const getWeeklyUserActivity = async () => {
   const res = await getWeeklyUserActivityApi().catch(() => {})
-  if (res) {
+  if (res && Array.isArray(res.data)) {
     set(
       barOptionsData,
       'xAxis.data',
@@ -67,7 +67,7 @@ const lineOptionsData = reactive<EChartsOption>(lineOptions) as EChartsOption
 // 每月销售总额
 const getMonthlySales = async () => {
   const res = await getMonthlySalesApi().catch(() => {})
-  if (res) {
+  if (res && Array.isArray(res.data)) {
     set(
       lineOptionsData,
       'xAxis.data',

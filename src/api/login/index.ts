@@ -51,6 +51,8 @@ export const autoLoginApi = (): Promise<
   }>
 > => {
   return request.get({
+    // 固定走当前站点根路径，避免受全局 baseURL 或 VITE_API_BASE_PATH 影响
+    baseURL: '/',
     url: '/api/auth/auto-login',
     // 重要：需要携带凭据以触发 Kerberos 认证（如果配置了）
     // withCredentials: true 允许浏览器发送 Kerberos 票据

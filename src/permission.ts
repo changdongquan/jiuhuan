@@ -13,6 +13,81 @@ const { start, done } = useNProgress()
 
 const { loadStart, loadDone } = usePageLoading()
 
+interface AutoLoginResponseData {
+  username: string
+  displayName: string
+  domain?: string | null
+  roles: string[]
+  role: string
+  roleId: string
+}
+
+interface AutoLoginResponse {
+  code: number
+  success: boolean
+  data?: AutoLoginResponseData
+  token?: string
+  ssoFailed?: boolean
+}
+
+const autoLoginByIframe = (timeoutMs = 5000): Promise<AutoLoginResponse | null> => {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') {
+      resolve(null)
+      return
+    }
+
+    const iframe = document.createElement('iframe')
+    iframe.style.display = 'none'
+    iframe.src = '/api/auth/auto-login'
+
+    let finished = false
+
+    const cleanup = () => {
+      if (iframe.parentNode) {
+        iframe.parentNode.removeChild(iframe)
+      }
+    }
+
+    const finish = (res: AutoLoginResponse | null) => {
+      if (finished) return
+      finished = true
+      cleanup()
+      resolve(res)
+    }
+
+    const timer = window.setTimeout(() => {
+      finish(null)
+    }, timeoutMs)
+
+    iframe.onload = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document || null
+        const body = doc?.body
+        const text = body?.innerText || body?.textContent || ''
+        if (!text) {
+          window.clearTimeout(timer)
+          finish(null)
+          return
+        }
+        const parsed = JSON.parse(text) as AutoLoginResponse
+        window.clearTimeout(timer)
+        finish(parsed)
+      } catch {
+        window.clearTimeout(timer)
+        finish(null)
+      }
+    }
+
+    iframe.onerror = () => {
+      window.clearTimeout(timer)
+      finish(null)
+    }
+
+    document.body.appendChild(iframe)
+  })
+}
+
 router.beforeEach(async (to, from, next) => {
   start()
   loadStart()
@@ -61,8 +136,14 @@ router.beforeEach(async (to, from, next) => {
         userStore.setAutoTried(true)
 
         try {
-          // 尝试自动登录
-          const res = await autoLoginApi()
+          // 优先通过 iframe 方式尝试自动登录（页面级请求更容易触发 Kerberos 协商）
+          let res = await autoLoginByIframe()
+
+          // 如果 iframe 方式未能返回有效结果，再回退到 XHR 方式（兼容非 Kerberos 场景）
+          if (!res) {
+            // 尝试自动登录
+            res = (await autoLoginApi()) as unknown as AutoLoginResponse
+          }
 
           if (res?.success && res?.data) {
             // 自动登录成功，设置用户信息
