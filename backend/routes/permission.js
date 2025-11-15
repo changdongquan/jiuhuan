@@ -604,16 +604,38 @@ router.get('/ad/users', async (req, res) => {
       }
 
       console.log('[AD用户查询] 开始查询，过滤条件:', filter)
+      console.log('[AD用户查询] LDAP配置:', {
+        url: LDAP_CONFIG.url,
+        baseDN: LDAP_CONFIG.baseDN,
+        hasBindDN: !!LDAP_CONFIG.bindDN
+      })
 
-      // 搜索用户（限制在 Users OU 下，避免查询整个域）
-      const searchBase = LDAP_CONFIG.baseDN
-      const entries = await ldapSearch(
-        client,
-        searchBase,
-        filter,
-        ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
-        { sizeLimit: 500, timeLimit: 10 }
-      )
+      // 尝试先查询 Users OU，如果失败则查询整个域
+      let searchBase = `CN=Users,${LDAP_CONFIG.baseDN}`
+      let entries = []
+
+      try {
+        entries = await ldapSearch(
+          client,
+          searchBase,
+          filter,
+          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+          { sizeLimit: 500, timeLimit: 10 }
+        )
+        console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
+      } catch (error) {
+        console.warn('[AD用户查询] Users OU 查询失败，尝试查询整个域:', error.message)
+        // 如果 Users OU 查询失败，尝试查询整个域
+        searchBase = LDAP_CONFIG.baseDN
+        entries = await ldapSearch(
+          client,
+          searchBase,
+          filter,
+          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+          { sizeLimit: 500, timeLimit: 10 }
+        )
+        console.log('[AD用户查询] 从整个域查询到用户数量:', entries.length)
+      }
 
       console.log('[AD用户查询] 查询到用户数量:', entries.length)
 
@@ -652,20 +674,43 @@ router.get('/ad/users', async (req, res) => {
         name: error.name,
         code: error.code,
         dn: error.dn,
+        errno: error.errno,
+        syscall: error.syscall,
         stack: error.stack
       })
+      // 强制输出到 stderr，确保日志被记录
+      process.stderr.write(
+        `[AD用户查询] 详细错误: ${JSON.stringify(
+          {
+            message: error.message,
+            name: error.name,
+            code: error.code,
+            dn: error.dn
+          },
+          null,
+          2
+        )}\n`
+      )
       throw error
     }
   } catch (error) {
     console.error('[AD用户查询] 查询 AD 用户列表失败:', error)
     console.error('[AD用户查询] 错误堆栈:', error.stack)
+    // 强制输出到 stderr
+    process.stderr.write(`[AD用户查询] 最终错误: ${error.message}\n`)
+    process.stderr.write(`[AD用户查询] 错误堆栈: ${error.stack}\n`)
 
     // 提供更友好的错误信息
     let errorMessage = error.message || '未知错误'
-    if (error.message && error.message.includes('Operations Error')) {
-      errorMessage = 'LDAP 查询操作失败，可能是权限不足或查询条件有误'
+    if (
+      error.message &&
+      (error.message.includes('Operations Error') || error.message.includes('Operations error'))
+    ) {
+      errorMessage = 'LDAP 查询操作失败，可能是权限不足或查询条件有误。请检查服务账号权限。'
     } else if (error.message && error.message.includes('bind')) {
       errorMessage = 'LDAP 服务账号绑定失败，请检查配置'
+    } else if (error.message && error.message.includes('timeout')) {
+      errorMessage = 'LDAP 查询超时，请稍后重试'
     }
 
     res.status(500).json({
