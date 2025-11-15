@@ -610,32 +610,16 @@ router.get('/ad/users', async (req, res) => {
         hasBindDN: !!LDAP_CONFIG.bindDN
       })
 
-      // 尝试先查询 Users OU，如果失败则查询整个域
-      let searchBase = `CN=Users,${LDAP_CONFIG.baseDN}`
-      let entries = []
-
-      try {
-        entries = await ldapSearch(
-          client,
-          searchBase,
-          filter,
-          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
-          { sizeLimit: 500, timeLimit: 10 }
-        )
-        console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
-      } catch (error) {
-        console.warn('[AD用户查询] Users OU 查询失败，尝试查询整个域:', error.message)
-        // 如果 Users OU 查询失败，尝试查询整个域
-        searchBase = LDAP_CONFIG.baseDN
-        entries = await ldapSearch(
-          client,
-          searchBase,
-          filter,
-          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
-          { sizeLimit: 500, timeLimit: 10 }
-        )
-        console.log('[AD用户查询] 从整个域查询到用户数量:', entries.length)
-      }
+      // 只查询 Users OU（根据权限检查，服务账号可以查询 Users OU）
+      const searchBase = `CN=Users,${LDAP_CONFIG.baseDN}`
+      const entries = await ldapSearch(
+        client,
+        searchBase,
+        filter,
+        ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+        { sizeLimit: 500, timeLimit: 10 }
+      )
+      console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
 
       console.log('[AD用户查询] 查询到用户数量:', entries.length)
 
