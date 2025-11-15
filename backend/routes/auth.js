@@ -25,15 +25,21 @@ const LDAP_CONFIG = {
   bindPassword: process.env.LDAP_BIND_PASSWORD // 可选：服务账号密码
 }
 
-// 普通账号列表（从数据库查询，这里先硬编码，可以后续改为从数据库读取）
-const LOCAL_ACCOUNTS = ['admin', 'test']
+// 默认域配置（域外用户可以直接输入用户名，无需前缀）
+const DEFAULT_DOMAIN = process.env.DEFAULT_DOMAIN || 'jiuhuan.local'
+
+// 本地账号白名单（这些账号优先作为本地账号处理，不使用域验证）
+const LOCAL_ACCOUNTS = ['admin']
 
 /**
  * 解析用户名格式
  * 支持：
- * - domain\username
- * - username@domain.com
- * - username (普通账号)
+ * - domain\username (域用户，显式指定域)
+ * - username@domain.com (域用户，UPN 格式)
+ * - username (纯用户名)
+ *   - 如果在本地账号白名单中 → 本地账号
+ *   - 如果不在白名单中，且配置了默认域 → 域用户（使用默认域）
+ *   - 如果不在白名单中，且没有默认域 → 本地账号
  */
 function parseUsername(input) {
   if (!input) return { username: null, domain: null, isDomainUser: false }
@@ -76,7 +82,30 @@ function parseUsername(input) {
     }
   }
 
-  // 普通账号
+  // 纯用户名（无 \ 和 @）
+  // 检查是否在本地账号白名单中（不区分大小写）
+  const usernameLower = input.toLowerCase()
+  if (LOCAL_ACCOUNTS.some((account) => account.toLowerCase() === usernameLower)) {
+    // 在白名单中，作为本地账号处理
+    return {
+      username: input,
+      domain: null,
+      isDomainUser: false,
+      fullUsername: input
+    }
+  }
+
+  // 不在白名单中，如果配置了默认域，作为域用户处理
+  if (DEFAULT_DOMAIN) {
+    return {
+      username: input,
+      domain: DEFAULT_DOMAIN,
+      isDomainUser: true,
+      fullUsername: `${input}@${DEFAULT_DOMAIN}`
+    }
+  }
+
+  // 没有配置默认域，作为普通账号处理
   return {
     username: input,
     domain: null,
@@ -136,9 +165,11 @@ async function mockVerifyDomainUser(username, password) {
   // 开发环境：模拟验证逻辑
   // 这里可以设置一些测试账号
   const mockDomainUsers = {
+    changdq: 'password123', // 域用户测试账号（使用默认域）
     testuser: 'password123', // 支持 username 格式（最常用）
     'domain\\testuser': 'password123', // 支持 domain\username 格式
-    'testuser@domain.com': 'password123' // 支持 username@domain.com 格式
+    'testuser@domain.com': 'password123', // 支持 username@domain.com 格式
+    'changdq@jiuhuan.local': 'password123' // 支持默认域格式
   }
 
   console.log('[域用户验证] 开始验证:', {
@@ -220,14 +251,6 @@ async function verifyLocalUser(username, password) {
           username: 'admin',
           role: 'admin',
           roleId: '1',
-          isValid: true
-        }
-      }
-      if (username === 'test' && password === 'test') {
-        return {
-          username: 'test',
-          role: 'test',
-          roleId: '2',
           isValid: true
         }
       }
