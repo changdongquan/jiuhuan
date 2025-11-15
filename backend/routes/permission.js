@@ -451,9 +451,23 @@ router.post('/sync-routes', async (req, res) => {
 })
 
 /**
+ * 转义 LDAP 过滤条件中的特殊字符
+ */
+function escapeLdapFilter(str) {
+  if (!str) return ''
+  return str
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\//g, '\\2f')
+    .replace(/\0/g, '\\00')
+}
+
+/**
  * LDAP 搜索辅助函数
  */
-function ldapSearch(client, searchBase, searchFilter, attributes = []) {
+function ldapSearch(client, searchBase, searchFilter, attributes = [], options = {}) {
   return new Promise((resolve, reject) => {
     const entries = []
 
@@ -461,8 +475,10 @@ function ldapSearch(client, searchBase, searchFilter, attributes = []) {
       searchBase,
       {
         filter: searchFilter,
-        scope: 'sub',
-        attributes: attributes
+        scope: options.scope || 'sub',
+        attributes: attributes,
+        sizeLimit: options.sizeLimit || 1000, // 限制返回结果数量
+        timeLimit: options.timeLimit || 10 // 限制查询时间（秒）
       },
       (err, res) => {
         if (err) {
@@ -582,17 +598,24 @@ router.get('/ad/users', async (req, res) => {
       // 查询用户对象（objectClass=user 且 !objectClass=computer）
       let filter = '(&(objectClass=user)(!(objectClass=computer)))'
       if (keyword) {
-        filter = `(&(objectClass=user)(!(objectClass=computer))(|(sAMAccountName=*${keyword}*)(displayName=*${keyword}*)(mail=*${keyword}*)))`
+        // 转义关键字中的特殊字符
+        const escapedKeyword = escapeLdapFilter(keyword)
+        filter = `(&(objectClass=user)(!(objectClass=computer))(|(sAMAccountName=*${escapedKeyword}*)(displayName=*${escapedKeyword}*)(mail=*${escapedKeyword}*)))`
       }
 
-      // 搜索用户
-      const entries = await ldapSearch(client, LDAP_CONFIG.baseDN, filter, [
-        'sAMAccountName',
-        'displayName',
-        'mail',
-        'distinguishedName',
-        'memberOf'
-      ])
+      console.log('[AD用户查询] 开始查询，过滤条件:', filter)
+
+      // 搜索用户（限制在 Users OU 下，避免查询整个域）
+      const searchBase = LDAP_CONFIG.baseDN
+      const entries = await ldapSearch(
+        client,
+        searchBase,
+        filter,
+        ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+        { sizeLimit: 500, timeLimit: 10 }
+      )
+
+      console.log('[AD用户查询] 查询到用户数量:', entries.length)
 
       // 格式化用户数据
       const users = entries.map((entry) => ({
@@ -623,14 +646,32 @@ router.get('/ad/users', async (req, res) => {
       })
     } catch (error) {
       client.unbind(() => {})
+      console.error('[AD用户查询] LDAP 查询错误:', error)
+      console.error('[AD用户查询] 错误详情:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        dn: error.dn,
+        stack: error.stack
+      })
       throw error
     }
   } catch (error) {
-    console.error('查询 AD 用户列表失败:', error)
+    console.error('[AD用户查询] 查询 AD 用户列表失败:', error)
+    console.error('[AD用户查询] 错误堆栈:', error.stack)
+
+    // 提供更友好的错误信息
+    let errorMessage = error.message || '未知错误'
+    if (error.message && error.message.includes('Operations Error')) {
+      errorMessage = 'LDAP 查询操作失败，可能是权限不足或查询条件有误'
+    } else if (error.message && error.message.includes('bind')) {
+      errorMessage = 'LDAP 服务账号绑定失败，请检查配置'
+    }
+
     res.status(500).json({
       code: 500,
       success: false,
-      message: '查询 AD 用户列表失败: ' + error.message
+      message: '查询 AD 用户列表失败: ' + errorMessage
     })
   }
 })
@@ -698,17 +739,23 @@ router.get('/ad/groups', async (req, res) => {
       // 查询组对象（objectClass=group）
       let filter = '(objectClass=group)'
       if (keyword) {
-        filter = `(&(objectClass=group)(|(cn=*${keyword}*)(description=*${keyword}*)))`
+        // 转义关键字中的特殊字符
+        const escapedKeyword = escapeLdapFilter(keyword)
+        filter = `(&(objectClass=group)(|(cn=*${escapedKeyword}*)(description=*${escapedKeyword}*)))`
       }
 
+      console.log('[AD组查询] 开始查询，过滤条件:', filter)
+
       // 搜索组
-      const entries = await ldapSearch(client, LDAP_CONFIG.baseDN, filter, [
-        'cn',
-        'name',
-        'description',
-        'distinguishedName',
-        'member'
-      ])
+      const entries = await ldapSearch(
+        client,
+        LDAP_CONFIG.baseDN,
+        filter,
+        ['cn', 'name', 'description', 'distinguishedName', 'member'],
+        { sizeLimit: 500, timeLimit: 10 }
+      )
+
+      console.log('[AD组查询] 查询到组数量:', entries.length)
 
       // 格式化组数据
       const groups = entries.map((entry) => ({
@@ -738,14 +785,23 @@ router.get('/ad/groups', async (req, res) => {
       })
     } catch (error) {
       client.unbind(() => {})
+      console.error('[AD组查询] LDAP 查询错误:', error)
       throw error
     }
   } catch (error) {
-    console.error('查询 AD 组列表失败:', error)
+    console.error('[AD组查询] 查询 AD 组列表失败:', error)
+    console.error('[AD组查询] 错误堆栈:', error.stack)
+
+    // 提供更友好的错误信息
+    let errorMessage = error.message || '未知错误'
+    if (error.message && error.message.includes('Operations Error')) {
+      errorMessage = 'LDAP 查询操作失败，可能是权限不足或查询条件有误'
+    }
+
     res.status(500).json({
       code: 500,
       success: false,
-      message: '查询 AD 组列表失败: ' + error.message
+      message: '查询 AD 组列表失败: ' + errorMessage
     })
   }
 })
@@ -785,13 +841,16 @@ router.get('/ad/user/:username/groups', async (req, res) => {
     const client = await createLdapClient()
 
     try {
-      // 先查找用户
-      const userFilter = `(sAMAccountName=${username})`
-      const userEntries = await ldapSearch(client, LDAP_CONFIG.baseDN, userFilter, [
-        'sAMAccountName',
-        'memberOf',
-        'distinguishedName'
-      ])
+      // 先查找用户（转义用户名中的特殊字符）
+      const escapedUsername = escapeLdapFilter(username)
+      const userFilter = `(sAMAccountName=${escapedUsername})`
+      const userEntries = await ldapSearch(
+        client,
+        LDAP_CONFIG.baseDN,
+        userFilter,
+        ['sAMAccountName', 'memberOf', 'distinguishedName'],
+        { sizeLimit: 10, timeLimit: 5 }
+      )
 
       if (userEntries.length === 0) {
         client.unbind(() => {})
@@ -818,13 +877,16 @@ router.get('/ad/user/:username/groups', async (req, res) => {
       // 查询组详细信息
       const groups = []
       for (const groupDN of memberOf) {
-        const groupFilter = `(distinguishedName=${groupDN.replace(/[()]/g, '\\$&')})`
-        const groupEntries = await ldapSearch(client, LDAP_CONFIG.baseDN, groupFilter, [
-          'cn',
-          'name',
-          'description',
-          'distinguishedName'
-        ])
+        // 转义 DN 中的特殊字符
+        const escapedDN = escapeLdapFilter(groupDN)
+        const groupFilter = `(distinguishedName=${escapedDN})`
+        const groupEntries = await ldapSearch(
+          client,
+          LDAP_CONFIG.baseDN,
+          groupFilter,
+          ['cn', 'name', 'description', 'distinguishedName'],
+          { sizeLimit: 1, timeLimit: 2 }
+        )
 
         if (groupEntries.length > 0) {
           const group = groupEntries[0]
@@ -845,14 +907,17 @@ router.get('/ad/user/:username/groups', async (req, res) => {
       })
     } catch (error) {
       client.unbind(() => {})
+      console.error('[用户组查询] LDAP 查询错误:', error)
       throw error
     }
   } catch (error) {
-    console.error('查询用户所属组失败:', error)
+    console.error('[用户组查询] 查询用户所属组失败:', error)
+    console.error('[用户组查询] 错误堆栈:', error.stack)
+
     res.status(500).json({
       code: 500,
       success: false,
-      message: '查询用户所属组失败: ' + error.message
+      message: '查询用户所属组失败: ' + (error.message || '未知错误')
     })
   }
 })
