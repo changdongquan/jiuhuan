@@ -76,6 +76,16 @@ export const constantRouterMap: AppRouteRecordRaw[] = [
       title: '404',
       noTagsView: true
     }
+  },
+  {
+    path: '/403',
+    component: () => import('@/views/Error/403.vue'),
+    name: '403',
+    meta: {
+      hidden: true,
+      title: '403',
+      noTagsView: true
+    }
   }
 ]
 
@@ -1028,6 +1038,14 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: 'Role',
         meta: {
           title: t('router.role')
+        }
+      },
+      {
+        path: 'permission',
+        component: () => import('@/views/Authorization/Permission/Permission.vue'),
+        name: 'Permission',
+        meta: {
+          title: '权限管理'
         }
       }
     ]

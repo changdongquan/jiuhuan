@@ -18,17 +18,27 @@ const salesOrdersRoutes = require('./routes/sales-orders')
 const productionTaskRoutes = require('./routes/production-task')
 const authRoutes = require('./routes/auth')
 const analysisRoutes = require('./routes/analysis')
+const permissionRoutes = require('./routes/permission')
 
 const app = express()
 const PORT = process.env.PORT || 3001
 
 // CORS 设置：允许域内站点和浏览器携带 Kerberos 凭据
+const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
+
 const allowOriginList = [
   /\.jiuhuan\.local$/i,
   /^https?:\/\/10\.0\.0\.248$/i,
   /^https?:\/\/craftsys\.jiuhuan\.local$/i,
   /^https?:\/\/jiuhuan.net(:[0-9]+)?$/i
 ]
+
+// 开发环境：允许 localhost 和 127.0.0.1
+if (isDev) {
+  allowOriginList.push(/^https?:\/\/localhost(:\d+)?$/i)
+  allowOriginList.push(/^https?:\/\/127\.0\.0\.1(:\d+)?$/i)
+  console.log('开发环境：已添加 localhost 和 127.0.0.1 到 CORS 白名单')
+}
 
 const corsOptions = {
   origin(origin, callback) {
@@ -70,6 +80,7 @@ app.use('/api/sales-orders', salesOrdersRoutes)
 app.use('/api/production-task', productionTaskRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/analysis', analysisRoutes)
+app.use('/api/permission', permissionRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -84,10 +95,21 @@ app.get('/health', (req, res) => {
 // 错误处理中间件
 app.use((err, req, res, next) => {
   console.error('服务器错误:', err)
+  console.error('错误详情:', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    code: err.code,
+    url: req.url,
+    method: req.method,
+    body: req.body,
+    headers: req.headers
+  })
   res.status(500).json({
+    code: 500,
     success: false,
-    message: '服务器内部错误',
-    error: err.message
+    message: '服务器内部错误: ' + (err.message || '未知错误'),
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
   })
 })
 

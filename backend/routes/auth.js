@@ -276,7 +276,7 @@ async function verifyLocalUser(username, password) {
  * 自动登录接口 - 从 Apache 传递的头部读取域用户名
  * GET /api/auth/auto-login
  */
-router.get('/auto-login', (req, res) => {
+router.get('/auto-login', async (req, res) => {
   // 开发环境：返回模拟数据
   if (isDev) {
     console.log('[DEV] 模拟自动登录，返回测试用户')
@@ -319,6 +319,35 @@ router.get('/auto-login', (req, res) => {
   // 解析用户名
   const parsed = parseUsername(remoteUser)
 
+  // 查询用户权限
+  let permissions = []
+  try {
+    // admin 拥有所有权限
+    if (parsed.username === 'admin') {
+      const allPermissions = await query(`
+        SELECT route_name FROM permissions
+      `)
+      permissions = allPermissions.map((p) => p.route_name)
+    } else {
+      // 查询用户直接分配的权限
+      const userPermissions = await query(
+        `
+        SELECT DISTINCT p.route_name
+        FROM permissions p
+        INNER JOIN user_permissions up ON p.id = up.permission_id
+        WHERE up.username = @username
+      `,
+        { username: parsed.username }
+      )
+
+      // TODO: 查询用户所属组，然后查询组权限（需要 AD 支持）
+      permissions = userPermissions.map((p) => p.route_name)
+    }
+  } catch (error) {
+    console.error('查询用户权限失败:', error)
+    permissions = []
+  }
+
   res.json({
     code: 0,
     success: true,
@@ -328,7 +357,8 @@ router.get('/auto-login', (req, res) => {
       domain: parsed.domain || null,
       roles: [],
       role: 'user',
-      roleId: '3'
+      roleId: '3',
+      permissions // 添加权限列表
     },
     token: 'SSO_AUTO_LOGIN'
   })
@@ -339,21 +369,21 @@ router.get('/auto-login', (req, res) => {
  * POST /api/auth/login
  */
 router.post('/login', async (req, res) => {
+  console.log('[登录] 收到登录请求 - 开始处理')
   try {
     const { username, password } = req.body
 
-    // 开发环境调试日志
-    if (isDev) {
-      console.log('[登录请求] 收到登录请求:', {
-        username,
-        usernameType: typeof username,
-        usernameLength: username ? username.length : 0,
-        usernameCharCodes: username ? Array.from(username).map((c) => c.charCodeAt(0)) : [],
-        passwordLength: password ? password.length : 0,
-        body: req.body,
-        rawBody: JSON.stringify(req.body)
-      })
-    }
+    console.log('[登录] 请求信息:', {
+      username: username,
+      passwordLength: password ? password.length : 0,
+      method: req.method,
+      url: req.url,
+      headers: {
+        'content-type': req.headers['content-type'],
+        origin: req.headers['origin'],
+        'user-agent': req.headers['user-agent']
+      }
+    })
 
     if (!username || !password) {
       return res.status(400).json({
@@ -439,20 +469,187 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    // 返回用户信息和 token
-    res.json({
+    // 查询用户权限（包含直接权限和组权限）
+    console.log('[登录] 开始查询用户权限, username:', userInfo.username)
+    let permissions = []
+    try {
+      // admin 拥有所有权限
+      if (userInfo.username === 'admin') {
+        console.log('[登录] 查询 admin 用户的所有权限')
+        const allPermissions = await query(`
+          SELECT route_name FROM permissions
+        `)
+        console.log('[登录] 查询到权限数量:', allPermissions.length)
+        permissions = allPermissions.map((p) => p.route_name)
+      } else {
+        // 提取纯用户名（去除域名前缀）
+        const pureUsername = userInfo.username.split('\\').pop().split('@')[0]
+
+        // 查询用户直接分配的权限
+        const userPermissions = await query(
+          `
+          SELECT DISTINCT p.route_name
+          FROM permissions p
+          INNER JOIN user_permissions up ON p.id = up.permission_id
+          WHERE up.username = @username
+        `,
+          { username: pureUsername }
+        )
+
+        // 查询用户所属组，然后查询组权限
+        let groupPermissions = []
+        try {
+          // 尝试加载 ldapjs
+          let ldap = null
+          try {
+            ldap = require('ldapjs')
+          } catch (e) {
+            // ldapjs 未安装，跳过组权限查询
+          }
+
+          if (ldap && parsed.isDomainUser) {
+            const LDAP_CONFIG = {
+              url: process.env.LDAP_URL || 'ldap://AD2016-1.jiuhuan.local:389',
+              baseDN: process.env.LDAP_BASE_DN || 'DC=JIUHUAN,DC=LOCAL',
+              bindDN: process.env.LDAP_BIND_DN,
+              bindPassword: process.env.LDAP_BIND_PASSWORD
+            }
+
+            // 创建 LDAP 客户端
+            const client = ldap.createClient({ url: LDAP_CONFIG.url })
+
+            try {
+              // 绑定服务账号（如果有）
+              if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
+                await new Promise((resolve, reject) => {
+                  client.bind(LDAP_CONFIG.bindDN, LDAP_CONFIG.bindPassword, (err) => {
+                    if (err) {
+                      client.unbind(() => {})
+                      return reject(err)
+                    }
+                    resolve()
+                  })
+                })
+              }
+
+              // 查询用户所属组
+              const userFilter = `(sAMAccountName=${pureUsername})`
+              const entries = []
+
+              await new Promise((resolve, reject) => {
+                client.search(
+                  LDAP_CONFIG.baseDN,
+                  {
+                    filter: userFilter,
+                    scope: 'sub',
+                    attributes: ['memberOf']
+                  },
+                  (err, res) => {
+                    if (err) return reject(err)
+
+                    res.on('searchEntry', (entry) => {
+                      entries.push(entry.object)
+                    })
+
+                    res.on('error', reject)
+                    res.on('end', (result) => {
+                      if (result.status !== 0)
+                        return reject(new Error(`LDAP 搜索失败: ${result.status}`))
+                      resolve()
+                    })
+                  }
+                )
+              })
+
+              if (entries.length > 0 && entries[0].memberOf) {
+                const memberOf = Array.isArray(entries[0].memberOf)
+                  ? entries[0].memberOf
+                  : [entries[0].memberOf]
+
+                // 查询组权限
+                if (memberOf.length > 0) {
+                  try {
+                    // 构建参数化查询
+                    const params = {}
+                    const placeholders = memberOf
+                      .map((dn, i) => {
+                        const key = `groupDn${i}`
+                        params[key] = dn
+                        return `@${key}`
+                      })
+                      .join(',')
+
+                    const groupPerms = await query(
+                      `
+                      SELECT DISTINCT p.route_name
+                      FROM permissions p
+                      INNER JOIN group_permissions gp ON p.id = gp.permission_id
+                      WHERE gp.group_dn IN (${placeholders})
+                    `,
+                      params
+                    )
+
+                    groupPermissions = groupPerms.map((p) => p.route_name)
+                  } catch (err) {
+                    console.warn('查询组权限失败（继续使用直接权限）:', err.message)
+                  }
+                }
+              }
+
+              client.unbind(() => {})
+            } catch (error) {
+              client.unbind(() => {})
+              console.warn('查询用户所属组失败（继续使用直接权限）:', error.message)
+            }
+          }
+        } catch (error) {
+          console.warn('查询组权限失败（继续使用直接权限）:', error.message)
+        }
+
+        // 合并直接权限和组权限（去重）
+        permissions = [
+          ...new Set([...userPermissions.map((p) => p.route_name), ...groupPermissions])
+        ]
+      }
+    } catch (error) {
+      console.error('查询用户权限失败:', error)
+      // 权限查询失败不影响登录，但权限列表为空
+      permissions = []
+    }
+
+    // 返回用户信息、权限和 token
+    console.log('[登录] 登录成功，准备返回响应，权限数量:', permissions.length)
+    const response = {
       code: 0,
       success: true,
-      data: userInfo,
+      data: {
+        ...userInfo,
+        permissions // 添加权限列表
+      },
       token: parsed.isDomainUser ? 'DOMAIN_LOGIN' : 'LOCAL_LOGIN'
-    })
+    }
+    console.log('[登录] 返回响应:', JSON.stringify(response, null, 2).substring(0, 500))
+    res.json(response)
   } catch (error) {
-    console.error('登录失败:', error)
-    res.status(500).json({
+    console.error('[登录] 登录失败:', error)
+    console.error('[登录] 登录失败详情:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+      body: req.body,
+      headers: {
+        'content-type': req.headers['content-type'],
+        origin: req.headers['origin']
+      }
+    })
+    const errorResponse = {
       code: 500,
       success: false,
-      message: '登录处理失败: ' + error.message
-    })
+      message: '登录处理失败: ' + (error.message || '未知错误')
+    }
+    console.error('[登录] 返回错误响应:', JSON.stringify(errorResponse))
+    res.status(500).json(errorResponse)
   }
 })
 

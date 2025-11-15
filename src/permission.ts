@@ -98,6 +98,44 @@ router.beforeEach(async (to, from, next) => {
     if (to.path === '/login') {
       next({ path: '/' })
     } else {
+      // 权限验证：检查用户是否有权限访问目标页面
+      const userInfo = userStore.getUserInfo
+      const userPermissions = (userInfo as any).permissions || []
+      const isAdmin = userInfo?.username === 'admin'
+
+      // 排除不需要权限验证的路由（如 404、403、个人中心、首页重定向等）
+      const noAuthRoutes = [
+        '404',
+        '403',
+        'NoFind',
+        'PersonalCenter',
+        'Redirect',
+        'Root', // 首页路由
+        'RedirectWrap', // 重定向包装路由
+        'Analysis', // 仪表盘分析页（首页默认跳转）
+        'Workplace', // 仪表盘工作台
+        'Dashboard' // 仪表盘父路由
+      ]
+
+      // admin 拥有所有权限，直接通过
+      // 或者白名单路由，直接通过
+      // 或者权限列表为空（兼容性处理）
+      if (isAdmin || noAuthRoutes.includes(to.name as string)) {
+        // admin 或白名单路由，允许访问，继续后续流程
+      } else if (to.name) {
+        // 其他用户需要检查权限
+        if (userPermissions.length === 0) {
+          // 如果用户权限列表为空，说明权限系统可能未启用或用户未分配权限
+          // 暂时允许访问（兼容性处理）
+          console.warn('[权限] 用户权限列表为空，允许访问:', to.name)
+        } else if (!userPermissions.includes(to.name)) {
+          // 有权限列表，但当前路由不在权限列表中，拒绝访问
+          console.warn('[权限] 用户无权限访问:', { route: to.name, permissions: userPermissions })
+          next('/403')
+          return
+        }
+      }
+
       if (permissionStore.getIsAddRouters) {
         next()
         return
@@ -153,7 +191,8 @@ router.beforeEach(async (to, from, next) => {
               role: res.data.role as any,
               roleId: res.data.roleId as any,
               password: '',
-              roles: res.data.roles || ([] as any)
+              roles: res.data.roles || ([] as any),
+              permissions: (res.data as any).permissions || [] // 添加权限列表
             } as any)
             userStore.setToken(res.token || 'SSO_AUTO_LOGIN')
 
