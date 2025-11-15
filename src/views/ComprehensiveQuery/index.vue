@@ -824,8 +824,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-
 @media (width <= 768px) {
   .insight-panel__item {
     flex-direction: column;

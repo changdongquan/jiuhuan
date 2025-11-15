@@ -22,6 +22,11 @@ const LDAP_CONFIG = {
 const isDev =
   process.env.NODE_ENV === 'development' || !process.env.NODE_ENV || process.env.NODE_ENV === 'dev'
 
+// 可选：只过滤特定 OU 下的用户和组（例如“模具”）
+// 若未配置，则使用默认的 CN=Users / 整个域
+const USERS_SEARCH_OU = process.env.LDAP_USERS_OU || ''
+const GROUPS_SEARCH_OU = process.env.LDAP_GROUPS_OU || ''
+
 /**
  * 获取所有权限列表（树形结构）
  * GET /api/permission/list
@@ -486,7 +491,35 @@ function ldapSearch(client, searchBase, searchFilter, attributes = [], options =
         }
 
         res.on('searchEntry', (entry) => {
-          entries.push(entry.object)
+          let obj = entry && entry.object
+
+          // 兼容不同 ldapjs 版本：尝试使用 toObject()
+          if (!obj && typeof entry?.toObject === 'function') {
+            try {
+              obj = entry.toObject()
+            } catch {
+              obj = null
+            }
+          }
+
+          // 兜底：从 attributes 手动构造对象
+          if (!obj && Array.isArray(entry?.attributes)) {
+            obj = {}
+            for (const attr of entry.attributes) {
+              const key = attr?.type
+              const vals = attr?.vals
+              if (!key) continue
+              if (Array.isArray(vals)) {
+                obj[key] = vals.length === 1 ? vals[0] : vals
+              } else if (typeof vals !== 'undefined') {
+                obj[key] = vals
+              }
+            }
+          }
+
+          if (obj) {
+            entries.push(obj)
+          }
         })
 
         res.on('error', (err) => {
@@ -523,6 +556,27 @@ function ldapSearch(client, searchBase, searchFilter, attributes = [], options =
       }
     )
   })
+}
+
+/**
+ * 根据名称查找 OU 的 DN（例如：模具）
+ */
+async function findOuDnByName(client, ouName) {
+  const escapedName = escapeLdapFilter(ouName)
+  const filter = `(&(objectClass=organizationalUnit)(|(ou=${escapedName})(name=${escapedName})))`
+
+  const entries = await ldapSearch(client, LDAP_CONFIG.baseDN, filter, ['distinguishedName'], {
+    sizeLimit: 1,
+    timeLimit: 10
+  })
+
+  if (!entries.length || !entries[0]?.distinguishedName) {
+    throw new Error(
+      `未找到名为 ${ouName} 的组织单元(OU)，请检查 AD 结构或 LDAP_USERS_OU / LDAP_GROUPS_OU 配置`
+    )
+  }
+
+  return entries[0].distinguishedName
 }
 
 /**
@@ -631,46 +685,48 @@ router.get('/ad/users', async (req, res) => {
         hasBindDN: !!LDAP_CONFIG.bindDN
       })
 
-      // 只查询 Users OU（根据权限检查，服务账号可以查询 Users OU）
-      const searchBase = `CN=Users,${LDAP_CONFIG.baseDN}`
+      // 搜索根：在整个域下查用户，然后按 OU 过滤
+      const searchBase = LDAP_CONFIG.baseDN
       console.log('[AD用户查询] 查询基础DN:', searchBase)
 
-      let entries = []
-      try {
-        entries = await ldapSearch(
-          client,
-          searchBase,
-          filter,
-          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
-          { sizeLimit: 500, timeLimit: 10 }
-        )
-        console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
-      } catch (searchError) {
-        console.error('[AD用户查询] LDAP 搜索失败:', searchError)
-        console.error('[AD用户查询] 搜索错误详情:', {
-          message: searchError.message,
-          name: searchError.name,
-          code: searchError.code,
-          errno: searchError.errno,
-          syscall: searchError.syscall,
-          stack: searchError.stack
-        })
-        // 强制输出到 stderr
-        process.stderr.write(`[AD用户查询] LDAP 搜索错误: ${searchError.message}\n`)
-        process.stderr.write(`[AD用户查询] 错误代码: ${searchError.code}\n`)
-        throw searchError
-      }
+      const entries = await ldapSearch(
+        client,
+        searchBase,
+        filter,
+        ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+        { sizeLimit: 500, timeLimit: 10 }
+      )
 
       console.log('[AD用户查询] 查询到用户数量:', entries.length)
+      if (entries.length > 0) {
+        console.log('[AD用户查询] 示例条目:', JSON.stringify(entries[0], null, 2))
+      }
 
-      // 格式化用户数据
-      const users = entries.map((entry) => ({
-        username: entry.sAMAccountName || '',
-        displayName: entry.displayName || entry.sAMAccountName || '',
-        email: entry.mail || '',
-        dn: entry.distinguishedName || '',
-        groups: entry.memberOf || []
-      }))
+      // 格式化用户数据（兼容可能出现的空条目）
+      const rawEntries = Array.isArray(entries) ? entries : []
+
+      let users = rawEntries
+        .map((entry) => {
+          const e = entry || {}
+          return {
+            username: e.sAMAccountName || '',
+            displayName: e.displayName || e.sAMAccountName || '',
+            email: e.mail || '',
+            dn: e.distinguishedName || '',
+            groups: e.memberOf || []
+          }
+        })
+        // 过滤掉完全为空的数据
+        .filter((u) => u.username || u.displayName || u.email)
+
+      // 如果配置了 USERS_SEARCH_OU，则只保留 DN 在该 OU 下的用户
+      if (USERS_SEARCH_OU) {
+        const ouPart = USERS_SEARCH_OU.toLowerCase()
+        users = users.filter((u) => u.dn && u.dn.toLowerCase().endsWith(ouPart))
+        console.log('[AD用户查询] 过滤 OU 后用户数量:', users.length)
+      }
+
+      console.log('[AD用户查询] 格式化后用户数量:', users.length)
 
       // 分页
       const total = users.length
@@ -815,10 +871,14 @@ router.get('/ad/groups', async (req, res) => {
 
       console.log('[AD组查询] 开始查询，过滤条件:', filter)
 
+      // 搜索根：默认整个域
+      const searchBase = LDAP_CONFIG.baseDN
+      console.log('[AD组查询] 查询基础DN:', searchBase)
+
       // 搜索组
       const entries = await ldapSearch(
         client,
-        LDAP_CONFIG.baseDN,
+        searchBase,
         filter,
         ['cn', 'name', 'description', 'distinguishedName', 'member'],
         { sizeLimit: 500, timeLimit: 10 }
@@ -826,13 +886,34 @@ router.get('/ad/groups', async (req, res) => {
 
       console.log('[AD组查询] 查询到组数量:', entries.length)
 
-      // 格式化组数据
-      const groups = entries.map((entry) => ({
-        name: entry.cn || entry.name || '',
-        dn: entry.distinguishedName || '',
-        description: entry.description || '',
-        memberCount: entry.member ? (Array.isArray(entry.member) ? entry.member.length : 1) : 0
-      }))
+      // 格式化组数据（兼容可能出现的空条目）
+      const rawEntries = Array.isArray(entries) ? entries : []
+
+      let groups = rawEntries
+        .map((entry) => {
+          const e = entry || {}
+          const dn = e.distinguishedName || ''
+          const name = e.cn || e.name || ''
+          return {
+            // 前端期望的字段
+            group_dn: dn,
+            group_name: name,
+            description: e.description || '',
+            memberCount: e.member ? (Array.isArray(e.member) ? e.member.length : 1) : 0,
+            // 兼容旧字段（如有需要）
+            dn,
+            name
+          }
+        })
+        // 过滤掉完全为空的数据
+        .filter((g) => g.group_name || g.group_dn)
+
+      // 如果配置了 GROUPS_SEARCH_OU，则只保留 DN 在该 OU 下的组
+      if (GROUPS_SEARCH_OU) {
+        const ouPart = GROUPS_SEARCH_OU.toLowerCase()
+        groups = groups.filter((g) => g.group_dn && g.group_dn.toLowerCase().endsWith(ouPart))
+        console.log('[AD组查询] 过滤 OU 后组数量:', groups.length)
+      }
 
       // 分页
       const total = groups.length

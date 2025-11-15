@@ -48,15 +48,15 @@ export const getUserPermissionsApi = (username: string) => {
 export const assignUserPermissionsApi = (username: string, permissionIds: number[]) => {
   return request.post({
     url: `/api/permission/user/${username}/assign`,
-    data: { permission_ids: permissionIds }
+    data: { permissionIds }
   })
 }
 
 // 移除用户权限
 export const removeUserPermissionsApi = (username: string, permissionIds: number[]) => {
-  return request.post({
+  return request.delete({
     url: `/api/permission/user/${username}/remove`,
-    data: { permission_ids: permissionIds }
+    data: { permissionIds }
   })
 }
 
@@ -71,31 +71,38 @@ export const getGroupPermissionsApi = (groupDn: string) => {
 export const assignGroupPermissionsApi = (groupDn: string, permissionIds: number[]) => {
   return request.post({
     url: `/api/permission/group/${encodeURIComponent(groupDn)}/assign`,
-    data: { permission_ids: permissionIds }
+    data: { permissionIds, groupDn }
   })
 }
 
 // 移除组权限
 export const removeGroupPermissionsApi = (groupDn: string, permissionIds: number[]) => {
-  return request.post({
+  return request.delete({
     url: `/api/permission/group/${encodeURIComponent(groupDn)}/remove`,
-    data: { permission_ids: permissionIds }
+    data: { permissionIds, groupDn }
   })
 }
 
+interface PagedResult<T> {
+  list: T[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 // 获取 AD 用户列表
-export const getAdUsersApi = (search?: string) => {
-  return request.get<AdUserItem[]>({
+export const getAdUsersApi = (params?: { keyword?: string; page?: number; pageSize?: number }) => {
+  return request.get<PagedResult<AdUserItem>>({
     url: '/api/permission/ad/users',
-    params: { search }
+    params
   })
 }
 
 // 获取 AD 组列表
-export const getAdGroupsApi = (search?: string) => {
-  return request.get<AdGroupItem[]>({
+export const getAdGroupsApi = (params?: { keyword?: string; page?: number; pageSize?: number }) => {
+  return request.get<PagedResult<AdGroupItem>>({
     url: '/api/permission/ad/groups',
-    params: { search }
+    params
   })
 }
 
