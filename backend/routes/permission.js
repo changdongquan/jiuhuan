@@ -495,7 +495,28 @@ function ldapSearch(client, searchBase, searchFilter, attributes = [], options =
 
         res.on('end', (result) => {
           if (result.status !== 0) {
-            return reject(new Error(`LDAP 搜索失败: ${result.status}`))
+            // LDAP 状态码说明：
+            // 0 = 成功
+            // 1 = Operations Error (通常表示权限不足)
+            // 4 = Size Limit Exceeded
+            // 其他 = 其他错误
+            const statusMessages = {
+              1: 'Operations Error - 可能是权限不足或查询条件有误',
+              4: 'Size Limit Exceeded - 查询结果超过限制',
+              10: 'Referral - 需要重定向',
+              11: 'Admin Limit Exceeded - 管理员限制',
+              50: 'Insufficient Access Rights - 权限不足',
+              51: 'Busy - 服务器繁忙',
+              52: 'Unavailable - 服务不可用',
+              53: 'Unwilling To Perform - 服务器拒绝执行',
+              80: 'Other - 其他错误'
+            }
+            const errorMsg =
+              statusMessages[result.status] || `LDAP 搜索失败，状态码: ${result.status}`
+            const error = new Error(errorMsg)
+            error.code = result.status
+            error.ldapStatus = result.status
+            return reject(error)
           }
           resolve(entries)
         })
@@ -612,14 +633,33 @@ router.get('/ad/users', async (req, res) => {
 
       // 只查询 Users OU（根据权限检查，服务账号可以查询 Users OU）
       const searchBase = `CN=Users,${LDAP_CONFIG.baseDN}`
-      const entries = await ldapSearch(
-        client,
-        searchBase,
-        filter,
-        ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
-        { sizeLimit: 500, timeLimit: 10 }
-      )
-      console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
+      console.log('[AD用户查询] 查询基础DN:', searchBase)
+
+      let entries = []
+      try {
+        entries = await ldapSearch(
+          client,
+          searchBase,
+          filter,
+          ['sAMAccountName', 'displayName', 'mail', 'distinguishedName', 'memberOf'],
+          { sizeLimit: 500, timeLimit: 10 }
+        )
+        console.log('[AD用户查询] 从 Users OU 查询到用户数量:', entries.length)
+      } catch (searchError) {
+        console.error('[AD用户查询] LDAP 搜索失败:', searchError)
+        console.error('[AD用户查询] 搜索错误详情:', {
+          message: searchError.message,
+          name: searchError.name,
+          code: searchError.code,
+          errno: searchError.errno,
+          syscall: searchError.syscall,
+          stack: searchError.stack
+        })
+        // 强制输出到 stderr
+        process.stderr.write(`[AD用户查询] LDAP 搜索错误: ${searchError.message}\n`)
+        process.stderr.write(`[AD用户查询] 错误代码: ${searchError.code}\n`)
+        throw searchError
+      }
 
       console.log('[AD用户查询] 查询到用户数量:', entries.length)
 
