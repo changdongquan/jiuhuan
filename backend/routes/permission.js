@@ -877,8 +877,14 @@ router.get('/ad/user/:username/groups', async (req, res) => {
       // 查询组详细信息
       const groups = []
       for (const groupDN of memberOf) {
-        // 转义 DN 中的特殊字符
-        const escapedDN = escapeLdapFilter(groupDN)
+        // DN 查询需要转义特殊字符，但转义方式与过滤条件不同
+        // 对于 distinguishedName，需要转义括号和反斜杠
+        const escapedDN = groupDN.replace(/[()\\]/g, (match) => {
+          if (match === '(') return '\\28'
+          if (match === ')') return '\\29'
+          if (match === '\\') return '\\5c'
+          return match
+        })
         const groupFilter = `(distinguishedName=${escapedDN})`
         const groupEntries = await ldapSearch(
           client,
