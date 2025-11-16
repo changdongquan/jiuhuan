@@ -25,6 +25,9 @@ const LDAP_CONFIG = {
   bindPassword: process.env.LDAP_BIND_PASSWORD // 可选：服务账号密码
 }
 
+// 可选的用户与组搜索 OU（例如仅查询“模具”OU）
+const LDAP_USERS_OU = process.env.LDAP_USERS_OU || ''
+
 // 默认域配置（域外用户可以直接输入用户名，无需前缀）
 const DEFAULT_DOMAIN = process.env.DEFAULT_DOMAIN || 'jiuhuan.local'
 
@@ -162,10 +165,23 @@ async function verifyDomainUser(username, password, domain) {
  * 从 AD 查询用户的显示名称（displayName）和邮箱
  * 优先使用 displayName，其次使用 cn，查询失败返回 null
  */
-async function fetchAdUserProfile(username) {
+async function fetchAdUserProfile(username, domain) {
   if (!ldap) {
     return null
   }
+
+  // 选择查询根：优先使用 LDAP_USERS_OU（若配置），否则使用 baseDN
+  // 若在指定 OU 下未找到，则回退到整个域 baseDN 再查一次，避免因 OU 配置不匹配导致查不到显示名
+  const primarySearchBase = LDAP_USERS_OU || LDAP_CONFIG.baseDN
+
+  // 转义 LDAP 过滤条件中的特殊字符
+  const escapeLdapFilter = (str) =>
+    (str || '')
+      .replace(/\\/g, '\\5c')
+      .replace(/\*/g, '\\2a')
+      .replace(/\(/g, '\\28')
+      .replace(/\)/g, '\\29')
+      .replace(/\0/g, '\\00')
 
   const client = ldap.createClient({
     url: LDAP_CONFIG.url
@@ -187,36 +203,60 @@ async function fetchAdUserProfile(username) {
   try {
     const entries = []
 
-    await new Promise((resolve, reject) => {
-      client.search(
-        LDAP_CONFIG.baseDN,
-        {
-          filter: `(sAMAccountName=${username})`,
-          scope: 'sub',
-          attributes: ['displayName', 'cn', 'mail']
-        },
-        (err, res) => {
-          if (err) return reject(err)
+    const doSearch = (base) =>
+      new Promise((resolve, reject) => {
+        // 构建更健壮的过滤条件：
+        // 1) sAMAccountName 精确匹配（大小写不敏感）
+        // 2) 如果提供 domain，尝试 userPrincipalName=username@domain
+        // 3) 兼容 CN 恰好等于用户名的情况
+        const upn =
+          domain && username && !String(username).includes('@')
+            ? `${username}@${domain}`
+            : undefined
+        const escapedSam = escapeLdapFilter(username)
+        const escapedUpn = upn ? escapeLdapFilter(upn) : null
+        const escapedCn = escapeLdapFilter(username)
+        const filterParts = [
+          `(sAMAccountName=${escapedSam})`,
+          escapedUpn ? `(userPrincipalName=${escapedUpn})` : null,
+          `(cn=${escapedCn})`
+        ].filter(Boolean)
+        const filter =
+          filterParts.length > 1 ? `(|${filterParts.join('')})` : filterParts[0] || `(cn=__none__)`
 
-          res.on('searchEntry', (entry) => {
-            // ldapjs v2: entry.object；v3: entry.toObject()
-            const obj =
-              entry.object || (typeof entry.toObject === 'function' ? entry.toObject() : null)
-            if (obj) {
-              entries.push(obj)
-            }
-          })
+        client.search(
+          base,
+          {
+            filter,
+            scope: 'sub',
+            attributes: ['displayName', 'cn', 'mail'],
+            sizeLimit: 5,
+            timeLimit: 10
+          },
+          (err, res) => {
+            if (err) return reject(err)
+            res.on('searchEntry', (entry) => {
+              const obj =
+                entry.object || (typeof entry.toObject === 'function' ? entry.toObject() : null)
+              if (obj) entries.push(obj)
+            })
+            res.on('error', (err2) => reject(err2))
+            res.on('end', (result) => {
+              if (result.status !== 0) {
+                return reject(new Error(`LDAP 搜索失败: ${result.status}`))
+              }
+              resolve()
+            })
+          }
+        )
+      })
 
-          res.on('error', (err2) => reject(err2))
-          res.on('end', (result) => {
-            if (result.status !== 0) {
-              return reject(new Error(`LDAP 搜索失败: ${result.status}`))
-            }
-            resolve()
-          })
-        }
-      )
-    })
+    // 先在 OU（如配置）下查找
+    await doSearch(primarySearchBase)
+    // 若未找到且 OU 已配置，则回退到整个域再查一次
+    if (!entries.length && LDAP_USERS_OU) {
+      await doSearch(LDAP_CONFIG.baseDN)
+    }
 
     if (!entries.length) {
       return null
@@ -517,6 +557,16 @@ router.post('/login', async (req, res) => {
             roleId: '3',
             isValid: true
           }
+          // 开发环境如已配置 LDAP，可尝试补齐显示名
+          try {
+            const profile = await fetchAdUserProfile(
+              parsed.username,
+              parsed.domain || DEFAULT_DOMAIN
+            )
+            if (profile?.displayName) {
+              userInfo.displayName = profile.displayName
+            }
+          } catch {}
         } else {
           // 生产环境：真实 LDAP 验证
           await verifyDomainUser(parsed.username, password, parsed.domain)
@@ -528,6 +578,18 @@ router.post('/login', async (req, res) => {
             role: 'user',
             roleId: '3',
             isValid: true
+          }
+          // 生产环境：补齐显示名（失败不影响登录）
+          try {
+            const profile = await fetchAdUserProfile(
+              parsed.username,
+              parsed.domain || DEFAULT_DOMAIN
+            )
+            if (profile?.displayName) {
+              userInfo.displayName = profile.displayName
+            }
+          } catch (e) {
+            console.warn('[登录] 获取 AD 显示名称失败（使用用户名作为显示名）:', e.message || e)
           }
         }
       } catch (error) {

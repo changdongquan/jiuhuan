@@ -43,28 +43,27 @@ const toPage = (path: string) => {
   push(path)
 }
 
-const headerName = computed(() => {
-  const info = userStore.getUserInfo as any
-  return info?.realName || info?.displayName || info?.username || ''
-})
-
 onMounted(async () => {
   const info = userStore.getUserInfo as any
   if (!info || !info.username) return
 
-  // 如果已经有中文名，就不再请求
-  if (info.realName && info.realName !== info.username) return
+  // 提取纯用户名（去掉域名前缀和 @ 域名）
+  const rawUsername = String(info.username || '')
+  const shortUsername = rawUsername.split('\\').pop()?.split('@')[0] || rawUsername
+
+  // 如果 realName 已经不是“纯用户名”（例如已经是中文显示名），就不再请求
+  if (info.realName && info.realName !== shortUsername) return
 
   try {
     const res = await getAdUsersApi({
-      keyword: info.username,
+      keyword: shortUsername,
       page: 1,
       pageSize: 10
     })
     const data = (res.data as any) || {}
     const list = data.list || []
-    const matched = list.find((u: any) => u.username === info.username)
-    if (matched && matched.displayName && matched.displayName !== info.username) {
+    const matched = list.find((u: any) => u.username === shortUsername)
+    if (matched && matched.displayName && matched.displayName !== shortUsername) {
       userStore.setUserInfo({
         ...info,
         realName: matched.displayName
@@ -73,6 +72,11 @@ onMounted(async () => {
   } catch {
     // 静默失败，不影响页面
   }
+})
+
+const headerName = computed(() => {
+  const info = userStore.getUserInfo as any
+  return info?.realName || info?.displayName || info?.username || ''
 })
 </script>
 
