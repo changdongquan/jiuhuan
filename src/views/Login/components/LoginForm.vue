@@ -256,8 +256,11 @@ const signIn = async () => {
           }
           userStore.setRememberMe(unref(remember))
           // 设置用户信息，确保包含必要的字段
+          const data = res.data as any
           userStore.setUserInfo({
-            ...res.data,
+            ...data,
+            // realName 优先使用后端返回的 displayName，其次 realName，最后 username
+            realName: data.displayName || data.realName || data.username,
             password: '' // 不存储密码
           } as any)
           // 设置 token

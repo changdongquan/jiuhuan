@@ -159,6 +159,80 @@ async function verifyDomainUser(username, password, domain) {
 }
 
 /**
+ * 从 AD 查询用户的显示名称（displayName）和邮箱
+ * 优先使用 displayName，其次使用 cn，查询失败返回 null
+ */
+async function fetchAdUserProfile(username) {
+  if (!ldap) {
+    return null
+  }
+
+  const client = ldap.createClient({
+    url: LDAP_CONFIG.url
+  })
+
+  // 绑定服务账号（如果配置了）
+  if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
+    await new Promise((resolve, reject) => {
+      client.bind(LDAP_CONFIG.bindDN, LDAP_CONFIG.bindPassword, (err) => {
+        if (err) {
+          client.unbind(() => {})
+          return reject(err)
+        }
+        resolve()
+      })
+    })
+  }
+
+  try {
+    const entries = []
+
+    await new Promise((resolve, reject) => {
+      client.search(
+        LDAP_CONFIG.baseDN,
+        {
+          filter: `(sAMAccountName=${username})`,
+          scope: 'sub',
+          attributes: ['displayName', 'cn', 'mail']
+        },
+        (err, res) => {
+          if (err) return reject(err)
+
+          res.on('searchEntry', (entry) => {
+            // ldapjs v2: entry.object；v3: entry.toObject()
+            const obj =
+              entry.object || (typeof entry.toObject === 'function' ? entry.toObject() : null)
+            if (obj) {
+              entries.push(obj)
+            }
+          })
+
+          res.on('error', (err2) => reject(err2))
+          res.on('end', (result) => {
+            if (result.status !== 0) {
+              return reject(new Error(`LDAP 搜索失败: ${result.status}`))
+            }
+            resolve()
+          })
+        }
+      )
+    })
+
+    if (!entries.length) {
+      return null
+    }
+
+    const user = entries[0]
+    return {
+      displayName: user.displayName || user.cn || null,
+      mail: user.mail || null
+    }
+  } finally {
+    client.unbind(() => {})
+  }
+}
+
+/**
  * 模拟 LDAP 验证（开发环境）
  */
 async function mockVerifyDomainUser(username, password) {
@@ -348,13 +422,29 @@ router.get('/auto-login', async (req, res) => {
     permissions = []
   }
 
+  // 尝试从 AD 获取显示名称和邮箱
+  let displayName = parsed.username
+  let mail = null
+  try {
+    const profile = await fetchAdUserProfile(parsed.username)
+    if (profile?.displayName) {
+      displayName = profile.displayName
+    }
+    if (profile?.mail) {
+      mail = profile.mail
+    }
+  } catch (e) {
+    console.warn('[SSO] 获取 AD 显示名称失败（使用用户名作为显示名）:', e.message || e)
+  }
+
   res.json({
     code: 0,
     success: true,
     data: {
       username: parsed.username,
-      displayName: parsed.username,
+      displayName,
       domain: parsed.domain || null,
+      mail,
       roles: [],
       role: 'user',
       roleId: '3',
@@ -619,11 +709,30 @@ router.post('/login', async (req, res) => {
 
     // 返回用户信息、权限和 token
     console.log('[登录] 登录成功，准备返回响应，权限数量:', permissions.length)
+
+    // 如果是域用户，尝试从 AD 获取显示名称和邮箱
+    let displayName = userInfo.displayName || parsed.username
+    let mail = null
+    if (parsed.isDomainUser) {
+      try {
+        const profile = await fetchAdUserProfile(parsed.username)
+        if (profile?.displayName) {
+          displayName = profile.displayName
+        }
+        if (profile?.mail) {
+          mail = profile.mail
+        }
+      } catch (e) {
+        console.warn('[登录] 获取 AD 显示名称失败（使用用户名作为显示名）:', e.message || e)
+      }
+    }
     const response = {
       code: 0,
       success: true,
       data: {
         ...userInfo,
+        displayName,
+        mail,
         permissions // 添加权限列表
       },
       token: parsed.isDomainUser ? 'DOMAIN_LOGIN' : 'LOCAL_LOGIN'

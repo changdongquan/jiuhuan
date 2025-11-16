@@ -542,7 +542,7 @@ const handleTabChange = (tab: string) => {
                 v-model="userSearchKeyword"
                 placeholder="按姓名 / 账号 / 邮箱搜索"
                 clearable
-                @keyup.enter.native="searchUsers"
+                @keyup.enter="searchUsers"
                 @clear="searchUsers"
               >
                 <template #append>
@@ -715,7 +715,7 @@ const handleTabChange = (tab: string) => {
                 v-model="groupSearchKeyword"
                 placeholder="按组名 / 描述搜索"
                 clearable
-                @keyup.enter.native="searchGroups"
+                @keyup.enter="searchGroups"
                 @clear="searchGroups"
               >
                 <template #append>
