@@ -7,7 +7,6 @@ import { usePermissionStoreWithOut } from '@/store/modules/permission'
 import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
-import { autoLoginApi } from '@/api/login'
 
 const { start, done } = useNProgress()
 
@@ -175,13 +174,8 @@ router.beforeEach(async (to, from, next) => {
 
         try {
           // 优先通过 iframe 方式尝试自动登录（页面级请求更容易触发 Kerberos 协商）
-          let res = await autoLoginByIframe()
-
-          // 如果 iframe 方式未能返回有效结果，再回退到 XHR 方式（兼容非 Kerberos 场景）
-          if (!res) {
-            // 尝试自动登录
-            res = (await autoLoginApi()) as unknown as AutoLoginResponse
-          }
+          // 若 iframe 未返回有效结果，则认为当前环境不可用 SSO，不再额外通过 XHR 重试
+          const res = await autoLoginByIframe()
 
           if (res?.success && res?.data) {
             // 自动登录成功，设置用户信息

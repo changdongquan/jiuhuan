@@ -43,6 +43,13 @@ axiosInstance.interceptors.response.use(
     return res
   },
   (error: AxiosError) => {
+    const url = error.config?.url || ''
+
+    // 对 Windows 域自动登录接口的 401 做静默处理（不弹错误），交由上层逻辑处理
+    if (url.includes('/api/auth/auto-login') && error.response?.status === 401) {
+      return Promise.reject(error)
+    }
+
     // 显示后端返回的具体错误消息，而不是通用的 HTTP 错误
     const errorMessage = (error.response?.data as any)?.message || error.message
     ElMessage.error(errorMessage)
