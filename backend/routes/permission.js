@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const { query } = require('../database')
+const { syncRoutesToPermissions } = require('../scripts/sync-routes-to-permissions')
 
 // 尝试动态加载 ldapjs（用于域用户验证）
 let ldap = null
@@ -55,6 +56,33 @@ router.get('/list', async (req, res) => {
       code: 500,
       success: false,
       message: '获取权限列表失败: ' + error.message
+    })
+  }
+})
+
+/**
+ * 同步路由到权限表
+ * POST /api/permission/sync-routes
+ *
+ * 说明：
+ * - 以 backend/scripts/sync-routes-to-permissions.js 中的 routesToSync 为准
+ * - 新增路由会插入 permissions 表，已有路由会更新标题和路径
+ * - 该接口主要给部署脚本和“权限管理”页面的“同步权限”按钮使用
+ */
+router.post('/sync-routes', async (req, res) => {
+  try {
+    await syncRoutesToPermissions()
+    res.json({
+      code: 0,
+      success: true,
+      message: '路由同步成功'
+    })
+  } catch (error) {
+    console.error('同步路由到权限失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '同步路由到权限失败: ' + (error.message || '未知错误')
     })
   }
 })

@@ -27,6 +27,7 @@ import {
   getAdUsersApi,
   getAdGroupsApi,
   getUserGroupsApi,
+  syncRoutesApi,
   type PermissionItem,
   type AdUserItem,
   type AdGroupItem
@@ -515,6 +516,30 @@ const handleGroupPageSizeChange = (size: number) => {
 const totalGroupPermissions = computed(() => permissionList.value.length)
 const checkedGroupPermissionsCount = computed(() => groupCheckedRouteNames.value.length)
 
+// ========================
+// 路由/权限同步
+// ========================
+
+const syncingRoutes = ref(false)
+
+const handleSyncRoutes = async () => {
+  if (syncingRoutes.value) return
+  syncingRoutes.value = true
+  try {
+    const res = await syncRoutesApi()
+    if ((res as any)?.success) {
+      ElMessage.success((res as any).message || '路由权限同步成功')
+      await loadPermissionList()
+    } else {
+      ElMessage.error(((res as any)?.message as string) || '路由权限同步失败')
+    }
+  } catch (error: any) {
+    ElMessage.error('路由权限同步失败: ' + (error.message || '未知错误'))
+  } finally {
+    syncingRoutes.value = false
+  }
+}
+
 // Tab 切换
 const handleTabChange = (tab: string) => {
   if (tab === 'user' && adUsers.value.length === 0) {
@@ -527,6 +552,11 @@ const handleTabChange = (tab: string) => {
 
 <template>
   <ContentWrap>
+    <div class="flex justify-end mb-10px">
+      <BaseButton type="primary" size="small" :loading="syncingRoutes" @click="handleSyncRoutes">
+        同步菜单权限
+      </BaseButton>
+    </div>
     <ElTabs v-model="activeTab" class="permission-tabs" @tab-change="handleTabChange">
       <!-- 用户权限 -->
       <ElTabPane label="按用户分配" name="user">
