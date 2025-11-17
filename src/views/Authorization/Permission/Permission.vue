@@ -561,7 +561,7 @@ const handleTabChange = (tab: string) => {
             >
               <ElTableColumn
                 prop="displayName"
-                label="姓名"
+                label="用户名"
                 min-width="120"
                 :formatter="(_, __, row: any) => row.displayName || row.username"
               />
