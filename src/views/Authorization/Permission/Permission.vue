@@ -563,7 +563,7 @@ const handleTabChange = (tab: string) => {
                 prop="displayName"
                 label="用户名"
                 min-width="120"
-                :formatter="(_, __, row: any) => row.displayName || row.username"
+                :formatter="(row: any) => row.displayName || row.username"
               />
               <ElTableColumn prop="username" label="账号" min-width="120" />
               <ElTableColumn prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
