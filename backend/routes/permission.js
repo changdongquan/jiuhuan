@@ -1047,8 +1047,9 @@ router.get('/ad/user/:username/groups', async (req, res) => {
         if (groupEntries.length > 0) {
           const group = groupEntries[0]
           groups.push({
-            name: group.cn || group.name || '',
-            dn: group.distinguishedName || groupDN,
+            // 与 /api/permission/ad/groups 接口保持字段一致，前端统一使用 group_name / group_dn
+            group_name: group.cn || group.name || '',
+            group_dn: group.distinguishedName || groupDN,
             description: group.description || ''
           })
         }
