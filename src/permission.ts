@@ -12,6 +12,10 @@ const { start, done } = useNProgress()
 
 const { loadStart, loadDone } = usePageLoading()
 
+// 开发模式下保持“权限为空时放行”，方便调试；
+// 生产构建（如 pro 模式）启用严格权限控制。
+const isDev = import.meta.env.DEV
+
 interface AutoLoginResponseData {
   username: string
   displayName: string
@@ -116,17 +120,21 @@ router.beforeEach(async (to, from, next) => {
         'Dashboard' // 仪表盘父路由
       ]
 
-      // admin 拥有所有权限，直接通过
-      // 或者白名单路由，直接通过
-      // 或者权限列表为空（兼容性处理）
+      // admin 拥有所有权限，直接通过；白名单路由直接通过
       if (isAdmin || noAuthRoutes.includes(to.name as string)) {
-        // admin 或白名单路由，允许访问，继续后续流程
+        // 允许访问，继续后续流程
       } else if (to.name) {
         // 其他用户需要检查权限
         if (userPermissions.length === 0) {
-          // 如果用户权限列表为空，说明权限系统可能未启用或用户未分配权限
-          // 暂时允许访问（兼容性处理）
-          console.warn('[权限] 用户权限列表为空，允许访问:', to.name)
+          if (isDev) {
+            // 开发模式：为方便调试，权限列表为空时暂时放行
+            console.warn('[权限][DEV] 用户权限列表为空，允许访问:', to.name)
+          } else {
+            // 生产严格模式：权限列表为空视为无任何权限，除白名单外全部拒绝
+            console.warn('[权限] 用户无任何页面权限，拒绝访问:', to.name)
+            next('/403')
+            return
+          }
         } else if (!userPermissions.includes(to.name)) {
           // 有权限列表，但当前路由不在权限列表中，拒绝访问
           console.warn('[权限] 用户无权限访问:', { route: to.name, permissions: userPermissions })
