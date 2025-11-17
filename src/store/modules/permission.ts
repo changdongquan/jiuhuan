@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { asyncRouterMap, constantRouterMap } from '@/router'
 import {
-  generateRoutesByFrontEnd,
   generateRoutesByServer,
+  generateRoutesByNames,
   flatMultiLevelRoutes
 } from '@/utils/routerHelper'
 import { store } from '../index'
@@ -52,13 +52,9 @@ export const usePermissionStore = defineStore('permission', {
             routerMap = generateRoutesByServer(routers as AppCustomRouteRecordRaw[])
           }
         } else if (type === 'frontEnd') {
-          // 模拟前端过滤菜单
-          // 如果路由列表为空，使用静态路由
-          if (!routers || (Array.isArray(routers) && routers.length === 0)) {
-            routerMap = cloneDeep(asyncRouterMap)
-          } else {
-            routerMap = generateRoutesByFrontEnd(cloneDeep(asyncRouterMap), routers as string[])
-          }
+          // 前端基于“允许访问的路由名称”过滤菜单
+          const keys = (routers || []) as string[]
+          routerMap = keys.length > 0 ? generateRoutesByNames(cloneDeep(asyncRouterMap), keys) : []
         } else {
           // 直接读取静态路由表
           routerMap = cloneDeep(asyncRouterMap)

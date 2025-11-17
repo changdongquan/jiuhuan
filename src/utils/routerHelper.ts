@@ -37,7 +37,7 @@ export const getRawRoute = (route: RouteLocationNormalized): RouteLocationNormal
   }
 }
 
-// 前端控制路由生成
+// 前端控制路由生成（基于路径或 followRoute）
 export const generateRoutesByFrontEnd = (
   routes: AppRouteRecordRaw[],
   keys: string[],
@@ -89,6 +89,40 @@ export const generateRoutesByFrontEnd = (
     }
   }
   return res
+}
+
+// 前端控制路由生成（基于路由名称）
+// names 为允许访问的路由 name 列表（如 ['SalesOrdersIndex', 'ProjectManagementIndex']）
+export const generateRoutesByNames = (
+  routes: AppRouteRecordRaw[],
+  names: string[]
+): AppRouteRecordRaw[] => {
+  const nameSet = new Set(names)
+
+  const filterByName = (list: AppRouteRecordRaw[]): AppRouteRecordRaw[] => {
+    const res: AppRouteRecordRaw[] = []
+
+    for (const route of list) {
+      const cloned: AppRouteRecordRaw = { ...route }
+
+      if (cloned.children && cloned.children.length) {
+        cloned.children = filterByName(cloned.children)
+      }
+
+      const selfMatch =
+        typeof cloned.name === 'string' && cloned.name && nameSet.has(cloned.name as string)
+      const hasChildren = !!cloned.children && cloned.children.length > 0
+
+      // 只要自己有权限，或有任意子路由有权限，就保留该路由
+      if (selfMatch || hasChildren) {
+        res.push(cloned)
+      }
+    }
+
+    return res
+  }
+
+  return filterByName(routes)
 }
 
 // 后端控制路由生成

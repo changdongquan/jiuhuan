@@ -148,18 +148,21 @@ router.beforeEach(async (to, from, next) => {
         return
       }
 
-      // 开发者可根据实际情况进行修改
+      // 根据用户权限生成可访问的菜单/路由
       const roleRouters = userStore.getRoleRouters || []
 
-      // 是否使用动态路由
-      // 如果动态路由为空，强制使用静态路由
       if (appStore.getDynamicRouter && roleRouters.length > 0) {
+        // 动态路由模式（目前未启用），保留原有逻辑
         appStore.serverDynamicRouter
           ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
           : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
       } else {
-        // 使用静态路由（未启用动态路由，或动态路由列表为空）
-        await permissionStore.generateRoutes('static')
+        // 静态路由模式：admin 使用完整路由；普通用户按权限过滤菜单
+        if (isAdmin) {
+          await permissionStore.generateRoutes('static')
+        } else {
+          await permissionStore.generateRoutes('frontEnd', userPermissions as string[])
+        }
       }
 
       permissionStore.getAddRouters.forEach((route) => {
