@@ -4,6 +4,8 @@ import { useForm } from '@/hooks/web/useForm'
 import { useValidator } from '@/hooks/web/useValidator'
 import { reactive, ref, watch } from 'vue'
 import { ElDivider, ElMessage, ElMessageBox } from 'element-plus'
+import { updateProfileApi } from '@/api/login'
+import { useUserStore } from '@/store/modules/user'
 
 const props = defineProps({
   userInfo: {
@@ -52,7 +54,9 @@ const rules = reactive({
 })
 
 const { formRegister, formMethods } = useForm()
-const { setValues, getElFormExpose } = formMethods
+const { setValues, getElFormExpose, getFormData } = formMethods
+
+const userStore = useUserStore()
 
 watch(
   () => props.userInfo,
@@ -84,8 +88,25 @@ const save = async () => {
       .then(async () => {
         try {
           saveLoading.value = true
-          // 这里可以调用修改用户信息接口
-          ElMessage.success('修改成功')
+          const formData = await getFormData()
+          const payload = {
+            realName: formData.realName,
+            displayName: formData.realName,
+            email: formData.email,
+            phoneNumber: formData.phoneNumber
+          }
+          const res = (await updateProfileApi(payload)) as any
+          if (res?.success) {
+            ElMessage.success(res.message || '修改成功')
+            const current = (userStore.getUserInfo || {}) as any
+            userStore.setUserInfo({
+              ...current,
+              realName: res.data?.realName || payload.realName || current.realName,
+              displayName: res.data?.displayName || payload.realName || current.displayName,
+              email: res.data?.email ?? payload.email ?? current.email,
+              phoneNumber: res.data?.phoneNumber ?? payload.phoneNumber ?? current.phoneNumber
+            })
+          }
         } catch (error) {
           console.log(error)
         } finally {

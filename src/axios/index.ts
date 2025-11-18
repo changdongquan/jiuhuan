@@ -16,6 +16,7 @@ const request = (option: AxiosConfig) => {
     headers: {
       'Content-Type': CONTENT_TYPE,
       [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
+      'X-Username': userStore.getUserInfo?.username || '',
       ...headers
     }
   })

@@ -339,17 +339,48 @@ async function mockVerifyDomainUser(username, password) {
   throw new Error('域用户验证失败: 用户名或密码错误（开发模式）')
 }
 
+const fs = require('fs')
+const path = require('path')
+
+const LOCAL_USERS_FILE = path.join(__dirname, '..', 'local-users.json')
+
+function readLocalUsers() {
+  try {
+    const content = fs.readFileSync(LOCAL_USERS_FILE, 'utf-8')
+    return JSON.parse(content || '{}')
+  } catch (e) {
+    if (isDev) {
+      console.warn('[LocalUser] 读取 local-users.json 失败，将使用空对象:', e.message)
+    }
+    return {}
+  }
+}
+
 /**
- * 验证普通账号（从数据库查询）
+ * 验证普通账号（从本地文件或数据库查询）
  */
 async function verifyLocalUser(username, password) {
   try {
-    // 这里假设有一个用户表，如果没有可以先从员工表查询
-    // 先检查是否有专门的用户表
+    const users = readLocalUsers()
+    const key = Object.keys(users).find((k) => k.toLowerCase() === username.toLowerCase())
+
+    if (key) {
+      const user = users[key]
+      if (String(user.password || '') === String(password)) {
+        return {
+          username: key,
+          role: user.role || 'user',
+          roleId: user.roleId || '3',
+          isValid: true
+        }
+      }
+      throw new Error('用户名或密码错误')
+    }
+
+    // 兼容旧逻辑：如果没有本地文件配置，尝试数据库中的 users 表（如果存在）
     let result = null
 
     try {
-      // 尝试查询用户表（如果存在）
       result = await query(
         `
         SELECT username, password, role, roleId 
@@ -359,15 +390,6 @@ async function verifyLocalUser(username, password) {
         { username, password }
       )
     } catch (e) {
-      // 如果没有用户表，检查是否是 admin（硬编码验证）
-      if (username === 'admin' && password === 'admin') {
-        return {
-          username: 'admin',
-          role: 'admin',
-          roleId: '1',
-          isValid: true
-        }
-      }
       throw new Error('用户名或密码错误')
     }
 

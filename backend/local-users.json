@@ -1,0 +1,10 @@
+{
+  "admin": {
+    "password": "admin",
+    "displayName": "系统管理员",
+    "email": "",
+    "phoneNumber": "",
+    "role": "admin",
+    "roleId": "1"
+  }
+}

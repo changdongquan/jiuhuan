@@ -62,3 +62,29 @@ export const autoLoginApi = (): Promise<
     }
   })
 }
+
+// 本地用户资料与密码接口
+export const getProfileApi = () => {
+  return request.get({
+    url: '/api/user/profile'
+  })
+}
+
+export const updateProfileApi = (data: {
+  realName?: string
+  displayName?: string
+  email?: string
+  phoneNumber?: string
+}) => {
+  return request.put({
+    url: '/api/user/profile',
+    data
+  })
+}
+
+export const changePasswordApi = (data: { oldPassword: string; newPassword: string }) => {
+  return request.post({
+    url: '/api/user/change-password',
+    data
+  })
+}

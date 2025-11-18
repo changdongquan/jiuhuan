@@ -4,6 +4,8 @@ import { useForm } from '@/hooks/web/useForm'
 import { reactive, ref } from 'vue'
 import { useValidator } from '@/hooks/web/useValidator'
 import { ElMessage, ElMessageBox, ElDivider } from 'element-plus'
+import { changePasswordApi } from '@/api/login'
+import { useUserStore } from '@/store/modules/user'
 
 const props = defineProps({
   disabled: {
@@ -82,6 +84,8 @@ const rules = reactive({
 const { formRegister, formMethods } = useForm()
 const { getFormData, getElFormExpose } = formMethods
 
+const userStore = useUserStore()
+
 const saveLoading = ref(false)
 const save = async () => {
   if (props.disabled) {
@@ -101,8 +105,15 @@ const save = async () => {
       .then(async () => {
         try {
           saveLoading.value = true
-          // 这里可以调用修改密码的接口
-          ElMessage.success('修改成功')
+          const formData = await getFormData()
+          const res = (await changePasswordApi({
+            oldPassword: formData.password,
+            newPassword: formData.newPassword
+          })) as any
+          if (res?.success) {
+            ElMessage.success(res.message || '修改成功，请使用新密码重新登录')
+            userStore.logout()
+          }
         } catch (error) {
           console.log(error)
         } finally {

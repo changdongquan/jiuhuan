@@ -19,6 +19,7 @@ const productionTaskRoutes = require('./routes/production-task')
 const authRoutes = require('./routes/auth')
 const analysisRoutes = require('./routes/analysis')
 const permissionRoutes = require('./routes/permission')
+const userRoutes = require('./routes/user')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -81,6 +82,7 @@ app.use('/api/production-task', productionTaskRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/analysis', analysisRoutes)
 app.use('/api/permission', permissionRoutes)
+app.use('/api/user', userRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
