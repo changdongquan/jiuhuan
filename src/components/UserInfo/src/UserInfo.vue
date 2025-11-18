@@ -51,8 +51,10 @@ onMounted(async () => {
   const rawUsername = String(info.username || '')
   const shortUsername = rawUsername.split('\\').pop()?.split('@')[0] || rawUsername
 
+  const normalizedShort = shortUsername.toLowerCase()
+
   // 如果 realName 已经不是“纯用户名”（例如已经是中文显示名），就不再请求
-  if (info.realName && info.realName !== shortUsername) return
+  if (info.realName && String(info.realName).toLowerCase() !== normalizedShort) return
 
   try {
     const res = await getAdUsersApi({
@@ -62,8 +64,14 @@ onMounted(async () => {
     })
     const data = (res.data as any) || {}
     const list = data.list || []
-    const matched = list.find((u: any) => u.username === shortUsername)
-    if (matched && matched.displayName && matched.displayName !== shortUsername) {
+    const matched = list.find(
+      (u: any) => String(u.username || '').toLowerCase() === normalizedShort
+    )
+    if (
+      matched &&
+      matched.displayName &&
+      String(matched.displayName).toLowerCase() !== normalizedShort
+    ) {
       userStore.setUserInfo({
         ...info,
         realName: matched.displayName

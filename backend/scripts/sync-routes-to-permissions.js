@@ -84,10 +84,10 @@ const routesToSync = [
 
   // 项目信息
   {
-    route_name: 'ProjectInfo',
-    route_path: '/project-info',
+    route_name: 'ProjectInfoIndex',
+    route_path: '/project-info/index',
     page_title: '项目信息',
-    parent_route: null
+    parent_route: 'ProjectInfo'
   },
 
   // 采购外协
@@ -107,33 +107,33 @@ const routesToSync = [
   // 综合查询
   {
     route_name: 'ComprehensiveQuery',
-    route_path: '/comprehensive-query',
+    route_path: '/financial-management/comprehensive-query',
     page_title: '综合查询',
-    parent_route: null
+    parent_route: 'FinancialManagement'
   },
 
   // 客户信息
   {
-    route_name: 'CustomerInfo',
-    route_path: '/customer-info',
+    route_name: 'CustomerInfoIndex',
+    route_path: '/customer-info/index',
     page_title: '客户信息',
-    parent_route: null
+    parent_route: 'CustomerInfo'
   },
 
   // 供方信息
   {
-    route_name: 'SupplierInfo',
-    route_path: '/supplier-info',
+    route_name: 'SupplierInfoIndex',
+    route_path: '/supplier-info/index',
     page_title: '供方信息',
-    parent_route: null
+    parent_route: 'SupplierInfo'
   },
 
   // 员工信息
   {
-    route_name: 'EmployeeInfo',
-    route_path: '/employee-info',
+    route_name: 'EmployeeInfoIndex',
+    route_path: '/employee-info/index',
     page_title: '员工信息',
-    parent_route: null
+    parent_route: 'EmployeeInfo'
   },
 
   // 仪表盘
