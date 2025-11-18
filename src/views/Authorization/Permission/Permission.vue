@@ -262,11 +262,19 @@ const saveUserPermissions = async () => {
 
   const map = permissionMapByRouteName.value
   const toAddIds = toAddRouteNames
-    .map((name) => map.get(name)?.id)
-    .filter((id): id is number => typeof id === 'number')
+    .map((name) => {
+      const raw = map.get(name)?.id as any
+      const num = raw != null ? Number(raw) : NaN
+      return Number.isFinite(num) ? num : NaN
+    })
+    .filter((id) => Number.isFinite(id))
   const toRemoveIds = toRemoveRouteNames
-    .map((name) => map.get(name)?.id)
-    .filter((id): id is number => typeof id === 'number')
+    .map((name) => {
+      const raw = map.get(name)?.id as any
+      const num = raw != null ? Number(raw) : NaN
+      return Number.isFinite(num) ? num : NaN
+    })
+    .filter((id) => Number.isFinite(id))
 
   savingUserPermissions.value = true
   const loading = ElLoading.service({ target: '.user-permission-panel' })
@@ -470,11 +478,19 @@ const saveGroupPermissions = async () => {
 
   const map = permissionMapByRouteName.value
   const toAddIds = toAddRouteNames
-    .map((name) => map.get(name)?.id)
-    .filter((id): id is number => typeof id === 'number')
+    .map((name) => {
+      const raw = map.get(name)?.id as any
+      const num = raw != null ? Number(raw) : NaN
+      return Number.isFinite(num) ? num : NaN
+    })
+    .filter((id) => Number.isFinite(id))
   const toRemoveIds = toRemoveRouteNames
-    .map((name) => map.get(name)?.id)
-    .filter((id): id is number => typeof id === 'number')
+    .map((name) => {
+      const raw = map.get(name)?.id as any
+      const num = raw != null ? Number(raw) : NaN
+      return Number.isFinite(num) ? num : NaN
+    })
+    .filter((id) => Number.isFinite(id))
 
   savingGroupPermissions.value = true
   const loading = ElLoading.service({ target: '.group-permission-panel' })
