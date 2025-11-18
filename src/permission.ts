@@ -160,8 +160,15 @@ router.beforeEach(async (to, from, next) => {
         // 静态路由模式：admin 使用完整路由；普通用户按权限过滤菜单
         if (isAdmin) {
           await permissionStore.generateRoutes('static')
-        } else {
+        } else if (userPermissions.length > 0) {
           await permissionStore.generateRoutes('frontEnd', userPermissions as string[])
+        } else if (isDev) {
+          // 开发环境下权限列表为空时，为方便调试使用静态路由
+          console.warn('[权限][DEV] 用户权限列表为空，使用静态路由生成菜单')
+          await permissionStore.generateRoutes('static')
+        } else {
+          // 生产环境且无任何权限，仅保留基础路由（不额外添加业务菜单）
+          await permissionStore.generateRoutes('frontEnd', [])
         }
       }
 
@@ -205,19 +212,19 @@ router.beforeEach(async (to, from, next) => {
             userStore.setAutoTried(false)
 
             // 加载路由（复用登录成功后的逻辑）
-            // 自动登录时，如果没有 roleRouters，使用静态路由
-            const roleRouters = userStore.getRoleRouters || []
+            const autoUserInfo = userStore.getUserInfo as any
+            const autoPermissions = (autoUserInfo?.permissions || []) as string[]
+            const autoIsAdmin = autoUserInfo?.username === 'admin'
 
-            if (appStore.getDynamicRouter && roleRouters.length > 0) {
-              appStore.serverDynamicRouter
-                ? await permissionStore.generateRoutes(
-                    'server',
-                    roleRouters as AppCustomRouteRecordRaw[]
-                  )
-                : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
-            } else {
-              // 使用静态路由（自动登录或动态路由为空时）
+            if (autoIsAdmin) {
               await permissionStore.generateRoutes('static')
+            } else if (autoPermissions.length > 0) {
+              await permissionStore.generateRoutes('frontEnd', autoPermissions as string[])
+            } else if (isDev) {
+              console.warn('[权限][DEV] 自动登录用户权限列表为空，使用静态路由生成菜单')
+              await permissionStore.generateRoutes('static')
+            } else {
+              await permissionStore.generateRoutes('frontEnd', [])
             }
 
             permissionStore.getAddRouters.forEach((route) => {

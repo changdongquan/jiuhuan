@@ -4,8 +4,7 @@ import { Form, FormSchema } from '@/components/Form'
 import { useI18n } from '@/hooks/web/useI18n'
 import { ElCheckbox, ElLink } from 'element-plus'
 import { useForm } from '@/hooks/web/useForm'
-import { loginApi, getTestRoleApi, getAdminRoleApi } from '@/api/login'
-import { useAppStore } from '@/store/modules/app'
+import { loginApi } from '@/api/login'
 import { usePermissionStore } from '@/store/modules/permission'
 import { useRouter } from 'vue-router'
 import type { RouteLocationNormalizedLoaded, RouteRecordRaw } from 'vue-router'
@@ -18,8 +17,6 @@ import { BaseButton } from '@/components/Button'
 const { required } = useValidator()
 
 const emit = defineEmits(['to-register'])
-
-const appStore = useAppStore()
 
 const userStore = useUserStore()
 
@@ -267,27 +264,38 @@ const signIn = async () => {
           if (res.token) {
             userStore.setToken(res.token)
           }
-          // 是否使用动态路由
-          if (appStore.getDynamicRouter) {
-            try {
-              await getRole()
-            } catch (error) {
-              // 如果获取角色路由失败，回退到静态路由
-              console.warn('获取角色路由失败，使用静态路由:', error)
+
+          // 根据后端返回的权限列表生成可访问路由和菜单
+          const permissions = ((res.data as any)?.permissions || []) as string[]
+          const username = (data?.username || '') as string
+          const isAdmin = username === 'admin'
+          const isDev = import.meta.env.DEV
+
+          try {
+            if (isAdmin) {
+              // admin 账户始终拥有全部菜单
               await permissionStore.generateRoutes('static').catch(() => {})
-              permissionStore.getAddRouters.forEach((route) => {
-                addRoute(route as RouteRecordRaw)
-              })
-              permissionStore.setIsAddRouters(true)
-              push({ path: redirect.value || permissionStore.addRouters[0].path })
+            } else if (permissions.length > 0) {
+              // 普通用户：按权限路由名称精确过滤菜单
+              await permissionStore
+                .generateRoutes('frontEnd', permissions as string[])
+                .catch(() => {})
+            } else if (isDev) {
+              // 开发模式下权限列表为空时，为方便调试继续展示全部菜单
+              console.warn('[权限][DEV] 登录用户权限列表为空，使用静态路由生成菜单')
+              await permissionStore.generateRoutes('static').catch(() => {})
+            } else {
+              // 生产环境且无任何权限，仅保留基础路由（不额外添加业务菜单）
+              await permissionStore.generateRoutes('frontEnd', []).catch(() => {})
             }
-          } else {
-            await permissionStore.generateRoutes('static').catch(() => {})
+
             permissionStore.getAddRouters.forEach((route) => {
               addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
             })
             permissionStore.setIsAddRouters(true)
             push({ path: redirect.value || permissionStore.addRouters[0].path })
+          } catch (error) {
+            console.error('[权限] 生成用户路由失败:', error)
           }
         }
       } finally {
@@ -295,46 +303,6 @@ const signIn = async () => {
       }
     }
   })
-}
-
-// 获取角色信息
-const getRole = async () => {
-  // 使用用户信息中的 role，如果没有则使用 username
-  const userInfo = userStore.getUserInfo
-  const role = userInfo?.role || (await getFormData<UserType>()).username
-
-  const params = { role: role }
-  const res =
-    appStore.getDynamicRouter && appStore.getServerDynamicRouter
-      ? await getAdminRoleApi(params)
-      : await getTestRoleApi(params)
-
-  if (!res) {
-    throw new Error('获取角色路由失败')
-  }
-
-  const routers = res.data || []
-  userStore.setRoleRouters(routers)
-
-  // 如果路由为空，使用静态路由
-  if (routers.length === 0) {
-    console.warn('角色路由为空，使用静态路由')
-    await permissionStore.generateRoutes('static').catch(() => {})
-  } else {
-    if (appStore.getDynamicRouter && appStore.getServerDynamicRouter) {
-      await permissionStore.generateRoutes('server', routers).catch(() => {})
-    } else if (appStore.getDynamicRouter) {
-      await permissionStore.generateRoutes('frontEnd', routers).catch(() => {})
-    } else {
-      await permissionStore.generateRoutes('static').catch(() => {})
-    }
-  }
-
-  permissionStore.getAddRouters.forEach((route) => {
-    addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
-  })
-  permissionStore.setIsAddRouters(true)
-  push({ path: redirect.value || permissionStore.addRouters[0].path })
 }
 
 // 去注册页面
