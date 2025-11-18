@@ -9,6 +9,10 @@ const props = defineProps({
   userInfo: {
     type: Object,
     default: () => ({})
+  },
+  disabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -63,6 +67,10 @@ watch(
 
 const saveLoading = ref(false)
 const save = async () => {
+  if (props.disabled) {
+    ElMessage.warning('域用户基本信息由域管理员维护，不能在此修改')
+    return
+  }
   const elForm = await getElFormExpose()
   const valid = await elForm?.validate().catch((err) => {
     console.log(err)
@@ -90,7 +98,7 @@ const save = async () => {
 </script>
 
 <template>
-  <Form :rules="rules" @register="formRegister" :schema="formSchema" />
+  <Form :rules="rules" :disabled="disabled" @register="formRegister" :schema="formSchema" />
   <ElDivider />
-  <BaseButton type="primary" @click="save">保存</BaseButton>
+  <BaseButton type="primary" :disabled="disabled" @click="save">保存</BaseButton>
 </template>

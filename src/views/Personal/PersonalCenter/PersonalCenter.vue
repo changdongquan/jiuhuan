@@ -1,28 +1,27 @@
 <script setup lang="ts">
 import { ContentWrap } from '@/components/ContentWrap'
-import { ref, unref } from 'vue'
+import { computed, ref, unref } from 'vue'
 import { ElDivider, ElImage, ElTag, ElTabPane, ElTabs, ElButton, ElMessage } from 'element-plus'
 import defaultAvatar from '@/assets/imgs/avatar.jpg'
 import UploadAvatar from './components/UploadAvatar.vue'
 import { Dialog } from '@/components/Dialog'
 import EditInfo from './components/EditInfo.vue'
 import EditPassword from './components/EditPassword.vue'
+import { useUserStore } from '@/store/modules/user'
 
-const userInfo = ref()
-const fetchDetailUserApi = async () => {
-  // 这里可以调用接口获取用户信息
-  const data = {
-    id: 1,
-    username: 'admin',
-    realName: 'admin',
-    phoneNumber: '18888888888',
-    email: '502431556@qq.com',
-    avatarUrl: '',
-    roleList: ['超级管理员']
-  }
-  userInfo.value = data
-}
-fetchDetailUserApi()
+const userStore = useUserStore()
+
+// 当前登录用户信息（从 Pinia 中获取）
+const userInfo = computed(() => userStore.getUserInfo as any)
+
+// 是否为域用户（有 domain，或者账号包含 \ 或 @）
+const isDomainUser = computed(() => {
+  const info = userInfo.value as any
+  if (!info) return false
+  if (info.domain) return true
+  const username = String(info.username || '')
+  return username.includes('\\') || username.includes('@')
+})
 
 const activeName = ref('first')
 
@@ -36,7 +35,6 @@ const saveAvatar = async () => {
     const base64 = unref(uploadAvatarRef)?.getBase64()
     console.log(base64)
     // 这里可以调用修改头像接口
-    fetchDetailUserApi()
     ElMessage.success('修改成功')
     dialogVisible.value = false
   } catch (error) {
@@ -67,6 +65,11 @@ const saveAvatar = async () => {
         <div>账号：</div>
         <div>{{ userInfo?.username }}</div>
       </div>
+      <ElDivider v-if="isDomainUser" />
+      <div v-if="isDomainUser" class="flex justify-between items-center">
+        <div>域：</div>
+        <div>{{ userInfo?.domain || '-' }}</div>
+      </div>
       <ElDivider />
       <div class="flex justify-between items-center">
         <div>昵称：</div>
@@ -80,7 +83,7 @@ const saveAvatar = async () => {
       <ElDivider />
       <div class="flex justify-between items-center">
         <div>用户邮箱：</div>
-        <div>{{ userInfo?.email ?? '-' }}</div>
+        <div>{{ userInfo?.email ?? userInfo?.mail ?? '-' }}</div>
       </div>
       <ElDivider />
       <div class="flex justify-between items-center">
@@ -91,18 +94,31 @@ const saveAvatar = async () => {
               >{{ item }}
             </ElTag>
           </template>
+          <template v-else-if="userInfo?.roles?.length">
+            <ElTag v-for="item in userInfo?.roles || []" :key="item" class="ml-2 mb-w">
+              {{ item }}
+            </ElTag>
+          </template>
+          <template v-else-if="userInfo?.role">
+            <ElTag class="ml-2 mb-w">
+              {{ userInfo?.role }}
+            </ElTag>
+          </template>
           <template v-else>-</template>
         </div>
       </div>
       <ElDivider />
     </ContentWrap>
     <ContentWrap title="基本资料" class="flex-[3] ml-20px">
+      <div v-if="isDomainUser" class="mb-10px text-[13px] text-[var(--el-text-color-secondary)]">
+        当前为域用户登录，基本资料和密码需由域管理员维护，本页面信息仅供查看。
+      </div>
       <ElTabs v-model="activeName">
         <ElTabPane label="基本信息" name="first">
-          <EditInfo :user-info="userInfo" />
+          <EditInfo :user-info="userInfo" :disabled="isDomainUser" />
         </ElTabPane>
         <ElTabPane label="修改密码" name="second">
-          <EditPassword />
+          <EditPassword :disabled="isDomainUser" />
         </ElTabPane>
       </ElTabs>
     </ContentWrap>

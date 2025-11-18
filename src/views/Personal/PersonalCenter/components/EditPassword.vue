@@ -5,6 +5,13 @@ import { reactive, ref } from 'vue'
 import { useValidator } from '@/hooks/web/useValidator'
 import { ElMessage, ElMessageBox, ElDivider } from 'element-plus'
 
+const props = defineProps({
+  disabled: {
+    type: Boolean,
+    default: false
+  }
+})
+
 const { required } = useValidator()
 
 const formSchema = reactive<FormSchema[]>([
@@ -77,6 +84,10 @@ const { getFormData, getElFormExpose } = formMethods
 
 const saveLoading = ref(false)
 const save = async () => {
+  if (props.disabled) {
+    ElMessage.warning('域用户密码需在域账号系统中修改，不能在此修改')
+    return
+  }
   const elForm = await getElFormExpose()
   const valid = await elForm?.validate().catch((err) => {
     console.log(err)
@@ -104,7 +115,7 @@ const save = async () => {
 </script>
 
 <template>
-  <Form :rules="rules" @register="formRegister" :schema="formSchema" />
+  <Form :rules="rules" :disabled="disabled" @register="formRegister" :schema="formSchema" />
   <ElDivider />
-  <BaseButton type="primary" @click="save">确认修改</BaseButton>
+  <BaseButton type="primary" :disabled="disabled" @click="save">确认修改</BaseButton>
 </template>
