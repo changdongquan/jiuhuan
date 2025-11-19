@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="px-4 pt-1 pb-4 space-y-2">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
@@ -75,18 +75,34 @@
       v-loading="loading"
       :data="tableData"
       border
-      max-height="calc(100vh - 450px)"
+      height="calc(100vh - 340px)"
       @row-dblclick="handleEdit"
+      @sort-change="handleSortChange"
     >
-      <el-table-column prop="项目编号" label="项目编号" width="130" show-overflow-tooltip />
+      <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+      <el-table-column
+        prop="项目编号"
+        label="项目编号"
+        width="130"
+        show-overflow-tooltip
+        sortable="custom"
+      />
       <el-table-column prop="productName" label="产品名称" width="130" show-overflow-tooltip />
       <el-table-column prop="productDrawing" label="产品图号" width="130" show-overflow-tooltip />
       <el-table-column prop="客户模号" label="客户模号" width="110" show-overflow-tooltip />
       <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
       <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
-      <el-table-column prop="项目状态" label="项目状态" width="90" align="center">
+      <el-table-column
+        prop="项目状态"
+        label="项目状态"
+        width="105"
+        align="center"
+        sortable="custom"
+      >
         <template #default="{ row }">
-          <el-tag :type="getStatusTagType(row.项目状态)">{{ row.项目状态 || '-' }}</el-tag>
+          <el-tag :type="getStatusTagType(row.项目状态)" size="small" class="pm-status-tag">
+            {{ row.项目状态 || '-' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="中标日期" label="中标日期" width="110">
@@ -104,7 +120,7 @@
           {{ formatDate(row.图纸下发日期) }}
         </template>
       </el-table-column>
-      <el-table-column prop="计划首样日期" label="计划首样日期" width="150">
+      <el-table-column prop="计划首样日期" label="计划首样日期" width="150" sortable="custom">
         <template #default="{ row }">
           <span>{{ formatDate(row.计划首样日期) }}</span>
           <el-tag
@@ -122,27 +138,27 @@
           {{ formatDate(row.首次送样日期) }}
         </template>
       </el-table-column>
-      <el-table-column prop="移模日期" label="移模日期" width="110">
+      <el-table-column prop="移模日期" label="移模日期" width="110" sortable="custom">
         <template #default="{ row }">
           {{ formatDate(row.移模日期) }}
         </template>
       </el-table-column>
       <el-table-column prop="进度影响原因" label="进度影响原因" width="130" show-overflow-tooltip />
-      <el-table-column label="操作" width="120" fixed="right" align="center">
+      <el-table-column label="操作" width="160" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button type="success" link @click="handleEdit(row)">编辑</el-button>
-          <el-button type="primary" link @click="handleView(row)">查看</el-button>
+          <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
+    <div class="pagination-footer">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
         :current-page="pagination.page"
         :page-size="pagination.size"
-        :page-sizes="[10, 20, 30, 50]"
+        :page-sizes="[10, 15, 20, 30, 50]"
         :total="total"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
@@ -639,7 +655,11 @@ import type { GoodsInfo } from '@/api/goods'
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
 const total = ref(0)
-const pagination = reactive({ page: 1, size: 10 })
+const pagination = reactive({ page: 1, size: 15 })
+const sortState = reactive({
+  prop: '',
+  order: '' as '' | 'ascending' | 'descending'
+})
 const summary = reactive({
   totalProjects: 0,
   t0Projects: 0,
@@ -687,10 +707,15 @@ const loadData = async () => {
     if (queryForm.keyword) params.keyword = queryForm.keyword
     if (queryForm.status) params.status = queryForm.status
     if (queryForm.category) params.category = queryForm.category
+    if (sortState.prop && sortState.order) {
+      params.sortField = sortState.prop
+      params.sortOrder = sortState.order === 'ascending' ? 'asc' : 'desc'
+    }
 
     const response: any = await getProjectListApi(params)
     console.log('API Response:', response)
 
+    // 为保证记录完整性，这里不再做前端过滤，全部交给后端根据状态参数处理
     if (response?.data?.data) {
       tableData.value = response.data.data.list || []
       total.value = response.data.data.total || 0
@@ -704,6 +729,13 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending' | null }) => {
+  sortState.prop = sort.order ? sort.prop : ''
+  sortState.order = sort.order || ''
+  pagination.page = 1
+  loadData()
 }
 
 // 加载统计信息
@@ -1113,13 +1145,27 @@ onMounted(() => {
 
 /* 统计卡片样式 */
 .summary-card {
+  display: flex;
+  height: 64px;
   border: none;
   transition: all 0.3s ease;
+  align-items: stretch;
 }
 
 .summary-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+}
+
+/* 分页固定在页面底部居中，靠近版权信息区域 */
+.pagination-footer {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 /* 第一个卡片 - 蓝色 */
@@ -1175,14 +1221,37 @@ onMounted(() => {
 }
 
 .summary-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .summary-value {
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 2px;
+  font-size: 20px;
   font-weight: 600;
+}
+
+/* 表格所有单元格内容不换行，超出宽度省略显示 */
+:deep(.el-table .cell),
+:deep(.el-table .cell span),
+:deep(.el-table .cell div) {
+  white-space: nowrap !important;
+}
+
+/* 压缩数据行行高，仅作用于数据行 */
+:deep(.el-table__body-wrapper .el-table__cell) {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* 分页固定在页面底部右侧，靠近版权信息区域 */
+.pagination-footer {
+  position: fixed;
+  right: 40px;
+  bottom: 40px;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* 查询表单垂直居中对齐 */

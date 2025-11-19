@@ -36,7 +36,7 @@ router.get('/statistics', async (req, res) => {
 // 获取项目信息列表
 router.get('/list', async (req, res) => {
   try {
-    const { keyword, status, category, page = 1, pageSize = 10 } = req.query
+    const { keyword, status, category, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
     let whereConditions = []
     let params = {}
@@ -60,8 +60,13 @@ router.get('/list', async (req, res) => {
     }
 
     if (status) {
+      // 显式选择了项目状态时，按所选状态精确筛选
       whereConditions.push(`p.项目状态 = @status`)
       params.status = status
+    } else {
+      // 默认情况下（未选择项目状态），不显示「已经移模」的记录
+      // 但仍然保留其他所有状态和空状态
+      whereConditions.push(`ISNULL(p.项目状态, '') <> '已经移模'`)
     }
 
     // 分类条件：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
@@ -90,7 +95,35 @@ router.get('/list', async (req, res) => {
     const finalWhereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : ''
 
     // 计算分页
-    const offset = (page - 1) * pageSize
+    const pageNum = parseInt(page)
+    const pageSizeNum = parseInt(pageSize)
+    const offset = (pageNum - 1) * pageSizeNum
+
+    // 排序字段白名单映射
+    const sortableFields = {
+      项目编号: 'p.项目编号',
+      项目状态: 'p.项目状态',
+      计划首样日期: 'p.计划首样日期',
+      移模日期: 'p.移模日期'
+    }
+
+    let orderByClause = ''
+    const mappedField = sortField && sortableFields[sortField]
+    const sortDir = (sortOrder || '').toString().toLowerCase()
+    if (mappedField && (sortDir === 'asc' || sortDir === 'desc')) {
+      orderByClause = `ORDER BY ${mappedField} ${sortDir.toUpperCase()}`
+    }
+
+    const defaultOrderBy = `
+      ORDER BY 
+        CASE 
+          WHEN p.计划首样日期 IS NULL THEN 2 
+          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
+          ELSE 0 
+        END ASC,
+        p.计划首样日期 ASC,
+        p.项目编号 DESC
+    `
 
     // 查询总数（需要排除 IsNew = 1 的项目）
     const countQuery = `
@@ -119,16 +152,9 @@ router.get('/list', async (req, res) => {
          ORDER BY g1.货物ID) as productDrawing
       FROM 项目管理 p
       ${finalWhereClause}
-      ORDER BY 
-        CASE 
-          WHEN p.计划首样日期 IS NULL THEN 2 
-          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
-          ELSE 0 
-        END ASC,
-        p.计划首样日期 ASC,
-        p.项目编号 DESC
+      ${orderByClause || defaultOrderBy}
       OFFSET ${offset} ROWS
-      FETCH NEXT ${pageSize} ROWS ONLY
+      FETCH NEXT ${pageSizeNum} ROWS ONLY
     `
 
     const data = await query(dataQuery, params)
@@ -147,8 +173,8 @@ router.get('/list', async (req, res) => {
       data: {
         list: mapped,
         total: total,
-        page: parseInt(page),
-        pageSize: parseInt(pageSize)
+        page: pageNum,
+        pageSize: pageSizeNum
       }
     })
   } catch (error) {

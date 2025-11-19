@@ -1,7 +1,6 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="px-4 pt-1 pb-4 space-y-2">
     <el-form
-      ref="queryFormRef"
       :model="queryForm"
       label-width="90px"
       inline
@@ -58,7 +57,7 @@
       </el-form-item>
     </el-form>
 
-    <el-row :gutter="16" style="margin-bottom: 16px">
+    <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="summary-card summary-card--year">
           <div class="summary-title">当年订单累计金额</div>
@@ -90,7 +89,7 @@
       v-loading="loading"
       :data="tableData"
       border
-      max-height="calc(100vh - 450px)"
+      height="calc(100vh - 340px)"
       row-key="orderNo"
       @row-dblclick="handleRowDblClick"
       :row-class-name="rowClassName"
@@ -155,54 +154,58 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="orderNo" label="订单编号" min-width="90" />
-      <el-table-column prop="customerName" label="客户名称" min-width="200">
+      <el-table-column prop="orderNo" label="订单编号" min-width="90" show-overflow-tooltip />
+      <el-table-column prop="customerName" label="客户名称" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
-          {{ row.customerName || '-' }}
+          <span class="so-cell-nowrap">
+            {{ row.customerName || '-' }}
+          </span>
         </template>
       </el-table-column>
-      <el-table-column prop="orderDate" label="订单日期" width="154">
+      <el-table-column prop="orderDate" label="订单日期" width="154" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatDate(row.orderDate) }}
         </template>
       </el-table-column>
-      <el-table-column prop="signDate" label="签订日期" width="154">
+      <el-table-column prop="signDate" label="签订日期" width="154" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatDate(row.signDate) }}
         </template>
       </el-table-column>
-      <el-table-column prop="contractNo" label="合同号" min-width="140" />
-      <el-table-column label="明细数量" width="100" align="center">
+      <el-table-column prop="contractNo" label="合同号" min-width="140" show-overflow-tooltip />
+      <el-table-column label="明细数量" width="100" align="center" show-overflow-tooltip>
         <template #default="{ row }">
           {{ row.details.length }}
         </template>
       </el-table-column>
-      <el-table-column label="总数量" width="100" align="center">
+      <el-table-column label="总数量" width="100" align="center" show-overflow-tooltip>
         <template #default="{ row }">
           {{ row.totalQuantity || 0 }}
         </template>
       </el-table-column>
-      <el-table-column label="总金额(元)" width="140" align="right">
+      <el-table-column label="总金额(元)" width="140" align="right" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatAmount(row.totalAmount) }}
         </template>
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          <el-button type="primary" link @click="handleView(row)">查看</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          <div class="so-operation-buttons">
+            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
 
-    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
+    <div class="pagination-footer">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
         :current-page="pagination.page"
         :page-size="pagination.size"
-        :page-sizes="[10, 20, 30, 50]"
+        :page-sizes="[10, 15, 20, 30, 50]"
         :total="total"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
@@ -662,7 +665,6 @@ const formatDate = (date: string | Date | null | undefined): string => {
   return `${year}-${month}-${day}`
 }
 
-const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<OrderQuery>({
   searchText: '',
   customerName: '',
@@ -672,7 +674,7 @@ const queryForm = reactive<OrderQuery>({
 
 const pagination = reactive({
   page: 1,
-  size: 10
+  size: 15
 })
 
 const tableRef = ref<InstanceType<typeof ElTable>>()
@@ -1617,8 +1619,34 @@ onMounted(async () => {
 }
 
 .summary-card {
+  display: flex;
+  height: 64px;
   border: none;
   transition: all 0.3s ease;
+  align-items: stretch;
+}
+
+/* 分页固定在页面底部居中，靠近版权信息区域 */
+.pagination-footer {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+
+/* 压缩统计卡片高度，并垂直居中内容 */
+:deep(.summary-card .el-card__body) {
+  display: flex;
+  height: 100%;
+  padding: 4px 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .summary-card:hover {
@@ -1679,13 +1707,44 @@ onMounted(async () => {
 }
 
 .summary-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 18px;
 }
 
 .summary-value {
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 2px;
+  font-size: 20px;
   font-weight: 600;
+  line-height: 24px;
+}
+
+/* 表格所有单元格内容不换行，超出宽度省略显示 */
+:deep(.el-table .cell),
+:deep(.el-table .cell span),
+:deep(.el-table .cell div) {
+  white-space: nowrap !important;
+}
+
+/* 销售订单表格中，显式控制不换行省略显示的单元格 */
+:deep(.so-cell-nowrap) {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+}
+
+/* 仅压缩数据行的行高（通过减少 body 单元格上下内边距），不影响表头 */
+:deep(.el-table__body-wrapper .el-table__cell) {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* 销售订单操作按钮布局，与项目信息页面风格统一（有背景色的小按钮） */
+.so-operation-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

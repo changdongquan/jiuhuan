@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="px-4 pt-1 pb-4 space-y-2">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
@@ -71,10 +71,11 @@
       v-loading="loading"
       :data="tableData"
       border
-      max-height="calc(100vh - 450px)"
+      height="calc(100vh - 340px)"
       row-key="项目编号"
       @row-dblclick="handleRowDblClick"
     >
+      <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
       <!-- 生产任务表的所有19个字段 -->
       <el-table-column
         prop="项目编号"
@@ -108,7 +109,9 @@
       <el-table-column prop="负责人" label="负责人" width="80" />
       <el-table-column prop="生产状态" label="生产状态" width="85" align="center">
         <template #default="{ row }">
-          <el-tag :type="getStatusTagType(row.生产状态)">{{ row.生产状态 || '-' }}</el-tag>
+          <el-tag :type="getStatusTagType(row.生产状态)" size="small" class="pt-status-tag">
+            {{ row.生产状态 || '-' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="开始日期" label="开始日期" width="110">
@@ -132,21 +135,21 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="160" fixed="right" align="center">
+      <el-table-column label="操作" width="200" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          <el-button type="info" link @click="handleView(row)">查看</el-button>
+          <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div style="display: flex; margin-top: 16px; justify-content: flex-end">
+    <div class="pagination-footer">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
         :current-page="pagination.page"
         :page-size="pagination.size"
-        :page-sizes="[10, 20, 30, 50]"
+        :page-sizes="[10, 15, 20, 30, 50]"
         :total="total"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
@@ -397,7 +400,7 @@ import {
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
 const total = ref(0)
-const pagination = reactive({ page: 1, size: 10 })
+const pagination = reactive({ page: 1, size: 15 })
 const statistics = reactive({
   total: 0,
   inProgress: 0,
@@ -801,8 +804,11 @@ onMounted(() => {
 
 /* 统计卡片样式 */
 .summary-card {
+  display: flex;
+  height: 64px;
   border: none;
   transition: all 0.3s ease;
+  align-items: stretch;
 }
 
 .summary-card:hover {
@@ -863,13 +869,71 @@ onMounted(() => {
 }
 
 .summary-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .summary-value {
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 2px;
+  font-size: 20px;
   font-weight: 600;
+}
+
+/* 表格所有单元格内容不换行，超出宽度省略显示 */
+:deep(.el-table .cell),
+:deep(.el-table .cell span),
+:deep(.el-table .cell div) {
+  white-space: nowrap !important;
+}
+
+/* 压缩数据行行高，仅作用于数据行 */
+:deep(.el-table__body-wrapper .el-table__cell) {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* 生产状态标签行高压缩，避免撑高整行 */
+:deep(.pt-status-tag.el-tag) {
+  height: 22px;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 18px;
+}
+
+/* 分页固定在页面底部居中，靠近版权信息区域 */
+.pagination-footer {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+
+/* 统计卡片内容垂直居中 */
+:deep(.summary-card .el-card__body) {
+  display: flex;
+  height: 100%;
+  padding: 4px 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 统计卡片内容垂直居中 */
+:deep(.summary-card .el-card__body) {
+  display: flex;
+  height: 100%;
+  padding: 4px 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
 }
 </style>
