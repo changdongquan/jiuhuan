@@ -59,10 +59,10 @@ router.get('/list', async (req, res) => {
       params.keyword = `%${keyword}%`
     }
 
-    if (status) {
+    if (status && status.trim() !== '') {
       // 显式选择了项目状态时，按所选状态精确筛选
       whereConditions.push(`p.项目状态 = @status`)
-      params.status = status
+      params.status = status.trim()
     } else {
       // 默认情况下（未选择项目状态），不显示「已经移模」的记录
       // 但仍然保留其他所有状态和空状态
