@@ -78,6 +78,7 @@
       height="calc(100vh - 340px)"
       @row-dblclick="handleEdit"
       @sort-change="handleSortChange"
+      class="pm-table"
     >
       <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
       <el-table-column
@@ -655,7 +656,7 @@ import type { GoodsInfo } from '@/api/goods'
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
 const total = ref(0)
-const pagination = reactive({ page: 1, size: 15 })
+const pagination = reactive({ page: 1, size: 20 })
 const sortState = reactive({
   prop: '',
   order: '' as '' | 'ascending' | 'descending'
@@ -1255,4 +1256,14 @@ onMounted(() => {
 }
 
 /* 查询表单垂直居中对齐 */
+
+/* 额外覆盖：进一步压缩项目管理主表数据行高度，使在固定表高下正好显示 20 行 */
+:deep(.pm-table .el-table__body-wrapper tbody tr) {
+  height: 20px !important;
+}
+
+:deep(.pm-table .el-table__body-wrapper .el-table__cell) {
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
 </style>

@@ -74,6 +74,7 @@
       height="calc(100vh - 340px)"
       row-key="项目编号"
       @row-dblclick="handleRowDblClick"
+      class="pt-table"
     >
       <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
       <!-- 生产任务表的所有19个字段 -->
@@ -400,7 +401,7 @@ import {
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
 const total = ref(0)
-const pagination = reactive({ page: 1, size: 15 })
+const pagination = reactive({ page: 1, size: 20 })
 const statistics = reactive({
   total: 0,
   inProgress: 0,
@@ -935,5 +936,15 @@ onMounted(() => {
   flex: 1;
   flex-direction: column;
   justify-content: center;
+}
+
+/* 额外覆盖：进一步压缩生产任务主表数据行高度，使在固定表高下正好显示 20 行 */
+:deep(.pt-table .el-table__body-wrapper tbody tr) {
+  height: 20px !important;
+}
+
+:deep(.pt-table .el-table__body-wrapper .el-table__cell) {
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
 }
 </style>

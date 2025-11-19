@@ -93,6 +93,7 @@
       row-key="orderNo"
       @row-dblclick="handleRowDblClick"
       :row-class-name="rowClassName"
+      class="so-table"
       @expand-change="onExpandChange"
     >
       <el-table-column type="expand">
@@ -154,8 +155,9 @@
           </div>
         </template>
       </el-table-column>
+      <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
       <el-table-column prop="orderNo" label="订单编号" min-width="90" show-overflow-tooltip />
-      <el-table-column prop="customerName" label="客户名称" min-width="200" show-overflow-tooltip>
+      <el-table-column prop="customerName" label="客户名称" min-width="195" show-overflow-tooltip>
         <template #default="{ row }">
           <span class="so-cell-nowrap">
             {{ row.customerName || '-' }}
@@ -172,7 +174,7 @@
           {{ formatDate(row.signDate) }}
         </template>
       </el-table-column>
-      <el-table-column prop="contractNo" label="合同号" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="contractNo" label="合同号" min-width="90" show-overflow-tooltip />
       <el-table-column label="明细数量" width="100" align="center" show-overflow-tooltip>
         <template #default="{ row }">
           {{ row.details.length }}
@@ -188,7 +190,7 @@
           {{ formatAmount(row.totalAmount) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="205" fixed="right">
         <template #default="{ row }">
           <div class="so-operation-buttons">
             <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -674,7 +676,7 @@ const queryForm = reactive<OrderQuery>({
 
 const pagination = reactive({
   page: 1,
-  size: 15
+  size: 20
 })
 
 const tableRef = ref<InstanceType<typeof ElTable>>()
@@ -1720,9 +1722,9 @@ onMounted(async () => {
 }
 
 /* 表格所有单元格内容不换行，超出宽度省略显示 */
-:deep(.el-table .cell),
-:deep(.el-table .cell span),
-:deep(.el-table .cell div) {
+:deep(.so-table .el-table__cell .cell),
+:deep(.so-table .el-table__cell .cell span),
+:deep(.so-table .el-table__cell .cell div) {
   white-space: nowrap !important;
 }
 
@@ -1735,16 +1737,21 @@ onMounted(async () => {
   white-space: nowrap !important;
 }
 
-/* 仅压缩数据行的行高（通过减少 body 单元格上下内边距），不影响表头 */
-:deep(.el-table__body-wrapper .el-table__cell) {
-  padding-top: 2px;
-  padding-bottom: 2px;
-}
-
 /* 销售订单操作按钮布局，与项目信息页面风格统一（有背景色的小按钮） */
 .so-operation-buttons {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 控制销售订单表数据行整体高度，使在固定表高下正好显示 20 行 */
+:deep(.so-table .el-table__body-wrapper tbody tr) {
+  height: 20px !important;
+}
+
+/* 进一步减小单元格内边距，配合行高压缩 */
+:deep(.so-table .el-table__body-wrapper .el-table__cell) {
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
 }
 </style>
