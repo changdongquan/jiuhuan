@@ -343,9 +343,23 @@ const fs = require('fs')
 const path = require('path')
 
 const LOCAL_USERS_FILE = path.join(__dirname, '..', 'local-users.json')
+const LOCAL_USERS_EXAMPLE_FILE = path.join(__dirname, '..', 'local-users.json.example')
 
 function readLocalUsers() {
   try {
+    // 如果文件不存在，尝试从示例文件复制
+    if (!fs.existsSync(LOCAL_USERS_FILE)) {
+      if (fs.existsSync(LOCAL_USERS_EXAMPLE_FILE)) {
+        try {
+          const exampleContent = fs.readFileSync(LOCAL_USERS_EXAMPLE_FILE, 'utf-8')
+          fs.writeFileSync(LOCAL_USERS_FILE, exampleContent, 'utf-8')
+          console.log('[LocalUser] 已从示例文件创建 local-users.json')
+        } catch (e) {
+          console.warn('[LocalUser] 从示例文件创建失败:', e.message)
+        }
+      }
+    }
+
     const content = fs.readFileSync(LOCAL_USERS_FILE, 'utf-8')
     return JSON.parse(content || '{}')
   } catch (e) {

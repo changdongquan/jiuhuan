@@ -17,3 +17,6 @@ backend/.env
 backend/*.bak.*
 dist-pro/
 stats.html
+
+# user data files (should not be in version control)
+backend/local-users.json
