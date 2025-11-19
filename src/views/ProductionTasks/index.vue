@@ -938,13 +938,13 @@ onMounted(() => {
   justify-content: center;
 }
 
-/* 额外覆盖：进一步压缩生产任务主表数据行高度，使在固定表高下正好显示 20 行 */
+/* 额外覆盖：调整生产任务主表数据行高度，使在固定表高下正好显示 20 行 */
 :deep(.pt-table .el-table__body-wrapper tbody tr) {
-  height: 20px !important;
+  height: 24px !important;
 }
 
 :deep(.pt-table .el-table__body-wrapper .el-table__cell) {
-  padding-top: 1px !important;
-  padding-bottom: 1px !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
 }
 </style>

@@ -1257,13 +1257,13 @@ onMounted(() => {
 
 /* 查询表单垂直居中对齐 */
 
-/* 额外覆盖：进一步压缩项目管理主表数据行高度，使在固定表高下正好显示 20 行 */
+/* 额外覆盖：调整项目管理主表数据行高度，使在固定表高下正好显示 20 行 */
 :deep(.pm-table .el-table__body-wrapper tbody tr) {
-  height: 20px !important;
+  height: 24px !important;
 }
 
 :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
-  padding-top: 1px !important;
-  padding-bottom: 1px !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
 }
 </style>
