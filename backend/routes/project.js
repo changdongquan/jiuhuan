@@ -60,13 +60,13 @@ router.get('/list', async (req, res) => {
     }
 
     if (status && status.trim() !== '') {
-      // 显式选择了项目状态时，按所选状态精确筛选
-      whereConditions.push(`p.项目状态 = @status`)
+      // 显式选择了项目状态时，按所选状态精确筛选（兼容字段中可能存在的前后空格）
+      whereConditions.push(`RTRIM(LTRIM(p.项目状态)) = @status`)
       params.status = status.trim()
     } else {
       // 默认情况下（未选择项目状态），不显示「已经移模」的记录
-      // 但仍然保留其他所有状态和空状态
-      whereConditions.push(`ISNULL(p.项目状态, '') <> '已经移模'`)
+      // 兼容数据库中「已经移模」字段值前后可能存在空格的情况
+      whereConditions.push(`RTRIM(LTRIM(ISNULL(p.项目状态, ''))) <> '已经移模'`)
     }
 
     // 分类条件：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
