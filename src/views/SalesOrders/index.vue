@@ -157,7 +157,13 @@
       </el-table-column>
       <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
       <el-table-column prop="orderNo" label="订单编号" min-width="90" show-overflow-tooltip />
-      <el-table-column prop="customerName" label="客户名称" min-width="195" show-overflow-tooltip>
+      <el-table-column
+        prop="customerName"
+        label="客户名称"
+        min-width="195"
+        sortable
+        show-overflow-tooltip
+      >
         <template #default="{ row }">
           <span class="so-cell-nowrap">
             {{ row.customerName || '-' }}
@@ -174,7 +180,13 @@
           {{ formatDate(row.signDate) }}
         </template>
       </el-table-column>
-      <el-table-column prop="contractNo" label="合同号" min-width="90" show-overflow-tooltip />
+      <el-table-column
+        prop="contractNo"
+        label="合同号"
+        min-width="90"
+        sortable
+        show-overflow-tooltip
+      />
       <el-table-column label="明细数量" width="100" align="center" show-overflow-tooltip>
         <template #default="{ row }">
           {{ row.details.length }}
@@ -1545,6 +1557,8 @@ onMounted(async () => {
 }
 
 :deep(.query-form .el-form-item) {
+  /* 默认 inline 表单 item 间距约 20px，这里缩小 10% 左右 */
+  margin-right: 18px;
   margin-bottom: 0;
 }
 
