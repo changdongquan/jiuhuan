@@ -498,12 +498,12 @@
         ref="editFormRef"
         :model="editForm"
         :rules="editRules"
-        label-width="120px"
+        :label-width="isMobile ? '100px' : '120px'"
         class="edit-form-container"
       >
-        <el-row :gutter="0" justify="center">
+        <el-row :gutter="isMobile ? 8 : 12" justify="center">
           <!-- 第1列：项目编号 产品名称 产品图号 客户模号 产品尺寸 产品重量 产品材质 产品颜色 收缩率 料柄重量 -->
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="项目编号" prop="项目编号">
               <el-input
                 v-model="editForm.项目编号"
@@ -583,7 +583,7 @@
           </el-col>
 
           <!-- 第2-4列：其他字段 -->
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="模具穴数">
               <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
             </el-form-item>
@@ -631,7 +631,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="机台吨位">
               <el-input-number
                 v-model="editForm.机台吨位"
@@ -680,7 +680,7 @@
             </el-form-item>
           </el-col>
           <!-- 第4列：日期和其他 -->
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="项目名称" prop="项目名称">
               <el-input v-model="editForm.项目名称" placeholder="项目名称" />
             </el-form-item>

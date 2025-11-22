@@ -283,69 +283,24 @@
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
-      <!-- 查看模式：表格化展示 -->
-      <div v-if="isViewMode" class="view-table-container">
-        <el-row :gutter="12">
-          <el-col
-            :span="12"
-            v-for="(section, sectionIndex) in viewTableSections"
-            :key="sectionIndex"
-            class="view-section-col"
-          >
-            <div class="view-section">
-              <div class="table-section-header">{{ section.title }}</div>
-              <!-- 工时信息特殊处理：两列显示 -->
-              <div v-if="section.title === '工时信息'" class="work-hours-container">
-                <el-row :gutter="6">
-                  <el-col :span="12">
-                    <el-table :data="section.data" border class="view-table" :show-header="false">
-                      <el-table-column width="110" align="right" class-name="label-column">
-                        <template #default="{ row }">
-                          <strong>{{ row.label }}</strong>
-                        </template>
-                      </el-table-column>
-                      <el-table-column class-name="value-column">
-                        <template #default="{ row }">
-                          <span>{{ row.value || '-' }}</span>
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </el-col>
-                  <el-col :span="12">
-                    <el-table :data="section.data2" border class="view-table" :show-header="false">
-                      <el-table-column width="110" align="right" class-name="label-column">
-                        <template #default="{ row }">
-                          <strong>{{ row.label }}</strong>
-                        </template>
-                      </el-table-column>
-                      <el-table-column class-name="value-column">
-                        <template #default="{ row }">
-                          <span>{{ row.value || '-' }}</span>
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </el-col>
-                </el-row>
-              </div>
-              <!-- 其他分组正常显示 -->
-              <el-table v-else :data="section.data" border class="view-table" :show-header="false">
-                <el-table-column width="150" align="right" class-name="label-column">
-                  <template #default="{ row }">
-                    <strong>{{ row.label }}</strong>
-                  </template>
-                </el-table-column>
-                <el-table-column class-name="value-column">
-                  <template #default="{ row }">
-                    <span v-if="row.tag">
-                      <el-tag :type="getStatusTagType(row.value)">{{ row.value || '-' }}</el-tag>
-                    </span>
-                    <span v-else>{{ row.value || '-' }}</span>
-                  </template>
-                </el-table-column>
-              </el-table>
+      <!-- 查看模式：与项目管理一致的详情布局 -->
+      <div v-if="isViewMode" class="pt-detail-view">
+        <div v-for="section in viewDetailSections" :key="section.title" class="detail-section">
+          <div class="detail-section-header">{{ section.title }}</div>
+          <div class="detail-grid">
+            <div v-for="item in section.items" :key="item.label" class="detail-cell">
+              <span class="detail-label">{{ item.label }}</span>
+              <span class="detail-value">
+                <template v-if="item.tag">
+                  <el-tag :type="getStatusTagType(item.value as string)">{{
+                    item.value || '-'
+                  }}</el-tag>
+                </template>
+                <template v-else>{{ item.value || '-' }}</template>
+              </span>
             </div>
-          </el-col>
-        </el-row>
+          </div>
+        </div>
       </div>
 
       <!-- 编辑模式：表单展示 -->
@@ -357,8 +312,8 @@
         label-width="120px"
         class="production-task-form"
       >
-        <el-row :gutter="20">
-          <el-col :span="6">
+        <el-row :gutter="isMobile ? 8 : 20">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="项目编号" prop="项目编号">
               <el-input v-model="dialogForm.项目编号" placeholder="项目编号" disabled />
             </el-form-item>
@@ -417,7 +372,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="生产状态">
               <el-select
                 v-model="dialogForm.生产状态"
@@ -464,7 +419,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="加工中心工时">
               <el-input-number v-model="dialogForm.加工中心工时" :min="0" style="width: 100%" />
             </el-form-item>
@@ -507,7 +462,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty } from 'element-plus'
+import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
 import {
   getProductionTaskListApi,
   getProductionTaskDetailApi,
@@ -560,57 +515,61 @@ watch(isMobile, (mobile) => {
   }
 })
 
-// 查看模式的表格数据（分组展示）
-const viewTableSections = computed(() => {
+// 查看模式的详情数据（与项目管理一致的网格样式）
+type DetailItem = { label: string; value: string | number | undefined; tag?: boolean }
+type DetailSection = { title: string; items: DetailItem[] }
+
+const viewDetailSections = computed<DetailSection[]>(() => {
   if (!dialogForm || Object.keys(dialogForm).length === 0) return []
 
+  const baseInfo: DetailItem[] = [
+    { label: '项目编号', value: dialogForm.项目编号 },
+    { label: '产品名称', value: dialogForm.productName },
+    { label: '产品图号', value: dialogForm.productDrawing },
+    { label: '客户模号', value: dialogForm.客户模号 },
+    { label: '产品材质', value: dialogForm.产品材质 },
+    { label: '图纸下发日期', value: formatDate(dialogForm.图纸下发日期 as any) },
+    { label: '计划首样日期', value: formatDate(dialogForm.计划首样日期 as any) },
+    { label: '负责人', value: dialogForm.负责人 },
+    { label: '生产状态', value: dialogForm.生产状态, tag: true },
+    { label: '优先级', value: dialogForm.优先级 }
+  ]
+
+  const quantityInfo: DetailItem[] = [
+    { label: '投产数量', value: formatValue(dialogForm.投产数量) },
+    { label: '已完成数量', value: formatValue(dialogForm.已完成数量) },
+    { label: '批次完成数量', value: formatValue(dialogForm.批次完成数量) }
+  ]
+
+  const dateInfo: DetailItem[] = [
+    { label: '开始日期', value: formatDate(dialogForm.开始日期) },
+    { label: '结束日期', value: formatDate(dialogForm.结束日期) },
+    { label: '批次完成时间', value: formatDate(dialogForm.批次完成时间) },
+    { label: '下达日期', value: formatDate(dialogForm.下达日期) }
+  ]
+
+  const hoursInfo: DetailItem[] = [
+    { label: '加工中心工时', value: formatValue(dialogForm.加工中心工时) },
+    { label: '线切割工时', value: formatValue(dialogForm.线切割工时) },
+    { label: '放电工时', value: formatValue(dialogForm.放电工时) },
+    { label: '机加工时', value: formatValue(dialogForm.机加工时) },
+    { label: '抛光工时', value: formatValue(dialogForm.抛光工时) },
+    { label: '装配工时', value: formatValue(dialogForm.装配工时) },
+    { label: '试模工时', value: formatValue(dialogForm.试模工时) }
+  ]
+
+  const remarks: DetailItem[] = [
+    { label: '加工工艺', value: formatValue((dialogForm as any).加工工艺) },
+    { label: '检测要点', value: formatValue((dialogForm as any).检测要点) },
+    { label: '生产备注', value: formatValue((dialogForm as any).生产备注) }
+  ]
+
   return [
-    {
-      title: '基本信息',
-      data: [
-        { label: '项目编号', value: dialogForm.项目编号 },
-        { label: '产品名称', value: dialogForm.productName },
-        { label: '产品图号', value: dialogForm.productDrawing },
-        { label: '客户模号', value: dialogForm.客户模号 },
-        { label: '产品材质', value: dialogForm.产品材质 },
-        { label: '图纸下发日期', value: formatDate(dialogForm.图纸下发日期 as any) },
-        { label: '计划首样日期', value: formatDate(dialogForm.计划首样日期 as any) },
-        { label: '负责人', value: dialogForm.负责人 },
-        { label: '生产状态', value: dialogForm.生产状态, tag: true },
-        { label: '优先级', value: dialogForm.优先级 }
-      ]
-    },
-    {
-      title: '数量信息',
-      data: [
-        { label: '投产数量', value: formatValue(dialogForm.投产数量) },
-        { label: '已完成数量', value: formatValue(dialogForm.已完成数量) },
-        { label: '批次完成数量', value: formatValue(dialogForm.批次完成数量) }
-      ]
-    },
-    {
-      title: '日期信息',
-      data: [
-        { label: '开始日期', value: formatDate(dialogForm.开始日期) },
-        { label: '结束日期', value: formatDate(dialogForm.结束日期) },
-        { label: '批次完成时间', value: formatDate(dialogForm.批次完成时间) },
-        { label: '下达日期', value: formatDate(dialogForm.下达日期) }
-      ]
-    },
-    {
-      title: '工时信息',
-      data: [
-        { label: '放电工时', value: formatValue(dialogForm.放电工时) },
-        { label: '试模工时', value: formatValue(dialogForm.试模工时) },
-        { label: '抛光工时', value: formatValue(dialogForm.抛光工时) }
-      ],
-      data2: [
-        { label: '机加工时', value: formatValue(dialogForm.机加工时) },
-        { label: '装配工时', value: formatValue(dialogForm.装配工时) },
-        { label: '加工中心工时', value: formatValue(dialogForm.加工中心工时) },
-        { label: '线切割工时', value: formatValue(dialogForm.线切割工时) }
-      ]
-    }
+    { title: '基本信息', items: baseInfo },
+    { title: '数量信息', items: quantityInfo },
+    { title: '日期信息', items: dateInfo },
+    { title: '工时信息', items: hoursInfo },
+    { title: '备注', items: remarks }
   ]
 })
 
@@ -873,6 +832,20 @@ onMounted(() => {
   :deep(.pt-table .el-table__body-wrapper .el-table__cell) {
     padding-top: 6px !important;
     padding-bottom: 6px !important;
+  }
+}
+
+@media (width <= 768px) {
+  .detail-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .detail-cell {
+    padding: 10px 12px;
+  }
+
+  .detail-label {
+    flex-basis: 90px;
   }
 }
 
@@ -1257,6 +1230,69 @@ onMounted(() => {
   gap: 8px;
   justify-content: flex-end;
   margin-top: 6px;
+}
+
+.pt-detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-section {
+  overflow: hidden;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.detail-section-header {
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #409eff;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0;
+}
+
+.detail-cell {
+  display: flex;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-right: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f0f2f5;
+  align-items: center;
+}
+
+.detail-cell:nth-child(odd) {
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+}
+
+.detail-label {
+  flex: 0 0 110px;
+  padding-right: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
+}
+
+.detail-label::after {
+  margin-left: 2px;
+  color: #c0c4cc;
+  content: ':';
+}
+
+.detail-value {
+  flex: 1;
+  font-size: 14px;
+  color: #303133;
+  word-break: break-word;
 }
 
 .pagination-footer--mobile {
