@@ -1,17 +1,32 @@
 <template>
-  <div class="px-4 pt-1 pb-4 space-y-2">
+  <div class="sales-orders-page px-4 pt-1 pb-4 space-y-2">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button label="card">卡片</el-radio-button>
+          <el-radio-button label="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
     <el-form
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="综合搜索">
         <el-input
           v-model="queryForm.searchText"
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
           clearable
-          style="width: 160px"
+          :style="{ width: isMobile ? '100%' : '160px' }"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -20,7 +35,7 @@
           placeholder="请选择客户"
           clearable
           filterable
-          style="width: 160px"
+          :style="{ width: isMobile ? '100%' : '160px' }"
         >
           <el-option
             v-for="customer in customerList"
@@ -35,7 +50,7 @@
           v-model="queryForm.contractNo"
           placeholder="请输入合同号"
           clearable
-          style="width: 140px"
+          :style="{ width: isMobile ? '100%' : '140px' }"
         />
       </el-form-item>
       <el-form-item label="下单日期">
@@ -47,13 +62,15 @@
           end-placeholder="结束日期"
           value-format="YYYY-MM-DD"
           clearable
-          style="width: 240px"
+          :style="{ width: isMobile ? '100%' : '240px' }"
         />
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleCreate">新增</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleCreate">新增</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -84,136 +101,206 @@
       </el-col>
     </el-row>
 
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="tableData"
-      border
-      height="calc(100vh - 340px)"
-      row-key="orderNo"
-      @row-dblclick="handleRowDblClick"
-      :row-class-name="rowClassName"
-      class="so-table"
-      @expand-change="onExpandChange"
+    <div
+      v-if="viewMode === 'table' || !isMobile"
+      class="so-table-wrapper"
+      :class="{ 'so-table-wrapper--mobile': isMobile }"
     >
-      <el-table-column type="expand">
-        <template #default="{ row }">
-          <div class="so-expanded-wrap">
-            <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
-              <el-table-column type="index" label="序号" width="50" />
-              <el-table-column prop="itemCode" label="项目编号" min-width="90" />
-              <el-table-column prop="productName" label="产品名称" min-width="100" />
-              <el-table-column prop="productDrawingNo" label="产品图号" min-width="100" />
-              <el-table-column prop="customerPartNo" label="客户模号" min-width="100" />
-              <el-table-column label="数量" width="60" align="center">
-                <template #default="{ row: detail }">
-                  {{ detail.quantity || 0 }}
-                </template>
-              </el-table-column>
-              <el-table-column label="单价(元)" width="100" align="right">
-                <template #default="{ row: detail }">
-                  {{ formatAmount(detail.unitPrice) }}
-                </template>
-              </el-table-column>
-              <el-table-column label="总金额(元)" width="100" align="right">
-                <template #default="{ row: detail }">
-                  {{ formatAmount(detail.totalAmount) }}
-                </template>
-              </el-table-column>
-              <el-table-column label="交货日期" width="100">
-                <template #default="{ row: detail }">
-                  {{ formatDate(detail.deliveryDate) }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-              <el-table-column
-                prop="costSource"
-                label="费用出处"
-                min-width="120"
-                show-overflow-tooltip
-              />
-              <el-table-column label="是否入库" width="100" align="center">
-                <template #default="{ row: detail }">
-                  <el-tag :type="detail.isInStock ? 'success' : 'info'" size="small">
-                    {{ detail.isInStock ? '是' : '否' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="是否出运" width="100" align="center">
-                <template #default="{ row: detail }">
-                  <el-tag :type="detail.isShipped ? 'success' : 'info'" size="small">
-                    {{ detail.isShipped ? '是' : '否' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="出运日期" width="140">
-                <template #default="{ row: detail }">
-                  {{ formatDate(detail.shippingDate) }}
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
-      <el-table-column prop="orderNo" label="订单编号" min-width="90" show-overflow-tooltip />
-      <el-table-column
-        prop="customerName"
-        label="客户名称"
-        min-width="195"
-        sortable
-        show-overflow-tooltip
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        :data="tableData"
+        border
+        :height="tableHeight"
+        row-key="orderNo"
+        @row-dblclick="handleRowDblClick"
+        :row-class-name="rowClassName"
+        class="so-table"
+        @expand-change="onExpandChange"
       >
-        <template #default="{ row }">
-          <span class="so-cell-nowrap">
-            {{ row.customerName || '-' }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="orderDate" label="订单日期" width="154" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ formatDate(row.orderDate) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="signDate" label="签订日期" width="154" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ formatDate(row.signDate) }}
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="contractNo"
-        label="合同号"
-        min-width="90"
-        sortable
-        show-overflow-tooltip
-      />
-      <el-table-column label="明细数量" width="100" align="center" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ row.details.length }}
-        </template>
-      </el-table-column>
-      <el-table-column label="总数量" width="100" align="center" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ row.totalQuantity || 0 }}
-        </template>
-      </el-table-column>
-      <el-table-column label="总金额(元)" width="140" align="right" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ formatAmount(row.totalAmount) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="205" fixed="right">
-        <template #default="{ row }">
-          <div class="so-operation-buttons">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="so-expanded-wrap">
+              <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
+                <el-table-column type="index" label="序号" width="50" />
+                <el-table-column prop="itemCode" label="项目编号" min-width="90" />
+                <el-table-column prop="productName" label="产品名称" min-width="100" />
+                <el-table-column prop="productDrawingNo" label="产品图号" min-width="100" />
+                <el-table-column prop="customerPartNo" label="客户模号" min-width="100" />
+                <el-table-column label="数量" width="60" align="center">
+                  <template #default="{ row: detail }">
+                    {{ detail.quantity || 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="单价(元)" width="100" align="right">
+                  <template #default="{ row: detail }">
+                    {{ formatAmount(detail.unitPrice) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="总金额(元)" width="100" align="right">
+                  <template #default="{ row: detail }">
+                    {{ formatAmount(detail.totalAmount) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="交货日期" width="100">
+                  <template #default="{ row: detail }">
+                    {{ formatDate(detail.deliveryDate) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+                <el-table-column
+                  prop="costSource"
+                  label="费用出处"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+                <el-table-column label="是否入库" width="100" align="center">
+                  <template #default="{ row: detail }">
+                    <el-tag :type="detail.isInStock ? 'success' : 'info'" size="small">
+                      {{ detail.isInStock ? '是' : '否' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="是否出运" width="100" align="center">
+                  <template #default="{ row: detail }">
+                    <el-tag :type="detail.isShipped ? 'success' : 'info'" size="small">
+                      {{ detail.isShipped ? '是' : '否' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="出运日期" width="140">
+                  <template #default="{ row: detail }">
+                    {{ formatDate(detail.shippingDate) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+        <el-table-column prop="orderNo" label="订单编号" min-width="90" show-overflow-tooltip />
+        <el-table-column
+          prop="customerName"
+          label="客户名称"
+          min-width="195"
+          sortable
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            <span class="so-cell-nowrap">
+              {{ row.customerName || '-' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="orderDate" label="订单日期" width="154" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatDate(row.orderDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="signDate" label="签订日期" width="154" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatDate(row.signDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="contractNo"
+          label="合同号"
+          min-width="90"
+          sortable
+          show-overflow-tooltip
+        />
+        <el-table-column label="明细数量" width="100" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.details.length }}
+          </template>
+        </el-table-column>
+        <el-table-column label="总数量" width="100" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.totalQuantity || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column label="总金额(元)" width="140" align="right" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatAmount(row.totalAmount) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="205" fixed="right">
+          <template #default="{ row }">
+            <div class="so-operation-buttons">
+              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <div v-else class="so-mobile-list" v-loading="loading">
+      <el-empty v-if="!tableData.length && !loading" description="暂无销售订单" />
+      <template v-else>
+        <el-card v-for="row in tableData" :key="row.orderNo" class="so-mobile-card" shadow="hover">
+          <div class="so-mobile-card__header">
+            <div>
+              <div class="so-mobile-card__order">订单编号：{{ row.orderNo || '-' }}</div>
+              <div class="so-mobile-card__customer">{{ row.customerName || '-' }}</div>
+            </div>
+            <el-tag size="small" type="info">明细 {{ row.details.length }}</el-tag>
+          </div>
+          <div class="so-mobile-card__meta">
+            <div>
+              <span class="label">合同号</span>
+              <span class="value">{{ row.contractNo || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">订单日期</span>
+              <span class="value">{{ formatDate(row.orderDate) || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">签订日期</span>
+              <span class="value">{{ formatDate(row.signDate) || '-' }}</span>
+            </div>
+          </div>
+          <div class="so-mobile-card__stats">
+            <div class="stat">
+              <div class="stat-label">总数量</div>
+              <div class="stat-value">{{ row.totalQuantity || 0 }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">总金额(元)</div>
+              <div class="stat-value">{{ formatAmount(row.totalAmount) }}</div>
+            </div>
+          </div>
+          <div v-if="row.details.length" class="so-mobile-card__details">
+            <div
+              v-for="detail in row.details.slice(0, 2)"
+              :key="detail.id || detail.itemCode || detail.productName"
+              class="detail-row"
+            >
+              <div class="detail-title">{{ detail.productName || detail.itemCode || '明细' }}</div>
+              <div class="detail-meta">
+                <span>{{ detail.itemCode || '-' }}</span>
+                <span>数量 {{ detail.quantity || 0 }}</span>
+                <span>交付 {{ formatDate(detail.deliveryDate) || '-' }}</span>
+              </div>
+            </div>
+            <div v-if="row.details.length > 2" class="detail-more">
+              还有 {{ row.details.length - 2 }} 条明细...
+            </div>
+          </div>
+          <div class="so-mobile-card__actions">
+            <el-button type="primary" size="small" @click="handleView(row)">查看</el-button>
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </div>
-        </template>
-      </el-table-column>
-    </el-table>
+        </el-card>
+      </template>
+    </div>
 
-    <div class="pagination-footer">
+    <div
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -229,8 +316,10 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="1500px"
+      :width="isMobile ? '100%' : '1500px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="so-dialog"
       @closed="handleDialogClosed"
     >
       <el-form
@@ -247,7 +336,7 @@
                 v-model="dialogForm.orderNo"
                 placeholder="订单编号"
                 disabled
-                style="width: 280px"
+                :style="{ width: dialogControlWidth }"
               />
             </el-form-item>
             <el-form-item label="订单日期">
@@ -256,7 +345,7 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择订单日期"
-                style="width: 280px"
+                :style="{ width: dialogControlWidth }"
               />
             </el-form-item>
           </div>
@@ -268,7 +357,7 @@
                 filterable
                 clearable
                 @change="handleCustomerChange"
-                style="width: 280px"
+                :style="{ width: dialogControlWidth }"
                 :disabled="!isCreateMode"
               >
                 <el-option
@@ -285,14 +374,14 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择签订日期"
-                style="width: 280px"
+                :style="{ width: dialogControlWidth }"
               />
             </el-form-item>
             <el-form-item label="合同编号">
               <el-input
                 v-model="dialogForm.contractNo"
                 placeholder="请输入合同编号"
-                style="width: 280px"
+                :style="{ width: dialogControlWidth }"
               />
             </el-form-item>
           </div>
@@ -304,100 +393,108 @@
               从新品中选择
             </el-button>
           </div>
-          <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="项目编号" min-width="140">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.itemCode"
-                  placeholder="请输入项目编号"
-                  :disabled="!isCreateMode"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="产品名称" min-width="150">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.productName"
-                  placeholder="请输入产品名称"
-                  :disabled="!isCreateMode"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="产品图号" min-width="130">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.productDrawingNo"
-                  placeholder="请输入产品图号"
-                  :disabled="!isCreateMode"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="客户模号" min-width="130">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.customerPartNo"
-                  placeholder="请输入客户模号"
-                  :disabled="!isCreateMode"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="数量" width="140" align="center">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
-                  :min="0"
-                  :step="100"
-                  :precision="2"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="handleDetailUnitPriceChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="金额(元)" width="80" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.totalAmount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="交付日期" width="150">
-              <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.deliveryDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择交付日期"
-                  style="width: 130px"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.remark" placeholder="备注" />
-              </template>
-            </el-table-column>
-            <el-table-column label="费用出处" min-width="145">
-              <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="费用出处" />
-              </template>
-            </el-table-column>
-            <el-table-column v-if="isCreateMode" label="操作" width="55" fixed="right">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="dialog-table-wrapper">
+            <el-table
+              :data="dialogForm.details"
+              border
+              size="small"
+              row-key="id"
+              style="width: 100%"
+            >
+              <el-table-column type="index" label="序号" width="45" />
+              <el-table-column label="项目编号" min-width="140">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.itemCode"
+                    placeholder="请输入项目编号"
+                    :disabled="!isCreateMode"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="产品名称" min-width="150">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.productName"
+                    placeholder="请输入产品名称"
+                    :disabled="!isCreateMode"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="产品图号" min-width="130">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.productDrawingNo"
+                    placeholder="请输入产品图号"
+                    :disabled="!isCreateMode"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="客户模号" min-width="130">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.customerPartNo"
+                    placeholder="请输入客户模号"
+                    :disabled="!isCreateMode"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="数量" width="140" align="center">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.quantity"
+                    :min="0"
+                    :step="1"
+                    style="width: 100%"
+                    @change="handleDetailQuantityChange(row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="120" align="right">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.unitPrice"
+                    :min="0"
+                    :step="100"
+                    :precision="2"
+                    :controls="false"
+                    style="width: 100%"
+                    @change="handleDetailUnitPriceChange(row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="金额(元)" width="80" align="right">
+                <template #default="{ row }">
+                  {{ formatAmount(row.totalAmount) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="交付日期" width="150">
+                <template #default="{ row }">
+                  <el-date-picker
+                    v-model="row.deliveryDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择交付日期"
+                    style="width: 130px"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="备注" min-width="150">
+                <template #default="{ row }">
+                  <el-input v-model="row.remark" placeholder="备注" />
+                </template>
+              </el-table-column>
+              <el-table-column label="费用出处" min-width="145">
+                <template #default="{ row }">
+                  <el-input v-model="row.costSource" placeholder="费用出处" />
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isCreateMode" label="操作" width="55" fixed="right">
+                <template #default="{ $index }">
+                  <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
 
           <div class="dialog-product-summary">
             <el-button v-if="isCreateMode" type="primary" plain @click="addDetailRow"
@@ -427,8 +524,10 @@
     <el-dialog
       v-model="newProductDialogVisible"
       title="选择新品货物"
-      width="1200px"
+      :width="isMobile ? '100%' : '1200px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="so-dialog"
     >
       <div
         v-if="selectedCustomerName"
@@ -447,47 +546,49 @@
           （只能选择同一客户的货物）
         </span>
       </div>
-      <el-table
-        ref="newProductTableRef"
-        v-loading="newProductLoading"
-        :data="newProductList"
-        border
-        @selection-change="handleProductSelectionChange"
-        @select="handleProductSelect"
-        max-height="500px"
-        :row-class-name="getRowClassName"
-      >
-        <el-table-column type="selection" width="55" :selectable="checkSelectable" />
-        <el-table-column prop="itemCode" label="项目编号" min-width="140">
-          <template #default="{ row }">
-            <span :style="{ color: isItemCodeExists(row.itemCode) ? '#999' : '#333' }">
-              {{ row.itemCode || '-' }}
-              <el-tag
-                v-if="isItemCodeExists(row.itemCode)"
-                type="info"
-                size="small"
-                style="margin-left: 8px"
+      <div class="dialog-table-wrapper">
+        <el-table
+          ref="newProductTableRef"
+          v-loading="newProductLoading"
+          :data="newProductList"
+          border
+          @selection-change="handleProductSelectionChange"
+          @select="handleProductSelect"
+          max-height="500px"
+          :row-class-name="getRowClassName"
+        >
+          <el-table-column type="selection" width="55" :selectable="checkSelectable" />
+          <el-table-column prop="itemCode" label="项目编号" min-width="140">
+            <template #default="{ row }">
+              <span :style="{ color: isItemCodeExists(row.itemCode) ? '#999' : '#333' }">
+                {{ row.itemCode || '-' }}
+                <el-tag
+                  v-if="isItemCodeExists(row.itemCode)"
+                  type="info"
+                  size="small"
+                  style="margin-left: 8px"
+                >
+                  已添加
+                </el-tag>
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="productName" label="产品名称" min-width="160" />
+          <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
+          <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
+          <el-table-column prop="customerName" label="客户名称" min-width="160">
+            <template #default="{ row }">
+              <span
+                :style="{ color: row.customerName === selectedCustomerName ? '#1890ff' : '#333' }"
               >
-                已添加
-              </el-tag>
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="productName" label="产品名称" min-width="160" />
-        <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-        <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-        <el-table-column prop="customerName" label="客户名称" min-width="160">
-          <template #default="{ row }">
-            <span
-              :style="{ color: row.customerName === selectedCustomerName ? '#1890ff' : '#333' }"
-            >
-              {{ row.customerName || '-' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="category" label="分类" width="100" />
-        <el-table-column prop="remarks" label="备注" min-width="140" show-overflow-tooltip />
-      </el-table>
+                {{ row.customerName || '-' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="category" label="分类" width="100" />
+          <el-table-column prop="remarks" label="备注" min-width="140" show-overflow-tooltip />
+        </el-table>
+      </div>
       <template #footer>
         <el-button @click="newProductDialogVisible = false">取消</el-button>
         <el-button
@@ -504,8 +605,10 @@
     <el-dialog
       v-model="viewDialogVisible"
       title="查看销售订单"
-      width="1500px"
+      :width="isMobile ? '100%' : '1500px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="so-dialog"
     >
       <div v-if="viewOrderData" class="view-dialog-container">
         <!-- 订单基本信息 -->
@@ -552,60 +655,62 @@
         <!-- 订单明细 -->
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">订单明细</h3>
-          <el-table :data="viewOrderData.details" border size="small" style="width: 100%">
-            <el-table-column type="index" label="序号" width="50" align="center" />
-            <el-table-column prop="itemCode" label="项目编号" min-width="140" />
-            <el-table-column prop="productName" label="产品名称" min-width="160" />
-            <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-            <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-            <el-table-column label="数量" width="90" align="center">
-              <template #default="{ row }">
-                {{ row.quantity || 0 }}
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.unitPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="总金额(元)" width="140" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.totalAmount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="交货日期" width="140" align="center">
-              <template #default="{ row }">
-                {{ formatDate(row.deliveryDate) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-            <el-table-column
-              prop="costSource"
-              label="费用出处"
-              min-width="140"
-              show-overflow-tooltip
-            />
-            <el-table-column prop="handler" label="经办人" width="100" />
-            <el-table-column label="是否入库" width="100" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
-                  {{ row.isInStock ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="是否出运" width="100" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
-                  {{ row.isShipped ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="出运日期" width="140" align="center">
-              <template #default="{ row }">
-                {{ formatDate(row.shippingDate) }}
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="dialog-table-wrapper">
+            <el-table :data="viewOrderData.details" border size="small" style="width: 100%">
+              <el-table-column type="index" label="序号" width="50" align="center" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
+              <el-table-column prop="productName" label="产品名称" min-width="160" />
+              <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
+              <el-table-column label="数量" width="90" align="center">
+                <template #default="{ row }">
+                  {{ row.quantity || 0 }}
+                </template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="120" align="right">
+                <template #default="{ row }">
+                  {{ formatAmount(row.unitPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="总金额(元)" width="140" align="right">
+                <template #default="{ row }">
+                  {{ formatAmount(row.totalAmount) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="交货日期" width="140" align="center">
+                <template #default="{ row }">
+                  {{ formatDate(row.deliveryDate) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+              <el-table-column
+                prop="costSource"
+                label="费用出处"
+                min-width="140"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="handler" label="经办人" width="100" />
+              <el-table-column label="是否入库" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
+                    {{ row.isInStock ? '是' : '否' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="是否出运" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
+                    {{ row.isShipped ? '是' : '否' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="出运日期" width="140" align="center">
+                <template #default="{ row }">
+                  {{ formatDate(row.shippingDate) }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </div>
       </div>
 
@@ -617,7 +722,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, nextTick } from 'vue'
+import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue'
 import type { FormInstance } from 'element-plus'
 import {
   ElButton,
@@ -632,12 +737,15 @@ import {
   ElMessage,
   ElMessageBox,
   ElPagination,
+  ElRadioButton,
+  ElRadioGroup,
   ElRow,
   ElSelect,
   ElOption,
   ElTable,
   ElTableColumn,
-  ElTag
+  ElTag,
+  ElEmpty
 } from 'element-plus'
 import {
   getSalesOrdersListApi,
@@ -655,6 +763,7 @@ import {
 } from '@/api/sales-orders'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
+import { useAppStore } from '@/store/modules/app'
 
 interface OrderQuery {
   searchText: string
@@ -667,6 +776,15 @@ interface OrderTableRow extends SalesOrder {
   totalQuantity: number
   totalAmount: number
 }
+
+type ViewMode = 'table' | 'card'
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+const showMobileFilters = ref(true)
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
+const dialogControlWidth = computed(() => (isMobile.value ? '100%' : '280px'))
 
 // 日期格式化
 const formatDate = (date: string | Date | null | undefined): string => {
@@ -695,6 +813,13 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
 const tableData = ref<OrderTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+  if (!mobile) {
+    showMobileFilters.value = true
+  }
+})
 
 // 统计数据
 const summary = reactive<SalesOrderStatistics>({
@@ -763,6 +888,7 @@ const formatAmount = (value: number | null | undefined): string => {
 const mapOrderToRow = (order: SalesOrder): OrderTableRow => {
   return {
     ...order,
+    details: order.details || [],
     totalQuantity: order.totalQuantity || 0,
     totalAmount: order.totalAmount || 0
   }
@@ -1549,11 +1675,99 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 查询表单垂直居中对齐 */
+@media (width <= 768px) {
+  .query-form--mobile {
+    padding: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item) {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-input),
+  :deep(.query-form--mobile .el-select),
+  :deep(.query-form--mobile .el-date-editor) {
+    width: 100%;
+  }
+
+  .summary-card {
+    height: auto;
+    min-height: 70px;
+  }
+
+  .so-mobile-card__meta {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .dialog-form-columns {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .dialog-product-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .view-dialog-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  :deep(.so-table .el-table__body-wrapper tbody tr) {
+    height: 42px !important;
+  }
+
+  :deep(.so-table .el-table__body-wrapper .el-table__cell) {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
 .query-form {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.sales-orders-page {
+  position: relative;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 0;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
+.query-form__actions {
+  margin-left: auto;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 :deep(.query-form .el-form-item) {
@@ -1640,6 +1854,128 @@ onMounted(async () => {
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;
+}
+
+.so-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.so-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.so-table-wrapper--mobile .so-table {
+  min-width: 960px;
+}
+
+.so-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.so-mobile-card {
+  border-radius: 10px;
+}
+
+.so-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.so-mobile-card__order {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.so-mobile-card__customer {
+  font-size: 13px;
+  color: #666;
+}
+
+.so-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.so-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.so-mobile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.so-mobile-card__stats .stat {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border-radius: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.so-mobile-card__details {
+  padding: 8px 0;
+  margin: 8px 0;
+  border-top: 1px dashed #e5e6eb;
+  border-bottom: 1px dashed #e5e6eb;
+}
+
+.detail-row + .detail-row {
+  margin-top: 6px;
+}
+
+.detail-title {
+  font-weight: 600;
+  color: #333;
+}
+
+.detail-meta {
+  display: flex;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #666;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-more {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #888;
+}
+
+.so-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.dialog-table-wrapper {
+  width: 100%;
+  padding-bottom: 8px;
+  overflow-x: auto;
 }
 
 /* 分页固定在页面底部居中，靠近版权信息区域 */
@@ -1768,4 +2104,14 @@ onMounted(async () => {
   padding-top: 1px !important;
   padding-bottom: 1px !important;
 }
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: flex-end;
+}
+
+/* 查询表单垂直居中对齐 */
 </style>

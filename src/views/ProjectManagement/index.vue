@@ -1,22 +1,42 @@
 <template>
-  <div class="px-4 pt-1 pb-4 space-y-2">
+  <div class="pm-page px-4 pt-1 pb-4 space-y-2">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button label="card">卡片</el-radio-button>
+          <el-radio-button label="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="关键词">
         <el-input
           v-model="queryForm.keyword"
           placeholder="项目编号/产品名称/产品图号/客户模号"
           clearable
-          style="width: 280px"
+          :style="{ width: isMobile ? '100%' : '280px' }"
         />
       </el-form-item>
       <el-form-item label="项目状态">
-        <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
+        <el-select
+          v-model="queryForm.status"
+          placeholder="请选择"
+          clearable
+          :style="{ width: isMobile ? '100%' : '160px' }"
+        >
           <el-option
             v-for="item in projectStatusOptions"
             :key="item.value"
@@ -26,7 +46,12 @@
         </el-select>
       </el-form-item>
       <el-form-item label="分类">
-        <el-select v-model="queryForm.category" placeholder="请选择" clearable style="width: 160px">
+        <el-select
+          v-model="queryForm.category"
+          placeholder="请选择"
+          clearable
+          :style="{ width: isMobile ? '100%' : '160px' }"
+        >
           <el-option
             v-for="item in categoryOptions"
             :key="item.value"
@@ -35,9 +60,11 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -70,90 +97,191 @@
       </el-col>
     </el-row>
 
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="tableData"
-      border
-      height="calc(100vh - 340px)"
-      @row-dblclick="handleEdit"
-      @sort-change="handleSortChange"
-      class="pm-table"
+    <div
+      v-if="viewMode === 'table' || !isMobile"
+      class="pm-table-wrapper"
+      :class="{ 'pm-table-wrapper--mobile': isMobile }"
     >
-      <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
-      <el-table-column
-        prop="项目编号"
-        label="项目编号"
-        width="130"
-        show-overflow-tooltip
-        sortable="custom"
-      />
-      <el-table-column prop="productName" label="产品名称" width="130" show-overflow-tooltip />
-      <el-table-column prop="productDrawing" label="产品图号" width="130" show-overflow-tooltip />
-      <el-table-column prop="客户模号" label="客户模号" width="110" show-overflow-tooltip />
-      <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
-      <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
-      <el-table-column
-        prop="项目状态"
-        label="项目状态"
-        width="105"
-        align="center"
-        sortable="custom"
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        :data="tableData"
+        border
+        :height="tableHeight"
+        @row-dblclick="handleEdit"
+        @sort-change="handleSortChange"
+        class="pm-table"
       >
-        <template #default="{ row }">
-          <el-tag :type="getStatusTagType(row.项目状态)" size="small" class="pm-status-tag">
-            {{ row.项目状态 || '-' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="中标日期" label="中标日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.中标日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="产品3D确认" label="产品3D确认" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.产品3D确认) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="图纸下发日期" label="图纸下发日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.图纸下发日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="计划首样日期" label="计划首样日期" width="150" sortable="custom">
-        <template #default="{ row }">
-          <span>{{ formatDate(row.计划首样日期) }}</span>
-          <el-tag
-            v-if="isDueSoon(row.计划首样日期)"
-            type="warning"
-            size="small"
-            effect="light"
-            style="margin-left: 6px"
-            >{{ daysUntil(row.计划首样日期) }}天</el-tag
-          >
-        </template>
-      </el-table-column>
-      <el-table-column prop="首次送样日期" label="首次送样日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.首次送样日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="移模日期" label="移模日期" width="110" sortable="custom">
-        <template #default="{ row }">
-          {{ formatDate(row.移模日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="进度影响原因" label="进度影响原因" width="130" show-overflow-tooltip />
-      <el-table-column label="操作" width="160" fixed="right" align="center">
-        <template #default="{ row }">
-          <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+        <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+        <el-table-column
+          prop="项目编号"
+          label="项目编号"
+          width="130"
+          show-overflow-tooltip
+          sortable="custom"
+          fixed="left"
+        />
+        <el-table-column
+          prop="productName"
+          label="产品名称"
+          width="130"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column
+          prop="productDrawing"
+          label="产品图号"
+          width="130"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column
+          prop="客户模号"
+          label="客户模号"
+          width="115"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
+        <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
+        <el-table-column
+          prop="项目状态"
+          label="项目状态"
+          width="105"
+          align="center"
+          sortable="custom"
+        >
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.项目状态)" size="small" class="pm-status-tag">
+              {{ row.项目状态 || '-' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="中标日期" label="中标日期" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.中标日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="产品3D确认" label="产品3D确认" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.产品3D确认) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="图纸下发日期" label="图纸下发日期" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.图纸下发日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="计划首样日期" label="计划首样日期" width="150" sortable="custom">
+          <template #default="{ row }">
+            <span>{{ formatDate(row.计划首样日期) }}</span>
+            <el-tag
+              v-if="isDueSoon(row.计划首样日期)"
+              type="warning"
+              size="small"
+              effect="light"
+              style="margin-left: 6px"
+              >{{ daysUntil(row.计划首样日期) }}天</el-tag
+            >
+          </template>
+        </el-table-column>
+        <el-table-column prop="首次送样日期" label="首次送样日期" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.首次送样日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="移模日期" label="移模日期" width="110" sortable="custom">
+          <template #default="{ row }">
+            {{ formatDate(row.移模日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="进度影响原因"
+          label="进度影响原因"
+          width="130"
+          show-overflow-tooltip
+        />
+        <el-table-column label="操作" width="160" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
-    <div class="pagination-footer">
+    <div v-else class="pm-mobile-list" v-loading="loading">
+      <el-empty v-if="!tableData.length && !loading" description="暂无项目" />
+      <template v-else>
+        <el-card v-for="row in tableData" :key="row.项目编号" class="pm-mobile-card" shadow="hover">
+          <div class="pm-mobile-card__header">
+            <div>
+              <div class="pm-mobile-card__code">项目编号：{{ row.项目编号 || '-' }}</div>
+              <div class="pm-mobile-card__name">{{ row.productName || '-' }}</div>
+            </div>
+            <el-tag :type="getStatusTagType(row.项目状态)" size="small">
+              {{ row.项目状态 || '未知' }}
+            </el-tag>
+          </div>
+          <div class="pm-mobile-card__meta">
+            <div>
+              <span class="label">产品图号</span>
+              <span class="value">{{ row.productDrawing || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">客户模号</span>
+              <span class="value">{{ row.客户模号 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">材质</span>
+              <span class="value">{{ row.产品材质 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">穴数</span>
+              <span class="value">{{ row.模具穴数 ?? '-' }}</span>
+            </div>
+          </div>
+          <div class="pm-mobile-card__dates">
+            <div>
+              <span class="label">首样</span>
+              <span class="value">
+                {{ formatDate(row.计划首样日期) }}
+                <el-tag
+                  v-if="isDueSoon(row.计划首样日期)"
+                  type="warning"
+                  size="small"
+                  effect="light"
+                  style="margin-left: 6px"
+                >
+                  {{ daysUntil(row.计划首样日期) }}天
+                </el-tag>
+              </span>
+            </div>
+            <div>
+              <span class="label">移模</span>
+              <span class="value">{{ formatDate(row.移模日期) }}</span>
+            </div>
+            <div>
+              <span class="label">图纸下发</span>
+              <span class="value">{{ formatDate(row.图纸下发日期) }}</span>
+            </div>
+          </div>
+          <div v-if="row.进度影响原因" class="pm-mobile-card__impact">
+            <span class="label">进度影响</span>
+            <span class="value">{{ row.进度影响原因 }}</span>
+          </div>
+          <div class="pm-mobile-card__actions">
+            <el-button size="small" type="primary" @click="handleView(row)">查看</el-button>
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+          </div>
+        </el-card>
+      </template>
+    </div>
+
+    <div
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -167,7 +295,12 @@
     </div>
 
     <!-- 查看详情对话框 -->
-    <el-dialog v-model="viewDialogVisible" title="项目详情" width="1200px">
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="项目详情"
+      :width="isMobile ? '100%' : '1200px'"
+      :fullscreen="isMobile"
+    >
       <div class="detail-grid">
         <div class="detail-grid-col">
           <div class="detail-cell"
@@ -355,7 +488,8 @@
     <el-dialog
       v-model="editDialogVisible"
       :title="editTitle"
-      width="1200px"
+      :width="isMobile ? '100%' : '1200px'"
+      :fullscreen="isMobile"
       align-center
       :close-on-click-modal="false"
       @closed="handleEditDialogClosed"
@@ -639,9 +773,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty } from 'element-plus'
 import {
   getProjectListApi,
   getProjectDetailApi,
@@ -652,6 +786,7 @@ import {
   type ProjectInfo
 } from '@/api/project'
 import type { GoodsInfo } from '@/api/goods'
+import { useAppStore } from '@/store/modules/app'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -669,6 +804,14 @@ const summary = reactive({
   surfaceTreatingProjects: 0,
   completedProjects: 0
 })
+
+type ViewMode = 'table' | 'card'
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+const showMobileFilters = ref(true)
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
 
 const queryForm = reactive({ keyword: '', status: '', category: '塑胶模具' })
 const categoryOptions = [
@@ -697,6 +840,13 @@ const currentProjectCode = ref('')
 const editRules: FormRules = {
   项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }]
 }
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+  if (!mobile) {
+    showMobileFilters.value = true
+  }
+})
 
 const loadData = async () => {
   loading.value = true
@@ -998,6 +1148,169 @@ onMounted(() => {
   }
 }
 
+@media (width <= 768px) {
+  .query-form--mobile {
+    padding: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item) {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-input),
+  :deep(.query-form--mobile .el-select),
+  :deep(.query-form--mobile .el-date-editor) {
+    width: 100%;
+  }
+
+  .summary-card {
+    height: auto;
+    min-height: 70px;
+  }
+
+  .pm-mobile-card__meta {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .pm-mobile-card__dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :deep(.pm-table .el-table__body-wrapper tbody tr) {
+    height: 40px !important;
+  }
+
+  :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
+.pm-page {
+  position: relative;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 0;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
+.query-form__actions {
+  margin-left: auto;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.pm-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.pm-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.pm-table-wrapper--mobile .pm-table {
+  min-width: 960px;
+}
+
+.pm-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pm-mobile-card {
+  border-radius: 10px;
+}
+
+.pm-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pm-mobile-card__code {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pm-mobile-card__name {
+  font-size: 13px;
+  color: #666;
+}
+
+.pm-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.pm-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.pm-mobile-card__dates {
+  display: grid;
+  margin: 8px 0;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.pm-mobile-card__dates .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.pm-mobile-card__impact {
+  margin: 6px 0;
+  color: #666;
+}
+
+.pm-mobile-card__impact .label {
+  margin-right: 6px;
+  color: #888;
+}
+
+.pm-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -1158,15 +1471,14 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
 }
 
-/* 分页固定在页面底部居中，靠近版权信息区域 */
+/* 分页固定在页面底部右侧，靠近版权信息区域 */
 .pagination-footer {
   position: fixed;
+  right: 40px;
   bottom: 40px;
-  left: 50%;
   z-index: 10;
   display: flex;
-  transform: translateX(-50%);
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 /* 第一个卡片 - 蓝色 */
@@ -1245,18 +1557,6 @@ onMounted(() => {
   padding-bottom: 2px;
 }
 
-/* 分页固定在页面底部右侧，靠近版权信息区域 */
-.pagination-footer {
-  position: fixed;
-  right: 40px;
-  bottom: 40px;
-  z-index: 10;
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* 查询表单垂直居中对齐 */
-
 /* 额外覆盖：调整项目管理主表数据行高度，使在固定表高下正好显示 20 行 */
 :deep(.pm-table .el-table__body-wrapper tbody tr) {
   height: 24px !important;
@@ -1265,5 +1565,13 @@ onMounted(() => {
 :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
   padding-top: 3px !important;
   padding-bottom: 3px !important;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: flex-end;
 }
 </style>

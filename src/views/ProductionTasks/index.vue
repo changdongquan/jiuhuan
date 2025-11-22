@@ -1,18 +1,33 @@
 <template>
-  <div class="px-4 pt-1 pb-4 space-y-2">
+  <div class="pt-page px-4 pt-1 pb-4 space-y-2">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button label="card">卡片</el-radio-button>
+          <el-radio-button label="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="关键词">
         <el-input
           v-model="queryForm.keyword"
           placeholder="项目编号/产品名称/产品图号/客户模号"
           clearable
-          style="width: 280px"
+          :style="{ width: isMobile ? '100%' : '280px' }"
         />
       </el-form-item>
       <el-form-item label="生产状态">
@@ -20,7 +35,7 @@
           v-model="queryForm.status"
           placeholder="请选择生产状态"
           clearable
-          style="width: 160px"
+          :style="{ width: isMobile ? '100%' : '160px' }"
         >
           <el-option
             v-for="item in statusOptions"
@@ -30,9 +45,11 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -66,85 +83,185 @@
       </el-col>
     </el-row>
 
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="tableData"
-      border
-      height="calc(100vh - 340px)"
-      row-key="项目编号"
-      @row-dblclick="handleRowDblClick"
-      class="pt-table"
+    <div
+      v-if="viewMode === 'table' || !isMobile"
+      class="pt-table-wrapper"
+      :class="{ 'pt-table-wrapper--mobile': isMobile }"
     >
-      <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
-      <!-- 生产任务表的所有19个字段 -->
-      <el-table-column
-        prop="项目编号"
-        label="项目编号"
-        width="145"
-        show-overflow-tooltip
-        fixed="left"
-      />
-      <el-table-column prop="productName" label="产品名称" width="140" show-overflow-tooltip />
-      <el-table-column prop="productDrawing" label="产品图号" width="140" show-overflow-tooltip />
-      <el-table-column prop="客户模号" label="客户模号" width="120" show-overflow-tooltip />
-      <el-table-column prop="产品材质" label="产品材质" width="100" show-overflow-tooltip />
-      <el-table-column prop="图纸下发日期" label="图纸下发日期" width="115">
-        <template #default="{ row }">
-          {{ formatDate(row.图纸下发日期 as any) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="计划首样日期" label="计划首样日期" width="145">
-        <template #default="{ row }">
-          <span>{{ formatDate(row.计划首样日期 as any) }}</span>
-          <el-tag
-            v-if="isDueSoon(row.计划首样日期 as any)"
-            type="warning"
-            size="small"
-            effect="light"
-            style="margin-left: 6px"
-            >{{ daysUntil(row.计划首样日期 as any) }}天</el-tag
-          >
-        </template>
-      </el-table-column>
-      <el-table-column prop="负责人" label="负责人" width="80" />
-      <el-table-column prop="生产状态" label="生产状态" width="85" align="center">
-        <template #default="{ row }">
-          <el-tag :type="getStatusTagType(row.生产状态)" size="small" class="pt-status-tag">
-            {{ row.生产状态 || '-' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="开始日期" label="开始日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.开始日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="结束日期" label="结束日期" width="110">
-        <template #default="{ row }">
-          {{ formatDate(row.结束日期) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="投产数量" label="投产数量" width="90" align="right">
-        <template #default="{ row }">
-          {{ formatValue(row.投产数量) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="已完成数量" label="已完成数量" width="105" align="right">
-        <template #default="{ row }">
-          {{ formatValue(row.已完成数量) }}
-        </template>
-      </el-table-column>
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        :data="tableData"
+        border
+        :height="tableHeight"
+        row-key="项目编号"
+        @row-dblclick="handleRowDblClick"
+        class="pt-table"
+      >
+        <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
+        <el-table-column
+          prop="项目编号"
+          label="项目编号"
+          width="145"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column
+          prop="productName"
+          label="产品名称"
+          width="140"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column
+          prop="productDrawing"
+          label="产品图号"
+          width="140"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column
+          prop="客户模号"
+          label="客户模号"
+          width="115"
+          show-overflow-tooltip
+          fixed="left"
+        />
+        <el-table-column prop="产品材质" label="产品材质" width="100" show-overflow-tooltip />
+        <el-table-column prop="图纸下发日期" label="图纸下发日期" width="115">
+          <template #default="{ row }">
+            {{ formatDate(row.图纸下发日期 as any) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="计划首样日期" label="计划首样日期" width="145">
+          <template #default="{ row }">
+            <span>{{ formatDate(row.计划首样日期 as any) }}</span>
+            <el-tag
+              v-if="isDueSoon(row.计划首样日期 as any)"
+              type="warning"
+              size="small"
+              effect="light"
+              style="margin-left: 6px"
+              >{{ daysUntil(row.计划首样日期 as any) }}天</el-tag
+            >
+          </template>
+        </el-table-column>
+        <el-table-column prop="负责人" label="负责人" width="80" />
+        <el-table-column prop="生产状态" label="生产状态" width="85" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.生产状态)" size="small" class="pt-status-tag">
+              {{ row.生产状态 || '-' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="开始日期" label="开始日期" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.开始日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="结束日期" label="结束日期" width="110">
+          <template #default="{ row }">
+            {{ formatDate(row.结束日期) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="投产数量" label="投产数量" width="90" align="right">
+          <template #default="{ row }">
+            {{ formatValue(row.投产数量) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="已完成数量" label="已完成数量" width="105" align="right">
+          <template #default="{ row }">
+            {{ formatValue(row.已完成数量) }}
+          </template>
+        </el-table-column>
 
-      <el-table-column label="操作" width="200" fixed="right" align="center">
-        <template #default="{ row }">
-          <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+        <el-table-column label="操作" width="200" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
-    <div class="pagination-footer">
+    <div v-else class="pt-mobile-list" v-loading="loading">
+      <el-empty v-if="!tableData.length && !loading" description="暂无生产任务" />
+      <template v-else>
+        <el-card v-for="row in tableData" :key="row.项目编号" class="pt-mobile-card" shadow="hover">
+          <div class="pt-mobile-card__header">
+            <div>
+              <div class="pt-mobile-card__code">项目编号：{{ row.项目编号 || '-' }}</div>
+              <div class="pt-mobile-card__name">{{ row.productName || '-' }}</div>
+            </div>
+            <el-tag :type="getStatusTagType(row.生产状态)" size="small">
+              {{ row.生产状态 || '未知' }}
+            </el-tag>
+          </div>
+          <div class="pt-mobile-card__meta">
+            <div>
+              <span class="label">产品图号</span>
+              <span class="value">{{ row.productDrawing || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">客户模号</span>
+              <span class="value">{{ row.客户模号 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">材质</span>
+              <span class="value">{{ row.产品材质 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">负责人</span>
+              <span class="value">{{ row.负责人 || '-' }}</span>
+            </div>
+          </div>
+          <div class="pt-mobile-card__dates">
+            <div>
+              <span class="label">首样</span>
+              <span class="value">
+                {{ formatDate(row.计划首样日期 as any) }}
+                <el-tag
+                  v-if="isDueSoon(row.计划首样日期 as any)"
+                  type="warning"
+                  size="small"
+                  effect="light"
+                  style="margin-left: 6px"
+                >
+                  {{ daysUntil(row.计划首样日期 as any) }}天
+                </el-tag>
+              </span>
+            </div>
+            <div>
+              <span class="label">开始</span>
+              <span class="value">{{ formatDate(row.开始日期) }}</span>
+            </div>
+            <div>
+              <span class="label">结束</span>
+              <span class="value">{{ formatDate(row.结束日期) }}</span>
+            </div>
+          </div>
+          <div class="pt-mobile-card__stats">
+            <div class="stat">
+              <div class="stat-label">投产数量</div>
+              <div class="stat-value">{{ formatValue(row.投产数量) }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">已完成</div>
+              <div class="stat-value">{{ formatValue(row.已完成数量) }}</div>
+            </div>
+          </div>
+          <div class="pt-mobile-card__actions">
+            <el-button size="small" type="primary" @click="handleView(row)">查看</el-button>
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+          </div>
+        </el-card>
+      </template>
+    </div>
+
+    <div
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -161,7 +278,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="1200px"
+      :width="isMobile ? '100%' : '1200px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
@@ -387,9 +505,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty } from 'element-plus'
 import {
   getProductionTaskListApi,
   getProductionTaskDetailApi,
@@ -397,6 +515,7 @@ import {
   getProductionTaskStatisticsApi,
   type ProductionTaskInfo
 } from '@/api/production-task'
+import { useAppStore } from '@/store/modules/app'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
@@ -418,6 +537,14 @@ const statusOptions = [
   { label: '已取消', value: '已取消' }
 ]
 
+type ViewMode = 'table' | 'card'
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+const showMobileFilters = ref(true)
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
+
 const dialogVisible = ref(false)
 const dialogTitle = ref('编辑生产任务')
 const dialogSubmitting = ref(false)
@@ -425,6 +552,13 @@ const dialogFormRef = ref<FormInstance>()
 const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
 const currentProjectCode = ref('')
 const isViewMode = ref(false)
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+  if (!mobile) {
+    showMobileFilters.value = true
+  }
+})
 
 // 查看模式的表格数据（分组展示）
 const viewTableSections = computed(() => {
@@ -698,11 +832,88 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 查询表单垂直居中对齐 */
+@media (width <= 768px) {
+  .query-form--mobile {
+    padding: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item) {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-input),
+  :deep(.query-form--mobile .el-select),
+  :deep(.query-form--mobile .el-date-editor) {
+    width: 100%;
+  }
+
+  .summary-card {
+    height: auto;
+    min-height: 70px;
+  }
+
+  .pt-mobile-card__meta {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .pt-mobile-card__dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :deep(.pt-table .el-table__body-wrapper tbody tr) {
+    height: 42px !important;
+  }
+
+  :deep(.pt-table .el-table__body-wrapper .el-table__cell) {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
+.pt-page {
+  position: relative;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 0;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
 .query-form {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.query-form__actions {
+  margin-left: auto;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 :deep(.query-form .el-form-item) {
@@ -906,12 +1117,13 @@ onMounted(() => {
 /* 分页固定在页面底部居中，靠近版权信息区域 */
 .pagination-footer {
   position: fixed;
+  right: 40px;
   bottom: 40px;
-  left: 50%;
+  left: auto;
   z-index: 10;
   display: flex;
-  transform: translateX(-50%);
-  justify-content: center;
+  transform: none;
+  justify-content: flex-end;
 }
 
 /* 统计卡片内容垂直居中 */
@@ -946,5 +1158,112 @@ onMounted(() => {
 :deep(.pt-table .el-table__body-wrapper .el-table__cell) {
   padding-top: 3px !important;
   padding-bottom: 3px !important;
+}
+
+.pt-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.pt-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.pt-table-wrapper--mobile .pt-table {
+  min-width: 960px;
+}
+
+.pt-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pt-mobile-card {
+  border-radius: 10px;
+}
+
+.pt-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pt-mobile-card__code {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pt-mobile-card__name {
+  font-size: 13px;
+  color: #666;
+}
+
+.pt-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.pt-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.pt-mobile-card__dates {
+  display: grid;
+  margin: 8px 0;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.pt-mobile-card__dates .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.pt-mobile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.pt-mobile-card__stats .stat {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border-radius: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pt-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: flex-end;
 }
 </style>
