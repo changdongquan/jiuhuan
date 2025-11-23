@@ -7,8 +7,8 @@
       <div class="view-mode-switch">
         <span class="view-mode-switch__label">视图</span>
         <el-radio-group v-model="viewMode" size="small">
-          <el-radio-button label="card">卡片</el-radio-button>
-          <el-radio-button label="table">表格</el-radio-button>
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
         </el-radio-group>
       </div>
     </div>

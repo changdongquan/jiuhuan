@@ -7,8 +7,8 @@
       <div class="view-mode-switch">
         <span class="view-mode-switch__label">视图</span>
         <el-radio-group v-model="viewMode" size="small">
-          <el-radio-button label="card">卡片</el-radio-button>
-          <el-radio-button label="table">表格</el-radio-button>
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
         </el-radio-group>
       </div>
     </div>
@@ -393,7 +393,7 @@
               从新品中选择
             </el-button>
           </div>
-          <div class="dialog-table-wrapper">
+          <div v-if="!isMobile" class="dialog-table-wrapper">
             <el-table
               :data="dialogForm.details"
               border
@@ -494,6 +494,106 @@
                 </template>
               </el-table-column>
             </el-table>
+          </div>
+          <div v-else class="dialog-mobile-details-list">
+            <div
+              v-for="(detail, index) in dialogForm.details"
+              :key="detail.id || index"
+              class="dialog-mobile-detail-card"
+            >
+              <div class="dialog-mobile-detail-header">
+                <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
+                <el-button
+                  v-if="isCreateMode"
+                  type="danger"
+                  text
+                  size="small"
+                  @click="removeDetailRow(index)"
+                >
+                  删除
+                </el-button>
+              </div>
+              <div class="dialog-mobile-detail-body">
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">项目编号</div>
+                  <el-input
+                    v-model="detail.itemCode"
+                    placeholder="请输入项目编号"
+                    :disabled="!isCreateMode"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">产品名称</div>
+                  <el-input
+                    v-model="detail.productName"
+                    placeholder="请输入产品名称"
+                    :disabled="!isCreateMode"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">产品图号</div>
+                  <el-input
+                    v-model="detail.productDrawingNo"
+                    placeholder="请输入产品图号"
+                    :disabled="!isCreateMode"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">客户模号</div>
+                  <el-input
+                    v-model="detail.customerPartNo"
+                    placeholder="请输入客户模号"
+                    :disabled="!isCreateMode"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">数量</div>
+                  <el-input-number
+                    v-model="detail.quantity"
+                    :min="0"
+                    :step="1"
+                    style="width: 100%"
+                    @change="handleDetailQuantityChange(detail)"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">单价(元)</div>
+                  <el-input-number
+                    v-model="detail.unitPrice"
+                    :min="0"
+                    :step="100"
+                    :precision="2"
+                    :controls="false"
+                    style="width: 100%"
+                    @change="handleDetailUnitPriceChange(detail)"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">金额(元)</div>
+                  <div class="dialog-mobile-detail-text">
+                    {{ formatAmount(detail.totalAmount) }}
+                  </div>
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">交付日期</div>
+                  <el-date-picker
+                    v-model="detail.deliveryDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择交付日期"
+                    style="width: 100%"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">备注</div>
+                  <el-input v-model="detail.remark" placeholder="备注" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">费用出处</div>
+                  <el-input v-model="detail.costSource" placeholder="费用出处" />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="dialog-product-summary">
@@ -655,7 +755,7 @@
         <!-- 订单明细 -->
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">订单明细</h3>
-          <div class="dialog-table-wrapper">
+          <div v-if="!isMobile" class="dialog-table-wrapper">
             <el-table :data="viewOrderData.details" border size="small" style="width: 100%">
               <el-table-column type="index" label="序号" width="50" align="center" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -710,6 +810,66 @@
                 </template>
               </el-table-column>
             </el-table>
+          </div>
+          <div v-else class="view-dialog-mobile-details">
+            <div
+              v-for="(detail, index) in viewOrderData.details"
+              :key="detail.id || index"
+              class="view-dialog-mobile-detail-card"
+            >
+              <div class="view-dialog-mobile-detail-header">
+                <div class="view-dialog-mobile-detail-title">
+                  {{ detail.productName || detail.itemCode || '明细 ' + (index + 1) }}
+                </div>
+                <div class="view-dialog-mobile-detail-qty"> 数量 {{ detail.quantity || 0 }} </div>
+              </div>
+              <div class="view-dialog-mobile-detail-body">
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">项目编号</span>
+                  <span class="value">{{ detail.itemCode || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">客户模号</span>
+                  <span class="value">{{ detail.customerPartNo || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">单价(元)</span>
+                  <span class="value">{{ formatAmount(detail.unitPrice) }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">总金额(元)</span>
+                  <span class="value">{{ formatAmount(detail.totalAmount) }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">交货日期</span>
+                  <span class="value">{{ formatDate(detail.deliveryDate) || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">出运日期</span>
+                  <span class="value">{{ formatDate(detail.shippingDate) || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">是否入库</span>
+                  <span class="value">{{ detail.isInStock ? '是' : '否' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">是否出运</span>
+                  <span class="value">{{ detail.isShipped ? '是' : '否' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row" v-if="detail.costSource">
+                  <span class="label">费用出处</span>
+                  <span class="value">{{ detail.costSource }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row" v-if="detail.handler">
+                  <span class="label">经办人</span>
+                  <span class="value">{{ detail.handler }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row" v-if="detail.remark">
+                  <span class="label">备注</span>
+                  <span class="value">{{ detail.remark }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1976,6 +2136,107 @@ onMounted(async () => {
   width: 100%;
   padding-bottom: 8px;
   overflow-x: auto;
+}
+
+.dialog-mobile-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dialog-mobile-detail-card {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+}
+
+.dialog-mobile-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.dialog-mobile-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dialog-mobile-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dialog-mobile-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog-mobile-detail-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.dialog-mobile-detail-text {
+  font-size: 13px;
+  color: #333;
+}
+
+.view-dialog-mobile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.view-dialog-mobile-detail-card {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+}
+
+.view-dialog-mobile-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.view-dialog-mobile-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.view-dialog-mobile-detail-qty {
+  font-size: 12px;
+  color: #888;
+}
+
+.view-dialog-mobile-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.view-dialog-mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.view-dialog-mobile-detail-row .label {
+  color: #888;
+}
+
+.view-dialog-mobile-detail-row .value {
+  color: #333;
+  text-align: right;
 }
 
 /* 分页固定在页面底部居中，靠近版权信息区域 */
