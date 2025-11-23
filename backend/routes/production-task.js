@@ -220,6 +220,12 @@ router.get('/detail', async (req, res) => {
           FROM 销售订单 
           WHERE 项目编号 = pt.项目编号
         ), 0) as 订单数量,
+        (
+          SELECT TOP 1 CONVERT(varchar(10), 交货日期, 23)
+          FROM 销售订单 
+          WHERE 项目编号 = pt.项目编号 AND 交货日期 IS NOT NULL
+          ORDER BY 交货日期 ASC
+        ) as 交货日期,
         p.产品材质 as 产品材质,
         CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
         p.计划首样日期 as 计划首样日期

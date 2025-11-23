@@ -9,6 +9,7 @@ export interface ProductionTaskInfo {
   生产状态?: string
   优先级?: string
   订单数量?: number // 订单数量（从销售订单表汇总）
+  交货日期?: string // 交货日期（从销售订单表获取最早的交货日期）
   投产数量?: number
   已完成数量?: number
   批次完成数量?: number

@@ -564,6 +564,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { label: '产品材质', value: dialogForm.产品材质 },
     { label: '图纸下发日期', value: formatDate(dialogForm.图纸下发日期 as any) },
     { label: '计划首样日期', value: formatDate(dialogForm.计划首样日期 as any) },
+    { label: '交货日期', value: formatDate(dialogForm.交货日期 as any) },
     { label: '负责人', value: dialogForm.负责人 },
     { label: '生产状态', value: dialogForm.生产状态, tag: true },
     { label: '优先级', value: dialogForm.优先级 }
