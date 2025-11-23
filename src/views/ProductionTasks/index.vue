@@ -96,6 +96,7 @@
         :height="tableHeight"
         row-key="项目编号"
         @row-dblclick="handleRowDblClick"
+        @sort-change="handleSortChange"
         class="pt-table"
       >
         <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
@@ -104,6 +105,7 @@
           label="项目编号"
           width="145"
           show-overflow-tooltip
+          sortable="custom"
           fixed="left"
         />
         <el-table-column
@@ -127,13 +129,20 @@
           show-overflow-tooltip
           fixed="left"
         />
+        <el-table-column
+          prop="订单数量"
+          label="订单数量"
+          width="100"
+          align="center"
+          show-overflow-tooltip
+        />
         <el-table-column prop="产品材质" label="产品材质" width="100" show-overflow-tooltip />
         <el-table-column prop="图纸下发日期" label="图纸下发日期" width="115">
           <template #default="{ row }">
             {{ formatDate(row.图纸下发日期 as any) }}
           </template>
         </el-table-column>
-        <el-table-column prop="计划首样日期" label="计划首样日期" width="145">
+        <el-table-column prop="计划首样日期" label="计划首样日期" width="145" sortable="custom">
           <template #default="{ row }">
             <span>{{ formatDate(row.计划首样日期 as any) }}</span>
             <el-tag
@@ -147,7 +156,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="负责人" label="负责人" width="80" />
-        <el-table-column prop="生产状态" label="生产状态" width="85" align="center">
+        <el-table-column
+          prop="生产状态"
+          label="生产状态"
+          width="105"
+          align="center"
+          sortable="custom"
+        >
           <template #default="{ row }">
             <el-tag :type="getStatusTagType(row.生产状态)" size="small" class="pt-status-tag">
               {{ row.生产状态 || '-' }}
@@ -205,6 +220,10 @@
             <div>
               <span class="label">客户模号</span>
               <span class="value">{{ row.客户模号 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">订单数量</span>
+              <span class="value">{{ row.订单数量 || 0 }}</span>
             </div>
             <div>
               <span class="label">材质</span>
@@ -401,6 +420,14 @@
                 <el-option label="低" value="低" />
               </el-select>
             </el-form-item>
+            <el-form-item label="订单数量">
+              <el-input-number
+                v-model="dialogForm.订单数量"
+                :min="0"
+                style="width: 100%"
+                disabled
+              />
+            </el-form-item>
             <el-form-item label="投产数量">
               <el-input-number v-model="dialogForm.投产数量" :min="0" style="width: 100%" />
             </el-form-item>
@@ -493,6 +520,12 @@ const statusOptions = [
   { label: '已取消', value: '已取消' }
 ]
 
+// 排序状态
+const sortState = reactive<{ prop: string; order: string }>({
+  prop: '',
+  order: ''
+})
+
 type ViewMode = 'table' | 'card'
 
 const appStore = useAppStore()
@@ -537,6 +570,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   ]
 
   const quantityInfo: DetailItem[] = [
+    { label: '订单数量', value: formatValue(dialogForm.订单数量) },
     { label: '投产数量', value: formatValue(dialogForm.投产数量) },
     { label: '已完成数量', value: formatValue(dialogForm.已完成数量) },
     { label: '批次完成数量', value: formatValue(dialogForm.批次完成数量) }
@@ -641,6 +675,13 @@ const getStatusTagType = (status?: string) => {
   return statusMap[status] || 'info'
 }
 
+const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending' | null }) => {
+  sortState.prop = sort.order ? sort.prop : ''
+  sortState.order = sort.order || ''
+  pagination.page = 1
+  loadData()
+}
+
 // 加载统计数据
 const loadStatistics = async () => {
   try {
@@ -665,6 +706,10 @@ const loadData = async () => {
     }
     if (queryForm.keyword) params.keyword = queryForm.keyword
     if (queryForm.status) params.status = queryForm.status
+    if (sortState.prop && sortState.order) {
+      params.sortField = sortState.prop
+      params.sortOrder = sortState.order === 'ascending' ? 'asc' : 'desc'
+    }
 
     const response: any = await getProductionTaskListApi(params)
 

@@ -2,10 +2,43 @@ const express = require('express')
 const { query } = require('../database')
 const router = express.Router()
 
+/**
+ * 构建 ORDER BY 子句
+ * @param {string} sortField - 排序字段
+ * @param {string} sortOrder - 排序方向 (asc/desc)
+ * @returns {string} ORDER BY SQL 子句
+ */
+function buildOrderByClause(sortField, sortOrder) {
+  // 排序字段白名单映射（防止SQL注入）
+  const sortableFields = {
+    项目编号: 'pt.项目编号',
+    计划首样日期: 'p.计划首样日期',
+    生产状态: 'pt.生产状态'
+  }
+
+  // 如果提供了有效的排序字段和排序方向
+  const mappedField = sortField && sortableFields[sortField]
+  const sortDir = (sortOrder || '').toString().toLowerCase()
+
+  if (mappedField && (sortDir === 'asc' || sortDir === 'desc')) {
+    return `ORDER BY ${mappedField} ${sortDir.toUpperCase()}`
+  }
+
+  // 默认排序
+  return `ORDER BY 
+        CASE 
+          WHEN p.计划首样日期 IS NULL THEN 2 
+          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
+          ELSE 0 
+        END ASC,
+        p.计划首样日期 ASC,
+        pt.项目编号 DESC`
+}
+
 // 获取生产任务列表
 router.get('/list', async (req, res) => {
   try {
-    const { keyword, status, page = 1, pageSize = 10 } = req.query
+    const { keyword, status, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
     let whereConditions = []
     let params = {}
@@ -72,6 +105,11 @@ router.get('/list', async (req, res) => {
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
         p.客户模号 as 客户模号,
+        ISNULL((
+          SELECT SUM(数量) 
+          FROM 销售订单 
+          WHERE 项目编号 = pt.项目编号
+        ), 0) as 订单数量,
         p.产品材质 as 产品材质,
         CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
         p.计划首样日期 as 计划首样日期
@@ -79,14 +117,7 @@ router.get('/list', async (req, res) => {
       LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
       LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
       ${whereClause}
-      ORDER BY 
-        CASE 
-          WHEN p.计划首样日期 IS NULL THEN 2 
-          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
-          ELSE 0 
-        END ASC,
-        p.计划首样日期 ASC,
-        pt.项目编号 DESC
+      ${buildOrderByClause(sortField, sortOrder)}
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
     `
@@ -184,6 +215,11 @@ router.get('/detail', async (req, res) => {
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
         p.客户模号 as 客户模号,
+        ISNULL((
+          SELECT SUM(数量) 
+          FROM 销售订单 
+          WHERE 项目编号 = pt.项目编号
+        ), 0) as 订单数量,
         p.产品材质 as 产品材质,
         CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
         p.计划首样日期 as 计划首样日期

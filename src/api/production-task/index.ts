@@ -8,6 +8,7 @@ export interface ProductionTaskInfo {
   结束日期?: string
   生产状态?: string
   优先级?: string
+  订单数量?: number // 订单数量（从销售订单表汇总）
   投产数量?: number
   已完成数量?: number
   批次完成数量?: number
@@ -36,6 +37,8 @@ export interface ProductionTaskQueryParams {
   status?: string // 生产状态
   page?: number
   pageSize?: number
+  sortField?: string // 排序字段
+  sortOrder?: string // 排序方向: 'asc' | 'desc'
 }
 
 // 获取生产任务列表

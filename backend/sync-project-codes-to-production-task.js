@@ -12,22 +12,24 @@ async function syncProjectCodesToProductionTask() {
     pool = await sql.connect(config)
     console.log('✅ 数据库连接成功\n')
 
-    // 1. 获取项目管理表中的所有项目编号
+    // 1. 获取项目管理表中的所有项目编号（且必须在货物信息表中存在，因为外键约束）
     console.log('='.repeat(60))
-    console.log('📋 获取项目管理表中的项目编号')
+    console.log('📋 获取项目管理表中的项目编号（且必须在货物信息表中存在）')
     console.log('='.repeat(60))
 
     const projectCodesQuery = `
-      SELECT DISTINCT 项目编号
-      FROM 项目管理
-      WHERE 项目编号 IS NOT NULL AND 项目编号 != ''
-      ORDER BY 项目编号
+      SELECT DISTINCT p.项目编号
+      FROM 项目管理 p
+      INNER JOIN 货物信息 g ON p.项目编号 = g.项目编号
+      WHERE p.项目编号 IS NOT NULL AND p.项目编号 != ''
+        AND CAST(g.IsNew AS INT) != 1
+      ORDER BY p.项目编号
     `
 
     const projectCodesResult = await pool.request().query(projectCodesQuery)
     const projectCodes = projectCodesResult.recordset.map((r) => r.项目编号)
 
-    console.log(`✅ 找到 ${projectCodes.length} 个项目编号`)
+    console.log(`✅ 找到 ${projectCodes.length} 个项目编号（在货物信息表中存在）`)
 
     if (projectCodes.length === 0) {
       console.log('⚠️  项目管理表中没有项目编号，无需同步')
