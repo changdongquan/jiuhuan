@@ -431,11 +431,7 @@
               </el-table-column>
               <el-table-column label="客户模号" min-width="130">
                 <template #default="{ row }">
-                  <el-input
-                    v-model="row.customerPartNo"
-                    placeholder="请输入客户模号"
-                    :disabled="!isCreateMode"
-                  />
+                  <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
                 </template>
               </el-table-column>
               <el-table-column label="数量" width="140" align="center">
@@ -540,11 +536,7 @@
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">客户模号</div>
-                  <el-input
-                    v-model="detail.customerPartNo"
-                    placeholder="请输入客户模号"
-                    :disabled="!isCreateMode"
-                  />
+                  <el-input v-model="detail.customerPartNo" placeholder="请输入客户模号" />
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">数量</div>
@@ -1526,6 +1518,12 @@ const submitDialogForm = async () => {
         details: dialogForm.details.map((d: any) => ({
           id: d.id,
           itemCode: d.itemCode || undefined,
+          customerPartNo:
+            d.customerPartNo !== undefined && d.customerPartNo !== null
+              ? d.customerPartNo.trim
+                ? d.customerPartNo.trim()
+                : String(d.customerPartNo)
+              : '',
           deliveryDate: d.deliveryDate || null,
           totalAmount: Number(d.totalAmount || 0),
           unitPrice: Number(d.unitPrice || 0),

@@ -727,6 +727,11 @@ router.put('/update', async (req, res) => {
       await query(baseUpdateQuery, baseUpdateParams)
     }
 
+    // 收集项目编号和客户模号的映射，用于更新项目管理表
+    const itemCodeToCustomerPartNo = new Map()
+    const pool = await getPool()
+    const sql = require('mssql')
+
     // 2. 批量更新明细记录
     for (const detail of details) {
       if (!detail.id) {
@@ -792,6 +797,61 @@ router.put('/update', async (req, res) => {
           WHERE 订单ID = @id
         `
         await query(detailUpdateQuery, detailParams)
+      }
+
+      // 如果提供了客户模号（包括空值，表示要清除），记录到映射中用于更新项目管理表
+      let itemCode = detail.itemCode
+      if (!itemCode) {
+        // 如果前端没有传递 itemCode，查询现有记录的项目编号
+        const existingRecordQuery = `SELECT 项目编号 as itemCode FROM 销售订单 WHERE 订单ID = @id`
+        const existingRecord = await query(existingRecordQuery, { id: detail.id })
+        if (existingRecord.length > 0) {
+          itemCode = existingRecord[0].itemCode
+        }
+      }
+      // 如果customerPartNo字段存在（包括null和空字符串），就记录到映射中
+      // undefined 表示前端没有传递该字段，不需要更新
+      if (itemCode && detail.hasOwnProperty('customerPartNo')) {
+        // 将 null、undefined 或空字符串统一转换为空字符串，用于后续清除
+        // 如果有值（非空字符串），使用实际值；否则使用空字符串表示清除
+        let customerPartNoValue = ''
+        if (detail.customerPartNo) {
+          // 确保是字符串类型，并进行去空格处理
+          const strValue = String(detail.customerPartNo).trim()
+          if (strValue !== '') {
+            customerPartNoValue = strValue
+          }
+        }
+        itemCodeToCustomerPartNo.set(itemCode, customerPartNoValue)
+      }
+    }
+
+    // 3. 更新项目管理表中的客户模号
+    if (itemCodeToCustomerPartNo.size > 0) {
+      try {
+        for (const [itemCode, customerPartNo] of itemCodeToCustomerPartNo.entries()) {
+          const updateProjectRequest = pool.request()
+          updateProjectRequest.input('itemCode', sql.NVarChar, itemCode)
+          // 如果客户模号为空字符串，设置为NULL；否则设置为实际值
+          const customerPartNoValue = customerPartNo === '' ? null : customerPartNo
+          updateProjectRequest.input('customerPartNo', sql.NVarChar, customerPartNoValue)
+
+          await updateProjectRequest.query(`
+            UPDATE 项目管理 
+            SET 客户模号 = @customerPartNo
+            WHERE 项目编号 = @itemCode
+          `)
+          if (customerPartNoValue) {
+            console.log(
+              `[销售订单] 已更新项目管理记录，项目编号: ${itemCode}, 客户模号: ${customerPartNoValue}`
+            )
+          } else {
+            console.log(`[销售订单] 已清除项目管理记录中的客户模号，项目编号: ${itemCode}`)
+          }
+        }
+      } catch (updateError) {
+        console.error('更新项目管理表中的客户模号失败:', updateError)
+        // 不影响订单更新，仅记录错误
       }
     }
 
