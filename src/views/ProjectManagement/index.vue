@@ -300,6 +300,7 @@
       title="项目详情"
       :width="isMobile ? '100%' : '1200px'"
       :fullscreen="isMobile"
+      class="pm-detail-dialog"
     >
       <div class="detail-grid">
         <div class="detail-grid-col">
@@ -1132,23 +1133,99 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 响应式优化 */
+
 @media (width <= 1200px) {
   .detail-grid {
-    flex-direction: column;
+    flex-wrap: wrap;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .detail-grid-col {
-    border-right: none;
+    flex: 0 0 50%;
+    max-width: 50%;
+    background: transparent;
+    border-right: 1px solid #e4e7ed;
     border-bottom: 1px solid #e4e7ed;
   }
 
-  .detail-grid-col:last-child {
+  .detail-cell {
+    min-height: 40px;
+    padding: 6px 8px;
+  }
+
+  .detail-label {
+    flex: 0 0 90px;
+    font-size: 12px;
+  }
+
+  .detail-value {
+    font-size: 13px;
+  }
+
+  /* 每行右侧列去掉右边框，避免双线 */
+  .detail-grid-col:nth-child(2n) {
+    border-right: none;
+  }
+
+  /* 最后一行两列去掉下边框 */
+  .detail-grid-col:nth-last-child(-n + 2) {
     border-bottom: none;
+  }
+
+  .detail-row-remark {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :deep(.el-dialog__body) {
+    padding-right: 8px;
+    padding-left: 8px;
   }
 }
 
 @media (width <= 768px) {
+  /* 手机端项目详情对话框：尽量铺满且减少边距 */
+  :deep(.el-dialog__body) {
+    padding: 8px 4px 12px;
+  }
+
+  .detail-grid {
+    width: 100%;
+    border-right: none;
+    border-left: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .detail-cell {
+    min-height: 40px;
+    padding: 6px 4px;
+  }
+
+  .detail-label {
+    flex: 0 0 70px;
+    font-size: 12px;
+  }
+
+  .detail-value {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-row-remark {
+    border-right: none;
+    border-left: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   .query-form--mobile {
     padding: 12px;
   }
@@ -1189,6 +1266,72 @@ onMounted(() => {
   :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
     padding-top: 6px !important;
     padding-bottom: 6px !important;
+  }
+}
+
+/* 手机端详情两列 + 紧凑布局 */
+@media (width <= 768px) {
+  /* 覆盖对话框本身的左右留白，尽量铺满 */
+  :deep(.pm-detail-dialog) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0;
+  }
+
+  /* 让查看弹窗更贴边、减少留白 */
+  :deep(.pm-detail-dialog .el-dialog__body) {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  :deep(.pm-detail-dialog .el-dialog__header) {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  :deep(.pm-detail-dialog .el-dialog__footer) {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .detail-grid {
+    border-right: none;
+    border-left: none;
+    border-radius: 0;
+    flex-wrap: wrap;
+  }
+
+  .detail-grid-col {
+    flex: 0 0 50%;
+    border-right: 1px solid #e4e7ed;
+  }
+
+  .detail-grid-col:nth-child(2n) {
+    border-right: none;
+  }
+
+  .detail-row-remark {
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+  }
+
+  .detail-cell {
+    min-height: 26px;
+    padding: 2px 4px;
+  }
+
+  .detail-label {
+    padding-right: 2px;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 0 64px;
+  }
+
+  .detail-value {
+    font-size: 11px;
   }
 }
 
@@ -1334,6 +1477,7 @@ onMounted(() => {
   width: 25%;
 }
 
+/* 详情查看布局 */
 .detail-grid {
   display: flex;
   overflow: hidden;
@@ -1411,9 +1555,12 @@ onMounted(() => {
 
 .detail-value {
   min-height: 20px;
+  overflow: hidden;
   font-size: 14px;
   color: #303133;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  word-break: normal;
+  white-space: nowrap;
   flex: 1;
 }
 
@@ -1574,4 +1721,6 @@ onMounted(() => {
   transform: none;
   justify-content: flex-end;
 }
+
+/* 响应式优化 */
 </style>

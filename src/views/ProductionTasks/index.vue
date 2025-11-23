@@ -281,6 +281,7 @@
       :width="isMobile ? '100%' : '1200px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="pt-detail-dialog"
       @closed="handleDialogClosed"
     >
       <!-- 查看模式：与项目管理一致的详情布局 -->
@@ -846,6 +847,63 @@ onMounted(() => {
 
   .detail-label {
     flex-basis: 90px;
+  }
+}
+
+/* 手机端查看详情紧凑布局 */
+@media (width <= 768px) {
+  /* 让查看弹窗铺满并减少留白，仅作用于生产任务弹窗 */
+  :deep(.pt-detail-dialog) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0;
+  }
+
+  :deep(.pt-detail-dialog .el-dialog__body) {
+    padding: 8px 4px;
+  }
+
+  :deep(.pt-detail-dialog .el-dialog__header),
+  :deep(.pt-detail-dialog .el-dialog__footer) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .pt-detail-view {
+    gap: 8px;
+  }
+
+  .detail-section {
+    border-radius: 6px;
+  }
+
+  .detail-section-header {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* 手机端改为两列网格，整体更紧凑 */
+  .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-cell {
+    min-height: 28px;
+    padding: 4px 6px;
+  }
+
+  .detail-label {
+    padding-right: 4px;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 0 70px;
+  }
+
+  .detail-value {
+    font-size: 11px;
   }
 }
 
