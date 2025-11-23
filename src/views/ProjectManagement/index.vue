@@ -1133,7 +1133,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
 @media (width <= 1200px) {
   .detail-grid {
     flex-wrap: wrap;
@@ -1269,7 +1268,7 @@ onMounted(() => {
   }
 }
 
-/* 手机端详情两列 + 紧凑布局 */
+/* 手机端详情两列 + 紧凑布局（仅项目详情弹窗） */
 @media (width <= 768px) {
   /* 覆盖对话框本身的左右留白，尽量铺满 */
   :deep(.pm-detail-dialog) {
@@ -1281,8 +1280,7 @@ onMounted(() => {
 
   /* 让查看弹窗更贴边、减少留白 */
   :deep(.pm-detail-dialog .el-dialog__body) {
-    padding-right: 0;
-    padding-left: 0;
+    padding: 2px 0 6px;
   }
 
   :deep(.pm-detail-dialog .el-dialog__header) {
@@ -1295,43 +1293,43 @@ onMounted(() => {
     padding-left: 6px;
   }
 
-  .detail-grid {
+  .pm-detail-dialog .detail-grid {
     border-right: none;
     border-left: none;
     border-radius: 0;
     flex-wrap: wrap;
   }
 
-  .detail-grid-col {
+  .pm-detail-dialog .detail-grid-col {
     flex: 0 0 50%;
     border-right: 1px solid #e4e7ed;
   }
 
-  .detail-grid-col:nth-child(2n) {
+  .pm-detail-dialog .detail-grid-col:nth-child(2n) {
     border-right: none;
   }
 
-  .detail-row-remark {
+  .pm-detail-dialog .detail-row-remark {
     border-top: none;
     border-radius: 0 0 8px 8px;
   }
 
-  .detail-cell {
-    min-height: 26px;
-    padding: 2px 4px;
+  .pm-detail-dialog .detail-cell {
+    min-height: 18px;
+    padding: 0 2px;
   }
 
-  .detail-label {
+  .pm-detail-dialog .detail-label {
     padding-right: 2px;
     overflow: hidden;
-    font-size: 11px;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 0 0 64px;
+    flex: 0 0 56px;
   }
 
-  .detail-value {
-    font-size: 11px;
+  .pm-detail-dialog .detail-value {
+    font-size: 10px;
   }
 }
 
@@ -1480,6 +1478,7 @@ onMounted(() => {
 /* 详情查看布局 */
 .detail-grid {
   display: flex;
+  flex-wrap: wrap;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e4e7ed;
@@ -1489,9 +1488,10 @@ onMounted(() => {
 }
 
 .detail-grid-col {
+  max-width: 50%;
   background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
   border-right: 1px solid #e4e7ed;
-  flex: 1;
+  flex: 0 0 50%;
 }
 
 .detail-grid-col:last-child {
@@ -1505,8 +1505,8 @@ onMounted(() => {
 .detail-cell {
   position: relative;
   display: flex;
-  min-height: 48px;
-  padding: 12px 16px;
+  min-height: 24px;
+  padding: 2px 4px;
   border-bottom: 1px solid #f0f2f5;
   transition: all 0.3s ease;
   align-items: center;
@@ -1539,12 +1539,12 @@ onMounted(() => {
 
 .detail-label {
   position: relative;
-  padding-right: 12px;
-  font-size: 13px;
+  padding-right: 4px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
   color: #606266;
-  flex: 0 0 100px;
+  flex: 0 0 70px;
 }
 
 .detail-label::after {
@@ -1556,7 +1556,7 @@ onMounted(() => {
 .detail-value {
   min-height: 20px;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 11px;
   color: #303133;
   text-overflow: ellipsis;
   word-break: normal;
@@ -1579,8 +1579,8 @@ onMounted(() => {
 }
 
 .detail-row-remark .detail-cell {
-  min-height: 60px;
-  padding-top: 16px;
+  min-height: 40px;
+  padding-top: 8px;
   border-bottom: none;
   align-items: flex-start;
 }
