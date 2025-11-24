@@ -1,21 +1,41 @@
 <template>
-  <div class="p-4">
+  <div class="project-info-page px-4 pt-1 pb-4 space-y-2">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
     <el-card shadow="never">
       <template #header>
-        <div class="flex justify-between items-center">
+        <div class="flex justify-between items-center gap-2">
           <span class="text-lg font-bold">项目信息</span>
-          <el-button type="primary" @click="handleAdd"> 新增项目 </el-button>
+          <el-button type="primary" @click="handleAdd">新增项目</el-button>
         </div>
       </template>
 
       <!-- 搜索表单 -->
-      <el-form :inline="true" :model="queryForm" class="mb-4">
+      <el-form
+        :model="queryForm"
+        :inline="!isMobile"
+        :label-width="isMobile ? 'auto' : '90px'"
+        :label-position="isMobile ? 'top' : 'right'"
+        class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-3 mb-4"
+        :class="{ 'query-form--mobile': isMobile }"
+        v-show="!isMobile || showMobileFilters"
+      >
         <el-form-item label="模糊查询">
           <el-input
             v-model="queryForm.keyword"
             placeholder="请输入项目编号/产品名称/产品图号"
             clearable
-            style="width: 280px"
+            :style="{ width: isMobile ? '100%' : '280px' }"
             @keyup.enter="handleQuery"
           />
         </el-form-item>
@@ -24,7 +44,7 @@
             v-model="queryForm.category"
             placeholder="请选择分类"
             clearable
-            style="width: 150px"
+            :style="{ width: isMobile ? '100%' : '150px' }"
           >
             <el-option label="塑胶模具" value="塑胶模具" />
             <el-option label="零件加工" value="零件加工" />
@@ -32,47 +52,117 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleQuery"> 查询 </el-button>
-          <el-button @click="handleReset"> 重置 </el-button>
+          <el-button type="primary" @click="handleQuery">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
 
-      <!-- 数据表格 -->
-      <el-table
-        :data="tableData"
-        border
-        stripe
-        v-loading="loading"
-        @row-dblclick="handleRowDoubleClick"
-      >
-        <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column
-          prop="projectCode"
-          label="项目编号"
-          min-width="160"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="productName" label="产品名称" width="240" />
-        <el-table-column prop="productDrawing" label="产品图号" width="240" />
-        <el-table-column
-          prop="customerModelNo"
-          label="客户模号"
-          width="150"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="category" label="分类" width="120" />
-        <el-table-column prop="customerName" label="客户名称" width="280" show-overflow-tooltip />
-        <el-table-column prop="remarks" label="备注" width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="220" align="center" fixed="right">
-          <template #default="{ row }">
-            <div class="operation-buttons">
-              <el-button type="primary" size="small" @click="handleEdit(row)"> 编辑 </el-button>
-              <el-button type="success" size="small" @click="handleView(row)"> 查看 </el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)"> 删除 </el-button>
+      <!-- 数据卡片（手机端） -->
+      <div v-if="isMobile && viewMode === 'card'" class="pi-mobile-list">
+        <el-card
+          v-for="item in tableData"
+          :key="item.id || item.projectCode"
+          class="pi-mobile-card"
+          shadow="hover"
+        >
+          <div class="pi-mobile-card__header">
+            <div>
+              <div class="pi-mobile-card__code">{{ item.projectCode }}</div>
+              <div class="pi-mobile-card__name">{{ item.productName }}</div>
             </div>
-          </template>
-        </el-table-column>
-      </el-table>
+            <el-tag size="small" :type="getCategoryTagType(item.category)">
+              {{ item.category }}
+            </el-tag>
+          </div>
+          <div class="pi-mobile-card__meta">
+            <div>
+              <span class="label">客户</span>
+              <span class="value">{{ item.customerName || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">客户模号</span>
+              <span class="value">{{ item.customerModelNo || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">产品图号</span>
+              <span class="value">{{ item.productDrawing || '-' }}</span>
+            </div>
+          </div>
+          <div v-if="item.remarks" class="pi-mobile-card__remarks">
+            <span class="label">备注</span>
+            <span class="value">{{ item.remarks }}</span>
+          </div>
+          <div class="pi-mobile-card__actions">
+            <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
+            <el-button size="small" @click="handleEdit(item)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 数据表格 -->
+      <div
+        v-if="!isMobile || viewMode === 'table'"
+        class="pi-table-wrapper"
+        :class="{ 'pi-table-wrapper--mobile': isMobile }"
+      >
+        <el-table
+          :data="tableData"
+          border
+          stripe
+          v-loading="loading"
+          @row-dblclick="handleRowDoubleClick"
+          class="pi-table"
+          :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+        >
+          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column
+            prop="projectCode"
+            label="项目编号"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="productName"
+            label="产品名称"
+            min-width="200"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="productDrawing"
+            label="产品图号"
+            min-width="200"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="customerModelNo"
+            label="客户模号"
+            width="150"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="category" label="分类" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getCategoryTagType(row.category)">{{ row.category }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="customerName"
+            label="客户名称"
+            min-width="200"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="remarks" label="备注" min-width="150" show-overflow-tooltip />
+          <el-table-column label="操作" width="220" align="center" fixed="right">
+            <template #default="{ row }">
+              <div class="operation-buttons">
+                <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+                <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+                <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <!-- 分页 -->
       <div class="flex justify-end mt-4">
@@ -92,11 +182,13 @@
     <el-dialog
       v-model="viewDialogVisible"
       title="项目详情"
-      width="600px"
+      :width="isMobile ? '100%' : '640px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="pi-detail-dialog"
     >
       <div v-if="viewData" class="project-detail">
-        <el-descriptions :column="2" border>
+        <el-descriptions :column="isMobile ? 1 : 2" border>
           <el-descriptions-item label="项目编号">
             {{ viewData.projectCode }}
           </el-descriptions-item>
@@ -132,57 +224,67 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="800px"
+      :width="isMobile ? '100%' : '800px'"
+      :fullscreen="isMobile"
+      class="pi-edit-dialog"
       @close="handleDialogClose"
       @opened="handleDialogOpened"
     >
-      <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
+      <el-form
+        :model="formData"
+        :rules="rules"
+        ref="formRef"
+        :label-width="isMobile ? '90px' : '100px'"
+      >
         <!-- 项目编号独立首行 -->
         <el-form-item label="项目编号" prop="projectCode">
           <div class="project-code-input">
-            <span class="code-prefix">JH</span>
-            <el-select
-              ref="projectCodeInputRef"
-              v-model="formData.projectCategory"
-              placeholder="类别"
-              class="code-category"
-              @change="onCategoryChange"
-            >
-              <el-option label="01" value="01" />
-              <el-option label="03" value="03" />
-              <el-option label="05" value="05" />
-            </el-select>
-            <span class="code-separator">-</span>
-            <el-input
-              v-model="formData.projectYear"
-              placeholder="年份"
-              maxlength="2"
-              class="code-year"
-              @input="updateProjectCode"
-            />
-            <span class="code-separator">-</span>
-            <el-input
-              ref="projectSerialInputRef"
-              v-model="formData.projectSerial"
-              placeholder="序号"
-              maxlength="3"
-              class="code-serial"
-              @input="updateProjectCode"
-              @focus="onSerialFocus"
-              @blur="onSerialBlur"
-            />
-            <template v-if="formData.projectCategory === '03'">
-              <span class="code-separator">/</span>
+            <div class="code-main-row">
+              <span class="code-prefix">JH</span>
+              <el-select
+                ref="projectCodeInputRef"
+                v-model="formData.projectCategory"
+                placeholder="类别"
+                class="code-category"
+                @change="onCategoryChange"
+              >
+                <el-option label="01" value="01" />
+                <el-option label="03" value="03" />
+                <el-option label="05" value="05" />
+              </el-select>
+              <span class="code-separator">-</span>
               <el-input
-                ref="partNumberInputRef"
-                v-model="formData.partNumber"
-                placeholder="零件"
+                v-model="formData.projectYear"
+                placeholder="年份"
                 maxlength="2"
-                class="code-part"
+                class="code-year"
                 @input="updateProjectCode"
-                @blur="onPartNumberBlur"
               />
-            </template>
+              <span class="code-separator">-</span>
+              <el-input
+                ref="projectSerialInputRef"
+                v-model="formData.projectSerial"
+                placeholder="序号"
+                maxlength="3"
+                class="code-serial"
+                @input="updateProjectCode"
+                @focus="onSerialFocus"
+                @blur="onSerialBlur"
+              />
+              <template
+                v-if="formData.projectCategory === '03' || formData.projectCategory === '01'"
+              >
+                <span class="code-separator">/</span>
+                <el-input
+                  ref="partNumberInputRef"
+                  v-model="formData.partNumber"
+                  placeholder="零件"
+                  maxlength="2"
+                  class="code-part"
+                  @input="updateProjectCode"
+                />
+              </template>
+            </div>
             <el-tag v-if="formData.projectCategory" type="info" class="category-tag">
               {{ getCategoryName(formData.projectCategory) }}
             </el-tag>
@@ -259,7 +361,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import {
   getGoodsListApi,
   createGoodsApi,
@@ -270,6 +372,7 @@ import {
   type GoodsQueryParams
 } from '@/api/goods'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import { useAppStore } from '@/store/modules/app'
 import {
   ElButton,
   ElCard,
@@ -290,6 +393,17 @@ import {
   ElTableColumn,
   ElTag
 } from 'element-plus'
+
+type ViewMode = 'table' | 'card'
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
+const showMobileFilters = ref(true)
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+})
 
 // 查询表单
 const queryForm = reactive({
@@ -379,6 +493,8 @@ const updateProjectCode = () => {
     return
   }
 
+  const trimmedPart = (partNumber || '').trim()
+
   // 格式化年份（确保是2位数）
   const yearStr = projectYear.padStart(2, '0')
 
@@ -388,9 +504,9 @@ const updateProjectCode = () => {
   // 基础编号格式：JH0X-YY-SSS
   let code = `JH${projectCategory}-${yearStr}-${serialStr}`
 
-  // 如果是03（零件加工）且有零件号，则添加零件号
-  if (projectCategory === '03' && partNumber) {
-    const partStr = partNumber.padStart(2, '0')
+  // 如果是01（塑胶模具）或03（零件加工）且有零件号，则添加零件号
+  if ((projectCategory === '03' || projectCategory === '01') && trimmedPart) {
+    const partStr = trimmedPart.padStart(2, '0')
     code += `/${partStr}`
   }
 
@@ -415,8 +531,8 @@ const onSerialFocus = () => {
 // 序号输入框失焦时聚焦到产品名称或零件号
 const onSerialBlur = () => {
   showSerialTip.value = false
-  if (formData.projectCategory === '03') {
-    // 如果是零件加工，聚焦到零件号输入框
+  if (formData.projectCategory === '03' || formData.projectCategory === '01') {
+    // 如果是零件加工或塑胶模具，聚焦到零件号输入框
     setTimeout(() => {
       partNumberInputRef.value?.focus()
     }, 100)
@@ -426,13 +542,6 @@ const onSerialBlur = () => {
       projectNameInputRef.value?.focus()
     }, 100)
   }
-}
-
-// 零件号输入框失焦时聚焦到产品名称
-const onPartNumberBlur = () => {
-  setTimeout(() => {
-    projectNameInputRef.value?.focus()
-  }, 100)
 }
 
 // 获取数据列表
@@ -706,17 +815,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.operation-buttons {
-  display: flex;
-  gap: 4px;
-  padding: 0 8px;
-  justify-content: center;
-}
-
 .project-code-input {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.code-main-row {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: nowrap;
 }
 
@@ -735,19 +844,19 @@ onMounted(() => {
 }
 
 .code-category {
-  width: 80px;
+  width: 70px;
 }
 
 .code-year {
-  width: 80px;
+  width: 70px;
 }
 
 .code-serial {
-  width: 100px;
+  width: 72px;
 }
 
 .code-part {
-  width: 80px;
+  width: 64px;
 }
 
 .category-tag {
@@ -757,5 +866,185 @@ onMounted(() => {
 .serial-tip {
   margin-top: 8px;
   margin-left: 8px;
+}
+
+.project-info-page {
+  position: relative;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
+.query-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+:deep(.query-form .el-form-item) {
+  margin-bottom: 0;
+}
+
+.query-form--mobile {
+  padding: 12px;
+}
+
+:deep(.query-form--mobile .el-form-item) {
+  width: 100%;
+  margin-right: 0;
+  margin-bottom: 8px;
+}
+
+:deep(.query-form--mobile .el-form-item .el-form-item__content) {
+  width: 100%;
+}
+
+.pi-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.pi-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.pi-table-wrapper--mobile .pi-table {
+  min-width: 960px;
+}
+
+.operation-buttons {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px;
+  justify-content: center;
+}
+
+.pi-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pi-mobile-card {
+  border-radius: 10px;
+}
+
+.pi-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pi-mobile-card__code {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pi-mobile-card__name {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.pi-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.pi-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.pi-mobile-card__remarks {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.pi-mobile-card__remarks .label {
+  margin-right: 6px;
+  color: #888;
+}
+
+.pi-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+@media (width <= 768px) {
+  :deep(.pi-detail-dialog .el-dialog__body) {
+    padding: 8px 8px 12px;
+  }
+
+  :deep(.pi-edit-dialog) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  :deep(.pi-edit-dialog .el-dialog__body) {
+    padding: 8px 8px 12px;
+  }
+
+  :deep(.pi-edit-dialog .el-dialog__header),
+  :deep(.pi-edit-dialog .el-dialog__footer) {
+    padding-inline: 8px;
+  }
+
+  .project-code-input {
+    gap: 4px;
+  }
+
+  .category-tag {
+    margin-top: 4px;
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .code-category {
+    width: 70px;
+  }
+
+  .code-year {
+    width: 60px;
+  }
+
+  .code-serial {
+    width: 80px;
+  }
+
+  .code-part {
+    width: 60px;
+  }
+
+  .serial-tip {
+    margin-top: 4px;
+    margin-left: 0;
+    flex-basis: 100%;
+  }
 }
 </style>

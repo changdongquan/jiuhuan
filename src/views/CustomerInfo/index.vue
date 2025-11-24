@@ -1,30 +1,22 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="customer-info-page p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
     >
       <el-form-item label="客户名称">
-        <el-input
-          v-model="queryForm.customerName"
-          placeholder="请输入客户名称"
-          clearable
-          style="width: 160px"
-        />
+        <el-input v-model="queryForm.customerName" placeholder="请输入客户名称" clearable />
       </el-form-item>
       <el-form-item label="联系人">
-        <el-input
-          v-model="queryForm.contact"
-          placeholder="请输入联系人"
-          clearable
-          style="width: 140px"
-        />
+        <el-input v-model="queryForm.contact" placeholder="请输入联系人" clearable />
       </el-form-item>
       <el-form-item label="客户状态">
-        <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
+        <el-select v-model="queryForm.status" placeholder="请选择" clearable>
           <el-option label="启用" value="active" />
           <el-option label="停用" value="inactive" />
         </el-select>
@@ -64,34 +56,37 @@
     </el-row>
 
     <template v-if="tableData.length">
-      <el-table
-        :data="tableData"
-        border
-        height="calc(100vh - 320px)"
-        row-key="id"
-        @row-dblclick="handleRowDblClick"
-      >
-        <el-table-column prop="id" label="客户ID" width="80" />
-        <el-table-column prop="customerName" label="客户名称" min-width="200" />
-        <el-table-column prop="contact" label="联系人" width="120" />
-        <el-table-column prop="phone" label="联系电话" width="160" />
-        <el-table-column prop="email" label="电子邮箱" min-width="180" />
-        <el-table-column prop="address" label="客户地址" min-width="200" show-overflow-tooltip />
-        <el-table-column label="客户状态" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusTagMap[row.status].type">{{
-              statusTagMap[row.status].label
-            }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="seqNumber" label="序号" width="80" align="center" />
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="ci-table-wrapper" :class="{ 'ci-table-wrapper--mobile': isMobile }">
+        <el-table
+          :data="tableData"
+          border
+          :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+          row-key="id"
+          @row-dblclick="handleRowDblClick"
+          class="ci-table"
+        >
+          <el-table-column prop="id" label="客户ID" width="80" />
+          <el-table-column prop="customerName" label="客户名称" min-width="200" />
+          <el-table-column prop="contact" label="联系人" width="120" />
+          <el-table-column prop="phone" label="联系电话" width="160" />
+          <el-table-column prop="email" label="电子邮箱" min-width="180" />
+          <el-table-column prop="address" label="客户地址" min-width="200" show-overflow-tooltip />
+          <el-table-column label="客户状态" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag :type="statusTagMap[row.status].type">{{
+                statusTagMap[row.status].label
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="seqNumber" label="序号" width="80" align="center" />
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <div class="flex justify-end">
         <el-pagination
@@ -116,7 +111,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="800px"
+      :width="isMobile ? '100%' : '800px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
@@ -193,7 +189,7 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { nextTick, reactive, ref, onMounted } from 'vue'
+import { nextTick, reactive, ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getCustomerListApi,
@@ -205,6 +201,7 @@ import {
   type CustomerInfo,
   type CustomerQueryParams
 } from '@/api/customer'
+import { useAppStore } from '@/store/modules/app'
 
 type CustomerStatus = 'active' | 'inactive'
 
@@ -225,6 +222,9 @@ const statusTagMap: Record<CustomerStatus, { label: string; type: 'success' | 'i
   active: { label: '启用', type: 'success' },
   inactive: { label: '停用', type: 'info' }
 }
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
 
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<CustomerQuery>({
@@ -547,5 +547,33 @@ onMounted(async () => {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 600;
+}
+
+.query-form--mobile {
+  padding: 12px;
+}
+
+:deep(.query-form--mobile .el-form-item) {
+  width: 100%;
+  margin-right: 0;
+  margin-bottom: 8px;
+}
+
+:deep(.query-form--mobile .el-form-item .el-form-item__content) {
+  width: 100%;
+}
+
+.ci-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.ci-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.ci-table-wrapper--mobile .ci-table {
+  min-width: 960px;
 }
 </style>

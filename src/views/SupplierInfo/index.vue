@@ -1,22 +1,19 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="supplier-info-page p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
     >
       <el-form-item label="供方名称">
-        <el-input
-          v-model="queryForm.supplierName"
-          placeholder="请输入供方名称"
-          clearable
-          style="width: 160px"
-        />
+        <el-input v-model="queryForm.supplierName" placeholder="请输入供方名称" clearable />
       </el-form-item>
       <el-form-item label="分类">
-        <el-select v-model="queryForm.category" placeholder="请选择" clearable style="width: 160px">
+        <el-select v-model="queryForm.category" placeholder="请选择" clearable>
           <el-option
             v-for="item in categoryOptions"
             :key="item.value"
@@ -26,7 +23,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="供方状态">
-        <el-select v-model="queryForm.status" placeholder="请选择" clearable style="width: 160px">
+        <el-select v-model="queryForm.status" placeholder="请选择" clearable>
           <el-option label="启用" value="active" />
           <el-option label="暂停" value="suspended" />
         </el-select>
@@ -66,43 +63,46 @@
     </el-row>
 
     <template v-if="tableData.length">
-      <el-table
-        :data="tableData"
-        border
-        height="calc(100vh - 320px)"
-        row-key="供方ID"
-        @row-dblclick="handleRowDblClick"
-        v-loading="loading"
-      >
-        <el-table-column prop="供方ID" label="供方ID" width="80" />
-        <el-table-column prop="供方名称" label="供方名称" min-width="180" />
-        <el-table-column prop="供方等级" label="供方等级" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag :type="levelTagType[row.供方等级]">{{ row.供方等级 }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="分类" label="分类" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag :type="categoryTagType[row.分类]">{{ row.分类 }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="联系人" label="联系人" width="140" />
-        <el-table-column prop="联系电话" label="联系电话" width="160" />
-        <el-table-column prop="所在地区" label="所在地区" min-width="160" />
-        <el-table-column label="供方状态" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusTagMap[row.供方状态].type">{{
-              statusTagMap[row.供方状态].label
-            }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="si-table-wrapper" :class="{ 'si-table-wrapper--mobile': isMobile }">
+        <el-table
+          :data="tableData"
+          border
+          :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+          row-key="供方ID"
+          @row-dblclick="handleRowDblClick"
+          v-loading="loading"
+          class="si-table"
+        >
+          <el-table-column prop="供方ID" label="供方ID" width="80" />
+          <el-table-column prop="供方名称" label="供方名称" min-width="180" />
+          <el-table-column prop="供方等级" label="供方等级" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag :type="levelTagType[row.供方等级]">{{ row.供方等级 }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="分类" label="分类" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag :type="categoryTagType[row.分类]">{{ row.分类 }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="联系人" label="联系人" width="140" />
+          <el-table-column prop="联系电话" label="联系电话" width="160" />
+          <el-table-column prop="所在地区" label="所在地区" min-width="160" />
+          <el-table-column label="供方状态" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag :type="statusTagMap[row.供方状态].type">{{
+                statusTagMap[row.供方状态].label
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <div class="flex justify-end">
         <el-pagination
@@ -263,7 +263,7 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { nextTick, reactive, ref, onMounted } from 'vue'
+import { nextTick, reactive, ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getSupplierList,
@@ -277,6 +277,7 @@ import {
   type SupplierCreate,
   type SupplierUpdate
 } from '@/api/supplier'
+import { useAppStore } from '@/store/modules/app'
 
 type SupplierLevel = 'A' | 'B' | 'C'
 type SupplierStatus = 'active' | 'suspended'
@@ -324,6 +325,9 @@ const categoryTagType: Record<
   外协: 'danger',
   服务: 'info'
 }
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
 
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<SupplierQuery>({
@@ -712,5 +716,33 @@ onMounted(async () => {
   font-size: 24px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.query-form--mobile {
+  padding: 12px;
+}
+
+:deep(.query-form--mobile .el-form-item) {
+  width: 100%;
+  margin-right: 0;
+  margin-bottom: 8px;
+}
+
+:deep(.query-form--mobile .el-form-item .el-form-item__content) {
+  width: 100%;
+}
+
+.si-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.si-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.si-table-wrapper--mobile .si-table {
+  min-width: 960px;
 }
 </style>

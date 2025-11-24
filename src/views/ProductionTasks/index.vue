@@ -474,12 +474,8 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
-        <el-button
-          v-if="!isViewMode"
-          type="primary"
-          :loading="dialogSubmitting"
-          @click="submitDialogForm"
-        >
+        <el-button v-if="isViewMode" type="primary" @click="handleEditFromView">编辑</el-button>
+        <el-button v-else type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
           保存
         </el-button>
       </template>
@@ -770,6 +766,11 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
+}
+
+const handleEditFromView = () => {
+  isViewMode.value = false
+  dialogTitle.value = '编辑生产任务'
 }
 
 const handleView = async (row: Partial<ProductionTaskInfo>) => {

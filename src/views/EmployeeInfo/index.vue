@@ -1,43 +1,25 @@
 <template>
-  <div class="p-4 space-y-4">
+  <div class="employee-info-page p-4 space-y-4">
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
     >
       <el-form-item label="员工姓名">
-        <el-input
-          v-model="queryForm.employeeName"
-          placeholder="请输入员工姓名"
-          clearable
-          style="width: 140px"
-        />
+        <el-input v-model="queryForm.employeeName" placeholder="请输入员工姓名" clearable />
       </el-form-item>
       <el-form-item label="工号">
-        <el-input
-          v-model="queryForm.employeeNumber"
-          placeholder="请输入工号"
-          clearable
-          style="width: 140px"
-        />
+        <el-input v-model="queryForm.employeeNumber" placeholder="请输入工号" clearable />
       </el-form-item>
       <el-form-item label="部门">
-        <el-input
-          v-model="queryForm.department"
-          placeholder="请输入部门"
-          clearable
-          style="width: 140px"
-        />
+        <el-input v-model="queryForm.department" placeholder="请输入部门" clearable />
       </el-form-item>
       <el-form-item label="在职状态">
-        <el-select
-          v-model="queryForm.status"
-          placeholder="请选择状态"
-          clearable
-          style="width: 160px"
-        >
+        <el-select v-model="queryForm.status" placeholder="请选择状态" clearable>
           <el-option label="在职" value="在职" />
           <el-option label="离职" value="离职" />
           <el-option label="休假" value="休假" />
@@ -50,49 +32,52 @@
       </el-form-item>
     </el-form>
 
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="tableData"
-      border
-      height="calc(100vh - 320px)"
-      row-key="id"
-      @row-dblclick="handleRowDblClick"
-    >
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="employeeName" label="姓名" width="100" />
-      <el-table-column prop="employeeNumber" label="工号" width="80" />
-      <el-table-column prop="gender" label="性别" width="80" />
-      <el-table-column prop="level" label="职级" width="80" />
-      <el-table-column prop="entryDate" label="入职时间" width="120">
-        <template #default="{ row }">
-          {{ formatDate(row.entryDate) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="idCard" label="身份证号码" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="department" label="部门" width="100" />
-      <el-table-column prop="position" label="岗位" width="100" />
-      <el-table-column prop="phone" label="联系方式" width="140" />
-      <el-table-column prop="emergencyContact" label="紧急联系人" min-width="140" />
-      <el-table-column label="在职状态" width="120" align="center">
-        <template #default="{ row }">
-          <el-tag :type="statusTagMap[row.status].type">{{
-            statusTagMap[row.status].label
-          }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="confirmDate" label="转正日期" width="140">
-        <template #default="{ row }">
-          {{ formatDate(row.confirmDate) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="ei-table-wrapper" :class="{ 'ei-table-wrapper--mobile': isMobile }">
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        :data="tableData"
+        border
+        :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+        row-key="id"
+        @row-dblclick="handleRowDblClick"
+        class="ei-table"
+      >
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="employeeName" label="姓名" width="100" />
+        <el-table-column prop="employeeNumber" label="工号" width="80" />
+        <el-table-column prop="gender" label="性别" width="80" />
+        <el-table-column prop="level" label="职级" width="80" />
+        <el-table-column prop="entryDate" label="入职时间" width="120">
+          <template #default="{ row }">
+            {{ formatDate(row.entryDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="idCard" label="身份证号码" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="department" label="部门" width="100" />
+        <el-table-column prop="position" label="岗位" width="100" />
+        <el-table-column prop="phone" label="联系方式" width="140" />
+        <el-table-column prop="emergencyContact" label="紧急联系人" min-width="140" />
+        <el-table-column label="在职状态" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusTagMap[row.status].type">{{
+              statusTagMap[row.status].label
+            }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="confirmDate" label="转正日期" width="140">
+          <template #default="{ row }">
+            {{ formatDate(row.confirmDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <div class="flex justify-end">
       <el-pagination
@@ -110,7 +95,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="800px"
+      :width="isMobile ? '100%' : '800px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
@@ -240,7 +226,7 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { nextTick, reactive, ref, onMounted } from 'vue'
+import { nextTick, reactive, ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getEmployeeListApi,
@@ -251,6 +237,7 @@ import {
   type EmployeeInfo,
   type EmployeeQueryParams
 } from '@/api/employee'
+import { useAppStore } from '@/store/modules/app'
 
 type EmployeePayload = Omit<EmployeeInfo, 'id'>
 
@@ -262,6 +249,9 @@ const statusTagMap: Record<
   离职: { label: '离职', type: 'danger' },
   休假: { label: '休假', type: 'info' }
 }
+
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
 
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<EmployeeQueryParams>({
@@ -492,7 +482,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 查询表单垂直居中对齐 */
 .query-form {
   display: flex;
   align-items: center;
@@ -501,5 +490,33 @@ onMounted(() => {
 
 :deep(.query-form .el-form-item) {
   margin-bottom: 0;
+}
+
+.query-form--mobile {
+  padding: 12px;
+}
+
+:deep(.query-form--mobile .el-form-item) {
+  width: 100%;
+  margin-right: 0;
+  margin-bottom: 8px;
+}
+
+:deep(.query-form--mobile .el-form-item .el-form-item__content) {
+  width: 100%;
+}
+
+.ei-table-wrapper {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.ei-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.ei-table-wrapper--mobile .ei-table {
+  min-width: 960px;
 }
 </style>
