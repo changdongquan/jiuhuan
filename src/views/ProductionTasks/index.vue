@@ -307,7 +307,7 @@
       <div v-if="isViewMode" class="pt-detail-view">
         <div v-for="section in viewDetailSections" :key="section.title" class="detail-section">
           <div class="detail-section-header">{{ section.title }}</div>
-          <div class="detail-grid">
+          <div class="detail-grid" :class="{ 'detail-grid--single': section.title === '基本信息' }">
             <div v-for="item in section.items" :key="item.label" class="detail-cell">
               <span class="detail-label">{{ item.label }}</span>
               <span class="detail-value">
@@ -411,13 +411,6 @@
               <el-select v-model="dialogForm.负责人" placeholder="请选择负责人" style="width: 100%">
                 <el-option label="张晓龙" value="张晓龙" />
                 <el-option label="丁忠寻" value="丁忠寻" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="优先级">
-              <el-select v-model="dialogForm.优先级" placeholder="请选择优先级" style="width: 100%">
-                <el-option label="高" value="高" />
-                <el-option label="中" value="中" />
-                <el-option label="低" value="低" />
               </el-select>
             </el-form-item>
             <el-form-item label="订单数量">
@@ -562,8 +555,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { label: '计划首样日期', value: formatDate(dialogForm.计划首样日期 as any) },
     { label: '交货日期', value: formatDate(dialogForm.交货日期 as any) },
     { label: '负责人', value: dialogForm.负责人 },
-    { label: '生产状态', value: dialogForm.生产状态, tag: true },
-    { label: '优先级', value: dialogForm.优先级 }
+    { label: '生产状态', value: dialogForm.生产状态, tag: true }
   ]
 
   const quantityInfo: DetailItem[] = [
@@ -590,18 +582,11 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { label: '试模工时', value: formatValue(dialogForm.试模工时) }
   ]
 
-  const remarks: DetailItem[] = [
-    { label: '加工工艺', value: formatValue((dialogForm as any).加工工艺) },
-    { label: '检测要点', value: formatValue((dialogForm as any).检测要点) },
-    { label: '生产备注', value: formatValue((dialogForm as any).生产备注) }
-  ]
-
   return [
     { title: '基本信息', items: baseInfo },
     { title: '数量信息', items: quantityInfo },
     { title: '日期信息', items: dateInfo },
-    { title: '工时信息', items: hoursInfo },
-    { title: '备注', items: remarks }
+    { title: '工时信息', items: hoursInfo }
   ]
 })
 
@@ -908,7 +893,7 @@ onMounted(() => {
   }
 
   :deep(.pt-detail-dialog .el-dialog__body) {
-    padding: 8px 4px;
+    padding: 4px;
   }
 
   :deep(.pt-detail-dialog .el-dialog__header),
@@ -917,40 +902,39 @@ onMounted(() => {
     padding-left: 8px;
   }
 
-  .pt-detail-view {
-    gap: 8px;
-  }
-
-  .detail-section {
-    border-radius: 6px;
-  }
-
   .detail-section-header {
-    padding: 6px 10px;
-    font-size: 13px;
+    padding: 2px 6px;
+    font-size: 11px;
   }
 
   /* 手机端改为两列网格，整体更紧凑 */
-  .detail-grid {
+  .pt-detail-view .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 基本信息分组单列显示 */
+  .pt-detail-view .detail-grid.detail-grid--single {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
   .detail-cell {
-    min-height: 28px;
-    padding: 4px 6px;
+    min-height: 18px;
+    padding: 1px 2px;
+    overflow-x: auto;
   }
 
   .detail-label {
-    padding-right: 4px;
+    padding-right: 2px;
     overflow: hidden;
-    font-size: 11px;
+    font-size: 9px;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 0 0 70px;
+    flex: 0 0 52px;
   }
 
   .detail-value {
-    font-size: 11px;
+    font-size: 9px;
+    white-space: nowrap;
   }
 }
 

@@ -302,181 +302,23 @@
       :fullscreen="isMobile"
       class="pm-detail-dialog"
     >
-      <div class="detail-grid">
-        <div class="detail-grid-col">
-          <div class="detail-cell"
-            ><span class="detail-label">项目编号</span
-            ><span class="detail-value">{{ formatValue(viewData.项目编号) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">项目状态</span
-            ><span class="detail-value"
-              ><el-tag :type="getStatusTagType(viewData.项目状态)">{{
-                formatValue(viewData.项目状态)
-              }}</el-tag></span
-            ></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品名称</span
-            ><span class="detail-value">{{ formatValue(viewData.productName) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品图号</span
-            ><span class="detail-value">{{ formatValue(viewData.productDrawing) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">客户模号</span
-            ><span class="detail-value">{{ formatValue(viewData.客户模号) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品尺寸</span
-            ><span class="detail-value">{{ formatValue(viewData.产品尺寸) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品重量</span
-            ><span class="detail-value">{{ formatValue(viewData.产品重量) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品材质</span
-            ><span class="detail-value">{{ formatValue(viewData.产品材质) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品颜色</span
-            ><span class="detail-value">{{ formatValue(viewData.产品颜色) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">收缩率</span
-            ><span class="detail-value">{{ formatValue(viewData.收缩率) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">料柄重量</span
-            ><span class="detail-value">{{ formatValue(viewData.料柄重量) }}</span></div
-          >
+      <div v-if="viewDetailSections.length" class="pm-detail-view">
+        <div v-for="section in viewDetailSections" :key="section.title" class="detail-section">
+          <div class="detail-section-header">{{ section.title }}</div>
+          <div class="detail-grid">
+            <div v-for="item in section.items" :key="item.label" class="detail-cell">
+              <span class="detail-label">{{ item.label }}</span>
+              <span class="detail-value">
+                <template v-if="item.tag">
+                  <el-tag :type="getStatusTagType(item.value)">{{ item.value || '-' }}</el-tag>
+                </template>
+                <template v-else>
+                  {{ item.value || '-' }}
+                </template>
+              </span>
+            </div>
+          </div>
         </div>
-        <div class="detail-grid-col">
-          <div class="detail-cell"
-            ><span class="detail-label">模具穴数</span
-            ><span class="detail-value">{{ formatValue(viewData.模具穴数) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">模具尺寸</span
-            ><span class="detail-value">{{ formatValue(viewData.模具尺寸) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">模具重量</span
-            ><span class="detail-value">{{ formatValue(viewData.模具重量) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">前模材质</span
-            ><span class="detail-value">{{ formatValue(viewData.前模材质) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">后模材质</span
-            ><span class="detail-value">{{ formatValue(viewData.后模材质) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">滑块材质</span
-            ><span class="detail-value">{{ formatValue(viewData.滑块材质) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">流道类型</span
-            ><span class="detail-value">{{ formatValue(viewData.流道类型) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">流道数量</span
-            ><span class="detail-value">{{ formatValue(viewData.流道数量) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">浇口类型</span
-            ><span class="detail-value">{{ formatValue(viewData.浇口类型) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">浇口数量</span
-            ><span class="detail-value">{{ formatValue(viewData.浇口数量) }}</span></div
-          >
-        </div>
-        <div class="detail-grid-col">
-          <div class="detail-cell"
-            ><span class="detail-label">机台吨位</span
-            ><span class="detail-value">{{ formatValue(viewData.机台吨位) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">锁模力</span
-            ><span class="detail-value">{{ formatValue(viewData.锁模力) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">定位圈</span
-            ><span class="detail-value">{{ formatValue(viewData.定位圈) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">容模量</span
-            ><span class="detail-value">{{ formatValue(viewData.容模量) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">拉杆间距</span
-            ><span class="detail-value">{{ formatValue(viewData.拉杆间距) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">成型周期</span
-            ><span class="detail-value">{{ formatValue(viewData.成型周期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">费用出处</span
-            ><span class="detail-value">{{ formatValue(viewData.费用出处) }}</span></div
-          >
-        </div>
-        <div class="detail-grid-col">
-          <div class="detail-cell"
-            ><span class="detail-label">项目名称</span
-            ><span class="detail-value">{{ formatValue(viewData.项目名称) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">设计师</span
-            ><span class="detail-value">{{ formatValue(viewData.设计师) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">中标日期</span
-            ><span class="detail-value">{{ formatDate(viewData.中标日期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">产品3D确认</span
-            ><span class="detail-value">{{ formatDate(viewData.产品3D确认) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">图纸下发日期</span
-            ><span class="detail-value">{{ formatDate(viewData.图纸下发日期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">计划首样日期</span
-            ><span class="detail-value">{{ formatDate(viewData.计划首样日期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">首次送样日期</span
-            ><span class="detail-value">{{ formatDate(viewData.首次送样日期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">移模日期</span
-            ><span class="detail-value">{{ formatDate(viewData.移模日期) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">封样时间</span
-            ><span class="detail-value">{{ formatDate(viewData.封样时间) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">制件厂家</span
-            ><span class="detail-value">{{ formatValue(viewData.制件厂家) }}</span></div
-          >
-          <div class="detail-cell"
-            ><span class="detail-label">进度影响原因</span
-            ><span class="detail-value">{{ formatValue(viewData.进度影响原因) }}</span></div
-          >
-        </div>
-      </div>
-      <div class="detail-row-remark">
-        <div class="detail-cell"
-          ><span class="detail-label">备注</span
-          ><span class="detail-value">{{ formatValue(viewData.备注) }}</span></div
-        >
       </div>
 
       <template #footer>
@@ -548,7 +390,7 @@
             <el-form-item label="产品尺寸">
               <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
             </el-form-item>
-            <el-form-item label="产品重量">
+            <el-form-item label="产品重量（克）">
               <el-input-number
                 v-model="editForm.产品重量"
                 :min="0"
@@ -591,7 +433,7 @@
             <el-form-item label="模具尺寸">
               <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
             </el-form-item>
-            <el-form-item label="模具重量">
+            <el-form-item label="模具重量（吨）">
               <el-input-number
                 v-model="editForm.模具重量"
                 :min="0"
@@ -633,7 +475,7 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="机台吨位">
+            <el-form-item label="机台吨位（吨）">
               <el-input-number
                 v-model="editForm.机台吨位"
                 :min="0"
@@ -668,16 +510,13 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="成型周期">
+            <el-form-item label="成型周期（秒）">
               <el-input-number
                 v-model="editForm.成型周期"
                 :min="0"
                 :controls="false"
                 style="width: 100%"
               />
-            </el-form-item>
-            <el-form-item label="费用出处">
-              <el-input v-model="editForm.费用出处" placeholder="费用出处" />
             </el-form-item>
           </el-col>
           <!-- 第4列：日期和其他 -->
@@ -974,6 +813,87 @@ const formatValue = (value?: string | number | null) => {
   if (typeof value === 'number' && value === 0) return '-'
   return value
 }
+
+type DetailItem = {
+  label: string
+  value: string
+  tag?: boolean
+}
+
+type DetailSection = {
+  title: string
+  items: DetailItem[]
+}
+
+const viewDetailSections = computed<DetailSection[]>(() => {
+  const data = viewData.value || {}
+
+  const v = (val?: string | number | null) => {
+    const res = formatValue(val)
+    return typeof res === 'number' ? String(res) : (res ?? '-')
+  }
+
+  const baseInfo: DetailItem[] = [
+    { label: '项目编号', value: v(data.项目编号 ?? '') },
+    { label: '项目状态', value: v(data.项目状态 ?? ''), tag: true },
+    { label: '项目名称', value: v(data.项目名称 ?? '') },
+    { label: '产品名称', value: v(data.productName ?? '') },
+    { label: '产品图号', value: v(data.productDrawing ?? '') },
+    { label: '客户模号', value: v(data.客户模号 ?? '') },
+    { label: '制件厂家', value: v(data.制件厂家 ?? '') },
+    { label: '进度影响原因', value: v(data.进度影响原因 ?? '') },
+    { label: '备注', value: v(data.备注 ?? '') }
+  ]
+
+  const productInfo: DetailItem[] = [
+    { label: '产品尺寸', value: v(data.产品尺寸 ?? '') },
+    { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
+    { label: '产品材质', value: v(data.产品材质 ?? '') },
+    { label: '产品颜色', value: v(data.产品颜色 ?? '') },
+    { label: '收缩率', value: v(data.收缩率 ?? '') },
+    { label: '料柄重量', value: v(data.料柄重量 ?? '') }
+  ]
+
+  const mouldInfo: DetailItem[] = [
+    { label: '模具穴数', value: v(data.模具穴数 ?? '') },
+    { label: '模具尺寸', value: v(data.模具尺寸 ?? '') },
+    { label: '模具重量（吨）', value: v(data.模具重量 ?? '') },
+    { label: '前模材质', value: v(data.前模材质 ?? '') },
+    { label: '后模材质', value: v(data.后模材质 ?? '') },
+    { label: '滑块材质', value: v(data.滑块材质 ?? '') },
+    { label: '流道类型', value: v(data.流道类型 ?? '') },
+    { label: '流道数量', value: v(data.流道数量 ?? '') },
+    { label: '浇口类型', value: v(data.浇口类型 ?? '') },
+    { label: '浇口数量', value: v(data.浇口数量 ?? '') }
+  ]
+
+  const equipmentInfo: DetailItem[] = [
+    { label: '机台吨位（吨）', value: v(data.机台吨位 ?? '') },
+    { label: '锁模力', value: v(data.锁模力 ?? '') },
+    { label: '定位圈', value: v(data.定位圈 ?? '') },
+    { label: '容模量', value: v(data.容模量 ?? '') },
+    { label: '拉杆间距', value: v(data.拉杆间距 ?? '') },
+    { label: '成型周期（秒）', value: v(data.成型周期 ?? '') }
+  ]
+
+  const dateInfo: DetailItem[] = [
+    { label: '中标日期', value: formatDate(data.中标日期 ?? '') },
+    { label: '产品3D确认', value: formatDate(data.产品3D确认 ?? '') },
+    { label: '图纸下发日期', value: formatDate(data.图纸下发日期 ?? '') },
+    { label: '计划首样日期', value: formatDate(data.计划首样日期 ?? '') },
+    { label: '首次送样日期', value: formatDate(data.首次送样日期 ?? '') },
+    { label: '移模日期', value: formatDate(data.移模日期 ?? '') },
+    { label: '封样时间', value: formatDate(data.封样时间 ?? '') }
+  ]
+
+  return [
+    { title: '基本信息', items: baseInfo },
+    { title: '产品信息', items: productInfo },
+    { title: '模具信息', items: mouldInfo },
+    { title: '设备参数', items: equipmentInfo },
+    { title: '时间信息', items: dateInfo }
+  ]
+})
 
 // 规范化为本地零点的日期，避免时区引起的天数误差
 const normalizeToLocalDate = (date?: string | null) => {
@@ -1293,43 +1213,30 @@ onMounted(() => {
     padding-left: 6px;
   }
 
+  .pm-detail-view {
+    gap: 8px;
+  }
+
   .pm-detail-dialog .detail-grid {
-    border-right: none;
-    border-left: none;
-    border-radius: 0;
-    flex-wrap: wrap;
-  }
-
-  .pm-detail-dialog .detail-grid-col {
-    flex: 0 0 50%;
-    border-right: 1px solid #e4e7ed;
-  }
-
-  .pm-detail-dialog .detail-grid-col:nth-child(2n) {
-    border-right: none;
-  }
-
-  .pm-detail-dialog .detail-row-remark {
-    border-top: none;
-    border-radius: 0 0 8px 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .pm-detail-dialog .detail-cell {
-    min-height: 18px;
-    padding: 0 2px;
+    min-height: 22px;
+    padding: 2px 4px;
   }
 
   .pm-detail-dialog .detail-label {
-    padding-right: 2px;
-    overflow: hidden;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 0 0 56px;
+    padding-right: 4px;
+    overflow: visible;
+    font-size: 11px;
+    text-overflow: unset;
+    white-space: normal;
+    flex: 0 0 auto;
   }
 
   .pm-detail-dialog .detail-value {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 
@@ -1502,49 +1409,54 @@ onMounted(() => {
   background: linear-gradient(180deg, #f5f7fa 0%, #fff 100%);
 }
 
-.detail-cell {
-  position: relative;
+.pm-detail-view {
   display: flex;
-  min-height: 24px;
-  padding: 2px 4px;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-section {
+  overflow: hidden;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.detail-section-header {
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #409eff;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.pm-detail-view .detail-grid {
+  display: grid;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.detail-cell {
+  display: flex;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-right: 1px solid #f0f2f5;
   border-bottom: 1px solid #f0f2f5;
-  transition: all 0.3s ease;
   align-items: center;
 }
 
-.detail-cell:hover {
-  background-color: #f5f7fa;
-  transform: translateX(2px);
-}
-
-.detail-cell:last-child {
-  border-bottom: none;
-}
-
-.detail-cell::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #409eff 0%, #66b1ff 100%);
-  content: '';
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.detail-cell:hover::before {
-  opacity: 1;
-}
-
 .detail-label {
-  position: relative;
-  padding-right: 4px;
-  font-size: 11px;
+  flex: 0 0 110px;
+  padding-right: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.3px;
   color: #606266;
-  flex: 0 0 70px;
 }
 
 .detail-label::after {
@@ -1554,42 +1466,12 @@ onMounted(() => {
 }
 
 .detail-value {
-  min-height: 20px;
-  overflow: hidden;
-  font-size: 11px;
-  color: #303133;
-  text-overflow: ellipsis;
-  word-break: normal;
-  white-space: nowrap;
   flex: 1;
+  font-size: 14px;
+  color: #303133;
+  word-break: break-word;
 }
 
-.detail-value:empty::before {
-  font-style: italic;
-  color: #c0c4cc;
-  content: '-';
-}
-
-.detail-row-remark {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 2px 12px 0 rgb(0 0 0 / 8%);
-}
-
-.detail-row-remark .detail-cell {
-  min-height: 40px;
-  padding-top: 8px;
-  border-bottom: none;
-  align-items: flex-start;
-}
-
-.detail-row-remark .detail-label {
-  padding-top: 4px;
-}
-
-/* 空值显示优化 */
 .detail-value:empty::before {
   font-style: italic;
   color: #c0c4cc;

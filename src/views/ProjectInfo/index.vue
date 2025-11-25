@@ -271,9 +271,7 @@
                 @focus="onSerialFocus"
                 @blur="onSerialBlur"
               />
-              <template
-                v-if="formData.projectCategory === '03' || formData.projectCategory === '01'"
-              >
+              <template v-if="showPartNumber">
                 <span class="code-separator">/</span>
                 <el-input
                   ref="partNumberInputRef"
@@ -284,6 +282,7 @@
                   @input="updateProjectCode"
                 />
               </template>
+              <span class="code-spacer"></span>
             </div>
             <el-tag v-if="formData.projectCategory" type="info" class="category-tag">
               {{ getCategoryName(formData.projectCategory) }}
@@ -298,7 +297,7 @@
         </el-form-item>
 
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="产品名称" prop="projectName">
               <el-input
                 ref="projectNameInputRef"
@@ -307,14 +306,14 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="产品图号" prop="projectManager">
               <el-input v-model="formData.projectManager" placeholder="请输入产品图号" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="客户模号" prop="customerModelNo">
               <el-input
                 v-model="formData.customerModelNo"
@@ -323,7 +322,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="客户名称" prop="customerName">
               <el-select
                 v-model="formData.customerName"
@@ -807,6 +806,10 @@ const handleCurrentChange = (val: number) => {
   fetchData()
 }
 
+const showPartNumber = computed(
+  () => formData.projectCategory === '03' || formData.projectCategory === '01'
+)
+
 // 页面加载时获取数据
 onMounted(() => {
   fetchData()
@@ -827,6 +830,12 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
+  width: 100%;
+}
+
+.code-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
 }
 
 .code-prefix {
@@ -844,19 +853,30 @@ onMounted(() => {
 }
 
 .code-category {
-  width: 70px;
+  width: 60px;
 }
 
 .code-year {
-  width: 70px;
+  width: 54px;
 }
 
 .code-serial {
-  width: 72px;
+  width: 54px;
 }
 
 .code-part {
-  width: 64px;
+  width: 54px;
+}
+
+@media (width <= 768px) {
+  .project-code-input {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .code-main-row {
+    min-width: 360px;
+  }
 }
 
 .category-tag {
