@@ -64,6 +64,14 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button
+            v-if="!isMobile"
+            text
+            type="primary"
+            @click="showExtraColumns = !showExtraColumns"
+          >
+            {{ showExtraColumns ? '折叠图号/模号' : '展开图号/模号' }}
+          </el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -129,6 +137,7 @@
           fixed="left"
         />
         <el-table-column
+          v-if="!isMobile && showExtraColumns"
           prop="productDrawing"
           label="产品图号"
           width="130"
@@ -136,6 +145,7 @@
           fixed="left"
         />
         <el-table-column
+          v-if="!isMobile && showExtraColumns"
           prop="客户模号"
           label="客户模号"
           width="115"
@@ -172,17 +182,29 @@
             {{ formatDate(row.图纸下发日期) }}
           </template>
         </el-table-column>
-        <el-table-column prop="计划首样日期" label="计划首样日期" width="150" sortable="custom">
+        <el-table-column prop="计划首样日期" label="计划首样日期" width="160" sortable="custom">
           <template #default="{ row }">
-            <span>{{ formatDate(row.计划首样日期) }}</span>
-            <el-tag
-              v-if="isDueSoon(row.计划首样日期)"
-              type="warning"
-              size="small"
-              effect="light"
-              style="margin-left: 6px"
-              >{{ daysUntil(row.计划首样日期) }}天</el-tag
-            >
+            <div class="pm-plan-date-cell">
+              <span class="pm-plan-date-text">{{ formatDate(row.计划首样日期) }}</span>
+              <span class="pm-plan-date-tag">
+                <el-tag
+                  v-if="isDueSoon(row.计划首样日期)"
+                  type="warning"
+                  size="small"
+                  effect="light"
+                  class="pm-due-tag"
+                  >{{ daysUntil(row.计划首样日期) }}天</el-tag
+                >
+                <el-tag
+                  v-else-if="isOverdue(row.计划首样日期, row.首次送样日期)"
+                  type="danger"
+                  size="small"
+                  effect="dark"
+                  class="pm-due-tag"
+                  >-{{ overdueDays(row.计划首样日期, row.首次送样日期) }}天</el-tag
+                >
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="首次送样日期" label="首次送样日期" width="110">
@@ -201,7 +223,7 @@
           width="130"
           show-overflow-tooltip
         />
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="操作" width="130" fixed="right" class-name="pm-op-column">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
@@ -254,6 +276,15 @@
                   style="margin-left: 6px"
                 >
                   {{ daysUntil(row.计划首样日期) }}天
+                </el-tag>
+                <el-tag
+                  v-else-if="isOverdue(row.计划首样日期, row.首次送样日期)"
+                  type="danger"
+                  size="small"
+                  effect="dark"
+                  style="margin-left: 6px"
+                >
+                  -{{ overdueDays(row.计划首样日期, row.首次送样日期) }}天
                 </el-tag>
               </span>
             </div>
@@ -632,6 +663,7 @@ const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
 const total = ref(0)
 const pagination = reactive({ page: 1, size: 20 })
+const showExtraColumns = ref(false)
 const sortState = reactive({
   prop: '',
   order: '' as '' | 'ascending' | 'descending'
@@ -917,6 +949,39 @@ const daysUntil = (date?: string | null) => {
 const isDueSoon = (date?: string | null) => {
   const d = daysUntil(date)
   return d >= 0 && d <= 7
+}
+
+// 是否已经逾期：
+// - 如果有首次送样日期：首次送样日期 > 计划首样日期 时视为逾期
+// - 如果首次送样日期为空：用系统当前日期与计划首样日期对比，当前日期 > 计划首样日期 时视为逾期
+const isOverdue = (planDate?: string | null, firstSampleDate?: string | null) => {
+  const plan = normalizeToLocalDate(planDate)
+  if (!plan) return false
+
+  const first = normalizeToLocalDate(firstSampleDate)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const compareDate = first || today
+
+  const diffMs = compareDate.getTime() - plan.getTime()
+  return diffMs > 0
+}
+
+// 逾期天数：
+// - 如果有首次送样日期：首次送样日期 - 计划首样日期 的天数差（>0 时取正）
+// - 如果首次送样日期为空：系统当前日期 - 计划首样日期 的天数差（>0 时取正）
+const overdueDays = (planDate?: string | null, firstSampleDate?: string | null) => {
+  const plan = normalizeToLocalDate(planDate)
+  if (!plan) return 0
+
+  const first = normalizeToLocalDate(firstSampleDate)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const compareDate = first || today
+
+  const diffMs = compareDate.getTime() - plan.getTime()
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000))
+  return days > 0 ? days : 0
 }
 
 const handleView = async (row: Partial<ProjectInfo>) => {
@@ -1359,6 +1424,29 @@ onMounted(() => {
   margin-top: 6px;
 }
 
+.pm-plan-date-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pm-plan-date-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-plan-date-tag {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pm-due-tag {
+  min-width: 52px;
+  text-align: center;
+  justify-content: center;
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -1594,6 +1682,13 @@ onMounted(() => {
 :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
   padding-top: 3px !important;
   padding-bottom: 3px !important;
+}
+
+:deep(.pm-op-column .cell) {
+  display: flex;
+  justify-content: center;
+  padding-right: 2px !important;
+  padding-left: 2px !important;
 }
 
 .pagination-footer--mobile {

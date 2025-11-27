@@ -99,7 +99,7 @@ router.get('/list', async (req, res) => {
     const pageSizeNum = parseInt(pageSize)
     const offset = (pageNum - 1) * pageSizeNum
 
-    // 排序字段白名单映射
+    // 排序字段白名单映射（仅用于前端点击表头时）
     const sortableFields = {
       项目编号: 'p.项目编号',
       项目状态: 'p.项目状态',
@@ -114,16 +114,33 @@ router.get('/list', async (req, res) => {
       orderByClause = `ORDER BY ${mappedField} ${sortDir.toUpperCase()}`
     }
 
-    const defaultOrderBy = `
-      ORDER BY 
-        CASE 
-          WHEN p.计划首样日期 IS NULL THEN 2 
-          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
-          ELSE 0 
-        END ASC,
-        p.计划首样日期 ASC,
-        p.项目编号 DESC
-    `
+    // 如果没有任何排序参数，则使用默认排序规则
+    if (!orderByClause) {
+      // 默认排序规则：
+      // 1. 计划首样日期在【今天前后 7 天之内】且“尚未送样”的项目排在最前面
+      //    （尚未送样：首次送样日期为空）
+      //    （即：|计划首样日期 - 今天| <= 7 天）
+      // 2. 这组内部按计划首样日期从早到晚排序
+      // 3. 其他项目按项目编号倒序（近似数据库倒序）
+      orderByClause = `
+        ORDER BY 
+          CASE 
+            WHEN p.计划首样日期 IS NOT NULL 
+                 AND p.首次送样日期 IS NULL
+                 AND ABS(DATEDIFF(DAY, CAST(GETDATE() AS date), p.计划首样日期)) <= 7
+          THEN 0
+          ELSE 1
+          END ASC,
+          CASE 
+            WHEN p.计划首样日期 IS NOT NULL 
+                 AND p.首次送样日期 IS NULL
+                 AND ABS(DATEDIFF(DAY, CAST(GETDATE() AS date), p.计划首样日期)) <= 7
+            THEN p.计划首样日期
+            ELSE NULL
+          END ASC,
+          p.项目编号 DESC
+      `
+    }
 
     // 查询总数（需要排除 IsNew = 1 的项目）
     const countQuery = `
@@ -152,7 +169,7 @@ router.get('/list', async (req, res) => {
          ORDER BY g1.货物ID) as productDrawing
       FROM 项目管理 p
       ${finalWhereClause}
-      ${orderByClause || defaultOrderBy}
+      ${orderByClause}
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSizeNum} ROWS ONLY
     `
@@ -338,10 +355,10 @@ router.put('/update', async (req, res) => {
 
     Object.keys(data).forEach((key) => {
       const value = data[key]
-      // 过滤掉项目编号字段、SSMA_TimeStamp 字段，以及 undefined 和 null（允许空字符串和数字0）
-      if (key !== '项目编号' && key !== 'SSMA_TimeStamp' && value !== undefined && value !== null) {
+      // 过滤掉项目编号字段、SSMA_TimeStamp 字段，以及 undefined（允许显式传 null 来将字段置为 NULL）
+      if (key !== '项目编号' && key !== 'SSMA_TimeStamp' && value !== undefined) {
         updates.push(`[${key}] = @${key}`)
-        params[key] = value
+        params[key] = value === undefined ? null : value
       }
     })
 

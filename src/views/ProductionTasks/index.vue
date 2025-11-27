@@ -49,6 +49,14 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button
+            v-if="!isMobile"
+            text
+            type="primary"
+            @click="showExtraColumns = !showExtraColumns"
+          >
+            {{ showExtraColumns ? '折叠图号/模号' : '展开图号/模号' }}
+          </el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -116,6 +124,7 @@
           fixed="left"
         />
         <el-table-column
+          v-if="!isMobile && showExtraColumns"
           prop="productDrawing"
           label="产品图号"
           width="140"
@@ -123,6 +132,7 @@
           fixed="left"
         />
         <el-table-column
+          v-if="!isMobile && showExtraColumns"
           prop="客户模号"
           label="客户模号"
           width="115"
@@ -190,7 +200,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="操作" width="130" fixed="right" class-name="pt-op-column">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
@@ -493,6 +503,7 @@ const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
 const total = ref(0)
 const pagination = reactive({ page: 1, size: 20 })
+const showExtraColumns = ref(false)
 const statistics = reactive({
   total: 0,
   inProgress: 0,
@@ -1220,6 +1231,13 @@ onMounted(() => {
 :deep(.pt-table .el-table__body-wrapper .el-table__cell) {
   padding-top: 3px !important;
   padding-bottom: 3px !important;
+}
+
+:deep(.pt-op-column .cell) {
+  display: flex;
+  justify-content: center;
+  padding-right: 2px !important;
+  padding-left: 2px !important;
 }
 
 .pt-table-wrapper {

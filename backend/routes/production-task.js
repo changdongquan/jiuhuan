@@ -24,15 +24,30 @@ function buildOrderByClause(sortField, sortOrder) {
     return `ORDER BY ${mappedField} ${sortDir.toUpperCase()}`
   }
 
-  // 默认排序
-  return `ORDER BY 
-        CASE 
-          WHEN p.计划首样日期 IS NULL THEN 2 
-          WHEN p.计划首样日期 < CAST(GETDATE() AS date) THEN 1 
-          ELSE 0 
-        END ASC,
-        p.计划首样日期 ASC,
-        pt.项目编号 DESC`
+  // 默认排序（与项目管理保持一致）：
+  // 1. 计划首样日期在【今天前后 7 天之内】且“尚未送样”的项目排在最前面
+  //    （尚未送样：首次送样日期为空）
+  //    （即：|计划首样日期 - 今天| <= 7 天）
+  // 2. 这组内部按计划首样日期从早到晚排序
+  // 3. 其他项目按项目编号倒序（近似数据库倒序）
+  return `
+    ORDER BY 
+      CASE 
+        WHEN p.计划首样日期 IS NOT NULL 
+             AND p.首次送样日期 IS NULL
+             AND ABS(DATEDIFF(DAY, CAST(GETDATE() AS date), p.计划首样日期)) <= 7
+        THEN 0
+        ELSE 1
+      END ASC,
+      CASE 
+        WHEN p.计划首样日期 IS NOT NULL 
+             AND p.首次送样日期 IS NULL
+             AND ABS(DATEDIFF(DAY, CAST(GETDATE() AS date), p.计划首样日期)) <= 7
+        THEN p.计划首样日期
+        ELSE NULL
+      END ASC,
+      pt.项目编号 DESC
+  `
 }
 
 // 获取生产任务列表
@@ -300,10 +315,11 @@ router.put('/update', async (req, res) => {
 
     Object.keys(data).forEach((key) => {
       const value = data[key]
-      // 只更新允许的字段，排除只读字段和undefined/null
-      if (allowedFields.includes(key) && value !== undefined && value !== null) {
+      // 只更新允许的字段，排除只读字段和 undefined
+      // 保留显式传入的 null，用于将字段置为 NULL（支持清空日期/数值等）
+      if (allowedFields.includes(key) && value !== undefined) {
         updates.push(`[${key}] = @${key}`)
-        params[key] = value
+        params[key] = value === undefined ? null : value
       }
     })
 
