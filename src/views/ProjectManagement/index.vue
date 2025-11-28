@@ -64,14 +64,6 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button
-            v-if="!isMobile"
-            text
-            type="primary"
-            @click="showExtraColumns = !showExtraColumns"
-          >
-            {{ showExtraColumns ? '折叠图号/模号' : '展开图号/模号' }}
-          </el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -135,7 +127,28 @@
           width="130"
           show-overflow-tooltip
           fixed="left"
-        />
+        >
+          <template #header>
+            <div class="pm-name-header">
+              <span>产品名称</span>
+              <el-tooltip v-if="!isMobile" content="展开/折叠图号、模号列" placement="top">
+                <span
+                  class="pm-column-toggle-icon"
+                  @click.stop="showExtraColumns = !showExtraColumns"
+                >
+                  <Icon
+                    :size="16"
+                    :icon="
+                      showExtraColumns
+                        ? 'vi-ant-design:menu-fold-outlined'
+                        : 'vi-ant-design:menu-unfold-outlined'
+                    "
+                  />
+                </span>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="!isMobile && showExtraColumns"
           prop="productDrawing"
@@ -1378,6 +1391,27 @@ onMounted(() => {
 .pm-mobile-card__name {
   font-size: 13px;
   color: #666;
+}
+
+.pm-name-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pm-column-toggle-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  color: var(--el-text-color-placeholder);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-column-toggle-icon:hover {
+  color: var(--el-color-primary);
 }
 
 .pm-mobile-card__meta {
