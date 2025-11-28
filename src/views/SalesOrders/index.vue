@@ -698,17 +698,18 @@
     <!-- 查看对话框 -->
     <el-dialog
       v-model="viewDialogVisible"
-      title="查看销售订单"
+      :title="''"
       :width="isMobile ? '100%' : '1500px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
-      class="so-dialog"
+      class="so-dialog so-dialog-view"
     >
       <div v-if="viewOrderData" class="view-dialog-container">
         <!-- 订单基本信息 -->
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">订单基本信息</h3>
-          <div class="view-dialog-info-grid">
+          <!-- PC 端：保持原来的 4 列网格布局 -->
+          <div v-if="!isMobile" class="view-dialog-info-grid">
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">订单编号：</span>
               <span class="view-dialog-info-value">{{ viewOrderData.orderNo || '-' }}</span>
@@ -733,15 +734,57 @@
               <span class="view-dialog-info-label">合同编号：</span>
               <span class="view-dialog-info-value">{{ viewOrderData.contractNo || '-' }}</span>
             </div>
-            <div class="view-dialog-info-item">
+            <div class="view-dialog-info-item view-dialog-info-item--two-line">
               <span class="view-dialog-info-label">总数量：</span>
               <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
             </div>
-            <div class="view-dialog-info-item">
+            <div class="view-dialog-info-item view-dialog-info-item--two-line">
               <span class="view-dialog-info-label">总金额：</span>
               <span class="view-dialog-info-value">
                 {{ formatAmount(viewOrderData.totalAmount) }} 元
               </span>
+            </div>
+          </div>
+
+          <!-- 手机端：顶部主信息 + 二列网格 -->
+          <div v-else class="view-dialog-mobile-basic">
+            <div class="view-dialog-mobile-basic-main">
+              <div class="view-dialog-mobile-order">
+                <span class="label">订单编号：</span>
+                <span class="value">{{ viewOrderData.orderNo || '-' }}</span>
+              </div>
+              <div class="view-dialog-mobile-customer">
+                <span class="label">客户名称：</span>
+                <span class="value">{{ viewOrderData.customerName || '-' }}</span>
+              </div>
+              <div class="view-dialog-mobile-contract">
+                <span class="label">合同编号：</span>
+                <span class="value">{{ viewOrderData.contractNo || '-' }}</span>
+              </div>
+            </div>
+            <div class="view-dialog-info-grid view-dialog-info-grid--mobile">
+              <div class="view-dialog-info-item">
+                <span class="view-dialog-info-label">订单日期：</span>
+                <span class="view-dialog-info-value">{{
+                  formatDate(viewOrderData.orderDate) || '-'
+                }}</span>
+              </div>
+              <div class="view-dialog-info-item">
+                <span class="view-dialog-info-label">签订日期：</span>
+                <span class="view-dialog-info-value">{{
+                  formatDate(viewOrderData.signDate) || '-'
+                }}</span>
+              </div>
+              <div class="view-dialog-info-item view-dialog-info-item--two-line">
+                <span class="view-dialog-info-label">总数量：</span>
+                <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
+              </div>
+              <div class="view-dialog-info-item view-dialog-info-item--two-line">
+                <span class="view-dialog-info-label">总金额：</span>
+                <span class="view-dialog-info-value">
+                  {{ formatAmount(viewOrderData.totalAmount) }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -2000,6 +2043,63 @@ onMounted(async () => {
 
 .view-dialog-info-label {
   color: #666;
+}
+
+.so-dialog-view {
+  :deep(.el-dialog__header) {
+    padding-top: 6px;
+    padding-bottom: 4px;
+  }
+
+  :deep(.el-dialog__title) {
+    display: none;
+  }
+
+  :deep(.el-dialog__body) {
+    padding-top: 8px;
+  }
+}
+
+.view-dialog-info-item--two-line .view-dialog-info-value {
+  display: block;
+  margin-top: 2px;
+}
+
+.view-dialog-mobile-basic {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.view-dialog-mobile-basic-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.view-dialog-mobile-order,
+.view-dialog-mobile-customer,
+.view-dialog-mobile-contract {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.view-dialog-mobile-order .label,
+.view-dialog-mobile-customer .label,
+.view-dialog-mobile-contract .label {
+  color: #666;
+}
+
+.view-dialog-mobile-order .value,
+.view-dialog-mobile-customer .value,
+.view-dialog-mobile-contract .value {
+  font-weight: 600;
+  color: #303133;
+}
+
+.view-dialog-info-grid--mobile {
+  margin-top: 2px;
 }
 
 /* 新品选择对话框 - 已添加的行样式 */
