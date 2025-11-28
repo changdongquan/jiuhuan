@@ -280,8 +280,10 @@
               <div class="detail-title">{{ detail.productName || detail.itemCode || '明细' }}</div>
               <div class="detail-meta">
                 <span>{{ detail.itemCode || '-' }}</span>
+                <span v-if="detail.productDrawingNo">产品图号 {{ detail.productDrawingNo }}</span>
+                <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
                 <span>数量 {{ detail.quantity || 0 }}</span>
-                <span>交付 {{ formatDate(detail.deliveryDate) || '-' }}</span>
+                <span v-if="detail.deliveryDate">交付 {{ formatDate(detail.deliveryDate) }}</span>
               </div>
             </div>
             <div v-if="row.details.length > 2" class="detail-more">
@@ -289,8 +291,8 @@
             </div>
           </div>
           <div class="so-mobile-card__actions">
-            <el-button type="primary" size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </div>
         </el-card>
@@ -819,6 +821,10 @@
                 <div class="view-dialog-mobile-detail-row">
                   <span class="label">项目编号</span>
                   <span class="value">{{ detail.itemCode || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">产品图号</span>
+                  <span class="value">{{ detail.productDrawingNo || '-' }}</span>
                 </div>
                 <div class="view-dialog-mobile-detail-row">
                   <span class="label">客户模号</span>
