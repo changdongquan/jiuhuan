@@ -26,6 +26,7 @@
           v-model="queryForm.searchText"
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
           clearable
+          @keydown.enter.prevent="handleSearch"
           :style="{ width: isMobile ? '100%' : '160px' }"
         />
       </el-form-item>
