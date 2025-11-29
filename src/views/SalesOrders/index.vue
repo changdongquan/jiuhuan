@@ -101,8 +101,207 @@
       </el-col>
     </el-row>
 
+    <!-- PC 顶部视图切换：表格 / 时间轴 -->
+    <div v-if="!isMobile" class="desktop-view-bar">
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="table">表格</el-radio-button>
+          <el-radio-button value="timeline">时间轴</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
+
+    <!-- PC 时间轴视图 -->
+    <div v-if="!isMobile && viewMode === 'timeline'" class="so-timeline-layout">
+      <div class="so-timeline-left">
+        <div v-for="group in timelineGroups" :key="group.date" class="so-timeline-date-group">
+          <div class="so-timeline-date-header">
+            <span class="so-timeline-date-label">{{ group.date }}</span>
+          </div>
+          <div v-for="order in group.orders" :key="order.orderNo" class="so-timeline-order-block">
+            <div
+              class="so-timeline-order-header"
+              :class="{ 'is-active': timelineActiveOrderNo === order.orderNo }"
+              @click="handleTimelineOrderClick(order)"
+            >
+              <div class="so-timeline-order-main">
+                <span class="so-timeline-order-no">{{ order.orderNo }}</span>
+                <span class="so-timeline-order-customer">{{ order.customerName || '-' }}</span>
+              </div>
+              <div class="so-timeline-order-meta">
+                <span>数量 {{ order.totalQuantity || 0 }}</span>
+                <span>金额 {{ formatAmount(order.totalAmount) }}</span>
+              </div>
+            </div>
+            <div v-if="order.details && order.details.length" class="so-timeline-order-details">
+              <div
+                v-for="detail in order.details"
+                :key="detail.id || detail.itemCode || detail.productName"
+                class="so-timeline-detail-row"
+                :class="{ 'is-active': isTimelineActiveDetail(order.orderNo, detail) }"
+                @click.stop="handleTimelineDetailClick(order, detail)"
+              >
+                <div class="so-timeline-detail-main">
+                  {{ detail.itemCode || '' }} {{ detail.productName || '' }}
+                </div>
+                <div class="so-timeline-detail-meta">
+                  <span v-if="detail.customerPartNo">模号 {{ detail.customerPartNo }}</span>
+                  <span>数量 {{ detail.quantity || 0 }}</span>
+                  <span v-if="detail.deliveryDate">交货 {{ formatDate(detail.deliveryDate) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="!timelineGroups.length" class="so-timeline-empty">
+          <el-empty description="当前条件下暂无订单数据" />
+        </div>
+      </div>
+      <div class="so-timeline-right">
+        <div v-if="viewOrderData && timelineActiveOrderNo" class="so-timeline-detail-panel">
+          <div class="view-dialog-section">
+            <div class="view-dialog-section-header view-dialog-section-header--timeline">
+              <div class="view-dialog-section-main">
+                <h3 class="view-dialog-section-title">订单基本信息</h3>
+                <div class="view-dialog-info-grid">
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">订单编号：</span>
+                    <span class="view-dialog-info-value">{{ viewOrderData.orderNo || '-' }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">客户名称：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewOrderData.customerName || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">合同编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewOrderData.contractNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">签订日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      formatDate(viewOrderData.signDate) || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">订单日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      formatDate(viewOrderData.orderDate) || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">总数量：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewOrderData.totalQuantity || 0
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">总金额：</span>
+                    <span class="view-dialog-info-value">
+                      {{ formatAmount(viewOrderData.totalAmount) }} 元
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="so-timeline-header-actions">
+                <el-button type="success" size="small" @click="handleTimelineView">查看</el-button>
+                <el-button type="primary" size="small" @click="handleTimelineEdit">编辑</el-button>
+                <el-button type="danger" size="small" @click="handleTimelineDelete">删除</el-button>
+              </div>
+            </div>
+          </div>
+          <div class="view-dialog-section">
+            <h3 class="view-dialog-section-title">订单明细</h3>
+            <div class="dialog-table-wrapper">
+              <el-table
+                :data="viewOrderData.details"
+                border
+                size="small"
+                style="width: 100%"
+                :row-class-name="viewDetailRowClassName"
+              >
+                <el-table-column type="index" label="序号" width="45" align="center" />
+                <el-table-column prop="itemCode" label="项目编号" min-width="120" />
+                <el-table-column
+                  prop="productName"
+                  label="产品名称"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+                <el-table-column
+                  prop="productDrawingNo"
+                  label="产品图号"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+                <el-table-column
+                  prop="customerPartNo"
+                  label="客户模号"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+                <el-table-column label="数量" width="50" align="center">
+                  <template #default="{ row }">
+                    {{ row.quantity || 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="单价(元)" width="85" align="right">
+                  <template #default="{ row }">
+                    {{ formatAmount(row.unitPrice) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="总金额(元)" width="85" align="right">
+                  <template #default="{ row }">
+                    {{ formatAmount(row.totalAmount) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="交货日期" width="100" align="center">
+                  <template #default="{ row }">
+                    {{ formatDate(row.deliveryDate) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+                <el-table-column
+                  prop="costSource"
+                  label="费用出处"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+                <el-table-column label="是否入库" width="70" align="center">
+                  <template #default="{ row }">
+                    <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
+                      {{ row.isInStock ? '是' : '否' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="是否出运" width="70" align="center">
+                  <template #default="{ row }">
+                    <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
+                      {{ row.isShipped ? '是' : '否' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="出运日期" width="105" align="center">
+                  <template #default="{ row }">
+                    {{ formatDate(row.shippingDate) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
+        </div>
+        <div v-else class="so-timeline-detail-panel-empty">
+          <el-empty description="请选择左侧时间轴中的订单" />
+        </div>
+      </div>
+    </div>
+
     <div
-      v-if="viewMode === 'table' || !isMobile"
+      v-if="viewMode === 'table'"
       class="so-table-wrapper"
       :class="{ 'so-table-wrapper--mobile': isMobile }"
     >
@@ -236,7 +435,7 @@
       </el-table>
     </div>
 
-    <div v-else class="so-mobile-list" v-loading="loading">
+    <div v-else-if="isMobile && viewMode === 'card'" class="so-mobile-list" v-loading="loading">
       <el-empty v-if="!tableData.length && !loading" description="暂无销售订单" />
       <template v-else>
         <el-card v-for="row in tableData" :key="row.orderNo" class="so-mobile-card" shadow="hover">
@@ -714,27 +913,27 @@
               <span class="view-dialog-info-value">{{ viewOrderData.customerName || '-' }}</span>
             </div>
             <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">订单日期</span>
-              <span class="view-dialog-info-value">{{
-                formatDate(viewOrderData.orderDate) || '-'
-              }}</span>
+              <span class="view-dialog-info-label">合同编号：</span>
+              <span class="view-dialog-info-value">{{ viewOrderData.contractNo || '-' }}</span>
             </div>
             <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">签订日期</span>
+              <span class="view-dialog-info-label">签订日期：</span>
               <span class="view-dialog-info-value">{{
                 formatDate(viewOrderData.signDate) || '-'
               }}</span>
             </div>
             <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">合同编号：</span>
-              <span class="view-dialog-info-value">{{ viewOrderData.contractNo || '-' }}</span>
+              <span class="view-dialog-info-label">订单日期：</span>
+              <span class="view-dialog-info-value">{{
+                formatDate(viewOrderData.orderDate) || '-'
+              }}</span>
             </div>
-            <div class="view-dialog-info-item view-dialog-info-item--two-line">
-              <span class="view-dialog-info-label">总数量</span>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">总数量：</span>
               <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
             </div>
-            <div class="view-dialog-info-item view-dialog-info-item--two-line">
-              <span class="view-dialog-info-label">总金额</span>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">总金额：</span>
               <span class="view-dialog-info-value">
                 {{ formatAmount(viewOrderData.totalAmount) }} 元
               </span>
@@ -770,11 +969,11 @@
                   formatDate(viewOrderData.signDate) || '-'
                 }}</span>
               </div>
-              <div class="view-dialog-info-item view-dialog-info-item--two-line">
+              <div class="view-dialog-info-item">
                 <span class="view-dialog-info-label">总数量</span>
                 <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
               </div>
-              <div class="view-dialog-info-item view-dialog-info-item--two-line">
+              <div class="view-dialog-info-item">
                 <span class="view-dialog-info-label">总金额</span>
                 <span class="view-dialog-info-value">
                   {{ formatAmount(viewOrderData.totalAmount) }}
@@ -788,55 +987,75 @@
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">订单明细</h3>
           <div v-if="!isMobile" class="dialog-table-wrapper">
-            <el-table :data="viewOrderData.details" border size="small" style="width: 100%">
-              <el-table-column type="index" label="序号" width="50" align="center" />
-              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
-              <el-table-column prop="productName" label="产品名称" min-width="160" />
-              <el-table-column prop="productDrawingNo" label="产品图号" min-width="150" />
-              <el-table-column prop="customerPartNo" label="客户模号" min-width="150" />
-              <el-table-column label="数量" width="90" align="center">
+            <el-table
+              :data="viewOrderData.details"
+              border
+              size="small"
+              style="width: 100%"
+              :row-class-name="viewDetailRowClassName"
+            >
+              <el-table-column type="index" label="序号" width="45" align="center" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="120" />
+              <el-table-column
+                prop="productName"
+                label="产品名称"
+                min-width="120"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="productDrawingNo"
+                label="产品图号"
+                min-width="120"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="customerPartNo"
+                label="客户模号"
+                min-width="120"
+                show-overflow-tooltip
+              />
+              <el-table-column label="数量" width="50" align="center">
                 <template #default="{ row }">
                   {{ row.quantity || 0 }}
                 </template>
               </el-table-column>
-              <el-table-column label="单价(元)" width="120" align="right">
+              <el-table-column label="单价(元)" width="80" align="right">
                 <template #default="{ row }">
                   {{ formatAmount(row.unitPrice) }}
                 </template>
               </el-table-column>
-              <el-table-column label="总金额(元)" width="140" align="right">
+              <el-table-column label="总金额(元)" width="80" align="right">
                 <template #default="{ row }">
                   {{ formatAmount(row.totalAmount) }}
                 </template>
               </el-table-column>
-              <el-table-column label="交货日期" width="140" align="center">
+              <el-table-column label="交货日期" width="110" align="center">
                 <template #default="{ row }">
                   {{ formatDate(row.deliveryDate) }}
                 </template>
               </el-table-column>
-              <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
               <el-table-column
                 prop="costSource"
                 label="费用出处"
-                min-width="140"
+                min-width="120"
                 show-overflow-tooltip
               />
-              <el-table-column prop="handler" label="经办人" width="100" />
-              <el-table-column label="是否入库" width="100" align="center">
+              <el-table-column label="是否入库" width="80" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
                     {{ row.isInStock ? '是' : '否' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="是否出运" width="100" align="center">
+              <el-table-column label="是否出运" width="80" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
                     {{ row.isShipped ? '是' : '否' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="出运日期" width="140" align="center">
+              <el-table-column label="出运日期" width="105" align="center">
                 <template #default="{ row }">
                   {{ formatDate(row.shippingDate) }}
                 </template>
@@ -973,11 +1192,16 @@ interface OrderTableRow extends SalesOrder {
   totalAmount: number
 }
 
-type ViewMode = 'table' | 'card'
+type ViewMode = 'table' | 'card' | 'timeline'
+
+interface TimelineGroup {
+  date: string
+  orders: OrderTableRow[]
+}
 
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
-const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'timeline')
 const showMobileFilters = ref(true)
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
 const dialogControlWidth = computed(() => (isMobile.value ? '100%' : '280px'))
@@ -1011,7 +1235,12 @@ const total = ref(0)
 const loading = ref(false)
 
 watch(isMobile, (mobile) => {
-  viewMode.value = mobile ? 'card' : 'table'
+  if (mobile) {
+    viewMode.value = 'card'
+  } else if (viewMode.value === 'card') {
+    // 从手机返回到 PC 时，默认时间轴
+    viewMode.value = 'timeline'
+  }
   if (!mobile) {
     showMobileFilters.value = true
   }
@@ -1030,6 +1259,26 @@ const summary = reactive<SalesOrderStatistics>({
   monthTotalAmount: 0,
   pendingInStock: 0,
   pendingShipped: 0
+})
+
+const timelineActiveOrderNo = ref<string | null>(null)
+const timelineActiveDetailKey = ref<string | null>(null)
+
+const timelineGroups = computed<TimelineGroup[]>(() => {
+  const map = new Map<string, OrderTableRow[]>()
+  for (const row of tableData.value) {
+    const dateStr = formatDate(row.orderDate) || '未知日期'
+    if (!map.has(dateStr)) {
+      map.set(dateStr, [])
+    }
+    map.get(dateStr)!.push(row)
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, orders]) => ({
+      date,
+      orders: orders.slice().sort((a, b) => a.orderNo.localeCompare(b.orderNo))
+    }))
 })
 
 // 对话框相关变量
@@ -1199,6 +1448,154 @@ const loadStatistics = async () => {
   }
 }
 
+const setViewOrderData = (orderData: any) => {
+  viewOrderData.value = {
+    orderNo: orderData.orderNo || '',
+    customerId: orderData.customerId || null,
+    customerName: orderData.customerName || '',
+    orderDate: orderData.orderDate ? formatDate(orderData.orderDate) : '',
+    signDate: orderData.signDate ? formatDate(orderData.signDate) : '',
+    contractNo: orderData.contractNo || '',
+    totalQuantity: orderData.totalQuantity || 0,
+    totalAmount: orderData.totalAmount || 0,
+    details: (orderData.details || []).map((detail: any) => ({
+      id: detail.id,
+      itemCode: detail.itemCode || '',
+      productName: detail.productName || '',
+      productDrawingNo: detail.productDrawingNo || '',
+      customerPartNo: detail.customerPartNo || '',
+      quantity: detail.quantity || 0,
+      unitPrice: detail.unitPrice || 0,
+      totalAmount: detail.totalAmount || 0,
+      deliveryDate: detail.deliveryDate ? formatDate(detail.deliveryDate) : null,
+      remark: detail.remark || '',
+      costSource: detail.costSource || '',
+      handler: detail.handler || '',
+      isInStock: detail.isInStock || false,
+      isShipped: detail.isShipped || false,
+      shippingDate: detail.shippingDate ? formatDate(detail.shippingDate) : null
+    }))
+  } as SalesOrder
+}
+
+const makeTimelineDetailKey = (orderNo: string, detail: any) => {
+  const idPart = detail.id != null ? String(detail.id) : ''
+  const codePart = detail.itemCode || ''
+  return `${orderNo}-${idPart}-${codePart}`
+}
+
+const isTimelineActiveDetail = (orderNo: string, detail: any) => {
+  if (!timelineActiveDetailKey.value) return false
+  return timelineActiveDetailKey.value === makeTimelineDetailKey(orderNo, detail)
+}
+
+const viewDetailRowClassName = ({ row }: { row: any }) => {
+  if (!viewOrderData.value) return ''
+  if (!timelineActiveOrderNo.value || !timelineActiveDetailKey.value) return ''
+  const key = makeTimelineDetailKey(viewOrderData.value.orderNo, row)
+  return key === timelineActiveDetailKey.value ? 'so-view-detail-row--active' : ''
+}
+
+const loadOrderForTimeline = async (orderNo: string) => {
+  try {
+    if (viewOrderData.value && viewOrderData.value.orderNo === orderNo) {
+      return
+    }
+    loading.value = true
+    const response = await getSalesOrderByOrderNoApi(orderNo)
+    const raw: any = response
+    const pr: any = raw?.data ?? raw
+    const orderData = pr?.data ?? pr
+
+    if (!orderData) {
+      ElMessage.error('获取订单信息失败')
+      return
+    }
+
+    setViewOrderData(orderData)
+  } catch (error) {
+    console.error('加载订单信息失败:', error)
+    ElMessage.error('加载订单信息失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleTimelineOrderClick = async (order: OrderTableRow) => {
+  timelineActiveOrderNo.value = order.orderNo
+  timelineActiveDetailKey.value = null
+  await loadOrderForTimeline(order.orderNo)
+}
+
+const handleTimelineDetailClick = async (order: OrderTableRow, detail: any) => {
+  timelineActiveOrderNo.value = order.orderNo
+  timelineActiveDetailKey.value = makeTimelineDetailKey(order.orderNo, detail)
+  await loadOrderForTimeline(order.orderNo)
+}
+
+const buildOrderRowFromView = (): OrderTableRow | null => {
+  if (!viewOrderData.value) return null
+  return {
+    ...(viewOrderData.value as SalesOrder),
+    totalQuantity: viewOrderData.value.totalQuantity || 0,
+    totalAmount: viewOrderData.value.totalAmount || 0,
+    details: viewOrderData.value.details || []
+  } as OrderTableRow
+}
+
+const handleTimelineEdit = () => {
+  const row = buildOrderRowFromView()
+  if (!row) return
+  void handleEdit(row)
+}
+
+const handleTimelineView = () => {
+  const row = buildOrderRowFromView()
+  if (!row) return
+  void handleView(row)
+}
+
+const handleTimelineDelete = () => {
+  const row = buildOrderRowFromView()
+  if (!row) return
+  void handleDelete(row)
+}
+
+watch(viewMode, (mode) => {
+  if (isMobile.value) return
+  if (mode === 'timeline') {
+    const first = tableData.value[0]
+    if (first) {
+      timelineActiveOrderNo.value = first.orderNo
+      timelineActiveDetailKey.value = null
+      void loadOrderForTimeline(first.orderNo)
+    } else {
+      timelineActiveOrderNo.value = null
+      timelineActiveDetailKey.value = null
+      viewOrderData.value = null
+    }
+  }
+  if (mode === 'table') {
+    timelineActiveOrderNo.value = null
+    timelineActiveDetailKey.value = null
+  }
+})
+
+watch(tableData, (rows) => {
+  if (isMobile.value) return
+  if (viewMode.value !== 'timeline') return
+  const first = rows[0]
+  if (first) {
+    timelineActiveOrderNo.value = first.orderNo
+    timelineActiveDetailKey.value = null
+    void loadOrderForTimeline(first.orderNo)
+  } else {
+    timelineActiveOrderNo.value = null
+    timelineActiveDetailKey.value = null
+    viewOrderData.value = null
+  }
+})
+
 const handleCreate = async () => {
   try {
     isCreateMode.value = true
@@ -1256,33 +1653,7 @@ const handleView = async (row: OrderTableRow) => {
     }
 
     // 设置查看数据
-    viewOrderData.value = {
-      orderNo: orderData.orderNo || '',
-      customerId: orderData.customerId || null,
-      customerName: orderData.customerName || '',
-      orderDate: orderData.orderDate ? formatDate(orderData.orderDate) : '',
-      signDate: orderData.signDate ? formatDate(orderData.signDate) : '',
-      contractNo: orderData.contractNo || '',
-      totalQuantity: orderData.totalQuantity || 0,
-      totalAmount: orderData.totalAmount || 0,
-      details: (orderData.details || []).map((detail: any) => ({
-        id: detail.id,
-        itemCode: detail.itemCode || '',
-        productName: detail.productName || '',
-        productDrawingNo: detail.productDrawingNo || '',
-        customerPartNo: detail.customerPartNo || '',
-        quantity: detail.quantity || 0,
-        unitPrice: detail.unitPrice || 0,
-        totalAmount: detail.totalAmount || 0,
-        deliveryDate: detail.deliveryDate ? formatDate(detail.deliveryDate) : null,
-        remark: detail.remark || '',
-        costSource: detail.costSource || '',
-        handler: detail.handler || '',
-        isInStock: detail.isInStock || false,
-        isShipped: detail.isShipped || false,
-        shippingDate: detail.shippingDate ? formatDate(detail.shippingDate) : null
-      }))
-    }
+    setViewOrderData(orderData)
 
     viewDialogVisible.value = true
   } catch (error) {
@@ -1988,6 +2359,14 @@ onMounted(async () => {
   background-color: #f0f2f5 !important;
 }
 
+:deep(.so-view-detail-row--active) td {
+  background-color: #ecf5ff !important;
+}
+
+:deep(.so-view-detail-row--active) .cell {
+  color: #409eff !important;
+}
+
 :deep(.el-table__expanded-cell) .so-expanded-wrap {
   padding: 8px;
   background-color: #eef1f6 !important;
@@ -2032,8 +2411,25 @@ onMounted(async () => {
 }
 
 .view-dialog-section-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 14px;
+}
+
+.view-dialog-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.view-dialog-section-header--timeline {
+  align-items: flex-start;
+}
+
+.view-dialog-section-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .view-dialog-info-grid {
@@ -2044,6 +2440,13 @@ onMounted(async () => {
 
 .view-dialog-info-label {
   color: #666;
+}
+
+.so-timeline-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .so-dialog-view {
@@ -2064,6 +2467,7 @@ onMounted(async () => {
 .view-dialog-info-item--two-line .view-dialog-info-value {
   display: block;
   margin-top: 2px;
+  white-space: nowrap;
 }
 
 .view-dialog-mobile-basic {
@@ -2133,6 +2537,151 @@ onMounted(async () => {
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;
+}
+
+.desktop-view-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.so-timeline-layout {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.so-timeline-left {
+  flex: 0 0 408px;
+  max-height: calc(100vh - 360px);
+  padding: 8px;
+  overflow: auto;
+  background-color: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.so-timeline-right {
+  flex: 1;
+  max-height: calc(100vh - 360px);
+  padding: 8px 12px;
+  overflow: auto;
+  background-color: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.so-timeline-date-group + .so-timeline-date-group {
+  margin-top: 12px;
+}
+
+.so-timeline-date-header {
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.so-timeline-order-block {
+  padding-left: 10px;
+  margin-left: 4px;
+  border-left: 2px solid #e4e7ed;
+}
+
+.so-timeline-order-header {
+  display: flex;
+  padding: 6px 8px;
+  margin: 4px 0;
+  cursor: pointer;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.so-timeline-order-header.is-active {
+  background-color: #ecf5ff;
+  border: 1px solid #409eff;
+}
+
+.so-timeline-order-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.so-timeline-order-no {
+  font-weight: 600;
+}
+
+.so-timeline-order-customer {
+  font-size: 12px;
+  color: #666;
+}
+
+.so-timeline-order-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 12px;
+  color: #666;
+}
+
+.so-timeline-order-details {
+  padding-bottom: 4px;
+  margin-left: 16px;
+}
+
+.so-timeline-detail-row {
+  padding: 4px 6px;
+  margin: 2px 0;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.so-timeline-detail-row:hover {
+  background-color: #f5f7fa;
+}
+
+.so-timeline-detail-row.is-active {
+  background-color: #ecf5ff;
+  border: 1px solid #409eff;
+}
+
+.so-timeline-detail-main {
+  font-weight: 500;
+  color: #333;
+}
+
+.so-timeline-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  color: #666;
+}
+
+.so-timeline-detail-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.so-timeline-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.so-timeline-detail-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.so-timeline-empty {
+  margin-top: 16px;
 }
 
 .so-table-wrapper {
