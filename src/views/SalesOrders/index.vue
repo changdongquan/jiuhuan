@@ -243,6 +243,9 @@
           <div class="so-mobile-card__header">
             <div>
               <div class="so-mobile-card__order">订单编号：{{ row.orderNo || '-' }}</div>
+              <div class="so-mobile-card__date">
+                订单日期：{{ formatDate(row.orderDate) || '-' }}
+              </div>
               <div class="so-mobile-card__customer">{{ row.customerName || '-' }}</div>
             </div>
             <el-tag size="small" type="info">明细 {{ row.details.length }}</el-tag>
@@ -251,14 +254,6 @@
             <div>
               <span class="label">合同号</span>
               <span class="value">{{ row.contractNo || '-' }}</span>
-            </div>
-            <div>
-              <span class="label">订单日期</span>
-              <span class="value">{{ formatDate(row.orderDate) || '-' }}</span>
-            </div>
-            <div>
-              <span class="label">签订日期</span>
-              <span class="value">{{ formatDate(row.signDate) || '-' }}</span>
             </div>
           </div>
           <div class="so-mobile-card__stats">
@@ -719,13 +714,13 @@
               <span class="view-dialog-info-value">{{ viewOrderData.customerName || '-' }}</span>
             </div>
             <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">订单日期：</span>
+              <span class="view-dialog-info-label">订单日期</span>
               <span class="view-dialog-info-value">{{
                 formatDate(viewOrderData.orderDate) || '-'
               }}</span>
             </div>
             <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">签订日期：</span>
+              <span class="view-dialog-info-label">签订日期</span>
               <span class="view-dialog-info-value">{{
                 formatDate(viewOrderData.signDate) || '-'
               }}</span>
@@ -735,11 +730,11 @@
               <span class="view-dialog-info-value">{{ viewOrderData.contractNo || '-' }}</span>
             </div>
             <div class="view-dialog-info-item view-dialog-info-item--two-line">
-              <span class="view-dialog-info-label">总数量：</span>
+              <span class="view-dialog-info-label">总数量</span>
               <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
             </div>
             <div class="view-dialog-info-item view-dialog-info-item--two-line">
-              <span class="view-dialog-info-label">总金额：</span>
+              <span class="view-dialog-info-label">总金额</span>
               <span class="view-dialog-info-value">
                 {{ formatAmount(viewOrderData.totalAmount) }} 元
               </span>
@@ -764,23 +759,23 @@
             </div>
             <div class="view-dialog-info-grid view-dialog-info-grid--mobile">
               <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">订单日期：</span>
+                <span class="view-dialog-info-label">订单日期</span>
                 <span class="view-dialog-info-value">{{
                   formatDate(viewOrderData.orderDate) || '-'
                 }}</span>
               </div>
               <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">签订日期：</span>
+                <span class="view-dialog-info-label">签订日期</span>
                 <span class="view-dialog-info-value">{{
                   formatDate(viewOrderData.signDate) || '-'
                 }}</span>
               </div>
               <div class="view-dialog-info-item view-dialog-info-item--two-line">
-                <span class="view-dialog-info-label">总数量：</span>
+                <span class="view-dialog-info-label">总数量</span>
                 <span class="view-dialog-info-value">{{ viewOrderData.totalQuantity || 0 }}</span>
               </div>
               <div class="view-dialog-info-item view-dialog-info-item--two-line">
-                <span class="view-dialog-info-label">总金额：</span>
+                <span class="view-dialog-info-label">总金额</span>
                 <span class="view-dialog-info-value">
                   {{ formatAmount(viewOrderData.totalAmount) }}
                 </span>
@@ -1925,6 +1920,7 @@ onMounted(async () => {
 
   .view-dialog-info-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 2px 0;
   }
 
   :deep(.so-table .el-table__body-wrapper tbody tr) {
@@ -2102,6 +2098,20 @@ onMounted(async () => {
   margin-top: 2px;
 }
 
+.view-dialog-info-grid--mobile .view-dialog-info-value {
+  white-space: nowrap;
+}
+
+/* 手机端：订单基本信息对齐优化 */
+.view-dialog-info-grid--mobile .view-dialog-info-item {
+  text-align: left;
+}
+
+/* 第4项为“总金额”，整体右对齐 */
+.view-dialog-info-grid--mobile .view-dialog-info-item:nth-child(4) {
+  text-align: right;
+}
+
 /* 新品选择对话框 - 已添加的行样式 */
 :deep(.row-disabled) {
   color: #999 !important;
@@ -2154,6 +2164,12 @@ onMounted(async () => {
 .so-mobile-card__order {
   font-size: 14px;
   font-weight: 600;
+}
+
+.so-mobile-card__date {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #666;
 }
 
 .so-mobile-card__customer {
