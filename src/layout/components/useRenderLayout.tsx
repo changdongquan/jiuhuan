@@ -36,7 +36,7 @@ const mobile = computed(() => appStore.getMobile)
 const fixedMenu = computed(() => appStore.getFixedMenu)
 
 export const useRenderLayout = () => {
-  const renderClassic = () => {
+  const renderClassic = (options?: { openSetting?: () => void; showSetting?: boolean }) => {
     return (
       <>
         <div
@@ -104,6 +104,8 @@ export const useRenderLayout = () => {
                     'layout-border__bottom': !tagsView.value
                   }
                 ]}
+                showSetting={options?.showSetting}
+                openSetting={options?.openSetting}
               ></ToolHeader>
 
               {tagsView.value ? (
@@ -118,13 +120,17 @@ export const useRenderLayout = () => {
     )
   }
 
-  const renderTopLeft = () => {
+  const renderTopLeft = (options?: { openSetting?: () => void; showSetting?: boolean }) => {
     return (
       <>
         <div class="flex items-center bg-[var(--top-header-bg-color)] relative layout-border__bottom dark:bg-[var(--el-bg-color)]">
           {logo.value ? <Logo class="custom-hover"></Logo> : undefined}
 
-          <ToolHeader class="flex-1"></ToolHeader>
+          <ToolHeader
+            class="flex-1"
+            showSetting={options?.showSetting}
+            openSetting={options?.openSetting}
+          ></ToolHeader>
         </div>
         <div class="absolute top-[var(--logo-height)+1px] left-0 w-full h-[calc(100%-1px-var(--logo-height))] flex">
           <Menu class="!h-full relative layout-border__right"></Menu>
@@ -175,7 +181,7 @@ export const useRenderLayout = () => {
     )
   }
 
-  const renderTop = () => {
+  const renderTop = (options?: { openSetting?: () => void; showSetting?: boolean }) => {
     return (
       <>
         <div
@@ -188,7 +194,7 @@ export const useRenderLayout = () => {
         >
           {logo.value ? <Logo class="custom-hover"></Logo> : undefined}
           <Menu class="flex-1 px-10px h-[var(--top-tool-height)]"></Menu>
-          <ToolHeader></ToolHeader>
+          <ToolHeader showSetting={options?.showSetting} openSetting={options?.openSetting} />
         </div>
         <div
           class={[
@@ -230,13 +236,17 @@ export const useRenderLayout = () => {
     )
   }
 
-  const renderCutMenu = () => {
+  const renderCutMenu = (options?: { openSetting?: () => void; showSetting?: boolean }) => {
     return (
       <>
         <div class="flex items-center bg-[var(--top-header-bg-color)] relative layout-border__bottom">
           {logo.value ? <Logo class="custom-hover !pr-15px"></Logo> : undefined}
 
-          <ToolHeader class="flex-1"></ToolHeader>
+          <ToolHeader
+            class="flex-1"
+            showSetting={options?.showSetting}
+            openSetting={options?.openSetting}
+          ></ToolHeader>
         </div>
         <div class="absolute top-[var(--logo-height)] left-0 w-[calc(100%-2px)] h-[calc(100%-var(--logo-height))] flex">
           <TabMenu></TabMenu>

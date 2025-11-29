@@ -1,11 +1,12 @@
 <script lang="tsx">
-import { defineComponent, computed } from 'vue'
+import { defineComponent, computed, type PropType } from 'vue'
 import { Collapse } from '@/components/Collapse'
 import { LocaleDropdown } from '@/components/LocaleDropdown'
 import { SizeDropdown } from '@/components/SizeDropdown'
 import { UserInfo } from '@/components/UserInfo'
 import { Screenfull } from '@/components/Screenfull'
 import { Breadcrumb } from '@/components/Breadcrumb'
+import { Icon } from '@/components/Icon'
 import { useAppStore } from '@/store/modules/app'
 import { useDesign } from '@/hooks/web/useDesign'
 
@@ -35,7 +36,17 @@ const locale = computed(() => appStore.getLocale)
 
 export default defineComponent({
   name: 'ToolHeader',
-  setup() {
+  props: {
+    showSetting: {
+      type: Boolean,
+      default: true
+    },
+    openSetting: {
+      type: Function as PropType<() => void>,
+      required: false
+    }
+  },
+  setup(props) {
     return () => (
       <div
         id={`${variables.namespace}-tool-header`}
@@ -53,6 +64,15 @@ export default defineComponent({
           </div>
         ) : undefined}
         <div class="h-full flex items-center">
+          {props.showSetting ? (
+            <div
+              class="custom-hover mr-1 flex items-center justify-center"
+              style="height: 100%;"
+              onClick={props.openSetting}
+            >
+              <Icon icon="vi-ep:setting" color="var(--top-header-text-color)" size={18} />
+            </div>
+          ) : undefined}
           {screenfull.value ? (
             <Screenfull class="custom-hover" color="var(--top-header-text-color)"></Screenfull>
           ) : undefined}

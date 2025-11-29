@@ -1,5 +1,5 @@
 <script lang="tsx">
-import { computed, defineComponent, unref } from 'vue'
+import { computed, defineComponent, unref, ref } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { Backtop } from '@/components/Backtop'
 import { Setting } from '@/components/Setting'
@@ -26,17 +26,17 @@ const handleClickOutside = () => {
   appStore.setCollapse(true)
 }
 
-const renderLayout = () => {
+const renderLayout = (options?: { openSetting?: () => void; showSetting?: boolean }) => {
   const { renderClassic, renderTopLeft, renderTop, renderCutMenu } = useRenderLayout()
   switch (unref(layout)) {
     case 'classic':
-      return renderClassic()
+      return renderClassic(options)
     case 'topLeft':
-      return renderTopLeft()
+      return renderTopLeft(options)
     case 'top':
-      return renderTop()
+      return renderTop(options)
     case 'cutMenu':
-      return renderCutMenu()
+      return renderCutMenu(options)
     default:
       break
   }
@@ -45,6 +45,11 @@ const renderLayout = () => {
 export default defineComponent({
   name: 'Layout',
   setup() {
+    const settingRef = ref<InstanceType<typeof Setting> | null>(null)
+    const openSetting = () => {
+      settingRef.value?.open?.()
+    }
+
     return () => (
       <section class={[prefixCls, `${prefixCls}__${layout.value}`, 'w-[100%] h-[100%] relative']}>
         {mobile.value && !collapse.value ? (
@@ -54,11 +59,11 @@ export default defineComponent({
           ></div>
         ) : undefined}
 
-        {renderLayout()}
+        {renderLayout({ openSetting, showSetting: !unref(hideSetting) })}
 
         <Backtop></Backtop>
 
-        {!unref(hideSetting) && <Setting></Setting>}
+        {!unref(hideSetting) && <Setting ref={settingRef}></Setting>}
       </section>
     )
   }

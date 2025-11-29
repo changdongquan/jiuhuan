@@ -11,13 +11,7 @@ import InterfaceDisplay from './components/InterfaceDisplay.vue'
 import LayoutRadioPicker from './components/LayoutRadioPicker.vue'
 import { useStorage } from '@/hooks/web/useStorage'
 import { useClipboard } from '@vueuse/core'
-import { useDesign } from '@/hooks/web/useDesign'
-
 const { clear: storageClear } = useStorage('localStorage')
-
-const { getPrefixCls } = useDesign()
-
-const prefixCls = getPrefixCls('setting')
 
 const appStore = useAppStore()
 
@@ -147,17 +141,15 @@ const clear = () => {
   storageClear()
   window.location.reload()
 }
+
+const open = () => {
+  drawer.value = true
+}
+
+defineExpose({ open })
 </script>
 
 <template>
-  <div
-    :class="prefixCls"
-    class="fixed top-[45%] right-0 w-40px h-40px flex items-center justify-center bg-[var(--el-color-primary)] cursor-pointer z-10"
-    @click="drawer = true"
-  >
-    <Icon icon="vi-ant-design:setting-outlined" color="#fff" />
-  </div>
-
   <ElDrawer v-model="drawer" direction="rtl" size="350px" :z-index="4000">
     <template #header>
       <span class="text-16px font-700">{{ t('setting.projectSetting') }}</span>
