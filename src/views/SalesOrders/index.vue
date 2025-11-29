@@ -1888,6 +1888,11 @@ onMounted(async () => {
     margin-bottom: 12px;
   }
 
+  /* 手机端：查询按钮与上方日期选择之间增加一点垂直间距 */
+  :deep(.query-form--mobile .query-form__actions) {
+    margin-top: 6px;
+  }
+
   :deep(.query-form--mobile .el-form-item .el-form-item__content) {
     width: 100%;
   }
