@@ -187,7 +187,7 @@ export default defineComponent({
   }
 
   .tool-header-summary-card {
-    min-width: 120px;
+    min-width: 144px;
     padding: 4px 8px;
     font-size: 12px;
     color: #333;

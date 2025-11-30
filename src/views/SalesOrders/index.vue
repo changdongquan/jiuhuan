@@ -240,12 +240,12 @@
                     {{ row.quantity || 0 }}
                   </template>
                 </el-table-column>
-                <el-table-column label="单价(元)" width="85" align="right">
+                <el-table-column label="单价(元)" width="95" align="right">
                   <template #default="{ row }">
                     {{ formatAmount(row.unitPrice) }}
                   </template>
                 </el-table-column>
-                <el-table-column label="总金额(元)" width="85" align="right">
+                <el-table-column label="总金额(元)" width="95" align="right">
                   <template #default="{ row }">
                     {{ formatAmount(row.totalAmount) }}
                   </template>
@@ -2503,6 +2503,12 @@ onMounted(async () => {
   :deep(.el-dialog__body) {
     padding-top: 8px;
   }
+
+  /* 查看弹窗中的订单明细表字体大小 */
+  :deep(.el-table__header .cell),
+  :deep(.el-table__body .cell) {
+    font-size: 14px;
+  }
 }
 
 .view-dialog-info-item--two-line .view-dialog-info-value {
@@ -2675,7 +2681,7 @@ onMounted(async () => {
 .so-timeline-detail-row {
   padding: 4px 6px;
   margin: 2px 0;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   border-radius: 4px;
 }
@@ -2712,6 +2718,12 @@ onMounted(async () => {
 .so-timeline-detail-title {
   font-size: 14px;
   font-weight: 600;
+}
+
+/* 时间轴右侧订单明细表字体大小 */
+:deep(.so-timeline-detail-panel .el-table__header .cell),
+:deep(.so-timeline-detail-panel .el-table__body .cell) {
+  font-size: 14px;
 }
 
 .so-timeline-detail-panel-empty {
