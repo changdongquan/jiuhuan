@@ -54,6 +54,7 @@ export default defineComponent({
 
     const isMobile = computed(() => appStore.getMobile)
     const isSalesOrdersPage = computed(() => route.name === 'SalesOrdersIndex')
+    const salesSummary = computed(() => appStore.getSalesOrdersSummary)
 
     type SalesOrdersViewMode = 'table' | 'timeline'
 
@@ -86,9 +87,38 @@ export default defineComponent({
             {breadcrumb.value ? <Breadcrumb class="<md:hidden"></Breadcrumb> : undefined}
           </div>
         ) : undefined}
+
+        {/* 顶部居中的销售订单统计卡片 */}
+        {isSalesOrdersPage.value && !isMobile.value ? (
+          <div class="tool-header-summary-center">
+            <div class="tool-header-summary-cards">
+              <div class="tool-header-summary-card tool-header-summary-card--year">
+                <div class="title">当年金额</div>
+                <div class="value">
+                  {salesSummary.value.yearTotalAmount?.toLocaleString?.() ?? 0}
+                </div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--month">
+                <div class="title">本月金额</div>
+                <div class="value">
+                  {salesSummary.value.monthTotalAmount?.toLocaleString?.() ?? 0}
+                </div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--pending-in">
+                <div class="title">待入库</div>
+                <div class="value">{salesSummary.value.pendingInStock ?? 0}</div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--pending-out">
+                <div class="title">待出运</div>
+                <div class="value">{salesSummary.value.pendingShipped ?? 0}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div class="h-full flex items-center">
           {isSalesOrdersPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-1">
+            <div class="flex items-center mr-3">
               <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
                 视图
               </span>
@@ -138,5 +168,78 @@ export default defineComponent({
 
 .@{prefix-cls} {
   transition: left var(--transition-time-02);
+
+  .tool-header-summary-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tool-header-summary-cards {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tool-header-summary-card {
+    min-width: 120px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #333;
+    pointer-events: auto;
+    background: #f5f7fa;
+    border-radius: 6px;
+  }
+
+  .tool-header-summary-card .title {
+    margin-bottom: 2px;
+    color: #666;
+  }
+
+  .tool-header-summary-card .value {
+    font-weight: 600;
+  }
+
+  /* 颜色和销售订单页面原 summary-card 保持一致，仅缩小尺寸 */
+  .tool-header-summary-card--year {
+    background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+  }
+
+  .tool-header-summary-card--year .title,
+  .tool-header-summary-card--year .value {
+    color: #409eff;
+  }
+
+  .tool-header-summary-card--month {
+    background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+  }
+
+  .tool-header-summary-card--month .title,
+  .tool-header-summary-card--month .value {
+    color: #67c23a;
+  }
+
+  .tool-header-summary-card--pending-in {
+    background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+  }
+
+  .tool-header-summary-card--pending-in .title,
+  .tool-header-summary-card--pending-in .value {
+    color: #e6a23c;
+  }
+
+  .tool-header-summary-card--pending-out {
+    background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+  }
+
+  .tool-header-summary-card--pending-out .title,
+  .tool-header-summary-card--pending-out .value {
+    color: #909399;
+  }
 }
 </style>

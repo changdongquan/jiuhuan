@@ -33,6 +33,12 @@ interface AppState {
   footer: boolean
   theme: ThemeTypes
   fixedMenu: boolean
+  salesOrdersSummary: {
+    yearTotalAmount: number
+    monthTotalAmount: number
+    pendingInStock: number
+    pendingShipped: number
+  }
 }
 
 export const useAppStore = defineStore('app', {
@@ -92,6 +98,13 @@ export const useAppStore = defineStore('app', {
         topHeaderHoverColor: '#f6f6f6',
         // 头部边框颜色
         topToolBorderColor: '#eee'
+      },
+      // 销售订单顶部统计信息
+      salesOrdersSummary: {
+        yearTotalAmount: 0,
+        monthTotalAmount: 0,
+        pendingInStock: 0,
+        pendingShipped: 0
       }
     }
   },
@@ -170,6 +183,9 @@ export const useAppStore = defineStore('app', {
     },
     getFooter(): boolean {
       return this.footer
+    },
+    getSalesOrdersSummary(): AppState['salesOrdersSummary'] {
+      return this.salesOrdersSummary
     }
   },
   actions: {
@@ -262,6 +278,9 @@ export const useAppStore = defineStore('app', {
     },
     setFooter(footer: boolean) {
       this.footer = footer
+    },
+    setSalesOrdersSummary(payload: Partial<AppState['salesOrdersSummary']>) {
+      this.salesOrdersSummary = Object.assign({}, this.salesOrdersSummary, payload)
     },
     setPrimaryLight() {
       if (this.theme.elColorPrimary) {

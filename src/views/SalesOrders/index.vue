@@ -12,16 +12,44 @@
         </el-radio-group>
       </div>
     </div>
+    <!-- 手机端仍在内容区显示统计卡片，PC 端在顶部工具栏显示 -->
+    <el-row :gutter="12" class="so-summary-row" v-if="isMobile">
+      <el-col :xs="24" :sm="12" :lg="5">
+        <el-card shadow="hover" class="summary-card summary-card--year">
+          <div class="summary-title">当年订单累计金额</div>
+          <div class="summary-value">{{ formatAmount(summary.yearTotalAmount) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="5">
+        <el-card shadow="hover" class="summary-card summary-card--month">
+          <div class="summary-title">本月订单累计金额</div>
+          <div class="summary-value">{{ formatAmount(summary.monthTotalAmount) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="5">
+        <el-card shadow="hover" class="summary-card summary-card--pending-in">
+          <div class="summary-title">待入库</div>
+          <div class="summary-value">{{ summary.pendingInStock || 0 }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="5">
+        <el-card shadow="hover" class="summary-card summary-card--pending-out">
+          <div class="summary-title">待出运</div>
+          <div class="summary-value">{{ summary.pendingShipped || 0 }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-form
       :model="queryForm"
-      :label-width="isMobile ? 'auto' : '90px'"
+      :label-width="isMobile ? 'auto' : '80px'"
       :label-position="isMobile ? 'top' : 'right'"
       :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-2 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
-      <el-form-item label="综合搜索">
+      <el-form-item label="关键词">
         <el-input
           v-model="queryForm.searchText"
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
@@ -74,33 +102,6 @@
         </div>
       </el-form-item>
     </el-form>
-
-    <el-row :gutter="16">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--year">
-          <div class="summary-title">当年订单累计金额</div>
-          <div class="summary-value">{{ formatAmount(summary.yearTotalAmount) }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--month">
-          <div class="summary-title">本月订单累计金额</div>
-          <div class="summary-value">{{ formatAmount(summary.monthTotalAmount) }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--pending-in">
-          <div class="summary-title">待入库</div>
-          <div class="summary-value">{{ summary.pendingInStock || 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--pending-out">
-          <div class="summary-title">待出运</div>
-          <div class="summary-value">{{ summary.pendingShipped || 0 }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
 
     <!-- PC 时间轴视图 -->
     <div v-if="!isMobile && viewMode === 'timeline'" class="so-timeline-layout">
@@ -1204,7 +1205,8 @@ const resolvePcViewModeFromRoute = (): ViewMode => {
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
 const showMobileFilters = ref(true)
 // PC 端表格高度：窗口高度减去顶部/底部区域，数值越小表格越高
-const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
+// 在原基础上再增加高度：从 300px 调整为 220px
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 220px)'))
 const dialogControlWidth = computed(() => (isMobile.value ? '100%' : '280px'))
 
 // 日期格式化
@@ -1465,6 +1467,13 @@ const loadStatistics = async () => {
       summary.monthTotalAmount = data.monthTotalAmount || 0
       summary.pendingInStock = data.pendingInStock || 0
       summary.pendingShipped = data.pendingShipped || 0
+
+      appStore.setSalesOrdersSummary({
+        yearTotalAmount: summary.yearTotalAmount,
+        monthTotalAmount: summary.monthTotalAmount,
+        pendingInStock: summary.pendingInStock,
+        pendingShipped: summary.pendingShipped
+      })
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
@@ -2368,7 +2377,10 @@ onMounted(async () => {
 }
 
 .query-form__actions {
+  display: flex;
+  margin-right: -16px;
   margin-left: auto;
+  justify-content: flex-end;
 }
 
 .query-actions {
@@ -2562,7 +2574,7 @@ onMounted(async () => {
 
 .summary-card {
   display: flex;
-  height: 64px;
+  height: 56px;
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;
@@ -2582,7 +2594,7 @@ onMounted(async () => {
 
 .so-timeline-left {
   flex: 0 0 408px;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 220px);
   padding: 8px;
   overflow: auto;
   background-color: var(--el-bg-color);
@@ -2591,7 +2603,7 @@ onMounted(async () => {
 
 .so-timeline-right {
   flex: 1;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 220px);
   padding: 8px 12px;
   overflow: auto;
   background-color: var(--el-bg-color);
