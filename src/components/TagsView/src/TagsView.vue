@@ -410,18 +410,6 @@ watch(
         :hover-color="isDark ? '#fff' : 'var(--el-color-black)'"
       />
     </span>
-    <!-- 销售订单页面视图切换（表格 / 时间轴），放在“项目配置”按钮左侧 -->
-    <div
-      v-if="isSalesOrdersPage && !appStore.getMobile"
-      :class="`${prefixCls}__extra-viewmode`"
-      class="flex items-center px-2"
-    >
-      <span class="mr-1 text-[12px] text-[#666]">视图</span>
-      <el-radio-group v-model="salesOrdersViewMode" size="small">
-        <el-radio-button label="table">表格</el-radio-button>
-        <el-radio-button label="timeline">时间轴</el-radio-button>
-      </el-radio-group>
-    </div>
     <ContextMenu
       trigger="click"
       :schema="[

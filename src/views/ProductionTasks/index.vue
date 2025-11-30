@@ -50,7 +50,6 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleCreate">新增</el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -832,16 +831,6 @@ const submitDialogForm = async () => {
   } finally {
     dialogSubmitting.value = false
   }
-}
-
-const handleCreate = () => {
-  isViewMode.value = false
-  dialogTitle.value = '新建生产任务'
-  currentProjectCode.value = ''
-  Object.keys(dialogForm).forEach((key) => {
-    delete dialogForm[key as keyof ProductionTaskInfo]
-  })
-  dialogVisible.value = true
 }
 
 const handleDialogClosed = () => {

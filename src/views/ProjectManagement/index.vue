@@ -65,7 +65,6 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleCreate">新增</el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -1012,13 +1011,6 @@ const handleView = async (row: Partial<ProjectInfo>) => {
 const handleEditFromView = () => {
   viewDialogVisible.value = false
   setTimeout(() => handleEdit(viewData.value), 100)
-}
-
-const handleCreate = () => {
-  editTitle.value = '新建项目'
-  currentProjectCode.value = ''
-  Object.keys(editForm).forEach((key) => delete (editForm as any)[key])
-  editDialogVisible.value = true
 }
 
 const handleEdit = (row: Partial<ProjectInfo>) => {
