@@ -1,5 +1,5 @@
 <template>
-  <div class="pt-page px-4 pt-1 pb-4 space-y-2">
+  <div class="pt-page px-4 pt-0 pb-1 space-y-2">
     <div v-if="isMobile" class="mobile-top-bar">
       <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
         {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
@@ -18,7 +18,7 @@
       :label-width="isMobile ? 'auto' : '90px'"
       :label-position="isMobile ? 'top' : 'right'"
       :inline="!isMobile"
-      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-2 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
@@ -50,6 +50,7 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleCreate">新增</el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -546,7 +547,7 @@ const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
 const showMobileFilters = ref(true)
-const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('编辑生产任务')
@@ -831,6 +832,16 @@ const submitDialogForm = async () => {
   } finally {
     dialogSubmitting.value = false
   }
+}
+
+const handleCreate = () => {
+  isViewMode.value = false
+  dialogTitle.value = '新建生产任务'
+  currentProjectCode.value = ''
+  Object.keys(dialogForm).forEach((key) => {
+    delete dialogForm[key as keyof ProductionTaskInfo]
+  })
+  dialogVisible.value = true
 }
 
 const handleDialogClosed = () => {
@@ -1201,16 +1212,15 @@ onMounted(() => {
   line-height: 18px;
 }
 
-/* 分页固定在页面底部居中，靠近版权信息区域 */
+/* 分页固定在页面底部居中，靠近版权信息区域（与销售订单一致） */
 .pagination-footer {
   position: fixed;
-  right: 40px;
-  bottom: 40px;
-  left: auto;
+  bottom: 10px;
+  left: 50%;
   z-index: 10;
   display: flex;
-  transform: none;
-  justify-content: flex-end;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 /* 统计卡片内容垂直居中 */

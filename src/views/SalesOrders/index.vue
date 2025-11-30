@@ -1,5 +1,5 @@
 <template>
-  <div class="sales-orders-page px-4 pt-1 pb-4 space-y-2">
+  <div class="sales-orders-page px-4 pt-0 pb-1 space-y-2">
     <div v-if="isMobile" class="mobile-top-bar">
       <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
         {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
@@ -17,7 +17,7 @@
       :label-width="isMobile ? 'auto' : '90px'"
       :label-position="isMobile ? 'top' : 'right'"
       :inline="!isMobile"
-      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-2 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
@@ -101,17 +101,6 @@
         </el-card>
       </el-col>
     </el-row>
-
-    <!-- PC 顶部视图切换：表格 / 时间轴 -->
-    <div v-if="!isMobile" class="desktop-view-bar">
-      <div class="view-mode-switch">
-        <span class="view-mode-switch__label">视图</span>
-        <el-radio-group v-model="viewMode" size="small">
-          <el-radio-button value="table">表格</el-radio-button>
-          <el-radio-button value="timeline">时间轴</el-radio-button>
-        </el-radio-group>
-      </div>
-    </div>
 
     <!-- PC 时间轴视图 -->
     <div v-if="!isMobile && viewMode === 'timeline'" class="so-timeline-layout">
@@ -1139,6 +1128,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance } from 'element-plus'
 import {
   ElButton,
@@ -1202,9 +1192,19 @@ interface TimelineGroup {
 
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
-const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'timeline')
+const route = useRoute()
+const router = useRouter()
+
+const resolvePcViewModeFromRoute = (): ViewMode => {
+  const v = route.query.view
+  if (v === 'table' || v === 'timeline') return v as ViewMode
+  return 'timeline'
+}
+
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
 const showMobileFilters = ref(true)
-const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 340px)'))
+// PC 端表格高度：窗口高度减去顶部/底部区域，数值越小表格越高
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
 const dialogControlWidth = computed(() => (isMobile.value ? '100%' : '280px'))
 
 // 日期格式化
@@ -1235,14 +1235,32 @@ const tableData = ref<OrderTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
 
+const updateViewQuery = (mode: 'table' | 'timeline') => {
+  const query = { ...route.query, view: mode }
+  router.replace({ path: route.path, query })
+}
+
+// PC 端监听路由 query.view，同步到本地 viewMode（供标签页切换使用）
+watch(
+  () => route.query.view,
+  (val) => {
+    if (isMobile.value) return
+    const mode = val === 'table' || val === 'timeline' ? (val as ViewMode) : 'timeline'
+    if (viewMode.value !== mode) {
+      viewMode.value = mode
+    }
+  }
+)
+
 watch(isMobile, (mobile) => {
   if (mobile) {
     viewMode.value = 'card'
-  } else if (viewMode.value === 'card') {
-    // 从手机返回到 PC 时，默认时间轴
-    viewMode.value = 'timeline'
-  }
-  if (!mobile) {
+  } else {
+    const next = resolvePcViewModeFromRoute()
+    viewMode.value = next
+    if (!route.query.view) {
+      updateViewQuery(next === 'card' ? 'timeline' : (next as 'table' | 'timeline'))
+    }
     showMobileFilters.value = true
   }
 })
@@ -1332,9 +1350,13 @@ const formatAmount = (value: number | null | undefined): string => {
 }
 
 const mapOrderToRow = (order: SalesOrder): OrderTableRow => {
+  const sortedDetails = (order.details || [])
+    .slice()
+    .sort((a, b) => (a.itemCode || '').localeCompare(b.itemCode || ''))
+
   return {
     ...order,
-    details: order.details || [],
+    details: sortedDetails,
     totalQuantity: order.totalQuantity || 0,
     totalAmount: order.totalAmount || 0
   }
@@ -1563,6 +1585,12 @@ const handleTimelineDelete = () => {
 }
 
 watch(viewMode, (mode) => {
+  if (!isMobile.value && (mode === 'table' || mode === 'timeline')) {
+    const currentView = route.query.view
+    if (currentView !== mode) {
+      updateViewQuery(mode)
+    }
+  }
   if (isMobile.value) return
   if (mode === 'timeline') {
     const first = tableData.value[0]
@@ -2554,7 +2582,7 @@ onMounted(async () => {
 
 .so-timeline-left {
   flex: 0 0 408px;
-  max-height: calc(100vh - 360px);
+  max-height: calc(100vh - 300px);
   padding: 8px;
   overflow: auto;
   background-color: var(--el-bg-color);
@@ -2563,7 +2591,7 @@ onMounted(async () => {
 
 .so-timeline-right {
   flex: 1;
-  max-height: calc(100vh - 360px);
+  max-height: calc(100vh - 300px);
   padding: 8px 12px;
   overflow: auto;
   background-color: var(--el-bg-color);
@@ -2917,7 +2945,7 @@ onMounted(async () => {
 /* 分页固定在页面底部居中，靠近版权信息区域 */
 .pagination-footer {
   position: fixed;
-  bottom: 40px;
+  bottom: 10px;
   left: 50%;
   z-index: 10;
   display: flex;

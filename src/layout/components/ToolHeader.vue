@@ -1,5 +1,7 @@
 <script lang="tsx">
 import { defineComponent, computed, type PropType } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElRadioButton, ElRadioGroup } from 'element-plus'
 import { Collapse } from '@/components/Collapse'
 import { LocaleDropdown } from '@/components/LocaleDropdown'
 import { SizeDropdown } from '@/components/SizeDropdown'
@@ -47,6 +49,27 @@ export default defineComponent({
     }
   },
   setup(props) {
+    const route = useRoute()
+    const router = useRouter()
+
+    const isMobile = computed(() => appStore.getMobile)
+    const isSalesOrdersPage = computed(() => route.name === 'SalesOrdersIndex')
+
+    type SalesOrdersViewMode = 'table' | 'timeline'
+
+    const salesOrdersViewMode = computed<SalesOrdersViewMode>({
+      get() {
+        const v = route.query.view
+        if (v === 'table' || v === 'timeline') return v as SalesOrdersViewMode
+        return 'timeline'
+      },
+      set(val) {
+        if (route.name !== 'SalesOrdersIndex') return
+        const query = { ...route.query, view: val }
+        router.replace({ path: route.path, query })
+      }
+    })
+
     return () => (
       <div
         id={`${variables.namespace}-tool-header`}
@@ -64,6 +87,23 @@ export default defineComponent({
           </div>
         ) : undefined}
         <div class="h-full flex items-center">
+          {isSalesOrdersPage.value && !isMobile.value ? (
+            <div class="flex items-center mr-1">
+              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
+                视图
+              </span>
+              <ElRadioGroup
+                size="small"
+                modelValue={salesOrdersViewMode.value}
+                onUpdate:modelValue={(val) =>
+                  (salesOrdersViewMode.value = val as SalesOrdersViewMode)
+                }
+              >
+                <ElRadioButton label="table">表格</ElRadioButton>
+                <ElRadioButton label="timeline">时间轴</ElRadioButton>
+              </ElRadioGroup>
+            </div>
+          ) : null}
           {props.showSetting ? (
             <div
               class="custom-hover mr-1 flex items-center justify-center"
