@@ -216,7 +216,7 @@
                 :row-class-name="viewDetailRowClassName"
               >
                 <el-table-column type="index" label="序号" width="45" align="center" />
-                <el-table-column prop="itemCode" label="项目编号" min-width="120" />
+                <el-table-column prop="itemCode" label="项目编号" min-width="135" />
                 <el-table-column
                   prop="productName"
                   label="产品名称"
@@ -226,12 +226,6 @@
                 <el-table-column
                   prop="productDrawingNo"
                   label="产品图号"
-                  min-width="120"
-                  show-overflow-tooltip
-                />
-                <el-table-column
-                  prop="customerPartNo"
-                  label="客户模号"
                   min-width="120"
                   show-overflow-tooltip
                 />
@@ -257,9 +251,15 @@
                 </el-table-column>
                 <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
                 <el-table-column
+                  prop="customerPartNo"
+                  label="客户模号"
+                  min-width="110"
+                  show-overflow-tooltip
+                />
+                <el-table-column
                   prop="costSource"
                   label="费用出处"
-                  min-width="120"
+                  min-width="115"
                   show-overflow-tooltip
                 />
                 <el-table-column label="是否入库" width="70" align="center">
@@ -2351,6 +2351,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  padding-right: 12px;
 }
 
 .sales-orders-page {
@@ -2378,19 +2379,19 @@ onMounted(async () => {
 
 .query-form__actions {
   display: flex;
-  margin-right: -16px;
+  margin-right: 0;
   margin-left: auto;
   justify-content: flex-end;
 }
 
 .query-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-end;
 }
 
-:deep(.query-form .el-form-item) {
+:deep(.query-form .el-form-item:not(.query-form__actions)) {
   /* 默认 inline 表单 item 间距约 20px，这里缩小 10% 左右 */
   margin-right: 18px;
   margin-bottom: 0;
