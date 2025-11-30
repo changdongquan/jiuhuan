@@ -31,7 +31,9 @@ const allowOriginList = [
   /\.jiuhuan\.local$/i,
   /^https?:\/\/10\.0\.0\.248$/i,
   /^https?:\/\/craftsys\.jiuhuan\.local$/i,
-  /^https?:\/\/jiuhuan.net(:[0-9]+)?$/i
+  /^https?:\/\/jiuhuan.net(:[0-9]+)?$/i,
+  // 本地 / 内网调试前端（如 http://10.0.0.67:4000）
+  /^https?:\/\/10\.0\.0\.67(:[0-9]+)?$/i
 ]
 
 // 开发环境：允许 localhost 和 127.0.0.1

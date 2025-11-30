@@ -232,8 +232,9 @@ router.beforeEach(async (to, from, next) => {
             })
             permissionStore.setIsAddRouters(true)
 
-            // 重新触发路由守卫，导航到目标页面
-            router.replace(to.fullPath)
+            // 使用 next 导航到目标页面，避免在导航守卫中直接调用 router.replace 触发
+            // “Invalid navigation guard / next callback was never called” 警告
+            next({ path: to.fullPath, replace: true })
             return
           } else {
             // 自动登录失败（可能不在域环境中或未配置 SSO），静默跳转到登录页

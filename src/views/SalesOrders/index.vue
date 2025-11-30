@@ -1,9 +1,14 @@
 <template>
   <div class="sales-orders-page px-4 pt-0 pb-1 space-y-2">
     <div v-if="isMobile" class="mobile-top-bar">
-      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
-        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
-      </el-button>
+      <div class="mobile-top-bar-left">
+        <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+          {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+        </el-button>
+        <el-button text type="primary" @click="showMobileSummary = !showMobileSummary">
+          {{ showMobileSummary ? '收起卡片' : '展开卡片' }}
+        </el-button>
+      </div>
       <div class="view-mode-switch">
         <span class="view-mode-switch__label">视图</span>
         <el-radio-group v-model="viewMode" size="small">
@@ -13,7 +18,7 @@
       </div>
     </div>
     <!-- 手机端仍在内容区显示统计卡片，PC 端在顶部工具栏显示 -->
-    <el-row :gutter="12" class="so-summary-row" v-if="isMobile">
+    <el-row :gutter="12" class="so-summary-row" v-if="isMobile && showMobileSummary">
       <el-col :xs="24" :sm="12" :lg="5">
         <el-card shadow="hover" class="summary-card summary-card--year">
           <div class="summary-title">当年订单累计金额</div>
@@ -262,23 +267,27 @@
                   min-width="115"
                   show-overflow-tooltip
                 />
-                <el-table-column label="是否入库" width="70" align="center">
-                  <template #default="{ row }">
-                    <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
-                      {{ row.isInStock ? '是' : '否' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="是否出运" width="70" align="center">
-                  <template #default="{ row }">
-                    <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
-                      {{ row.isShipped ? '是' : '否' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
                 <el-table-column label="出运日期" width="105" align="center">
                   <template #default="{ row }">
                     {{ formatDate(row.shippingDate) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="附件" min-width="120">
+                  <template #default="{ row }">
+                    <template v-if="row.id && getDetailAttachmentCount(row.id) > 0">
+                      <div class="so-attachment-links">
+                        <el-link
+                          v-for="file in getDetailAttachments(row.id)"
+                          :key="file.id"
+                          type="primary"
+                          :underline="false"
+                          @click="handleAttachmentDownload(file)"
+                        >
+                          {{ file.originalName }}
+                        </el-link>
+                      </div>
+                    </template>
+                    <span v-else class="so-attachment-hint">暂无附件</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -361,6 +370,24 @@
                 <el-table-column label="出运日期" width="140">
                   <template #default="{ row: detail }">
                     {{ formatDate(detail.shippingDate) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="附件" min-width="120">
+                  <template #default="{ row: detail }">
+                    <template v-if="detail.id && getDetailAttachmentCount(detail.id) > 0">
+                      <div class="so-attachment-links">
+                        <el-link
+                          v-for="file in getDetailAttachments(detail.id)"
+                          :key="file.id"
+                          type="primary"
+                          :underline="false"
+                          @click="handleAttachmentDownload(file)"
+                        >
+                          {{ file.originalName }}
+                        </el-link>
+                      </div>
+                    </template>
+                    <span v-else class="so-attachment-hint">暂无附件</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -468,6 +495,9 @@
                 <span v-if="detail.productDrawingNo">产品图号 {{ detail.productDrawingNo }}</span>
                 <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
                 <span>数量 {{ detail.quantity || 0 }}</span>
+                <span v-if="getDetailAttachmentCount(detail.id) > 0">
+                  附件 {{ getDetailAttachmentCount(detail.id) }}
+                </span>
                 <span v-if="detail.deliveryDate">交付 {{ formatDate(detail.deliveryDate) }}</span>
               </div>
             </div>
@@ -671,6 +701,58 @@
                   <el-input v-model="row.costSource" placeholder="费用出处" />
                 </template>
               </el-table-column>
+              <el-table-column label="附件" min-width="220">
+                <template #default="{ row }">
+                  <div class="so-attachment-cell">
+                    <template v-if="!isCreateMode && row.id">
+                      <el-upload
+                        :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${row.id}/attachments`"
+                        :show-file-list="false"
+                        :on-success="() => handleEditAttachmentUploadSuccess(row)"
+                        :on-error="handleEditAttachmentUploadError"
+                      >
+                        <el-button type="primary" link size="small">上传附件</el-button>
+                      </el-upload>
+                      <div
+                        v-if="getDetailAttachments(row.id).length"
+                        class="so-edit-attachment-list"
+                      >
+                        <div
+                          v-for="(file, index) in getDetailAttachments(row.id)"
+                          :key="file.id"
+                          class="so-edit-attachment-row"
+                        >
+                          <span class="index">{{ index + 1 }}</span>
+                          <span class="name" :title="file.originalName">
+                            {{ file.originalName }}
+                          </span>
+                          <span class="size">{{ formatFileSize(file.fileSize) }}</span>
+                          <span class="ops">
+                            <el-button
+                              type="primary"
+                              link
+                              size="small"
+                              @click="handleAttachmentDownload(file)"
+                            >
+                              下载
+                            </el-button>
+                            <el-button
+                              type="danger"
+                              link
+                              size="small"
+                              @click="handleEditAttachmentRemove(row, file)"
+                            >
+                              删除
+                            </el-button>
+                          </span>
+                        </div>
+                      </div>
+                      <span v-else class="so-attachment-hint">暂无附件</span>
+                    </template>
+                    <span v-else class="so-attachment-hint">保存后可上传附件</span>
+                  </div>
+                </template>
+              </el-table-column>
               <el-table-column v-if="isCreateMode" label="操作" width="55" fixed="right">
                 <template #default="{ $index }">
                   <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
@@ -770,6 +852,57 @@
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">费用出处</div>
                   <el-input v-model="detail.costSource" placeholder="费用出处" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">附件</div>
+                  <div class="dialog-mobile-detail-attachments">
+                    <template v-if="!isCreateMode && detail.id">
+                      <el-upload
+                        :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${detail.id}/attachments`"
+                        :show-file-list="false"
+                        :on-success="() => handleEditAttachmentUploadSuccess(detail)"
+                        :on-error="handleEditAttachmentUploadError"
+                      >
+                        <el-button type="primary" link size="small">上传附件</el-button>
+                      </el-upload>
+                      <div
+                        v-if="getDetailAttachments(detail.id).length"
+                        class="so-edit-attachment-list"
+                      >
+                        <div
+                          v-for="(file, index) in getDetailAttachments(detail.id)"
+                          :key="file.id"
+                          class="so-edit-attachment-row"
+                        >
+                          <span class="index">{{ index + 1 }}</span>
+                          <span class="name" :title="file.originalName">
+                            {{ file.originalName }}
+                          </span>
+                          <span class="size">{{ formatFileSize(file.fileSize) }}</span>
+                          <span class="ops">
+                            <el-button
+                              type="primary"
+                              link
+                              size="small"
+                              @click="handleAttachmentDownload(file)"
+                            >
+                              下载
+                            </el-button>
+                            <el-button
+                              type="danger"
+                              link
+                              size="small"
+                              @click="handleEditAttachmentRemove(detail, file)"
+                            >
+                              删除
+                            </el-button>
+                          </span>
+                        </div>
+                      </div>
+                      <span v-else class="so-attachment-hint">暂无附件</span>
+                    </template>
+                    <span v-else class="so-attachment-hint">保存后可上传附件</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -884,7 +1017,7 @@
     <el-dialog
       v-model="viewDialogVisible"
       :title="''"
-      :width="isMobile ? '100%' : '1500px'"
+      :width="isMobile ? '100%' : '1540px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="so-dialog so-dialog-view"
@@ -986,11 +1119,11 @@
               :row-class-name="viewDetailRowClassName"
             >
               <el-table-column type="index" label="序号" width="45" align="center" />
-              <el-table-column prop="itemCode" label="项目编号" min-width="120" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="135" />
               <el-table-column
                 prop="productName"
                 label="产品名称"
-                min-width="120"
+                min-width="115"
                 show-overflow-tooltip
               />
               <el-table-column
@@ -1010,17 +1143,17 @@
                   {{ row.quantity || 0 }}
                 </template>
               </el-table-column>
-              <el-table-column label="单价(元)" width="80" align="right">
+              <el-table-column label="单价(元)" width="95" align="right">
                 <template #default="{ row }">
                   {{ formatAmount(row.unitPrice) }}
                 </template>
               </el-table-column>
-              <el-table-column label="总金额(元)" width="80" align="right">
+              <el-table-column label="总金额(元)" width="95" align="right">
                 <template #default="{ row }">
                   {{ formatAmount(row.totalAmount) }}
                 </template>
               </el-table-column>
-              <el-table-column label="交货日期" width="110" align="center">
+              <el-table-column label="交货日期" width="105" align="center">
                 <template #default="{ row }">
                   {{ formatDate(row.deliveryDate) }}
                 </template>
@@ -1029,17 +1162,17 @@
               <el-table-column
                 prop="costSource"
                 label="费用出处"
-                min-width="120"
+                min-width="110"
                 show-overflow-tooltip
               />
-              <el-table-column label="是否入库" width="80" align="center">
+              <el-table-column label="是否入库" width="75" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.isInStock ? 'success' : 'info'" size="small">
                     {{ row.isInStock ? '是' : '否' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="是否出运" width="80" align="center">
+              <el-table-column label="是否出运" width="75" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.isShipped ? 'success' : 'info'" size="small">
                     {{ row.isShipped ? '是' : '否' }}
@@ -1049,6 +1182,24 @@
               <el-table-column label="出运日期" width="105" align="center">
                 <template #default="{ row }">
                   {{ formatDate(row.shippingDate) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="附件" min-width="120">
+                <template #default="{ row }">
+                  <template v-if="row.id && getDetailAttachmentCount(row.id) > 0">
+                    <div class="so-attachment-links">
+                      <el-link
+                        v-for="file in getDetailAttachments(row.id)"
+                        :key="file.id"
+                        type="primary"
+                        :underline="false"
+                        @click="handleAttachmentDownload(file)"
+                      >
+                        {{ file.originalName }}
+                      </el-link>
+                    </div>
+                  </template>
+                  <span v-else class="so-attachment-hint">暂无附件</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -1114,6 +1265,25 @@
                   <span class="label">备注</span>
                   <span class="value">{{ detail.remark }}</span>
                 </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">附件</span>
+                  <span class="value">
+                    <template v-if="detail.id && getDetailAttachmentCount(detail.id) > 0">
+                      <div class="so-attachment-links">
+                        <el-link
+                          v-for="file in getDetailAttachments(detail.id)"
+                          :key="file.id"
+                          type="primary"
+                          :underline="false"
+                          @click="handleAttachmentDownload(file)"
+                        >
+                          {{ file.originalName }}
+                        </el-link>
+                      </div>
+                    </template>
+                    <template v-else>暂无附件</template>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1162,11 +1332,18 @@ import {
   generateOrderNoApi,
   deleteSalesOrderApi,
   getSalesOrdersStatisticsApi,
+  getSalesOrderDetailAttachmentsApi,
+  deleteSalesOrderAttachmentApi,
+  downloadSalesOrderAttachmentApi,
+  getSalesOrderAttachmentsSummaryApi,
   type SalesOrder,
+  type SalesOrderDetail,
   type SalesOrderQueryParams,
   type UpdateSalesOrderPayload,
   type CreateSalesOrderPayload,
-  type SalesOrderStatistics
+  type SalesOrderStatistics,
+  type SalesOrderAttachment,
+  type SalesOrderAttachmentSummary
 } from '@/api/sales-orders'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
@@ -1204,6 +1381,7 @@ const resolvePcViewModeFromRoute = (): ViewMode => {
 
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
 const showMobileFilters = ref(true)
+const showMobileSummary = ref(false)
 // PC 端表格高度：窗口高度减去顶部/底部区域，数值越小表格越高
 // 在原基础上再增加高度：从 300px 调整为 220px
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 220px)'))
@@ -1295,7 +1473,14 @@ const timelineGroups = computed<TimelineGroup[]>(() => {
     map.get(dateStr)!.push(row)
   }
   return Array.from(map.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .sort((a, b) => {
+      const aDate = a[0]
+      const bDate = b[0]
+      if (aDate === '未知日期') return 1
+      if (bDate === '未知日期') return -1
+      // 日期格式为 YYYY-MM-DD，字符串比较等价于时间比较，这里倒序排列
+      return bDate.localeCompare(aDate)
+    })
     .map(([date, orders]) => ({
       date,
       orders: orders.slice().sort((a, b) => a.orderNo.localeCompare(b.orderNo))
@@ -1314,6 +1499,22 @@ const isCreateMode = ref(false) // 标识是新建模式还是编辑模式
 // 查看对话框相关变量
 const viewDialogVisible = ref(false)
 const viewOrderData = ref<SalesOrder | null>(null)
+
+// 查看弹窗中，每个明细对应的附件数量
+const viewAttachmentSummary = ref<Record<number, number>>({})
+
+const getDetailAttachmentCount = (detailId?: number): number => {
+  if (!detailId) return 0
+  return viewAttachmentSummary.value[detailId] ?? 0
+}
+
+// 查看弹窗中，按明细记录附件列表（用于直接展示下载链接）
+const viewDetailAttachments = ref<Record<number, SalesOrderAttachment[]>>({})
+
+const getDetailAttachments = (detailId?: number): SalesOrderAttachment[] => {
+  if (!detailId) return []
+  return viewDetailAttachments.value[detailId] ?? []
+}
 
 // 新品选择对话框相关变量
 const newProductDialogVisible = ref(false)
@@ -1336,8 +1537,13 @@ const dialogRules = {}
 // 记录展开的订单编号集合，用于高亮展开行
 const expandedOrderNos = ref<Set<string>>(new Set())
 
-const onExpandChange = (_row: OrderTableRow, expandedRows: OrderTableRow[]) => {
+const onExpandChange = (row: OrderTableRow, expandedRows: OrderTableRow[]) => {
   expandedOrderNos.value = new Set(expandedRows.map((r) => r.orderNo))
+  // 当某个订单在表格视图中被展开时，加载该订单的附件数量汇总，
+  // 这样展开明细中的“附件”列可以显示最新的附件数量
+  if (row?.orderNo && expandedOrderNos.value.has(row.orderNo)) {
+    void loadAttachmentSummaryForOrder(row.orderNo)
+  }
 }
 
 const rowClassName = ({ row }: { row: OrderTableRow }) => {
@@ -1349,6 +1555,100 @@ const formatAmount = (value: number | null | undefined): string => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })
+}
+
+const formatFileSize = (size?: number | null): string => {
+  if (!size || size <= 0) return '-'
+  if (size < 1024) return `${size} B`
+  return `${(size / 1024).toFixed(1)} KB`
+}
+
+// 编辑弹窗内，针对单条明细行刷新附件列表
+const refreshDetailAttachmentsForEdit = async (orderNo: string, detailId: number) => {
+  try {
+    const resp = await getSalesOrderDetailAttachmentsApi(orderNo, detailId)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const list: SalesOrderAttachment[] = pr?.data ?? pr ?? []
+
+    // 更新通用的明细附件映射（供查看弹窗 / 手机端共用）
+    viewDetailAttachments.value = {
+      ...viewDetailAttachments.value,
+      [detailId]: Array.isArray(list) ? list : []
+    }
+
+    // 同步更新数量汇总，保证卡片 / 时间轴 / 查看弹窗显示的附件数量一致
+    viewAttachmentSummary.value = {
+      ...viewAttachmentSummary.value,
+      [detailId]: Array.isArray(list) ? list.length : 0
+    }
+  } catch (error) {
+    console.error('刷新明细附件列表失败:', error)
+  }
+}
+
+// 编辑弹窗：上传附件成功后刷新当前明细的附件列表和数量
+const handleEditAttachmentUploadSuccess = async (detail: any) => {
+  ElMessage.success('上传成功')
+  if (!dialogForm.orderNo || !detail?.id) return
+  await refreshDetailAttachmentsForEdit(dialogForm.orderNo, detail.id)
+}
+
+// 编辑弹窗：上传失败时给出明确提示（方便在手机端排查问题）
+const handleEditAttachmentUploadError = (err: any) => {
+  console.error('上传附件失败:', err)
+  const msg =
+    err?.message ||
+    err?.toString?.() ||
+    (err?.response && (err.response.data?.message || err.response.statusText)) ||
+    '上传附件失败，请稍后重试'
+  ElMessage.error(msg)
+}
+
+// 编辑弹窗：删除附件
+const handleEditAttachmentRemove = async (detail: any, file: SalesOrderAttachment) => {
+  if (!dialogForm.orderNo || !detail?.id) return
+  try {
+    await ElMessageBox.confirm(`确认删除附件「${file.originalName}」吗？`, '提示', {
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    const resp = await deleteSalesOrderAttachmentApi(file.id)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const success = pr?.success ?? pr?.code === 0
+    if (success) {
+      ElMessage.success(pr?.message || '删除成功')
+      await refreshDetailAttachmentsForEdit(dialogForm.orderNo, detail.id)
+    } else {
+      ElMessage.error(pr?.message || '删除失败')
+    }
+  } catch (error) {
+    console.error('删除附件失败:', error)
+    ElMessage.error('删除附件失败')
+  }
+}
+
+const handleAttachmentDownload = async (row: SalesOrderAttachment) => {
+  try {
+    const resp = await downloadSalesOrderAttachmentApi(row.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.originalName || '附件'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载附件失败:', error)
+    ElMessage.error('下载附件失败')
+  }
 }
 
 const mapOrderToRow = (order: SalesOrder): OrderTableRow => {
@@ -1402,6 +1702,17 @@ const loadData = async () => {
       if (list.length > 0) {
         tableData.value = list.map(mapOrderToRow)
         total.value = Number(totalCount) || 0
+
+        // 手机端卡片视图：为当前页所有订单预加载附件数量汇总，
+        // 这样卡片、展开明细等位置都能显示附件数量
+        if (isMobile.value && viewMode.value === 'card') {
+          const orderNos = Array.from(new Set(tableData.value.map((o) => o.orderNo))).filter(
+            Boolean
+          )
+          for (const orderNo of orderNos) {
+            await loadAttachmentSummaryForOrder(orderNo)
+          }
+        }
       } else {
         tableData.value = []
         total.value = 0
@@ -1528,9 +1839,61 @@ const viewDetailRowClassName = ({ row }: { row: any }) => {
   return key === timelineActiveDetailKey.value ? 'so-view-detail-row--active' : ''
 }
 
+const loadAttachmentSummaryForOrder = async (orderNo: string) => {
+  try {
+    const resp = await getSalesOrderAttachmentsSummaryApi(orderNo)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const list: SalesOrderAttachmentSummary[] = pr?.data ?? pr ?? []
+    if (Array.isArray(list)) {
+      const summaryMap: Record<number, number> = { ...viewAttachmentSummary.value }
+      list.forEach((item) => {
+        if (item?.orderId) {
+          summaryMap[item.orderId] = item.attachmentCount || 0
+        }
+      })
+      viewAttachmentSummary.value = summaryMap
+    }
+  } catch (e) {
+    console.warn('加载附件数量汇总失败:', e)
+  }
+}
+
+// 为查看弹窗加载指定订单下各明细的附件列表，用于直接展示下载链接
+const loadAttachmentsForView = async (orderNo: string, details: SalesOrderDetail[] = []) => {
+  if (!orderNo || !details.length) return
+  const attachmentsMap: Record<number, SalesOrderAttachment[]> = { ...viewDetailAttachments.value }
+
+  for (const detail of details) {
+    if (!detail.id) continue
+    const count = getDetailAttachmentCount(detail.id)
+    if (count <= 0) {
+      // 没附件，清理旧数据
+      if (attachmentsMap[detail.id]) {
+        delete attachmentsMap[detail.id]
+      }
+      continue
+    }
+    try {
+      const resp = await getSalesOrderDetailAttachmentsApi(orderNo, detail.id)
+      const raw: any = resp
+      const pr: any = raw?.data ?? raw
+      const list: SalesOrderAttachment[] = pr?.data ?? pr ?? []
+      attachmentsMap[detail.id] = Array.isArray(list) ? list : []
+    } catch (error) {
+      console.warn('加载查看弹窗附件列表失败:', error)
+    }
+  }
+
+  viewDetailAttachments.value = attachmentsMap
+}
+
 const loadOrderForTimeline = async (orderNo: string) => {
   try {
     if (viewOrderData.value && viewOrderData.value.orderNo === orderNo) {
+      // 订单数据已加载，但可能需要刷新附件数量
+      await loadAttachmentSummaryForOrder(orderNo)
+      await loadAttachmentsForView(orderNo, (viewOrderData.value?.details || []) as any)
       return
     }
     loading.value = true
@@ -1545,6 +1908,8 @@ const loadOrderForTimeline = async (orderNo: string) => {
     }
 
     setViewOrderData(orderData)
+    await loadAttachmentSummaryForOrder(orderData.orderNo)
+    await loadAttachmentsForView(orderData.orderNo, orderData.details || [])
   } catch (error) {
     console.error('加载订单信息失败:', error)
     ElMessage.error('加载订单信息失败')
@@ -1692,6 +2057,8 @@ const handleView = async (row: OrderTableRow) => {
 
     // 设置查看数据
     setViewOrderData(orderData)
+    await loadAttachmentSummaryForOrder(orderData.orderNo)
+    await loadAttachmentsForView(orderData.orderNo, orderData.details || [])
 
     viewDialogVisible.value = true
   } catch (error) {
@@ -1784,6 +2151,10 @@ const handleEdit = async (row: OrderTableRow) => {
       isShipped: detail.isShipped || false,
       shippingDate: detail.shippingDate ? formatDate(detail.shippingDate) : null
     }))
+
+    // 加载当前订单下所有明细的附件数量与列表，确保编辑弹窗中可以立即看到附件信息
+    await loadAttachmentSummaryForOrder(orderData.orderNo)
+    await loadAttachmentsForView(orderData.orderNo, orderData.details || [])
 
     dialogVisible.value = true
   } catch (error) {
@@ -2366,6 +2737,12 @@ onMounted(async () => {
   padding: 2px 6px 0;
 }
 
+.mobile-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .view-mode-switch {
   display: inline-flex;
   align-items: center;
@@ -2743,6 +3120,63 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
+.so-attachment-cell {
+  display: flex;
+  align-items: center;
+}
+
+.so-attachment-hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.attachment-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.so-attachment-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.so-edit-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.so-edit-attachment-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 80px auto;
+  align-items: center;
+  column-gap: 8px;
+  font-size: 12px;
+}
+
+.so-edit-attachment-row .index {
+  color: #999;
+}
+
+.so-edit-attachment-row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.so-edit-attachment-row .size {
+  color: #666;
+}
+
+.so-edit-attachment-row .ops {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
 .so-table-wrapper--mobile {
   padding-bottom: 8px;
   overflow-x: auto;
@@ -2896,6 +3330,14 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.dialog-mobile-detail-attachments {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
 }
 
 .dialog-mobile-detail-field {

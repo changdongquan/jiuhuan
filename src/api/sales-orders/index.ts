@@ -78,6 +78,26 @@ export interface SalesOrderStatistics {
   pendingShipped: number // 待出运数量
 }
 
+// 明细附件
+export interface SalesOrderAttachment {
+  id: number
+  orderId: number
+  orderNo: string
+  itemCode?: string
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+}
+
+export interface SalesOrderAttachmentSummary {
+  orderId: number
+  attachmentCount: number
+}
+
 // 获取销售订单列表（按订单号分组）
 export const getSalesOrdersListApi = (params?: SalesOrderQueryParams) => {
   return request.get<SalesOrderPageResponse>({
@@ -207,3 +227,44 @@ export const getSalesOrdersStatisticsApi = () => {
 
 // 注意：这里导出时保持名称一致
 export const getSalesOrderStatisticsApi = getSalesOrdersStatisticsApi
+
+// 获取某订单下各明细的附件数量汇总
+export const getSalesOrderAttachmentsSummaryApi = (orderNo: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: SalesOrderAttachmentSummary[]
+  }>({
+    url: `/api/sales-orders/${encodeURIComponent(orderNo)}/attachments/summary`
+  })
+}
+
+// 获取某条明细下的附件列表
+export const getSalesOrderDetailAttachmentsApi = (orderNo: string, detailId: number) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: SalesOrderAttachment[]
+  }>({
+    url: `/api/sales-orders/${encodeURIComponent(orderNo)}/details/${detailId}/attachments`
+  })
+}
+
+// 删除附件
+export const deleteSalesOrderAttachmentApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/sales-orders/attachments/${attachmentId}`
+  })
+}
+
+// 下载附件：返回文件流，由调用方处理
+export const downloadSalesOrderAttachmentApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/sales-orders/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}

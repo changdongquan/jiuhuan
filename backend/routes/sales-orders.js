@@ -1,7 +1,88 @@
 const express = require('express')
+const path = require('path')
+const fs = require('fs')
+const multer = require('multer')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
 const router = express.Router()
+
+// 销售订单附件存储配置
+// 生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
+// 本地开发环境则默认使用 backend/uploads 目录，避免没有 /mnt 权限导致上传失败
+const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const SALES_SUBDIR = process.env.SALES_ORDER_FILES_SUBDIR || 'sales-orders'
+const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
+  process.env.SALES_ORDER_ATTACHMENT_MAX_SIZE || String(50 * 1024 * 1024),
+  10
+)
+
+const ensureDirSync = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+// 使用 multer 将销售订单附件直接写入 NAS
+const attachmentStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    try {
+      const { orderNo, detailId } = req.params
+
+      if (!orderNo || !detailId) {
+        return cb(new Error('缺少订单编号或明细ID'))
+      }
+
+      const numericDetailId = parseInt(detailId, 10)
+      if (!Number.isInteger(numericDetailId) || numericDetailId <= 0) {
+        return cb(new Error('明细ID不合法'))
+      }
+
+      const now = new Date()
+      const year = String(now.getFullYear())
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+
+      const relativeDir = path.posix.join(
+        SALES_SUBDIR,
+        year,
+        month,
+        orderNo,
+        String(numericDetailId)
+      )
+      const fullDir = path.join(FILE_ROOT, relativeDir)
+
+      ensureDirSync(fullDir)
+
+      // 在请求对象上记录相对路径，后续插入数据库时使用
+      req._attachmentRelativeDir = relativeDir
+
+      cb(null, fullDir)
+    } catch (err) {
+      cb(err)
+    }
+  },
+  filename(req, file, cb) {
+    try {
+      const timestamp = Date.now()
+      const randomPart = Math.random().toString(36).slice(2, 8)
+      const safeOriginalName = file.originalname.replace(/[/\\?%*:|"<>]/g, '_')
+      const storedFileName = `${timestamp}-${randomPart}-${safeOriginalName}`
+
+      // 记录存储文件名，方便后续插入数据库
+      req._attachmentStoredFileName = storedFileName
+
+      cb(null, storedFileName)
+    } catch (err) {
+      cb(err)
+    }
+  }
+})
+
+const uploadAttachment = multer({
+  storage: attachmentStorage,
+  limits: {
+    fileSize: MAX_ATTACHMENT_SIZE_BYTES
+  }
+})
 
 // 生成新的订单编号
 // 格式：XS-YYYYMMDD-XXX
@@ -919,6 +1000,370 @@ router.delete('/delete/:orderNo', async (req, res) => {
       code: 500,
       success: false,
       message: '删除销售订单失败',
+      error: error.message
+    })
+  }
+})
+
+// === 销售订单附件相关接口 ===
+
+// 上传单个附件（按明细行）
+router.post(
+  '/:orderNo/details/:detailId/attachments',
+  uploadAttachment.single('file'),
+  async (req, res) => {
+    try {
+      const { orderNo, detailId } = req.params
+      const numericDetailId = parseInt(detailId, 10)
+
+      if (!orderNo || !Number.isInteger(numericDetailId) || numericDetailId <= 0) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '订单编号或明细ID不合法'
+        })
+      }
+
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '未找到上传文件'
+        })
+      }
+
+      // 校验该明细是否存在，并获取实际订单编号 / 项目编号
+      const detailRows = await query(
+        `
+        SELECT TOP 1 
+          订单ID as id,
+          订单编号 as orderNo,
+          项目编号 as itemCode
+        FROM 销售订单
+        WHERE 订单ID = @detailId
+      `,
+        { detailId: numericDetailId }
+      )
+
+      if (!detailRows.length) {
+        return res.status(404).json({
+          code: 404,
+          success: false,
+          message: '对应的销售订单明细不存在'
+        })
+      }
+
+      const dbDetail = detailRows[0]
+
+      if (dbDetail.orderNo && dbDetail.orderNo !== orderNo) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '订单编号与明细记录不一致'
+        })
+      }
+
+      const itemCode = dbDetail.itemCode || null
+      const originalName = file.originalname
+      const storedFileName = req._attachmentStoredFileName || file.filename
+      const relativePath = req._attachmentRelativeDir || path.posix.join(SALES_SUBDIR, orderNo)
+      const fileSize = file.size
+      const contentType = file.mimetype || null
+      const uploadedBy = (req.body && (req.body.uploadedBy || req.body.uploader)) || null
+
+      const insertSql = `
+        INSERT INTO 销售订单附件 (
+          订单ID,
+          订单编号,
+          项目编号,
+          原始文件名,
+          存储文件名,
+          相对路径,
+          文件大小,
+          内容类型,
+          上传人
+        )
+        OUTPUT 
+          INSERTED.附件ID as attachmentId,
+          INSERTED.上传时间 as uploadedAt
+        VALUES (
+          @detailId,
+          @orderNo,
+          @itemCode,
+          @originalName,
+          @storedFileName,
+          @relativePath,
+          @fileSize,
+          @contentType,
+          @uploadedBy
+        )
+      `
+
+      const insertResult = await query(insertSql, {
+        detailId: numericDetailId,
+        orderNo,
+        itemCode,
+        originalName,
+        storedFileName,
+        relativePath,
+        fileSize,
+        contentType,
+        uploadedBy
+      })
+
+      const inserted = insertResult[0]
+
+      res.json({
+        code: 0,
+        success: true,
+        message: '上传附件成功',
+        data: {
+          id: inserted.attachmentId,
+          orderId: numericDetailId,
+          orderNo,
+          itemCode,
+          originalName,
+          storedFileName,
+          relativePath,
+          fileSize,
+          contentType,
+          uploadedAt: inserted.uploadedAt
+        }
+      })
+    } catch (error) {
+      console.error('上传销售订单附件失败:', error)
+      res.status(500).json({
+        code: 500,
+        success: false,
+        message: '上传销售订单附件失败',
+        error: error.message
+      })
+    }
+  }
+)
+
+// 获取某一明细下的所有附件
+router.get('/:orderNo/details/:detailId/attachments', async (req, res) => {
+  try {
+    const { orderNo, detailId } = req.params
+    const numericDetailId = parseInt(detailId, 10)
+
+    if (!orderNo || !Number.isInteger(numericDetailId) || numericDetailId <= 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '订单编号或明细ID不合法'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT 
+        附件ID as id,
+        订单ID as orderId,
+        订单编号 as orderNo,
+        项目编号 as itemCode,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy
+      FROM 销售订单附件
+      WHERE 订单ID = @detailId
+        AND 订单编号 = @orderNo
+      ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+      { detailId: numericDetailId, orderNo }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      data: rows
+    })
+  } catch (error) {
+    console.error('获取销售订单附件列表失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取销售订单附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取某订单下各明细的附件数量汇总
+router.get('/:orderNo/attachments/summary', async (req, res) => {
+  try {
+    const { orderNo } = req.params
+    if (!orderNo) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '订单编号不能为空'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT 
+        订单ID as orderId,
+        COUNT(*) as attachmentCount
+      FROM 销售订单附件
+      WHERE 订单编号 = @orderNo
+      GROUP BY 订单ID
+    `,
+      { orderNo }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      data: rows
+    })
+  } catch (error) {
+    console.error('获取销售订单附件汇总失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取销售订单附件汇总失败',
+      error: error.message
+    })
+  }
+})
+
+// 下载附件
+router.get('/attachments/:attachmentId/download', async (req, res) => {
+  try {
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '附件ID不合法'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT 
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        内容类型 as contentType
+      FROM 销售订单附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+
+    if (!rows.length) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '附件不存在'
+      })
+    }
+
+    const attachment = rows[0]
+    const fullPath = path.join(FILE_ROOT, attachment.relativePath, attachment.storedFileName)
+
+    fs.access(fullPath, fs.constants.R_OK, (err) => {
+      if (err) {
+        console.error('附件文件不存在或无法访问:', err)
+        return res.status(404).json({
+          code: 404,
+          success: false,
+          message: '附件文件不存在或无法访问'
+        })
+      }
+
+      res.download(fullPath, attachment.originalName, (downloadErr) => {
+        if (downloadErr) {
+          console.error('下载销售订单附件时出错:', downloadErr)
+        }
+      })
+    })
+  } catch (error) {
+    console.error('下载销售订单附件失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载销售订单附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 删除附件
+router.delete('/attachments/:attachmentId', async (req, res) => {
+  try {
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '附件ID不合法'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT 
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 销售订单附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+
+    if (!rows.length) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '附件不存在'
+      })
+    }
+
+    const attachment = rows[0]
+    const fullPath = path.join(FILE_ROOT, attachment.relativePath, attachment.storedFileName)
+
+    try {
+      await fs.promises.unlink(fullPath)
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error('删除附件文件失败:', err)
+      } else {
+        console.warn('附件文件不存在，直接删除数据库记录')
+      }
+    }
+
+    await query(
+      `
+      DELETE FROM 销售订单附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      message: '删除附件成功'
+    })
+  } catch (error) {
+    console.error('删除销售订单附件失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除销售订单附件失败',
       error: error.message
     })
   }
