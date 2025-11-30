@@ -21,7 +21,8 @@ router.get('/new-products', async (req, res) => {
       INNER JOIN 项目管理 p ON g.项目编号 = p.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
       WHERE g.IsNew = 1 AND g.项目编号 IS NOT NULL AND g.项目编号 != ''
-      ORDER BY g.货物ID DESC
+      -- 按项目编号正序排列，确保“从新品中选择”弹窗中项目编号从小到大显示
+      ORDER BY g.项目编号 ASC, g.货物ID ASC
     `
 
     const data = await query(dataQuery)
