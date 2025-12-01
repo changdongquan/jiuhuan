@@ -1,9 +1,14 @@
 <template>
   <div class="pt-page px-4 pt-0 pb-1 space-y-2">
     <div v-if="isMobile" class="mobile-top-bar">
-      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
-        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
-      </el-button>
+      <div class="mobile-top-bar-left">
+        <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+          {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+        </el-button>
+        <el-button text type="primary" @click="showMobileSummary = !showMobileSummary">
+          {{ showMobileSummary ? '收起卡片' : '展开卡片' }}
+        </el-button>
+      </div>
       <div class="view-mode-switch">
         <span class="view-mode-switch__label">视图</span>
         <el-radio-group v-model="viewMode" size="small">
@@ -55,7 +60,7 @@
     </el-form>
 
     <!-- 统计卡片 -->
-    <el-row :gutter="16">
+    <el-row :gutter="16" v-show="!isMobile || showMobileSummary">
       <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-title">总任务数</div>
@@ -545,7 +550,8 @@ type ViewMode = 'table' | 'card'
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
-const showMobileFilters = ref(true)
+const showMobileFilters = ref(false)
+const showMobileSummary = ref(false)
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
 
 const dialogVisible = ref(false)
@@ -970,9 +976,14 @@ onMounted(() => {
 .mobile-top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 2px 6px 0;
+}
+
+.mobile-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .view-mode-switch {

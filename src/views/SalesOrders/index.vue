@@ -272,7 +272,7 @@
                     {{ formatDate(row.shippingDate) }}
                   </template>
                 </el-table-column>
-                <el-table-column label="附件" min-width="130">
+                <el-table-column label="附件" min-width="120">
                   <template #default="{ row }">
                     <template v-if="row.id">
                       <el-button
