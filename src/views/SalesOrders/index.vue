@@ -639,7 +639,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="产品名称" min-width="150">
+              <el-table-column label="产品名称" min-width="140">
                 <template #default="{ row }">
                   <el-input
                     v-model="row.productName"
@@ -648,7 +648,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="产品图号" min-width="130">
+              <el-table-column label="产品图号" min-width="120">
                 <template #default="{ row }">
                   <el-input
                     v-model="row.productDrawingNo"
@@ -657,7 +657,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="客户模号" min-width="130">
+              <el-table-column label="客户模号" min-width="120">
                 <template #default="{ row }">
                   <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
                 </template>
@@ -702,17 +702,17 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="备注" min-width="150">
+              <el-table-column label="备注" min-width="130">
                 <template #default="{ row }">
                   <el-input v-model="row.remark" placeholder="备注" />
                 </template>
               </el-table-column>
-              <el-table-column label="费用出处" min-width="145">
+              <el-table-column label="费用出处" min-width="125">
                 <template #default="{ row }">
                   <el-input v-model="row.costSource" placeholder="费用出处" />
                 </template>
               </el-table-column>
-              <el-table-column label="附件" min-width="140">
+              <el-table-column v-if="!isCreateMode" label="附件" min-width="120">
                 <template #default="{ row }">
                   <div class="so-attachment-cell">
                     <el-button
@@ -828,7 +828,7 @@
                   <div class="dialog-mobile-detail-label">费用出处</div>
                   <el-input v-model="detail.costSource" placeholder="费用出处" />
                 </div>
-                <div class="dialog-mobile-detail-field">
+                <div v-if="!isCreateMode" class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">附件</div>
                   <div class="dialog-mobile-detail-attachments">
                     <template v-if="!isCreateMode && detail.id">
@@ -875,9 +875,7 @@
                           </span>
                         </div>
                       </div>
-                      <span v-else class="so-attachment-hint">暂无附件</span>
                     </template>
-                    <span v-else class="so-attachment-hint">保存后可上传附件</span>
                   </div>
                 </div>
               </div>
@@ -1220,7 +1218,7 @@
                   {{ formatDate(row.shippingDate) }}
                 </template>
               </el-table-column>
-              <el-table-column label="附件" min-width="100">
+              <el-table-column label="附件" min-width="120">
                 <template #default="{ row }">
                   <template v-if="row.id">
                     <el-button
