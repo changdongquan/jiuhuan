@@ -44,6 +44,7 @@ export interface SalesOrderQueryParams {
   contractNo?: string
   orderDateStart?: string
   orderDateEnd?: string
+  category?: string
   isInStock?: boolean
   isShipped?: boolean
   page?: number

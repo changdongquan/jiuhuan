@@ -181,6 +181,7 @@ router.get('/list', async (req, res) => {
       contractNo,
       orderDateStart,
       orderDateEnd,
+      category,
       isInStock,
       isShipped,
       page = 1,
@@ -240,6 +241,12 @@ router.get('/list', async (req, res) => {
     if (orderDateEnd) {
       whereConditionsWithAlias.push('so.订单日期 <= @orderDateEnd')
       params.orderDateEnd = orderDateEnd
+    }
+
+    // 产品分类（来源于货物信息表 g.分类）
+    if (category) {
+      whereConditionsWithAlias.push('g.分类 = @category')
+      params.category = category
     }
 
     if (isInStock !== undefined) {

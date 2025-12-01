@@ -23,7 +23,7 @@
       :label-width="isMobile ? 'auto' : '90px'"
       :label-position="isMobile ? 'top' : 'right'"
       :inline="!isMobile"
-      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-2 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] py-2 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
@@ -1004,7 +1004,12 @@ onMounted(() => {
 }
 
 .query-form__actions {
+  display: flex;
+  margin-right: 12px;
+  margin-bottom: 0;
   margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .query-actions {

@@ -50,7 +50,7 @@
       :label-width="isMobile ? 'auto' : '80px'"
       :label-position="isMobile ? 'top' : 'right'"
       :inline="!isMobile"
-      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] px-4 py-2 shadow-sm"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] py-2 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
@@ -60,7 +60,7 @@
           placeholder="请输入项目编号/订单编号/客户模号/产品图号/产品名称"
           clearable
           @keydown.enter.prevent="handleSearch"
-          :style="{ width: isMobile ? '100%' : '160px' }"
+          :style="{ width: isMobile ? '100%' : '130px' }"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -69,7 +69,7 @@
           placeholder="请选择客户"
           clearable
           filterable
-          :style="{ width: isMobile ? '100%' : '160px' }"
+          :style="{ width: isMobile ? '100%' : '120px' }"
         >
           <el-option
             v-for="customer in customerList"
@@ -79,12 +79,27 @@
           />
         </el-select>
       </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="queryForm.category"
+          placeholder="请选择"
+          clearable
+          :style="{ width: isMobile ? '100%' : '130px' }"
+        >
+          <el-option
+            v-for="item in categoryOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="合同号">
         <el-input
           v-model="queryForm.contractNo"
           placeholder="请输入合同号"
           clearable
-          :style="{ width: isMobile ? '100%' : '140px' }"
+          :style="{ width: isMobile ? '100%' : '120px' }"
         />
       </el-form-item>
       <el-form-item label="下单日期">
@@ -96,7 +111,7 @@
           end-placeholder="结束日期"
           value-format="YYYY-MM-DD"
           clearable
-          :style="{ width: isMobile ? '100%' : '240px' }"
+          :style="{ width: isMobile ? '100%' : '190px' }"
         />
       </el-form-item>
       <el-form-item class="query-form__actions">
@@ -1371,6 +1386,7 @@ import { useAppStore } from '@/store/modules/app'
 interface OrderQuery {
   searchText: string
   customerName: string
+  category: string
   contractNo: string
   orderDateRange: string[]
 }
@@ -1421,9 +1437,16 @@ const formatDate = (date: string | Date | null | undefined): string => {
 const queryForm = reactive<OrderQuery>({
   searchText: '',
   customerName: '',
+  category: '',
   contractNo: '',
   orderDateRange: []
 })
+
+const categoryOptions = [
+  { label: '塑胶模具', value: '塑胶模具' },
+  { label: '零件加工', value: '零件加工' },
+  { label: '修改模具', value: '修改模具' }
+]
 
 const pagination = reactive({
   page: 1,
@@ -1812,6 +1835,10 @@ const loadData = async () => {
       params.customerName = queryForm.customerName.trim()
     }
 
+    if (queryForm.category && queryForm.category.trim()) {
+      params.category = queryForm.category.trim()
+    }
+
     if (queryForm.contractNo && queryForm.contractNo.trim()) {
       params.contractNo = queryForm.contractNo.trim()
     }
@@ -1872,6 +1899,7 @@ const handleSearch = () => {
 const handleReset = () => {
   queryForm.searchText = ''
   queryForm.customerName = ''
+  queryForm.category = ''
   queryForm.contractNo = ''
   queryForm.orderDateRange = []
   pagination.page = 1
@@ -2853,7 +2881,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  padding-right: 12px;
+
+  /* 让查询区左右与下方表格对齐，由外层容器控制整体内边距 */
+  padding-right: 0;
 }
 
 .sales-orders-page {
@@ -2887,9 +2917,15 @@ onMounted(async () => {
 
 .query-form__actions {
   display: flex;
-  margin-right: 0;
+
+  /* 按钮整体略向左收，和下方“删除”列对齐，留少量呼吸空间 */
+  margin-right: 12px;
+
+  /* 和其他查询项保持同样的竖向间距/高度 */
+  margin-bottom: 0;
   margin-left: auto;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .query-actions {
