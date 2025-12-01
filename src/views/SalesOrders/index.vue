@@ -272,22 +272,20 @@
                     {{ formatDate(row.shippingDate) }}
                   </template>
                 </el-table-column>
-                <el-table-column label="附件" min-width="120">
+                <el-table-column label="附件" min-width="100">
                   <template #default="{ row }">
-                    <template v-if="row.id && getDetailAttachmentCount(row.id) > 0">
-                      <div class="so-attachment-links">
-                        <el-link
-                          v-for="file in getDetailAttachments(row.id)"
-                          :key="file.id"
-                          type="primary"
-                          :underline="false"
-                          @click="handleAttachmentDownload(file)"
-                        >
-                          {{ file.originalName }}
-                        </el-link>
-                      </div>
+                    <template v-if="row.id">
+                      <el-button
+                        v-if="getDetailAttachmentCount(row.id) > 0"
+                        type="primary"
+                        link
+                        size="small"
+                        @click="openAttachmentDialog(viewOrderData.orderNo, row, true)"
+                      >
+                        查看附件（{{ getDetailAttachmentCount(row.id) }}）
+                      </el-button>
+                      <span v-else class="so-attachment-hint">暂无附件</span>
                     </template>
-                    <span v-else class="so-attachment-hint">暂无附件</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -374,20 +372,18 @@
                 </el-table-column>
                 <el-table-column label="附件" min-width="120">
                   <template #default="{ row: detail }">
-                    <template v-if="detail.id && getDetailAttachmentCount(detail.id) > 0">
-                      <div class="so-attachment-links">
-                        <el-link
-                          v-for="file in getDetailAttachments(detail.id)"
-                          :key="file.id"
-                          type="primary"
-                          :underline="false"
-                          @click="handleAttachmentDownload(file)"
-                        >
-                          {{ file.originalName }}
-                        </el-link>
-                      </div>
+                    <template v-if="detail.id">
+                      <el-button
+                        v-if="getDetailAttachmentCount(detail.id) > 0"
+                        type="primary"
+                        link
+                        size="small"
+                        @click="openAttachmentDialog(row.orderNo, detail, true)"
+                      >
+                        查看附件（{{ getDetailAttachmentCount(detail.id) }}）
+                      </el-button>
+                      <span v-else class="so-attachment-hint">暂无附件</span>
                     </template>
-                    <span v-else class="so-attachment-hint">暂无附件</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -701,54 +697,18 @@
                   <el-input v-model="row.costSource" placeholder="费用出处" />
                 </template>
               </el-table-column>
-              <el-table-column label="附件" min-width="220">
+              <el-table-column label="附件" min-width="140">
                 <template #default="{ row }">
                   <div class="so-attachment-cell">
-                    <template v-if="!isCreateMode && row.id">
-                      <el-upload
-                        :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${row.id}/attachments`"
-                        :show-file-list="false"
-                        :on-success="() => handleEditAttachmentUploadSuccess(row)"
-                        :on-error="handleEditAttachmentUploadError"
-                      >
-                        <el-button type="primary" link size="small">上传附件</el-button>
-                      </el-upload>
-                      <div
-                        v-if="getDetailAttachments(row.id).length"
-                        class="so-edit-attachment-list"
-                      >
-                        <div
-                          v-for="(file, index) in getDetailAttachments(row.id)"
-                          :key="file.id"
-                          class="so-edit-attachment-row"
-                        >
-                          <span class="index">{{ index + 1 }}</span>
-                          <span class="name" :title="file.originalName">
-                            {{ file.originalName }}
-                          </span>
-                          <span class="size">{{ formatFileSize(file.fileSize) }}</span>
-                          <span class="ops">
-                            <el-button
-                              type="primary"
-                              link
-                              size="small"
-                              @click="handleAttachmentDownload(file)"
-                            >
-                              下载
-                            </el-button>
-                            <el-button
-                              type="danger"
-                              link
-                              size="small"
-                              @click="handleEditAttachmentRemove(row, file)"
-                            >
-                              删除
-                            </el-button>
-                          </span>
-                        </div>
-                      </div>
-                      <span v-else class="so-attachment-hint">暂无附件</span>
-                    </template>
+                    <el-button
+                      v-if="!isCreateMode && row.id"
+                      type="primary"
+                      link
+                      size="small"
+                      @click="openAttachmentDialog(dialogForm.orderNo, row, false)"
+                    >
+                      管理附件
+                    </el-button>
                     <span v-else class="so-attachment-hint">保存后可上传附件</span>
                   </div>
                 </template>
@@ -930,6 +890,65 @@
           保存
         </el-button>
       </template>
+    </el-dialog>
+
+    <!-- PC 端“管理附件”弹窗 -->
+    <el-dialog
+      v-if="!isMobile"
+      v-model="attachmentDialogVisible"
+      :title="attachmentDialogTitle"
+      width="680px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="attachmentOrderNo && attachmentDetailId" class="attachment-dialog-body">
+        <el-upload
+          v-if="!attachmentReadonly"
+          :action="`/api/sales-orders/${encodeURIComponent(attachmentOrderNo)}/details/${attachmentDetailId}/attachments`"
+          :show-file-list="false"
+          :on-success="handleAttachmentDialogUploadSuccess"
+          :on-error="handleEditAttachmentUploadError"
+        >
+          <el-button type="primary" size="small">上传附件</el-button>
+        </el-upload>
+
+        <el-table
+          v-loading="attachmentLoading"
+          :data="attachmentList"
+          border
+          size="small"
+          style="width: 100%; margin-top: 12px"
+        >
+          <el-table-column type="index" label="序号" width="45" />
+          <el-table-column
+            prop="originalName"
+            label="文件名"
+            min-width="260"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="fileSize"
+            label="大小"
+            width="100"
+            :formatter="(row: any) => formatFileSize(row.fileSize)"
+          />
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <el-button type="primary" link size="small" @click="handleAttachmentDownload(row)">
+                下载
+              </el-button>
+              <el-button
+                v-if="!attachmentReadonly"
+                type="danger"
+                link
+                size="small"
+                @click="handleAttachmentDialogRemove(row)"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-dialog>
 
     <!-- 新品选择对话框 -->
@@ -1184,22 +1203,20 @@
                   {{ formatDate(row.shippingDate) }}
                 </template>
               </el-table-column>
-              <el-table-column label="附件" min-width="120">
+              <el-table-column label="附件" min-width="100">
                 <template #default="{ row }">
-                  <template v-if="row.id && getDetailAttachmentCount(row.id) > 0">
-                    <div class="so-attachment-links">
-                      <el-link
-                        v-for="file in getDetailAttachments(row.id)"
-                        :key="file.id"
-                        type="primary"
-                        :underline="false"
-                        @click="handleAttachmentDownload(file)"
-                      >
-                        {{ file.originalName }}
-                      </el-link>
-                    </div>
+                  <template v-if="row.id">
+                    <el-button
+                      v-if="getDetailAttachmentCount(row.id) > 0"
+                      type="primary"
+                      link
+                      size="small"
+                      @click="openAttachmentDialog(viewOrderData.orderNo, row, true)"
+                    >
+                      查看附件（{{ getDetailAttachmentCount(row.id) }}）
+                    </el-button>
+                    <span v-else class="so-attachment-hint">暂无附件</span>
                   </template>
-                  <span v-else class="so-attachment-hint">暂无附件</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -1500,7 +1517,16 @@ const isCreateMode = ref(false) // 标识是新建模式还是编辑模式
 const viewDialogVisible = ref(false)
 const viewOrderData = ref<SalesOrder | null>(null)
 
-// 查看弹窗中，每个明细对应的附件数量
+// PC 端“管理附件”弹窗相关变量
+const attachmentDialogVisible = ref(false)
+const attachmentDialogTitle = ref('附件')
+const attachmentList = ref<SalesOrderAttachment[]>([])
+const attachmentLoading = ref(false)
+const attachmentOrderNo = ref<string>('')
+const attachmentDetailId = ref<number | null>(null)
+const attachmentReadonly = ref(false)
+
+// 查看弹窗中，每个明细对应的附件数量（供 PC 按钮和手机端显示）
 const viewAttachmentSummary = ref<Record<number, number>>({})
 
 const getDetailAttachmentCount = (detailId?: number): number => {
@@ -1563,7 +1589,7 @@ const formatFileSize = (size?: number | null): string => {
   return `${(size / 1024).toFixed(1)} KB`
 }
 
-// 编辑弹窗内，针对单条明细行刷新附件列表
+// 编辑 / 查看：针对单条明细行刷新附件列表和数量（供 PC 弹窗和手机端复用）
 const refreshDetailAttachmentsForEdit = async (orderNo: string, detailId: number) => {
   try {
     const resp = await getSalesOrderDetailAttachmentsApi(orderNo, detailId)
@@ -1587,14 +1613,14 @@ const refreshDetailAttachmentsForEdit = async (orderNo: string, detailId: number
   }
 }
 
-// 编辑弹窗：上传附件成功后刷新当前明细的附件列表和数量
+// 编辑弹窗：上传附件成功后刷新当前明细的附件列表和数量（手机端编辑使用）
 const handleEditAttachmentUploadSuccess = async (detail: any) => {
   ElMessage.success('上传成功')
   if (!dialogForm.orderNo || !detail?.id) return
   await refreshDetailAttachmentsForEdit(dialogForm.orderNo, detail.id)
 }
 
-// 编辑弹窗：上传失败时给出明确提示（方便在手机端排查问题）
+// 通用：上传失败时给出明确提示（方便在手机端 / PC 排查问题）
 const handleEditAttachmentUploadError = (err: any) => {
   console.error('上传附件失败:', err)
   const msg =
@@ -1648,6 +1674,84 @@ const handleAttachmentDownload = async (row: SalesOrderAttachment) => {
   } catch (error) {
     console.error('下载附件失败:', error)
     ElMessage.error('下载附件失败')
+  }
+}
+
+// PC 端：打开“管理附件”弹窗（编辑 / 查看）
+const openAttachmentDialog = (
+  orderNo: string,
+  detail: SalesOrderDetail | any,
+  readonly = false
+) => {
+  if (!orderNo || !detail?.id) {
+    ElMessage.warning('请先保存订单和明细，再管理附件')
+    return
+  }
+  attachmentOrderNo.value = orderNo
+  attachmentDetailId.value = detail.id
+  attachmentReadonly.value = readonly
+  attachmentDialogTitle.value = `附件 - 订单 ${orderNo} / 明细 ${detail.itemCode || detail.id}`
+  attachmentDialogVisible.value = true
+  attachmentList.value = []
+  void loadAttachmentsForDialog()
+}
+
+// PC 端：“管理附件”弹窗加载附件列表
+const loadAttachmentsForDialog = async () => {
+  if (!attachmentOrderNo.value || !attachmentDetailId.value) return
+  attachmentLoading.value = true
+  try {
+    const resp = await getSalesOrderDetailAttachmentsApi(
+      attachmentOrderNo.value,
+      attachmentDetailId.value
+    )
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const list: SalesOrderAttachment[] = pr?.data ?? pr ?? []
+    attachmentList.value = Array.isArray(list) ? list : []
+  } catch (error) {
+    console.error('加载附件列表失败:', error)
+    ElMessage.error('加载附件列表失败')
+  } finally {
+    attachmentLoading.value = false
+  }
+}
+
+// PC 端：“管理附件”弹窗上传成功
+const handleAttachmentDialogUploadSuccess = async () => {
+  ElMessage.success('上传成功')
+  await loadAttachmentsForDialog()
+  if (attachmentOrderNo.value && attachmentDetailId.value) {
+    await refreshDetailAttachmentsForEdit(attachmentOrderNo.value, attachmentDetailId.value)
+  }
+}
+
+// PC 端：“管理附件”弹窗删除附件
+const handleAttachmentDialogRemove = async (file: SalesOrderAttachment) => {
+  if (!attachmentOrderNo.value || !attachmentDetailId.value) return
+  try {
+    await ElMessageBox.confirm(`确认删除附件「${file.originalName}」吗？`, '提示', {
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    const resp = await deleteSalesOrderAttachmentApi(file.id)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const success = pr?.success ?? pr?.code === 0
+    if (success) {
+      ElMessage.success(pr?.message || '删除成功')
+      await loadAttachmentsForDialog()
+      await refreshDetailAttachmentsForEdit(attachmentOrderNo.value, attachmentDetailId.value)
+    } else {
+      ElMessage.error(pr?.message || '删除失败')
+    }
+  } catch (error) {
+    console.error('删除附件失败:', error)
+    ElMessage.error('删除附件失败')
   }
 }
 
