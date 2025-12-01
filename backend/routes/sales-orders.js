@@ -12,9 +12,19 @@ const router = express.Router()
 const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
 const SALES_SUBDIR = process.env.SALES_ORDER_FILES_SUBDIR || 'sales-orders'
 const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
-  process.env.SALES_ORDER_ATTACHMENT_MAX_SIZE || String(50 * 1024 * 1024),
+  process.env.SALES_ORDER_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
   10
 )
+
+// 处理上传文件名中的中文乱码（multipart 默认按 latin1 解码）
+const normalizeAttachmentFileName = (name) => {
+  if (!name) return name
+  try {
+    return Buffer.from(name, 'latin1').toString('utf8')
+  } catch {
+    return name
+  }
+}
 
 const ensureDirSync = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
@@ -64,7 +74,8 @@ const attachmentStorage = multer.diskStorage({
     try {
       const timestamp = Date.now()
       const randomPart = Math.random().toString(36).slice(2, 8)
-      const safeOriginalName = file.originalname.replace(/[/\\?%*:|"<>]/g, '_')
+      const decodedName = normalizeAttachmentFileName(file.originalname)
+      const safeOriginalName = decodedName.replace(/[/\\?%*:|"<>]/g, '_')
       const storedFileName = `${timestamp}-${randomPart}-${safeOriginalName}`
 
       // 记录存储文件名，方便后续插入数据库
@@ -331,13 +342,15 @@ router.get('/list', async (req, res) => {
 
     // 转换为数组并按订单日期排序
     const groupedList = Array.from(orderMap.values()).sort((a, b) => {
-      // 按订单日期降序，如果日期相同则按订单号排序
+      // 按订单日期“倒序”（最新在前），如果日期相同则按订单编号升序
       if (a.orderDate && b.orderDate) {
-        return new Date(b.orderDate) - new Date(a.orderDate)
+        const diff = new Date(b.orderDate) - new Date(a.orderDate)
+        if (diff !== 0) return diff
+        return a.orderNo.localeCompare(b.orderNo)
       }
       if (a.orderDate) return -1
       if (b.orderDate) return 1
-      return b.orderNo.localeCompare(a.orderNo)
+      return a.orderNo.localeCompare(b.orderNo)
     })
 
     // 计算总数（按订单号分组后的数量）
@@ -1065,7 +1078,7 @@ router.post(
       }
 
       const itemCode = dbDetail.itemCode || null
-      const originalName = file.originalname
+      const originalName = normalizeAttachmentFileName(file.originalname)
       const storedFileName = req._attachmentStoredFileName || file.filename
       const relativePath = req._attachmentRelativeDir || path.posix.join(SALES_SUBDIR, orderNo)
       const fileSize = file.size

@@ -231,7 +231,7 @@
                 <el-table-column
                   prop="productDrawingNo"
                   label="产品图号"
-                  min-width="120"
+                  min-width="110"
                   show-overflow-tooltip
                 />
                 <el-table-column label="数量" width="50" align="center">
@@ -264,7 +264,7 @@
                 <el-table-column
                   prop="costSource"
                   label="费用出处"
-                  min-width="115"
+                  min-width="105"
                   show-overflow-tooltip
                 />
                 <el-table-column label="出运日期" width="105" align="center">
@@ -272,7 +272,7 @@
                     {{ formatDate(row.shippingDate) }}
                   </template>
                 </el-table-column>
-                <el-table-column label="附件" min-width="100">
+                <el-table-column label="附件" min-width="130">
                   <template #default="{ row }">
                     <template v-if="row.id">
                       <el-button
@@ -820,6 +820,7 @@
                       <el-upload
                         :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${detail.id}/attachments`"
                         :show-file-list="false"
+                        :before-upload="beforeAttachmentUpload"
                         :on-success="() => handleEditAttachmentUploadSuccess(detail)"
                         :on-error="handleEditAttachmentUploadError"
                       >
@@ -905,6 +906,7 @@
           v-if="!attachmentReadonly"
           :action="`/api/sales-orders/${encodeURIComponent(attachmentOrderNo)}/details/${attachmentDetailId}/attachments`"
           :show-file-list="false"
+          :before-upload="beforeAttachmentUpload"
           :on-success="handleAttachmentDialogUploadSuccess"
           :on-error="handleEditAttachmentUploadError"
         >
@@ -1397,8 +1399,9 @@ const resolvePcViewModeFromRoute = (): ViewMode => {
 }
 
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
-const showMobileFilters = ref(true)
+const showMobileFilters = ref(false)
 const showMobileSummary = ref(false)
+const MAX_ATTACHMENT_SIZE_BYTES = 200 * 1024 * 1024
 // PC 端表格高度：窗口高度减去顶部/底部区域，数值越小表格越高
 // 在原基础上再增加高度：从 300px 调整为 220px
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 220px)'))
@@ -1613,6 +1616,15 @@ const refreshDetailAttachmentsForEdit = async (orderNo: string, detailId: number
   }
 }
 
+// 上传前校验附件大小（PC/手机端通用）
+const beforeAttachmentUpload = (file: File) => {
+  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+    ElMessage.error('上传失败：单个附件不能超过 200MB')
+    return false
+  }
+  return true
+}
+
 // 编辑弹窗：上传附件成功后刷新当前明细的附件列表和数量（手机端编辑使用）
 const handleEditAttachmentUploadSuccess = async (detail: any) => {
   ElMessage.success('上传成功')
@@ -1623,9 +1635,24 @@ const handleEditAttachmentUploadSuccess = async (detail: any) => {
 // 通用：上传失败时给出明确提示（方便在手机端 / PC 排查问题）
 const handleEditAttachmentUploadError = (err: any) => {
   console.error('上传附件失败:', err)
+
+  // 413 或响应体中包含 Nginx 的 413 HTML 时，统一提示为“超过 200MB”
+  const status = err?.status || err?.response?.status || err?.target?.status
+  const responseText: string = (typeof err?.response?.data === 'string' && err.response.data) || ''
+  const raw = (typeof err === 'string' && err) || ''
+  const body = `${responseText}${raw}`
+
+  if (
+    status === 413 ||
+    body.includes('413 Request Entity Too Large') ||
+    body.includes('<html') // 防止把整段 HTML 弹出来
+  ) {
+    ElMessage.error('上传失败：单个附件不能超过 200MB')
+    return
+  }
+
   const msg =
     err?.message ||
-    err?.toString?.() ||
     (err?.response && (err.response.data?.message || err.response.statusText)) ||
     '上传附件失败，请稍后重试'
   ElMessage.error(msg)
