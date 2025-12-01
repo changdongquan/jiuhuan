@@ -312,11 +312,12 @@
     >
       <el-pagination
         background
-        layout="total, sizes, prev, pager, next, jumper"
+        :layout="paginationLayout"
         :current-page="pagination.page"
         :page-size="pagination.size"
         :page-sizes="[10, 15, 20, 30, 50]"
         :total="total"
+        :pager-count="paginationPagerCount"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       />
@@ -553,6 +554,16 @@ const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
 const showMobileFilters = ref(false)
 const showMobileSummary = ref(false)
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
+
+// 分页组件布局：PC 端保留完整布局，手机端精简，避免内容被遮挡
+const paginationLayout = computed(() =>
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
+)
+
+// 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('编辑生产任务')
@@ -1457,6 +1468,6 @@ onMounted(() => {
   left: auto;
   margin-top: 12px;
   transform: none;
-  justify-content: flex-end;
+  justify-content: center;
 }
 </style>
