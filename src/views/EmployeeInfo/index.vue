@@ -33,16 +33,23 @@
         <el-input v-model="queryForm.department" placeholder="请输入部门" clearable />
       </el-form-item>
       <el-form-item label="在职状态">
-        <el-select v-model="queryForm.status" placeholder="请选择状态" clearable>
+        <el-select
+          v-model="queryForm.status"
+          placeholder="请选择状态"
+          clearable
+          :style="{ width: isMobile ? '100%' : '120px' }"
+        >
           <el-option label="在职" value="在职" />
           <el-option label="离职" value="离职" />
           <el-option label="休假" value="休假" />
         </el-select>
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleCreate">新增</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleCreate">新增</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -588,6 +595,27 @@ onMounted(() => {
 
 :deep(.query-form--mobile .el-form-item .el-form-item__content) {
   width: 100%;
+}
+
+.query-form__actions {
+  display: flex;
+  margin-right: 12px;
+  margin-bottom: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+:deep(.query-form .el-form-item:not(.query-form__actions)) {
+  margin-right: 18px;
+  margin-bottom: 0;
 }
 
 .ei-table-wrapper {

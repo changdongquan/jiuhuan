@@ -44,10 +44,12 @@
           <el-option label="修改模具" value="修改模具" />
         </el-select>
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleQuery">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleAdd">新增项目</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleQuery">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleAdd">新增项目</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -959,6 +961,27 @@ onMounted(() => {
 
 :deep(.query-form--mobile .el-form-item .el-form-item__content) {
   width: 100%;
+}
+
+.query-form__actions {
+  display: flex;
+  margin-right: 12px;
+  margin-bottom: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+:deep(.query-form .el-form-item:not(.query-form__actions)) {
+  margin-right: 18px;
+  margin-bottom: 0;
 }
 
 .pi-table-wrapper {

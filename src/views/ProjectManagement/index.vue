@@ -683,7 +683,7 @@ const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
 const total = ref(0)
 const pagination = reactive({ page: 1, size: 20 })
-const showExtraColumns = ref(false)
+const showExtraColumns = ref(true)
 const sortState = reactive({
   prop: '',
   order: '' as '' | 'ascending' | 'descending'
@@ -1740,6 +1740,18 @@ onMounted(() => {
   margin-top: 2px;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* 压缩统计卡片高度，并垂直居中内容 */
+:deep(.summary-card .el-card__body) {
+  display: flex;
+  height: 100%;
+  padding: 4px 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* 表格所有单元格内容不换行，超出宽度省略显示 */

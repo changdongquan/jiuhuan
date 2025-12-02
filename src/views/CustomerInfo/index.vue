@@ -35,10 +35,12 @@
           <el-option label="停用" value="inactive" />
         </el-select>
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleCreate">新增</el-button>
+      <el-form-item class="query-form__actions">
+        <div class="query-actions">
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleCreate">新增</el-button>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -610,6 +612,27 @@ onMounted(async () => {
 
 :deep(.query-form--mobile .el-form-item .el-form-item__content) {
   width: 100%;
+}
+
+.query-form__actions {
+  display: flex;
+  margin-right: 12px;
+  margin-bottom: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+:deep(.query-form .el-form-item:not(.query-form__actions)) {
+  margin-right: 18px;
+  margin-bottom: 0;
 }
 
 .ci-table-wrapper {

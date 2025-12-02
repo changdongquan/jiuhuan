@@ -523,7 +523,7 @@ const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
 const total = ref(0)
 const pagination = reactive({ page: 1, size: 20 })
-const showExtraColumns = ref(false)
+const showExtraColumns = ref(true)
 const statistics = reactive({
   total: 0,
   inProgress: 0,
