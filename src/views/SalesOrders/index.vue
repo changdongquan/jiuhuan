@@ -500,9 +500,9 @@
               :key="detail.id || detail.itemCode || detail.productName"
               class="detail-row"
             >
-              <div class="detail-title">{{ detail.productName || detail.itemCode || '明细' }}</div>
+              <div class="detail-title">{{ detail.itemCode || '明细' }}</div>
               <div class="detail-meta">
-                <span>{{ detail.itemCode || '-' }}</span>
+                <span>{{ detail.productName || '-' }}</span>
                 <span v-if="detail.productDrawingNo">产品图号 {{ detail.productDrawingNo }}</span>
                 <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
                 <span>数量 {{ detail.quantity || 0 }}</span>
@@ -1245,14 +1245,14 @@
             >
               <div class="view-dialog-mobile-detail-header">
                 <div class="view-dialog-mobile-detail-title">
-                  {{ detail.productName || detail.itemCode || '明细 ' + (index + 1) }}
+                  {{ detail.itemCode || detail.productName || '明细 ' + (index + 1) }}
                 </div>
                 <div class="view-dialog-mobile-detail-qty"> 数量 {{ detail.quantity || 0 }} </div>
               </div>
               <div class="view-dialog-mobile-detail-body">
                 <div class="view-dialog-mobile-detail-row">
-                  <span class="label">项目编号</span>
-                  <span class="value">{{ detail.itemCode || '-' }}</span>
+                  <span class="label">产品名称</span>
+                  <span class="value">{{ detail.productName || '-' }}</span>
                 </div>
                 <div class="view-dialog-mobile-detail-row">
                   <span class="label">产品图号</span>

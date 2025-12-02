@@ -271,17 +271,15 @@
                 @focus="onSerialFocus"
                 @blur="onSerialBlur"
               />
-              <template v-if="showPartNumber">
-                <span class="code-separator">/</span>
-                <el-input
-                  ref="partNumberInputRef"
-                  v-model="formData.partNumber"
-                  placeholder="零件"
-                  maxlength="2"
-                  class="code-part"
-                  @input="updateProjectCode"
-                />
-              </template>
+              <span class="code-separator">/</span>
+              <el-input
+                ref="partNumberInputRef"
+                v-model="formData.partNumber"
+                placeholder="零件"
+                maxlength="2"
+                class="code-part"
+                @input="updateProjectCode"
+              />
               <span class="code-spacer"></span>
             </div>
             <el-tag v-if="formData.projectCategory" type="info" class="category-tag">
@@ -503,8 +501,8 @@ const updateProjectCode = () => {
   // 基础编号格式：JH0X-YY-SSS
   let code = `JH${projectCategory}-${yearStr}-${serialStr}`
 
-  // 如果是01（塑胶模具）或03（零件加工）且有零件号，则添加零件号
-  if ((projectCategory === '03' || projectCategory === '01') && trimmedPart) {
+  // 只要有零件号，不论分类，统一追加“/零件”
+  if (trimmedPart) {
     const partStr = trimmedPart.padStart(2, '0')
     code += `/${partStr}`
   }
@@ -806,10 +804,6 @@ const handleCurrentChange = (val: number) => {
   fetchData()
 }
 
-const showPartNumber = computed(
-  () => formData.projectCategory === '03' || formData.projectCategory === '01'
-)
-
 // 页面加载时获取数据
 onMounted(() => {
   fetchData()
@@ -853,7 +847,7 @@ onMounted(() => {
 }
 
 .code-category {
-  width: 60px;
+  width: 120px;
 }
 
 .code-year {
@@ -869,6 +863,14 @@ onMounted(() => {
 }
 
 @media (width <= 768px) {
+  /* 手机端：项目编号四个输入框统一为 50px */
+  .code-category,
+  .code-year,
+  .code-serial,
+  .code-part {
+    width: 50px;
+  }
+
   .project-code-input {
     width: 100%;
     overflow-x: auto;
