@@ -863,10 +863,19 @@ onMounted(() => {
 }
 
 @media (width <= 768px) {
-  /* 手机端：项目编号四个输入框统一为 50px */
-  .code-category,
-  .code-year,
-  .code-serial,
+  /* 手机端：项目编号输入框宽度 */
+  .code-category {
+    width: 60px;
+  }
+
+  .code-year {
+    width: 40px;
+  }
+
+  .code-serial {
+    width: 50px;
+  }
+
   .code-part {
     width: 50px;
   }
@@ -1045,22 +1054,6 @@ onMounted(() => {
     margin-top: 4px;
     margin-left: 0;
     flex-basis: 100%;
-  }
-
-  .code-category {
-    width: 70px;
-  }
-
-  .code-year {
-    width: 60px;
-  }
-
-  .code-serial {
-    width: 80px;
-  }
-
-  .code-part {
-    width: 60px;
   }
 
   .serial-tip {
