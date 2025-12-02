@@ -129,8 +129,8 @@ export default defineComponent({
                   (salesOrdersViewMode.value = val as SalesOrdersViewMode)
                 }
               >
-                <ElRadioButton label="table">表格</ElRadioButton>
-                <ElRadioButton label="timeline">时间轴</ElRadioButton>
+                <ElRadioButton value="table">表格</ElRadioButton>
+                <ElRadioButton value="timeline">时间轴</ElRadioButton>
               </ElRadioGroup>
             </div>
           ) : null}

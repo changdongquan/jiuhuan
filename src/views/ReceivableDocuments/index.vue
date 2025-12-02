@@ -109,7 +109,7 @@
       </el-table-column>
     </el-table>
 
-    <div style="margin-top: 16px; display: flex; justify-content: flex-end">
+    <div style=" display: flex;margin-top: 16px; justify-content: center">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -950,8 +950,8 @@ onMounted(() => {
 }
 
 .dialog-product-summary {
-  margin-top: 12px;
   display: flex;
+  margin-top: 12px;
   justify-content: space-between;
   align-items: center;
 }

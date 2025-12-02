@@ -169,7 +169,7 @@
             </template>
           </el-table>
 
-          <div v-if="totalRecords > 0" class="flex justify-end pt-4">
+          <div v-if="totalRecords > 0" class="flex justify-center pt-4">
             <el-pagination
               background
               layout="total, sizes, prev, pager, next, jumper"

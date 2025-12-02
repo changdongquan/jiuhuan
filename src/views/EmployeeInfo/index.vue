@@ -1,5 +1,18 @@
 <template>
   <div class="employee-info-page p-4 space-y-4">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
+
     <el-form
       ref="queryFormRef"
       :model="queryForm"
@@ -8,6 +21,7 @@
       :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="员工姓名">
         <el-input v-model="queryForm.employeeName" placeholder="请输入员工姓名" clearable />
@@ -32,7 +46,56 @@
       </el-form-item>
     </el-form>
 
-    <div class="ei-table-wrapper" :class="{ 'ei-table-wrapper--mobile': isMobile }">
+    <!-- 数据卡片（手机端） -->
+    <div v-if="isMobile && viewMode === 'card' && tableData.length" class="ei-mobile-list">
+      <el-card v-for="item in tableData" :key="item.id" class="ei-mobile-card" shadow="hover">
+        <div class="ei-mobile-card__header">
+          <div>
+            <div class="ei-mobile-card__name">{{ item.employeeName }}</div>
+            <div class="ei-mobile-card__number">工号：{{ item.employeeNumber }}</div>
+          </div>
+          <el-tag size="small" :type="statusTagMap[item.status].type">
+            {{ statusTagMap[item.status].label }}
+          </el-tag>
+        </div>
+        <div class="ei-mobile-card__meta">
+          <div>
+            <span class="label">性别</span>
+            <span class="value">{{ item.gender || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">职级</span>
+            <span class="value">{{ item.level || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">部门</span>
+            <span class="value">{{ item.department || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">岗位</span>
+            <span class="value">{{ item.position || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">联系方式</span>
+            <span class="value">{{ item.phone || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">入职时间</span>
+            <span class="value">{{ formatDate(item.entryDate) || '-' }}</span>
+          </div>
+        </div>
+        <div class="ei-mobile-card__actions">
+          <el-button size="small" type="primary" @click="handleEdit(item)">编辑</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+        </div>
+      </el-card>
+    </div>
+
+    <div
+      v-if="!isMobile || viewMode === 'table'"
+      class="ei-table-wrapper"
+      :class="{ 'ei-table-wrapper--mobile': isMobile }"
+    >
       <el-table
         ref="tableRef"
         v-loading="loading"
@@ -79,10 +142,14 @@
       </el-table>
     </div>
 
-    <div class="flex justify-end">
+    <div
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
       <el-pagination
         background
-        layout="total, sizes, prev, pager, next, jumper"
+        :layout="paginationLayout"
+        :pager-count="paginationPagerCount"
         :current-page="pagination.page"
         :page-size="pagination.size"
         :page-sizes="[10, 20, 30, 50]"
@@ -226,7 +293,7 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { nextTick, reactive, ref, onMounted, computed } from 'vue'
+import { nextTick, reactive, ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getEmployeeListApi,
@@ -252,6 +319,23 @@ const statusTagMap: Record<
 
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
+const showMobileFilters = ref(false)
+type ViewMode = 'table' | 'card'
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+})
+
+// 分页组件布局：PC 端保留完整布局，手机端精简，避免内容被遮挡
+const paginationLayout = computed(() =>
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
+)
+
+// 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<EmployeeQueryParams>({
@@ -261,7 +345,7 @@ const queryForm = reactive<EmployeeQueryParams>({
   status: ''
 })
 
-const pagination = reactive({ page: 1, size: 10 })
+const pagination = reactive({ page: 1, size: 20 })
 const tableData = ref<EmployeeInfo[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -518,5 +602,90 @@ onMounted(() => {
 
 .ei-table-wrapper--mobile .ei-table {
   min-width: 960px;
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: center;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
+.ei-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ei-mobile-card {
+  border-radius: 10px;
+}
+
+.ei-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ei-mobile-card__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ei-mobile-card__number {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.ei-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.ei-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.ei-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 </style>

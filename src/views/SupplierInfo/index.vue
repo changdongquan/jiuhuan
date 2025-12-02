@@ -1,5 +1,18 @@
 <template>
   <div class="supplier-info-page p-4 space-y-4">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+      </el-button>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
+
     <el-form
       ref="queryFormRef"
       :model="queryForm"
@@ -8,6 +21,7 @@
       :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
       :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="供方名称">
         <el-input v-model="queryForm.supplierName" placeholder="请输入供方名称" clearable />
@@ -35,35 +49,50 @@
       </el-form-item>
     </el-form>
 
-    <el-row :gutter="16">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
-          <div class="summary-title">供方总数</div>
-          <div class="summary-value">{{ summary.totalSuppliers }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--green">
-          <div class="summary-title">启用供方</div>
-          <div class="summary-value">{{ summary.activeSuppliers }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
-          <div class="summary-title">原料供方</div>
-          <div class="summary-value">{{ summary.materialSuppliers }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--gray">
-          <div class="summary-title">配件供方</div>
-          <div class="summary-value">{{ summary.partsSuppliers }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 数据卡片（手机端） -->
+    <div v-if="isMobile && viewMode === 'card' && tableData.length" class="si-mobile-list">
+      <el-card v-for="item in tableData" :key="item.供方ID" class="si-mobile-card" shadow="hover">
+        <div class="si-mobile-card__header">
+          <div>
+            <div class="si-mobile-card__name">{{ item.供方名称 }}</div>
+            <div class="si-mobile-card__contact">{{ item.联系人 || '-' }}</div>
+          </div>
+          <div>
+            <el-tag size="small" :type="levelTagType[item.供方等级]">{{ item.供方等级 }}</el-tag>
+            <el-tag size="small" :type="categoryTagType[item.分类]" style="margin-left: 4px">
+              {{ item.分类 }}
+            </el-tag>
+          </div>
+        </div>
+        <div class="si-mobile-card__meta">
+          <div>
+            <span class="label">联系电话</span>
+            <span class="value">{{ item.联系电话 || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">所在地区</span>
+            <span class="value">{{ item.所在地区 || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">供方状态</span>
+            <el-tag size="small" :type="statusTagMap[item.供方状态].type">
+              {{ statusTagMap[item.供方状态].label }}
+            </el-tag>
+          </div>
+        </div>
+        <div class="si-mobile-card__actions">
+          <el-button size="small" type="primary" @click="handleEdit(item)">编辑</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+        </div>
+      </el-card>
+    </div>
 
     <template v-if="tableData.length">
-      <div class="si-table-wrapper" :class="{ 'si-table-wrapper--mobile': isMobile }">
+      <div
+        v-if="!isMobile || viewMode === 'table'"
+        class="si-table-wrapper"
+        :class="{ 'si-table-wrapper--mobile': isMobile }"
+      >
         <el-table
           :data="tableData"
           border
@@ -104,10 +133,14 @@
         </el-table>
       </div>
 
-      <div class="flex justify-end">
+      <div
+        class="pagination-footer"
+        :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+      >
         <el-pagination
           background
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="paginationLayout"
+          :pager-count="paginationPagerCount"
           :current-page="pagination.page"
           :page-size="pagination.size"
           :page-sizes="[10, 20, 30, 50]"
@@ -263,7 +296,7 @@ import {
   ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { nextTick, reactive, ref, onMounted, computed } from 'vue'
+import { nextTick, reactive, ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getSupplierList,
@@ -328,6 +361,23 @@ const categoryTagType: Record<
 
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
+const showMobileFilters = ref(false)
+type ViewMode = 'table' | 'card'
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+
+watch(isMobile, (mobile) => {
+  viewMode.value = mobile ? 'card' : 'table'
+})
+
+// 分页组件布局：PC 端保留完整布局，手机端精简，避免内容被遮挡
+const paginationLayout = computed(() =>
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
+)
+
+// 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<SupplierQuery>({
@@ -338,7 +388,7 @@ const queryForm = reactive<SupplierQuery>({
 
 const pagination = reactive({
   page: 1,
-  size: 10
+  size: 20
 })
 
 const dialogVisible = ref(false)
@@ -744,5 +794,90 @@ onMounted(async () => {
 
 .si-table-wrapper--mobile .si-table {
   min-width: 960px;
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: center;
+}
+
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: #666;
+}
+
+.si-mobile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.si-mobile-card {
+  border-radius: 10px;
+}
+
+.si-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.si-mobile-card__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.si-mobile-card__contact {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.si-mobile-card__meta {
+  display: grid;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.si-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.si-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 </style>

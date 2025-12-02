@@ -1052,7 +1052,7 @@ const schema = reactive<FormSchema[]>([
       slots: {
         default: (options: RadioOption[]) => {
           return options?.map((v) => {
-            return <ElRadio label={v.label + `(${v.value})`} value={v.value} />
+            return <ElRadio value={v.value}>{v.label + `(${v.value})`}</ElRadio>
           })
         }
       }
@@ -1093,7 +1093,7 @@ const schema = reactive<FormSchema[]>([
       slots: {
         default: (options: RadioOption[]) => {
           return options?.map((v) => {
-            return <ElRadioButton label={v.label + `(${v.value})`} value={v.value} />
+            return <ElRadioButton value={v.value}>{v.label + `(${v.value})`}</ElRadioButton>
           })
         }
       }

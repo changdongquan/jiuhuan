@@ -1,5 +1,5 @@
 <template>
-  <div class="project-info-page px-4 pt-1 pb-4 space-y-2">
+  <div class="project-info-page p-4 space-y-4">
     <div v-if="isMobile" class="mobile-top-bar">
       <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
         {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
@@ -12,95 +12,90 @@
         </el-radio-group>
       </div>
     </div>
-    <el-card shadow="never">
-      <template #header>
-        <div class="flex justify-between items-center gap-2">
-          <span class="text-lg font-bold">项目信息</span>
-          <el-button type="primary" @click="handleAdd">新增项目</el-button>
-        </div>
-      </template>
 
-      <!-- 搜索表单 -->
-      <el-form
-        :model="queryForm"
-        :inline="!isMobile"
-        :label-width="isMobile ? 'auto' : '90px'"
-        :label-position="isMobile ? 'top' : 'right'"
-        class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-3 mb-4"
-        :class="{ 'query-form--mobile': isMobile }"
-        v-show="!isMobile || showMobileFilters"
-      >
-        <el-form-item label="模糊查询">
-          <el-input
-            v-model="queryForm.keyword"
-            placeholder="请输入项目编号/产品名称/产品图号"
-            clearable
-            :style="{ width: isMobile ? '100%' : '280px' }"
-            @keyup.enter="handleQuery"
-          />
-        </el-form-item>
-        <el-form-item label="分类">
-          <el-select
-            v-model="queryForm.category"
-            placeholder="请选择分类"
-            clearable
-            :style="{ width: isMobile ? '100%' : '150px' }"
-          >
-            <el-option label="塑胶模具" value="塑胶模具" />
-            <el-option label="零件加工" value="零件加工" />
-            <el-option label="修改模具" value="修改模具" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-
-      <!-- 数据卡片（手机端） -->
-      <div v-if="isMobile && viewMode === 'card'" class="pi-mobile-list">
-        <el-card
-          v-for="item in tableData"
-          :key="item.id || item.projectCode"
-          class="pi-mobile-card"
-          shadow="hover"
+    <!-- 搜索表单 -->
+    <el-form
+      :model="queryForm"
+      :inline="!isMobile"
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
+    >
+      <el-form-item label="模糊查询">
+        <el-input
+          v-model="queryForm.keyword"
+          placeholder="请输入项目编号/产品名称/产品图号"
+          clearable
+          :style="{ width: isMobile ? '100%' : '280px' }"
+          @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="queryForm.category"
+          placeholder="请选择分类"
+          clearable
+          :style="{ width: isMobile ? '100%' : '150px' }"
         >
-          <div class="pi-mobile-card__header">
-            <div>
-              <div class="pi-mobile-card__code">{{ item.projectCode }}</div>
-              <div class="pi-mobile-card__name">{{ item.productName }}</div>
-            </div>
-            <el-tag size="small" :type="getCategoryTagType(item.category)">
-              {{ item.category }}
-            </el-tag>
-          </div>
-          <div class="pi-mobile-card__meta">
-            <div>
-              <span class="label">客户</span>
-              <span class="value">{{ item.customerName || '-' }}</span>
-            </div>
-            <div>
-              <span class="label">客户模号</span>
-              <span class="value">{{ item.customerModelNo || '-' }}</span>
-            </div>
-            <div>
-              <span class="label">产品图号</span>
-              <span class="value">{{ item.productDrawing || '-' }}</span>
-            </div>
-          </div>
-          <div v-if="item.remarks" class="pi-mobile-card__remarks">
-            <span class="label">备注</span>
-            <span class="value">{{ item.remarks }}</span>
-          </div>
-          <div class="pi-mobile-card__actions">
-            <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
-            <el-button size="small" @click="handleEdit(item)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
-          </div>
-        </el-card>
-      </div>
+          <el-option label="塑胶模具" value="塑胶模具" />
+          <el-option label="零件加工" value="零件加工" />
+          <el-option label="修改模具" value="修改模具" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="handleQuery">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+        <el-button type="success" @click="handleAdd">新增项目</el-button>
+      </el-form-item>
+    </el-form>
 
-      <!-- 数据表格 -->
+    <!-- 数据卡片（手机端） -->
+    <div v-if="isMobile && viewMode === 'card' && tableData.length" class="pi-mobile-list">
+      <el-card
+        v-for="item in tableData"
+        :key="item.id || item.projectCode"
+        class="pi-mobile-card"
+        shadow="hover"
+      >
+        <div class="pi-mobile-card__header">
+          <div>
+            <div class="pi-mobile-card__code">{{ item.projectCode }}</div>
+            <div class="pi-mobile-card__name">{{ item.productName }}</div>
+          </div>
+          <el-tag size="small" :type="getCategoryTagType(item.category)">
+            {{ item.category }}
+          </el-tag>
+        </div>
+        <div class="pi-mobile-card__meta">
+          <div>
+            <span class="label">客户</span>
+            <span class="value">{{ item.customerName || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">客户模号</span>
+            <span class="value">{{ item.customerModelNo || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">产品图号</span>
+            <span class="value">{{ item.productDrawing || '-' }}</span>
+          </div>
+        </div>
+        <div v-if="item.remarks" class="pi-mobile-card__remarks">
+          <span class="label">备注</span>
+          <span class="value">{{ item.remarks }}</span>
+        </div>
+        <div class="pi-mobile-card__actions">
+          <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
+          <el-button size="small" @click="handleEdit(item)">编辑</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 数据表格 -->
+    <template v-if="tableData.length">
       <div
         v-if="!isMobile || viewMode === 'table'"
         class="pi-table-wrapper"
@@ -109,7 +104,6 @@
         <el-table
           :data="tableData"
           border
-          stripe
           v-loading="loading"
           @row-dblclick="handleRowDoubleClick"
           class="pi-table"
@@ -165,18 +159,29 @@
       </div>
 
       <!-- 分页 -->
-      <div class="flex justify-end mt-4">
+      <div
+        class="pagination-footer"
+        :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+      >
         <el-pagination
+          background
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :total="total"
           :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="paginationLayout"
+          :pager-count="paginationPagerCount"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
       </div>
-    </el-card>
+    </template>
+    <el-empty
+      v-else
+      description="暂无项目数据"
+      class="rounded-lg bg-[var(--el-bg-color-overlay)] py-16"
+      :image-size="180"
+    />
 
     <!-- 查看详情对话框 -->
     <el-dialog
@@ -402,6 +407,16 @@ watch(isMobile, (mobile) => {
   viewMode.value = mobile ? 'card' : 'table'
 })
 
+// 分页组件布局：PC 端保留完整布局，手机端精简，避免内容被遮挡
+const paginationLayout = computed(() =>
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
+)
+
+// 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
+
 // 查询表单
 const queryForm = reactive({
   keyword: '',
@@ -422,7 +437,7 @@ const showSerialTip = ref(false)
 
 // 分页
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(20)
 const total = ref(0)
 
 // 对话框
@@ -1061,5 +1076,23 @@ onMounted(() => {
     margin-left: 0;
     flex-basis: 100%;
   }
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
+  justify-content: center;
 }
 </style>

@@ -13,14 +13,19 @@ export const useRenderRadio = () => {
       item.component === ComponentNameEnum.RADIO_GROUP ? ElRadio : ElRadioButton
     ) as ReturnType<typeof defineComponent>
     return componentProps?.options?.map((option) => {
-      const { ...other } = option
+      const {
+        [labelAlias || 'label']: labelValue,
+        [valueAlias || 'value']: valueValue,
+        [disabledAlias || 'disabled']: disabledValue,
+        label,
+        value,
+        disabled,
+        ...other
+      } = option
       return (
-        <Com
-          {...other}
-          disabled={option[disabledAlias || 'disabled']}
-          label={option[labelAlias || 'label']}
-          value={option[valueAlias || 'value']}
-        ></Com>
+        <Com {...other} disabled={disabledValue} value={valueValue}>
+          {labelValue}
+        </Com>
       )
     })
   }
