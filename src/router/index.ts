@@ -133,6 +133,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
           roles: ['*'],
           noCache: true
         }
+      },
+      {
+        path: 'quotation',
+        name: 'QuotationIndex',
+        component: () => import('@/views/Quotation/index.vue'),
+        meta: {
+          title: '报价单',
+          icon: 'vi-ep:document-checked',
+          roles: ['*'],
+          noCache: true
+        }
       }
     ]
   },

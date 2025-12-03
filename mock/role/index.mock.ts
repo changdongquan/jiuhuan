@@ -80,6 +80,16 @@ const adminList = [
           icon: 'vi-mdi:briefcase-outline',
           noCache: true
         }
+      },
+      {
+        path: 'quotation',
+        component: 'views/Quotation/index',
+        name: 'QuotationIndex',
+        meta: {
+          title: '报价单',
+          icon: 'vi-ep:document-checked',
+          noCache: true
+        }
       }
     ]
   },

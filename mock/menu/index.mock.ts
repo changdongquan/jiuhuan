@@ -125,6 +125,20 @@ const businessMenus: MenuNode[] = [
           title: 'router.projectManagement',
           icon: 'vi-mdi:briefcase-outline'
         }
+      },
+      {
+        id: 62,
+        path: 'quotation',
+        component: 'views/Quotation/index',
+        name: 'QuotationIndex',
+        status: 1,
+        type: 1,
+        parentId: 12,
+        title: '报价单',
+        meta: {
+          title: '报价单',
+          icon: 'vi-ep:document-checked'
+        }
       }
     ]
   },
