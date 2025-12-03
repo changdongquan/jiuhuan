@@ -161,8 +161,10 @@ const submit = async () => {
 
 watch(
   () => props.currentRow,
-  (currentRow) => {
+  async (currentRow) => {
     if (!currentRow) return
+    // 重新加载菜单列表，确保获取最新菜单结构
+    await getMenuList()
     setValues(currentRow)
   },
   {

@@ -1,11 +1,11 @@
 <script setup lang="tsx">
-import { PropType, ref, unref, nextTick } from 'vue'
+import { PropType, ref, unref, nextTick, watch } from 'vue'
 import { Descriptions, DescriptionsSchema } from '@/components/Descriptions'
 import { ElTag, ElTree } from 'element-plus'
 import { findIndex } from '@/utils'
 import { getMenuListApi } from '@/api/menu'
 
-defineProps({
+const props = defineProps({
   currentRow: {
     type: Object as PropType<any>,
     default: () => undefined
@@ -39,6 +39,20 @@ const getMenuList = async () => {
   }
 }
 getMenuList()
+
+// 监听 currentRow 变化，重新加载菜单列表以确保显示最新菜单结构
+watch(
+  () => props.currentRow,
+  async () => {
+    if (props.currentRow) {
+      await getMenuList()
+    }
+  },
+  {
+    deep: true,
+    immediate: true
+  }
+)
 
 const detailSchema = ref<DescriptionsSchema[]>([
   {
