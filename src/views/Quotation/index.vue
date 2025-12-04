@@ -19,7 +19,7 @@
       <el-form-item label="模糊查询">
         <el-input
           v-model="queryForm.keyword"
-          placeholder="请输入更改通知单号 / 模具编号 / 加工零件名称"
+          placeholder="请输入报价单号 / 客户名称 / 更改通知单号 / 模具编号 / 加工零件名称"
           clearable
           :style="{ width: isMobile ? '100%' : '320px' }"
           @keyup.enter="handleSearch"
@@ -45,9 +45,10 @@
     </el-form>
 
     <!-- 报价单列表 -->
-    <template v-if="filteredQuotations.length">
+    <template v-if="quotations.length">
       <div class="qt-table-wrapper" :class="{ 'qt-table-wrapper--mobile': isMobile }">
         <el-table
+          v-loading="loading"
           :data="pagedQuotations"
           border
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
@@ -57,41 +58,36 @@
         >
           <el-table-column type="index" label="序号" width="60" align="center" />
           <el-table-column
-            prop="changeOrderNo"
-            label="更改通知单号"
+            prop="quotationNo"
+            label="报价单号"
+            min-width="150"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="quotationDate" label="报价日期" width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ formatDate(row.quotationDate) }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="customerName"
+            label="客户名称"
             min-width="180"
             show-overflow-tooltip
           />
           <el-table-column
-            prop="processingDate"
-            label="加工周期"
-            width="140"
+            prop="changeOrderNo"
+            label="更改通知单号"
+            min-width="140"
             show-overflow-tooltip
           />
           <el-table-column
             prop="partName"
             label="加工零件名称"
-            min-width="200"
-            show-overflow-tooltip
-          />
-          <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
-          <el-table-column
-            prop="department"
-            label="申请更改部门"
             min-width="160"
             show-overflow-tooltip
           />
+          <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
           <el-table-column prop="applicant" label="申请更改人" width="120" show-overflow-tooltip />
-          <el-table-column label="单位材料费" width="120" align="right">
-            <template #default="{ row }">
-              {{ formatAmount(calcMaterialsTotal(row)) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="加工费用" width="120" align="right">
-            <template #default="{ row }">
-              {{ formatAmount(calcProcessingTotal(row)) }}
-            </template>
-          </el-table-column>
           <el-table-column prop="taxIncludedPrice" label="含税价格" width="120" align="right">
             <template #default="{ row }">
               {{ formatAmount(calcTaxIncludedPrice(row)) }}
@@ -115,7 +111,7 @@
           background
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
-          :total="filteredQuotations.length"
+          :total="total"
           :layout="paginationLayout"
           :pager-count="paginationPagerCount"
           :page-sizes="[10, 20, 50]"
@@ -142,18 +138,7 @@
     >
       <template #header>
         <div class="qt-dialog-header">
-          <span class="qt-dialog-header__title">
-            长虹美菱股份有限公司(维修/更改类完工确认单）
-          </span>
-          <div class="qt-dialog-header__actions">
-            <el-button size="small" @click="dialogVisible = false">取消</el-button>
-            <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit">
-              保存
-            </el-button>
-            <el-button v-else size="small" type="primary" @click="switchToEdit">
-              改为编辑
-            </el-button>
-          </div>
+          <span class="qt-dialog-header__title"></span>
         </div>
       </template>
       <el-form
@@ -163,6 +148,63 @@
         label-width="0"
         class="quotation-form"
       >
+        <!-- 顶部字段：报价单号、报价日期、客户名称 -->
+        <div class="quotation-top-fields">
+          <el-form-item prop="quotationNo" class="quotation-top-field quotation-top-field--inline">
+            <span class="field-label-inline">报价单号：</span>
+            <el-input
+              v-model="quotationForm.quotationNo"
+              :disabled="true"
+              placeholder="报价单号"
+              class="field-input-inline field-input-quotation-no"
+            />
+          </el-form-item>
+          <el-form-item
+            prop="quotationDate"
+            class="quotation-top-field quotation-top-field--inline"
+          >
+            <span class="field-label-inline">报价日期：</span>
+            <el-date-picker
+              v-model="quotationForm.quotationDate"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="请选择报价日期"
+              :disabled="isViewMode"
+              class="field-input-inline field-input-quotation-date"
+              style="width: 120px !important"
+            />
+          </el-form-item>
+          <el-form-item prop="customerName" class="quotation-top-field quotation-top-field--inline">
+            <span class="field-label-inline">客户名称：</span>
+            <el-select
+              v-model="quotationForm.customerName"
+              placeholder="请选择客户名称"
+              :disabled="isViewMode"
+              filterable
+              clearable
+              :loading="customerLoading"
+              class="field-input-inline field-input-customer-name"
+            >
+              <el-option
+                v-for="customer in customerList"
+                :key="customer.id"
+                :label="customer.customerName"
+                :value="customer.customerName"
+              />
+            </el-select>
+          </el-form-item>
+          <!-- 操作按钮 -->
+          <div class="qt-dialog-actions">
+            <el-button size="small" @click="dialogVisible = false">取消</el-button>
+            <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit">
+              保存
+            </el-button>
+            <el-button v-else size="small" type="primary" @click="switchToEdit">
+              改为编辑
+            </el-button>
+          </div>
+        </div>
+
         <div class="quotation-sheet">
           <table class="qs-table">
             <tbody>
@@ -397,13 +439,24 @@ import {
   ElInputNumber,
   ElMessage,
   ElMessageBox,
+  ElOption,
   ElPagination,
+  ElSelect,
   ElTable,
   ElTableColumn
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useAppStore } from '@/store/modules/app'
+import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import {
+  generateQuotationNoApi,
+  createQuotationApi,
+  updateQuotationApi,
+  getQuotationListApi,
+  type QuotationFormData
+} from '@/api/quotation'
+import type { QuotationRecord } from '@/api/quotation'
 
 interface QuotationMaterialItem {
   name: string
@@ -421,6 +474,9 @@ interface QuotationProcessItem {
 
 interface QuotationFormModel {
   id: number | null
+  quotationNo: string
+  quotationDate: string | ''
+  customerName: string
   processingDate: string | ''
   changeOrderNo: string
   partName: string
@@ -434,9 +490,7 @@ interface QuotationFormModel {
   quantity: number
 }
 
-type QuotationRecord = QuotationFormModel & {
-  id: number
-}
+// QuotationRecord 类型已从 API 导入
 
 interface QueryForm {
   keyword: string
@@ -447,15 +501,20 @@ const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const showMobileFilters = ref(true)
 
+// 客户列表
+const customerList = ref<CustomerInfo[]>([])
+const customerLoading = ref(false)
+
 // 查询表单
 const queryForm = reactive<QueryForm>({
   keyword: '',
   processingDate: ''
 })
 
-// 报价单列表（前端临时存储，后端实现后再替换为接口）
+// 报价单列表
 const quotations = ref<QuotationRecord[]>([])
-const nextId = ref(1)
+const loading = ref(false)
+const total = ref(0)
 
 // 分页
 const pagination = reactive({
@@ -469,30 +528,8 @@ const paginationLayout = computed(() =>
 
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
 
-// 过滤后的数据
-const filteredQuotations = computed(() => {
-  let list = quotations.value
-
-  if (queryForm.keyword) {
-    const kw = queryForm.keyword.trim()
-    list = list.filter(
-      (item) =>
-        item.changeOrderNo.includes(kw) || item.moldNo.includes(kw) || item.partName.includes(kw)
-    )
-  }
-
-  if (queryForm.processingDate) {
-    list = list.filter((item) => item.processingDate === queryForm.processingDate)
-  }
-
-  return list
-})
-
-const pagedQuotations = computed(() => {
-  const start = (pagination.page - 1) * pagination.pageSize
-  const end = start + pagination.pageSize
-  return filteredQuotations.value.slice(start, end)
-})
+// 直接使用后端返回的数据（后端已实现搜索和分页）
+const pagedQuotations = computed(() => quotations.value)
 
 // 表单 & 对话框
 const dialogVisible = ref(false)
@@ -503,6 +540,9 @@ const formRef = ref<FormInstance>()
 
 const createEmptyForm = (): QuotationFormModel => ({
   id: null,
+  quotationNo: '',
+  quotationDate: '',
+  customerName: '',
   processingDate: '',
   changeOrderNo: '',
   partName: '',
@@ -533,8 +573,11 @@ const createEmptyForm = (): QuotationFormModel => ({
 const quotationForm = reactive<QuotationFormModel>(createEmptyForm())
 
 const formRules: FormRules = {
+  quotationNo: [{ required: true, message: '请输入报价单号', trigger: 'blur' }],
+  quotationDate: [{ required: true, message: '请选择报价日期', trigger: 'change' }],
+  customerName: [{ required: true, message: '请选择客户名称', trigger: 'change' }],
   processingDate: [{ required: true, message: '请选择加工周期', trigger: 'change' }],
-  changeOrderNo: [{ required: true, message: '请输入更改通知单号', trigger: 'blur' }],
+  changeOrderNo: [{ required: false, message: '请输入更改通知单号', trigger: 'blur' }],
   partName: [{ required: true, message: '请输入加工零件名称', trigger: 'blur' }],
   moldNo: [{ required: true, message: '请输入模具编号', trigger: 'blur' }],
   department: [{ required: true, message: '请输入申请更改部门', trigger: 'blur' }],
@@ -572,27 +615,123 @@ const formatAmount = (value: number) => {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+// 格式化日期：YYYY-MM-DD
+const formatDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '-'
+  // 如果已经是 YYYY-MM-DD 格式，直接返回
+  if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr
+  }
+  // 如果是日期对象或其他格式，尝试转换
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '-'
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  } catch {
+    return dateStr || '-'
+  }
+}
+
+// 获取客户列表
+const fetchCustomerList = async () => {
+  try {
+    customerLoading.value = true
+    const response = await getCustomerListApi({
+      status: 'active',
+      page: 1,
+      pageSize: 10000
+    })
+
+    if (response && response.data && response.data.list) {
+      customerList.value = response.data.list
+    } else {
+      ElMessage.error('获取客户列表失败')
+    }
+  } catch (error) {
+    console.error('获取客户列表失败:', error)
+    ElMessage.error('获取客户列表失败')
+  } finally {
+    customerLoading.value = false
+  }
+}
+
+// 加载报价单列表
+const loadQuotations = async () => {
+  try {
+    loading.value = true
+    const response = await getQuotationListApi({
+      keyword: queryForm.keyword,
+      processingDate: queryForm.processingDate,
+      page: pagination.page,
+      pageSize: pagination.pageSize
+    })
+
+    const pr: any = response
+    if (pr?.code === 0 || pr?.success === true) {
+      quotations.value = pr.data?.list || []
+      total.value = pr.data?.total || 0
+    } else {
+      ElMessage.error(pr?.message || '获取报价单列表失败')
+    }
+  } catch (error: any) {
+    console.error('加载报价单列表失败:', error)
+    ElMessage.error('加载报价单列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 // 查询
 const handleSearch = () => {
   pagination.page = 1
+  loadQuotations()
 }
 
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.processingDate = ''
   pagination.page = 1
+  loadQuotations()
 }
 
 // 新增
-const handleCreate = () => {
-  dialogMode.value = 'create'
-  dialogTitle.value = '新增报价单'
-  Object.assign(quotationForm, createEmptyForm())
-  dialogVisible.value = true
+const handleCreate = async () => {
+  try {
+    dialogMode.value = 'create'
+    dialogTitle.value = '新增报价单'
+    Object.assign(quotationForm, createEmptyForm())
+
+    // 生成新的报价单编号
+    const response = await generateQuotationNoApi()
+    const raw: any = response
+    const pr: any = raw?.data ?? raw
+    const newQuotationNo = pr?.quotationNo || ''
+
+    if (!newQuotationNo) {
+      ElMessage.error('生成报价单号失败')
+      return
+    }
+
+    // 设置报价单号
+    quotationForm.quotationNo = newQuotationNo
+
+    // 设置默认报价日期为今天
+    const today = new Date()
+    quotationForm.quotationDate = today.toISOString().split('T')[0]
+
+    await fetchCustomerList()
+    dialogVisible.value = true
+  } catch (error) {
+    console.error('打开新建对话框失败:', error)
+    ElMessage.error('打开新建对话框失败')
+  }
 }
 
 // 编辑
-const handleEdit = (row: QuotationRecord) => {
+const handleEdit = async (row: QuotationRecord) => {
   dialogMode.value = 'edit'
   dialogTitle.value = '编辑报价单'
   Object.assign(quotationForm, {
@@ -600,11 +739,12 @@ const handleEdit = (row: QuotationRecord) => {
     materials: row.materials.map((m) => ({ ...m })),
     processes: row.processes.map((p) => ({ ...p }))
   })
+  await fetchCustomerList()
   dialogVisible.value = true
 }
 
 // 查看
-const handleView = (row: QuotationRecord) => {
+const handleView = async (row: QuotationRecord) => {
   dialogMode.value = 'view'
   dialogTitle.value = '查看报价单'
   Object.assign(quotationForm, {
@@ -612,6 +752,7 @@ const handleView = (row: QuotationRecord) => {
     materials: row.materials.map((m) => ({ ...m })),
     processes: row.processes.map((p) => ({ ...p }))
   })
+  await fetchCustomerList()
   dialogVisible.value = true
 }
 
@@ -623,17 +764,25 @@ const switchToEdit = () => {
 // 删除
 const handleDelete = async (row: QuotationRecord) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除报价单【${row.changeOrderNo || row.partName}】吗？`,
-      '提示',
-      {
-        type: 'warning'
-      }
-    )
-    quotations.value = quotations.value.filter((item) => item.id !== row.id)
-    ElMessage.success('删除成功')
+    const message = `确定要删除报价单【${row.quotationNo}】吗？\n请输入 Y 确认删除：`
+    const { value } = await ElMessageBox.prompt(message, '警告', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入 Y 确认删除'
+    })
+
+    if (value === 'Y' || value === 'y') {
+      // TODO: 调用后端删除API
+      // await deleteQuotationApi(row.id)
+      quotations.value = quotations.value.filter((item) => item.id !== row.id)
+      ElMessage.success('删除成功')
+      // 重新加载列表
+      await loadQuotations()
+    }
   } catch {
-    // 用户取消
+    // 用户取消或输入错误
   }
 }
 
@@ -645,55 +794,101 @@ const handleRowDblClick = (row: QuotationRecord) => {
 // 保存
 const handleSubmit = async () => {
   if (!formRef.value) return
-  await formRef.value.validate()
 
-  const payload: QuotationFormModel = {
-    id: quotationForm.id,
-    processingDate: quotationForm.processingDate,
-    changeOrderNo: quotationForm.changeOrderNo.trim(),
-    partName: quotationForm.partName.trim(),
-    moldNo: quotationForm.moldNo.trim(),
-    department: quotationForm.department.trim(),
-    applicant: quotationForm.applicant.trim(),
-    materials: quotationForm.materials.map((m) => ({ ...m })),
-    processes: quotationForm.processes.map((p) => ({ ...p })),
-    otherFee: quotationForm.otherFee,
-    transportFee: quotationForm.transportFee,
-    quantity: quotationForm.quantity
-  }
+  try {
+    await formRef.value.validate()
 
-  if (dialogMode.value === 'create' || quotationForm.id == null) {
-    const id = nextId.value++
-    const record: QuotationRecord = {
-      ...payload,
-      id
+    const payload: QuotationFormData = {
+      quotationNo: quotationForm.quotationNo?.trim() || '',
+      quotationDate: quotationForm.quotationDate || '',
+      customerName: quotationForm.customerName?.trim() || '',
+      processingDate: quotationForm.processingDate || '',
+      changeOrderNo: quotationForm.changeOrderNo?.trim() || '',
+      partName: quotationForm.partName?.trim() || '',
+      moldNo: quotationForm.moldNo?.trim() || '',
+      department: quotationForm.department?.trim() || '',
+      applicant: quotationForm.applicant?.trim() || '',
+      materials: quotationForm.materials.map((m) => ({ ...m })),
+      processes: quotationForm.processes.map((p) => ({ ...p })),
+      otherFee: quotationForm.otherFee || 0,
+      transportFee: quotationForm.transportFee || 0,
+      quantity: quotationForm.quantity || 1
     }
-    quotations.value.unshift(record)
-    ElMessage.success('新增报价单成功（当前为前端本地记录）')
-  } else {
-    quotations.value = quotations.value.map((item) =>
-      item.id === quotationForm.id ? ({ ...item, ...payload } as QuotationRecord) : item
-    )
-    ElMessage.success('编辑报价单成功（当前为前端本地记录）')
-  }
 
-  dialogVisible.value = false
+    console.log('准备保存报价单，数据:', JSON.stringify(payload, null, 2))
+
+    if (dialogMode.value === 'create' || quotationForm.id == null) {
+      // 创建新报价单
+      const response = await createQuotationApi(payload)
+      console.log('创建报价单响应:', response)
+
+      // 响应拦截器已经返回了 response.data，所以 response 就是 { code, success, data, message }
+      const pr: any = response
+      console.log('处理后的响应数据:', pr)
+
+      // 检查响应：code === 0 或 success === true 都表示成功
+      if ((pr?.code === 0 || pr?.success === true) && pr?.data?.id) {
+        ElMessage.success('新增报价单成功')
+        dialogVisible.value = false
+        // 重新加载列表
+        await loadQuotations()
+      } else {
+        console.error('创建失败，响应数据:', pr)
+        ElMessage.error(pr?.message || '新增报价单失败')
+      }
+    } else {
+      // 更新报价单
+      const response = await updateQuotationApi(quotationForm.id, payload)
+      console.log('更新报价单响应:', response)
+
+      // 响应拦截器已经返回了 response.data，所以 response 就是 { code, success, message }
+      const pr: any = response
+      console.log('处理后的响应数据:', pr)
+
+      // 检查响应：code === 0 或 success === true 都表示成功
+      if (pr?.code === 0 || pr?.success === true) {
+        ElMessage.success('编辑报价单成功')
+        dialogVisible.value = false
+        // 重新加载列表
+        await loadQuotations()
+      } else {
+        console.error('更新失败，响应数据:', pr)
+        ElMessage.error(pr?.message || '编辑报价单失败')
+      }
+    }
+  } catch (error: any) {
+    console.error('保存报价单失败:', error)
+    console.error('错误响应数据:', error?.response?.data)
+    if (error?.response?.data?.message) {
+      ElMessage.error(error.response.data.message)
+    } else if (error?.message) {
+      ElMessage.error(error.message)
+    } else {
+      ElMessage.error('保存报价单失败')
+    }
+  }
 }
 
 // 分页
 const handleSizeChange = (size: number) => {
   pagination.pageSize = size
   pagination.page = 1
+  loadQuotations()
 }
 
 const handleCurrentChange = (page: number) => {
   pagination.page = page
+  loadQuotations()
 }
+
+// 页面加载时获取数据
+onMounted(() => {
+  loadQuotations()
+  fetchCustomerList()
+})
 </script>
 
 <style scoped>
-
-
 @media (width <= 768px) {
   :deep(.qt-edit-dialog) {
     width: 100% !important;
@@ -708,6 +903,23 @@ const handleCurrentChange = (page: number) => {
   :deep(.qt-edit-dialog .el-dialog__header),
   :deep(.qt-edit-dialog .el-dialog__footer) {
     padding-inline: 8px;
+  }
+}
+
+@media (width <= 768px) {
+  .quotation-top-fields {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .quotation-top-field--inline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .field-input-inline {
+    width: 100% !important;
   }
 }
 
@@ -806,8 +1018,106 @@ const handleCurrentChange = (page: number) => {
   justify-content: center;
 }
 
+/* 报价单顶部字段样式 */
+.quotation-top-fields {
+  display: flex;
+  padding: 0 12px 12px;
+  margin-top: -8px;
+  margin-bottom: 8px;
+  background-color: var(--el-bg-color-overlay);
+  border-radius: 4px;
+  align-items: center;
+  gap: 16px;
+}
+
+.quotation-top-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.quotation-top-field .field-label {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+}
+
+:deep(.quotation-top-field .el-form-item__content) {
+  margin-left: 0 !important;
+}
+
+/* 内联字段样式 */
+.quotation-top-field--inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.quotation-top-field--inline :deep(.el-form-item__content) {
+  width: auto;
+  margin-left: 0 !important;
+  flex: 0 0 auto;
+}
+
+.field-label-inline {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  white-space: nowrap;
+}
+
+/* .field-input-inline 默认样式，具体宽度由子类定义 */
+
+/* 报价单号输入框宽度 */
+.field-input-inline.field-input-quotation-no {
+  width: 140px !important;
+  flex: 0 0 140px !important;
+}
+
+.field-input-inline.field-input-quotation-no :deep(.el-input__wrapper),
+.field-input-inline.field-input-quotation-no :deep(.el-input) {
+  width: 140px !important;
+}
+
+/* 报价日期选择器宽度 */
+.field-input-inline.field-input-quotation-date {
+  width: 120px !important;
+  max-width: 120px !important;
+  min-width: 120px !important;
+  flex: 0 0 120px !important;
+}
+
+.field-input-inline.field-input-quotation-date :deep(.el-input__wrapper) {
+  width: 120px !important;
+  max-width: 120px !important;
+  min-width: 120px !important;
+}
+
+.field-input-inline.field-input-quotation-date :deep(.el-input__inner) {
+  width: 120px !important;
+}
+
+.field-input-inline.field-input-quotation-date :deep(.el-input) {
+  width: 120px !important;
+  max-width: 120px !important;
+  min-width: 120px !important;
+}
+
+/* 客户名称选择框宽度 */
+.field-input-inline.field-input-customer-name {
+  width: 240px !important;
+  flex: 0 0 240px !important;
+}
+
+.field-input-inline.field-input-customer-name :deep(.el-input__wrapper),
+.field-input-inline.field-input-customer-name :deep(.el-input) {
+  width: 240px !important;
+}
+
 /* 报价单弹窗样式 */
 .quotation-sheet {
+  margin-top: -8px;
   font-size: 13px;
   color: #333;
 }
@@ -872,24 +1182,28 @@ const handleCurrentChange = (page: number) => {
 
 /* 弹窗整体高度控制（PC 端） */
 :deep(.qt-edit-dialog .el-dialog) {
-  max-height: calc(100vh - 80px);
+  max-height: calc(100vh - 0px);
   margin-top: 0;
 }
 
 :deep(.qt-edit-dialog .el-dialog__body) {
-  max-height: calc(100vh - 120px);
-  padding: 4px 12px 12px;
+  position: relative;
+  max-height: calc(100vh - 40px);
+  padding: 0 12px 12px;
   overflow-y: auto;
 }
 
 :deep(.qt-edit-dialog .el-dialog__header) {
-  padding: 2px 12px 0;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  border-bottom: none;
 }
 
 .qt-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: none;
 }
 
 .qt-dialog-header__title {
@@ -898,8 +1212,13 @@ const handleCurrentChange = (page: number) => {
   flex: 1 1 auto;
 }
 
-.qt-dialog-header__actions {
+/* 操作按钮区域 - 与输入框同一行 */
+.qt-dialog-actions {
   display: flex;
+  padding: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
 }
 
