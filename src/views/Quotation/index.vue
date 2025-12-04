@@ -1,9 +1,18 @@
 <template>
   <div class="quotation-page p-4 space-y-4">
     <div v-if="isMobile" class="mobile-top-bar">
-      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
-        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
-      </el-button>
+      <div class="mobile-top-bar-left">
+        <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+          {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+        </el-button>
+      </div>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
     </div>
 
     <!-- 查询表单 -->
@@ -45,83 +54,146 @@
     </el-form>
 
     <!-- 报价单列表 -->
-    <template v-if="quotations.length">
-      <div class="qt-table-wrapper" :class="{ 'qt-table-wrapper--mobile': isMobile }">
-        <el-table
-          v-loading="loading"
-          :data="pagedQuotations"
-          border
-          :height="isMobile ? undefined : 'calc(100vh - 320px)'"
-          class="qt-table"
-          row-key="id"
-          @row-dblclick="handleRowDblClick"
-        >
-          <el-table-column type="index" label="序号" width="60" align="center" />
-          <el-table-column
-            prop="quotationNo"
-            label="报价单号"
-            min-width="150"
-            show-overflow-tooltip
-          />
-          <el-table-column prop="quotationDate" label="报价日期" width="120" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ formatDate(row.quotationDate) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="customerName"
-            label="客户名称"
-            min-width="180"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="changeOrderNo"
-            label="更改通知单号"
-            min-width="140"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="partName"
-            label="加工零件名称"
-            min-width="160"
-            show-overflow-tooltip
-          />
-          <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="applicant" label="申请更改人" width="120" show-overflow-tooltip />
-          <el-table-column prop="taxIncludedPrice" label="含税价格" width="120" align="right">
-            <template #default="{ row }">
-              {{ formatAmount(calcTaxIncludedPrice(row)) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right" align="center">
-            <template #default="{ row }">
-              <div class="operation-buttons">
-                <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-                <el-button size="small" @click="handleView(row)">查看</el-button>
-                <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+    <!-- 手机端卡片视图 -->
+    <div v-if="isMobile && viewMode === 'card'" class="qt-mobile-list" v-loading="loading">
+      <el-empty v-if="!quotations.length && !loading" description="暂无报价单" />
+      <template v-else>
+        <el-card v-for="row in pagedQuotations" :key="row.id" class="qt-mobile-card" shadow="hover">
+          <div class="qt-mobile-card__header">
+            <div>
+              <div class="qt-mobile-card__quotation-no">
+                报价单号：{{ row.quotationNo || '-' }}
               </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
+              <div class="qt-mobile-card__date">
+                报价日期：{{ formatDate(row.quotationDate) || '-' }}
+              </div>
+              <div class="qt-mobile-card__customer">{{ row.customerName || '-' }}</div>
+            </div>
+          </div>
+          <div class="qt-mobile-card__meta">
+            <div>
+              <span class="label">更改通知单号</span>
+              <span class="value">{{ row.changeOrderNo || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">模具编号</span>
+              <span class="value">{{ row.moldNo || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">加工零件名称</span>
+              <span class="value">{{ row.partName || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">申请更改人</span>
+              <span class="value">{{ row.applicant || '-' }}</span>
+            </div>
+          </div>
+          <div class="qt-mobile-card__stats">
+            <div class="stat">
+              <div class="stat-label">加工数量</div>
+              <div class="stat-value">{{ row.quantity || 0 }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">含税价格(元)</div>
+              <div class="stat-value">{{ formatAmount(calcTaxIncludedPrice(row)) }}</div>
+            </div>
+          </div>
+          <div class="qt-mobile-card__actions">
+            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+          </div>
+        </el-card>
+      </template>
+    </div>
 
-      <!-- 分页 -->
-      <div class="pagination-footer" :class="{ 'pagination-footer--mobile': isMobile }">
-        <el-pagination
-          background
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="total"
-          :layout="paginationLayout"
-          :pager-count="paginationPagerCount"
-          :page-sizes="[10, 20, 50]"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+    <!-- PC端表格视图 / 手机端表格视图 -->
+    <div
+      v-else-if="viewMode === 'table'"
+      class="qt-table-wrapper"
+      :class="{ 'qt-table-wrapper--mobile': isMobile }"
+    >
+      <el-table
+        v-if="quotations.length"
+        v-loading="loading"
+        :data="pagedQuotations"
+        border
+        :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+        class="qt-table"
+        row-key="id"
+        @row-dblclick="handleRowDblClick"
+      >
+        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column
+          prop="quotationNo"
+          label="报价单号"
+          min-width="150"
+          show-overflow-tooltip
         />
-      </div>
-    </template>
+        <el-table-column prop="quotationDate" label="报价日期" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatDate(row.quotationDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="customerName"
+          label="客户名称"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="changeOrderNo"
+          label="更改通知单号"
+          min-width="140"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="partName"
+          label="加工零件名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="applicant" label="申请更改人" width="120" show-overflow-tooltip />
+        <el-table-column prop="taxIncludedPrice" label="含税价格" width="120" align="right">
+          <template #default="{ row }">
+            {{ formatAmount(calcTaxIncludedPrice(row)) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="operation-buttons">
+              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button size="small" @click="handleView(row)">查看</el-button>
+              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div
+      v-if="quotations.length"
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
+      <el-pagination
+        background
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :total="total"
+        :layout="paginationLayout"
+        :pager-count="paginationPagerCount"
+        :page-sizes="[10, 20, 50]"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+      />
+    </div>
+
+    <!-- 空状态 -->
     <el-empty
-      v-else
+      v-if="!quotations.length && !loading && (viewMode === 'table' || !isMobile)"
       description="暂无报价单"
       class="rounded-lg bg-[var(--el-bg-color-overlay)] py-16"
       :image-size="180"
@@ -430,6 +502,7 @@
 <script setup lang="ts">
 import {
   ElButton,
+  ElCard,
   ElDatePicker,
   ElDialog,
   ElEmpty,
@@ -441,12 +514,14 @@ import {
   ElMessageBox,
   ElOption,
   ElPagination,
+  ElRadioGroup,
+  ElRadioButton,
   ElSelect,
   ElTable,
   ElTableColumn
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import {
@@ -501,6 +576,10 @@ const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const showMobileFilters = ref(true)
 
+// 视图模式：手机端默认卡片视图，PC端默认表格视图
+type ViewMode = 'table' | 'card'
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+
 // 客户列表
 const customerList = ref<CustomerInfo[]>([])
 const customerLoading = ref(false)
@@ -523,10 +602,12 @@ const pagination = reactive({
 })
 
 const paginationLayout = computed(() =>
-  isMobile.value ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
 )
 
-const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
 // 直接使用后端返回的数据（后端已实现搜索和分页）
 const pagedQuotations = computed(() => quotations.value)
@@ -881,6 +962,15 @@ const handleCurrentChange = (page: number) => {
   loadQuotations()
 }
 
+// 监听移动端状态变化，自动切换视图模式
+watch(isMobile, (mobile) => {
+  if (mobile) {
+    viewMode.value = 'card'
+  } else {
+    viewMode.value = 'table'
+  }
+})
+
 // 页面加载时获取数据
 onMounted(() => {
   loadQuotations()
@@ -898,11 +988,25 @@ onMounted(() => {
 
   :deep(.qt-edit-dialog .el-dialog__body) {
     padding: 2px 8px 8px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   :deep(.qt-edit-dialog .el-dialog__header),
   :deep(.qt-edit-dialog .el-dialog__footer) {
     padding-inline: 8px;
+  }
+
+  /* 手机端表格容器可滚动 */
+  .quotation-sheet {
+    width: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 确保表格可以横向滚动 */
+  .qs-table {
+    min-width: 800px;
   }
 }
 
@@ -923,6 +1027,12 @@ onMounted(() => {
   }
 }
 
+@media (width <= 768px) {
+  .qt-mobile-card__meta {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
 .quotation-page {
   position: relative;
 }
@@ -933,6 +1043,23 @@ onMounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding-top: 2px;
+}
+
+.mobile-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 13px;
+  color: #606266;
 }
 
 .query-form {
@@ -992,6 +1119,86 @@ onMounted(() => {
 
 .qt-table-wrapper--mobile .qt-table {
   min-width: 960px;
+}
+
+/* 手机端卡片视图样式 */
+.qt-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qt-mobile-card {
+  border-radius: 10px;
+}
+
+.qt-mobile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.qt-mobile-card__quotation-no {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qt-mobile-card__date {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #666;
+}
+
+.qt-mobile-card__customer {
+  font-size: 13px;
+  color: #666;
+}
+
+.qt-mobile-card__meta {
+  display: grid;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #555;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.qt-mobile-card__meta .label {
+  margin-right: 4px;
+  color: #888;
+}
+
+.qt-mobile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.qt-mobile-card__stats .stat {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border-radius: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.qt-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .operation-buttons {
