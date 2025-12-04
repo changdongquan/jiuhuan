@@ -93,6 +93,14 @@ export const getQuotationListApi = (params?: {
   })
 }
 
+// 下载报价单对应的 Excel 文件
+export const downloadQuotationExcelApi = (id: number) => {
+  return request.get<Blob>({
+    url: `/api/quotation/${id}/export-excel`,
+    responseType: 'blob'
+  })
+}
+
 // 报价单记录（包含ID）
 export interface QuotationRecord extends QuotationFormData {
   id: number

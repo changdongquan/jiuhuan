@@ -271,8 +271,13 @@
             <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit">
               保存
             </el-button>
-            <el-button v-else size="small" type="primary" @click="switchToEdit">
-              改为编辑
+            <el-button
+              v-if="isViewMode && quotationForm.id"
+              size="small"
+              type="success"
+              @click="handleDownloadExcel"
+            >
+              下载
             </el-button>
           </div>
         </div>
@@ -529,6 +534,7 @@ import {
   createQuotationApi,
   updateQuotationApi,
   getQuotationListApi,
+  downloadQuotationExcelApi,
   type QuotationFormData
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
@@ -837,9 +843,28 @@ const handleView = async (row: QuotationRecord) => {
   dialogVisible.value = true
 }
 
-const switchToEdit = () => {
-  dialogMode.value = 'edit'
-  dialogTitle.value = '编辑报价单'
+// 下载当前报价单的 Excel 文件
+const handleDownloadExcel = async () => {
+  if (!quotationForm.id) {
+    ElMessage.warning('请先保存报价单后再下载')
+    return
+  }
+
+  try {
+    const resp = await downloadQuotationExcelApi(quotationForm.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${quotationForm.quotationNo || '报价单'}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载报价单 Excel 失败:', error)
+    ElMessage.error('下载报价单失败')
+  }
 }
 
 // 删除
