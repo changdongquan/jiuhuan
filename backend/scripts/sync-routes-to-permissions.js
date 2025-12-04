@@ -28,6 +28,14 @@ const routesToSync = [
     parent_route: 'ProjectManagement'
   },
 
+  // 报价单（项目管理下）
+  {
+    route_name: 'QuotationIndex',
+    route_path: '/project-management/quotation',
+    page_title: '报价单',
+    parent_route: 'ProjectManagement'
+  },
+
   // 生产任务
   {
     route_name: 'ProductionTasksIndex',
