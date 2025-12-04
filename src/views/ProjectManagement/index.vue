@@ -676,6 +676,7 @@ import {
   getProjectStatisticsApi,
   type ProjectInfo
 } from '@/api/project'
+import { getProductionTaskDetailApi } from '@/api/production-task'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
 
@@ -1061,6 +1062,41 @@ const handleSubmitEdit = async () => {
     await editFormRef.value.validate()
   } catch {
     return
+  }
+
+  // 当项目状态改为“已经移模”时，进行额外业务校验：
+  // 1. 必须填写移模日期
+  // 2. 对应生产任务的生产状态必须为“已完成”
+  if (editForm.项目状态 === '已经移模') {
+    if (!editForm.移模日期) {
+      ElMessage.error('项目状态为“已经移模”时，必须填写移模日期')
+      return
+    }
+
+    const projectCode = editForm.项目编号 || currentProjectCode.value
+    if (!projectCode) {
+      ElMessage.error('项目编号不能为空，无法校验生产任务状态')
+      return
+    }
+
+    try {
+      const response: any = await getProductionTaskDetailApi(projectCode)
+      const taskData = response?.data?.data || response?.data || null
+
+      if (!taskData) {
+        ElMessage.error('未找到对应的生产任务，无法将项目状态设置为“已经移模”')
+        return
+      }
+
+      const taskStatus = taskData.生产状态
+      if (taskStatus !== '已完成') {
+        ElMessage.error('生产任务状态必须为“已完成”才能将项目状态设置为“已经移模”')
+        return
+      }
+    } catch (error: any) {
+      ElMessage.error('校验生产任务状态失败，暂不能将项目状态设置为“已经移模”')
+      return
+    }
   }
 
   editSubmitting.value = true

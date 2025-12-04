@@ -70,11 +70,12 @@ router.get('/list', async (req, res) => {
     }
 
     if (status) {
+      // 显式选择生产状态时按所选状态筛选
       whereConditions.push(`pt.生产状态 = @status`)
       params.status = status
     } else {
-      // 默认排除已完成（保留状态为空的记录）
-      whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus) `)
+      // 默认情况下（未选择生产状态），不显示“已完成”的记录，保留状态为空的任务
+      whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
       params.excludeStatus = '已完成'
     }
 
@@ -110,8 +111,7 @@ router.get('/list', async (req, res) => {
         pt.优先级,
         pt.投产数量,
         pt.已完成数量,
-        pt.批次完成数量,
-        pt.批次完成时间,
+        pt.电极加工工时,
         pt.下达日期,
         pt.放电工时,
         pt.检验工时,
@@ -220,8 +220,7 @@ router.get('/detail', async (req, res) => {
         pt.优先级,
         pt.投产数量,
         pt.已完成数量,
-        pt.批次完成数量,
-        pt.批次完成时间,
+        pt.电极加工工时,
         pt.下达日期,
         pt.放电工时,
         pt.检验工时,
@@ -304,8 +303,7 @@ router.put('/update', async (req, res) => {
       '优先级',
       '投产数量',
       '已完成数量',
-      '批次完成数量',
-      '批次完成时间',
+      '电极加工工时',
       '下达日期',
       '放电工时',
       '检验工时',

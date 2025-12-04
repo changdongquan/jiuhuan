@@ -409,7 +409,7 @@
               />
             </el-form-item>
 
-            <el-form-item label="开始日期">
+            <el-form-item label="开始日期" prop="开始日期">
               <el-date-picker
                 v-model="dialogForm.开始日期"
                 type="date"
@@ -418,7 +418,7 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="结束日期">
+            <el-form-item label="结束日期" prop="结束日期">
               <el-date-picker
                 v-model="dialogForm.结束日期"
                 type="date"
@@ -438,7 +438,7 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="生产状态">
+            <el-form-item label="生产状态" prop="生产状态">
               <el-select
                 v-model="dialogForm.生产状态"
                 placeholder="请选择生产状态"
@@ -466,28 +466,19 @@
                 disabled
               />
             </el-form-item>
-            <el-form-item label="投产数量">
+            <el-form-item label="投产数量" prop="投产数量">
               <el-input-number v-model="dialogForm.投产数量" :min="0" style="width: 100%" />
             </el-form-item>
-            <el-form-item label="已完成数量">
+            <el-form-item label="已完成数量" prop="已完成数量">
               <el-input-number v-model="dialogForm.已完成数量" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="批次完成数量">
-              <el-input-number v-model="dialogForm.批次完成数量" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="批次完成时间">
-              <el-date-picker
-                v-model="dialogForm.批次完成时间"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="批次完成时间"
-                style="width: 100%"
-              />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="加工中心工时">
               <el-input-number v-model="dialogForm.加工中心工时" :min="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="电极加工工时">
+              <el-input-number v-model="dialogForm.电极加工工时" :min="0" style="width: 100%" />
             </el-form-item>
             <el-form-item label="线切割工时">
               <el-input-number v-model="dialogForm.线切割工时" :min="0" style="width: 100%" />
@@ -624,18 +615,17 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   const quantityInfo: DetailItem[] = [
     { label: '订单数量', value: formatValue(dialogForm.订单数量) },
     { label: '投产数量', value: formatValue(dialogForm.投产数量) },
-    { label: '已完成数量', value: formatValue(dialogForm.已完成数量) },
-    { label: '批次完成数量', value: formatValue(dialogForm.批次完成数量) }
+    { label: '已完成数量', value: formatValue(dialogForm.已完成数量) }
   ]
 
   const dateInfo: DetailItem[] = [
     { label: '开始日期', value: formatDate(dialogForm.开始日期) },
     { label: '结束日期', value: formatDate(dialogForm.结束日期) },
-    { label: '批次完成时间', value: formatDate(dialogForm.批次完成时间) },
     { label: '下达日期', value: formatDate(dialogForm.下达日期) }
   ]
 
   const hoursInfo: DetailItem[] = [
+    { label: '电极加工工时', value: formatValue(dialogForm.电极加工工时) },
     { label: '加工中心工时', value: formatValue(dialogForm.加工中心工时) },
     { label: '线切割工时', value: formatValue(dialogForm.线切割工时) },
     { label: '放电工时', value: formatValue(dialogForm.放电工时) },
@@ -653,8 +643,74 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   ]
 })
 
+// 校验：结束日期不得早于开始日期；当状态为“已完成”时，相关字段必须填写
+const validateStartDate = (_rule: any, value: any, callback: any) => {
+  if (dialogForm.生产状态 === '已完成' && !value) {
+    callback(new Error('已完成状态必须填写开始日期'))
+    return
+  }
+  callback()
+}
+
+const validateEndDate = (_rule: any, value: any, callback: any) => {
+  const start = dialogForm.开始日期
+  if (dialogForm.生产状态 === '已完成' && !value) {
+    callback(new Error('已完成状态必须填写结束日期'))
+    return
+  }
+  if (value && start && String(value) < String(start)) {
+    callback(new Error('结束日期不能早于开始日期'))
+    return
+  }
+  callback()
+}
+
+const validateProductionQty = (_rule: any, value: any, callback: any) => {
+  const status = dialogForm.生产状态
+  const num = typeof value === 'number' ? value : Number(value)
+
+  if (status === '已完成') {
+    if (!num || Number.isNaN(num) || num <= 0) {
+      callback(new Error('已完成状态必须填写投产数量'))
+      return
+    }
+  }
+
+  callback()
+}
+
+const validateCompletedQty = (_rule: any, value: any, callback: any) => {
+  const status = dialogForm.生产状态
+  const completed = typeof value === 'number' ? value : Number(value)
+  const productionRaw = dialogForm.投产数量
+  const production = typeof productionRaw === 'number' ? productionRaw : Number(productionRaw ?? 0)
+
+  if (status === '已完成') {
+    if (!completed || Number.isNaN(completed) || completed <= 0) {
+      callback(new Error('已完成状态必须填写已完成数量'))
+      return
+    }
+  }
+
+  if (
+    !Number.isNaN(completed) &&
+    !Number.isNaN(production) &&
+    production > 0 &&
+    completed > production
+  ) {
+    callback(new Error('已完成数量不能大于投产数量'))
+    return
+  }
+
+  callback()
+}
+
 const dialogRules: FormRules = {
-  项目编号: [{ required: true, message: '项目编号不能为空', trigger: 'blur' }]
+  项目编号: [{ required: true, message: '项目编号不能为空', trigger: 'blur' }],
+  开始日期: [{ validator: validateStartDate, trigger: 'change' }],
+  结束日期: [{ validator: validateEndDate, trigger: 'change' }],
+  投产数量: [{ validator: validateProductionQty, trigger: 'change' }],
+  已完成数量: [{ validator: validateCompletedQty, trigger: 'change' }]
 }
 
 const formatDate = (date?: string | null) => {

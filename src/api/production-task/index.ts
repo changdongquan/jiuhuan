@@ -12,8 +12,7 @@ export interface ProductionTaskInfo {
   交货日期?: string // 交货日期（从销售订单表获取最早的交货日期）
   投产数量?: number
   已完成数量?: number
-  批次完成数量?: number
-  批次完成时间?: string
+  电极加工工时?: number
   下达日期?: string
   放电工时?: number
   检验工时?: number
