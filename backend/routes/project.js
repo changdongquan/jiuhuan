@@ -205,9 +205,17 @@ router.get('/list', async (req, res) => {
 })
 
 // 根据项目编号获取货物信息（产品名称和产品图号）
-router.get('/goods/:projectCode', async (req, res) => {
+// 使用 query 参数，避免项目编号包含斜杠的问题
+router.get('/goods', async (req, res) => {
   try {
-    const { projectCode } = req.params
+    const { projectCode } = req.query
+
+    if (!projectCode) {
+      return res.status(400).json({
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
 
     const queryString = `
       SELECT TOP 1

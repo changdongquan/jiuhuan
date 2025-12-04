@@ -53,7 +53,7 @@ function buildOrderByClause(sortField, sortOrder) {
 // 获取生产任务列表
 router.get('/list', async (req, res) => {
   try {
-    const { keyword, status, page = 1, pageSize = 10, sortField, sortOrder } = req.query
+    const { keyword, status, category, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
     let whereConditions = []
     let params = {}
@@ -76,6 +76,11 @@ router.get('/list', async (req, res) => {
       // 默认排除已完成（保留状态为空的记录）
       whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus) `)
       params.excludeStatus = '已完成'
+    }
+
+    if (category) {
+      whereConditions.push(`g.分类 = @category`)
+      params.category = category
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''

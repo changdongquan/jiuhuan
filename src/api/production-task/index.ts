@@ -36,6 +36,7 @@ export interface ProductionTaskInfo {
 export interface ProductionTaskQueryParams {
   keyword?: string // 项目编号/负责人
   status?: string // 生产状态
+  category?: string // 分类
   page?: number
   pageSize?: number
   sortField?: string // 排序字段

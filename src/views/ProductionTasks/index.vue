@@ -51,6 +51,21 @@
           />
         </el-select>
       </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="queryForm.category"
+          placeholder="请选择分类"
+          clearable
+          :style="{ width: isMobile ? '100%' : '140px' }"
+        >
+          <el-option
+            v-for="item in categoryOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -531,13 +546,19 @@ const statistics = reactive({
   pending: 0
 })
 
-const queryForm = reactive({ keyword: '', status: '' })
+const queryForm = reactive({ keyword: '', status: '', category: '' })
 const statusOptions = [
   { label: '待开始', value: '待开始' },
   { label: '进行中', value: '进行中' },
   { label: '已完成', value: '已完成' },
   { label: '已暂停', value: '已暂停' },
   { label: '已取消', value: '已取消' }
+]
+
+const categoryOptions = [
+  { label: '塑胶模具', value: '塑胶模具' },
+  { label: '零件加工', value: '零件加工' },
+  { label: '修改模具', value: '修改模具' }
 ]
 
 // 排序状态
@@ -730,6 +751,7 @@ const loadData = async () => {
     }
     if (queryForm.keyword) params.keyword = queryForm.keyword
     if (queryForm.status) params.status = queryForm.status
+    if (queryForm.category) params.category = queryForm.category
     if (sortState.prop && sortState.order) {
       params.sortField = sortState.prop
       params.sortOrder = sortState.order === 'ascending' ? 'asc' : 'desc'
@@ -761,6 +783,7 @@ const handleSearch = () => {
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.status = ''
+  queryForm.category = ''
   handleSearch()
 }
 

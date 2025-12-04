@@ -89,7 +89,10 @@ export const deleteProjectApi = (projectCode: string) => {
 
 // 根据项目编号获取货物信息
 export const getProjectGoodsApi = (projectCode: string) => {
-  return request.get({ url: `/api/project/goods/${projectCode}` })
+  return request.get({
+    url: '/api/project/goods',
+    params: { projectCode }
+  })
 }
 
 // 获取项目统计信息

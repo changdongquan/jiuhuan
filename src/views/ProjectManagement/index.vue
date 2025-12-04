@@ -122,7 +122,7 @@
         <el-table-column
           prop="项目编号"
           label="项目编号"
-          width="130"
+          width="145"
           show-overflow-tooltip
           sortable="custom"
           fixed="left"
