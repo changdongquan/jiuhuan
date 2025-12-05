@@ -55,7 +55,7 @@ router.get('/list', async (req, res) => {
     // 构建查询条件
     if (keyword) {
       whereConditions.push(
-        `(g.项目编号 LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword)`
+        `(g.项目编号 LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword OR p.客户模号 LIKE @keyword)`
       )
       params.keyword = `%${keyword}%`
     }
