@@ -275,9 +275,11 @@
               v-if="isViewMode && quotationForm.id"
               size="small"
               type="success"
+              :loading="downloading"
+              :disabled="downloading"
               @click="handleDownloadExcel"
             >
-              下载
+              {{ downloading ? '正在生成 PDF...' : '下载' }}
             </el-button>
           </div>
         </div>
@@ -624,6 +626,7 @@ const dialogTitle = ref('新增报价单')
 const dialogMode = ref<'create' | 'edit' | 'view'>('create')
 const isViewMode = computed(() => dialogMode.value === 'view')
 const formRef = ref<FormInstance>()
+const downloading = ref(false)
 
 const createEmptyForm = (): QuotationFormModel => ({
   id: null,
@@ -851,6 +854,9 @@ const handleDownloadExcel = async () => {
   }
 
   try {
+    downloading.value = true
+    ElMessage.info('正在生成 PDF，请稍候...')
+
     const resp = await downloadQuotationPdfApi(quotationForm.id)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
@@ -864,6 +870,8 @@ const handleDownloadExcel = async () => {
   } catch (error) {
     console.error('下载报价单 Excel 失败:', error)
     ElMessage.error('下载报价单失败')
+  } finally {
+    downloading.value = false
   }
 }
 

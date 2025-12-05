@@ -867,14 +867,34 @@ router.get('/:id/export-pdf', async (req, res) => {
     // 调用 LibreOffice 将 xlsx 转为 pdf
     const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
     try {
-      await execFileAsync(sofficePath, [
-        '--headless',
-        '--convert-to',
-        'pdf',
-        '--outdir',
-        tmpDir,
-        xlsxPath
-      ])
+      // 为 LibreOffice 单独指定可写的用户配置目录，避免使用默认的 /var/www 等只读目录
+      const loUserDir = path.join(tmpDir, 'libreoffice-profile')
+      try {
+        await fs.promises.mkdir(loUserDir, { recursive: true })
+      } catch {}
+
+      // LibreOffice 要求 file:// 前缀的 URL 形式
+      const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+
+      const env = {
+        ...process.env,
+        // 确保 HOME 指向一个当前进程可写的目录，避免 dconf 等组件初始化失败
+        HOME: loUserDir
+      }
+
+      await execFileAsync(
+        sofficePath,
+        [
+          '--headless',
+          `-env:UserInstallation=${loUserDirUrl}`,
+          '--convert-to',
+          'pdf',
+          '--outdir',
+          tmpDir,
+          xlsxPath
+        ],
+        { env }
+      )
     } catch (err) {
       console.error('调用 LibreOffice 失败:', err)
       try {
