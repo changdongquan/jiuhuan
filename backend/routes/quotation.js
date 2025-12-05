@@ -1,8 +1,14 @@
 const express = require('express')
 const path = require('path')
+const fs = require('fs')
+const os = require('os')
+const { execFile } = require('child_process')
+const { promisify } = require('util')
 const ExcelJS = require('exceljs')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
+
+const execFileAsync = promisify(execFile)
 const router = express.Router()
 
 // 获取报价单列表
@@ -693,6 +699,231 @@ router.get('/:id/export-excel', async (req, res) => {
       code: 500,
       success: false,
       message: '导出报价单 Excel 失败',
+      error: error.message
+    })
+  }
+})
+
+// 下载当前报价单对应的 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
+router.get('/:id/export-pdf', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // 查询报价单详情
+    const rows = await query(
+      `
+        SELECT 
+          报价单ID as id,
+          报价单号 as quotationNo,
+          报价日期 as quotationDate,
+          客户名称 as customerName,
+          加工周期 as processingDate,
+          更改通知单号 as changeOrderNo,
+          加工零件名称 as partName,
+          模具编号 as moldNo,
+          申请更改部门 as department,
+          申请更改人 as applicant,
+          材料明细 as materialsJson,
+          加工费用明细 as processesJson,
+          其他费用 as otherFee,
+          运输费用 as transportFee,
+          加工数量 as quantity,
+          含税价格 as taxIncludedPrice
+        FROM 报价单
+        WHERE 报价单ID = @id
+      `,
+      { id: parseInt(id, 10) }
+    )
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '报价单不存在'
+      })
+    }
+
+    const row = rows[0]
+
+    // 解析 JSON 字段
+    let materials = []
+    let processes = []
+    try {
+      materials = JSON.parse(row.materialsJson || '[]')
+    } catch (e) {
+      console.error('解析材料明细JSON失败:', e)
+      materials = []
+    }
+    try {
+      processes = JSON.parse(row.processesJson || '[]')
+    } catch (e) {
+      console.error('解析加工费用明细JSON失败:', e)
+      processes = []
+    }
+
+    // 计算金额（与创建/更新时保持一致）
+    const materialsTotal = (materials || []).reduce(
+      (sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+      0
+    )
+    const processingTotal = (processes || []).reduce(
+      (sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.hours) || 0),
+      0
+    )
+    const otherFee = Number(row.otherFee || 0)
+    const transportFee = Number(row.transportFee || 0)
+    const quantity = Number(row.quantity || 0) || 1
+
+    const taxIncludedPrice =
+      row.taxIncludedPrice !== undefined && row.taxIncludedPrice !== null
+        ? Number(row.taxIncludedPrice)
+        : materialsTotal + processingTotal + otherFee + transportFee
+
+    // 读取 Excel 模板（美菱改模报价单）
+    const templatePath = path.join(__dirname, '..', 'templates', 'quotation', '美菱改模报价单.xlsx')
+
+    const workbook = new ExcelJS.Workbook()
+    try {
+      await workbook.xlsx.readFile(templatePath)
+    } catch (err) {
+      console.error('读取报价单模板失败:', err)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '读取报价单模板失败'
+      })
+    }
+
+    const sheet = workbook.worksheets[0]
+
+    // 工具方法：写入单元格，仅修改单元格数据，不改变样式/格式
+    const setCell = (addr, value) => {
+      const cell = sheet.getCell(addr)
+      if (value === null || value === undefined || value === '') {
+        cell.value = ''
+      } else if (value instanceof Date || typeof value === 'number') {
+        cell.value = value
+      } else {
+        cell.value = String(value)
+      }
+    }
+    const parseDate = (val) => {
+      if (!val) return null
+      if (val instanceof Date) return val
+      const d = new Date(val)
+      if (Number.isNaN(d.getTime())) {
+        return null
+      }
+      return d
+    }
+
+    // 一、表头字段
+    setCell('C3', parseDate(row.processingDate)) // 加工周期
+    setCell('G3', row.changeOrderNo || '') // 更改通知单号
+    setCell('C4', row.partName || '') // 加工零件名称
+    setCell('G4', row.moldNo || '') // 模具编号
+    setCell('C5', row.department || '') // 申请更改部门
+    setCell('G5', row.applicant || '') // 申请更改人
+
+    // 二、单位材料费
+    const materialRows = [8, 9]
+    materialRows.forEach((rowIndex, i) => {
+      const item = materials[i] || {}
+      const unitPrice = Number(item.unitPrice) || 0
+      const qty = Number(item.quantity) || 0
+      const fee = unitPrice * qty
+      setCell(`C${rowIndex}`, item.name || '')
+      setCell(`E${rowIndex}`, unitPrice)
+      setCell(`F${rowIndex}`, qty)
+      setCell(`G${rowIndex}`, fee)
+    })
+
+    // 三、加工费用
+    const processStartRow = 14
+    processes.forEach((item, index) => {
+      const rowIndex = processStartRow + index
+      const hours = Number(item.hours) || 0
+      const unitPrice = Number(item.unitPrice) || 0
+      const fee = unitPrice * hours
+      setCell(`F${rowIndex}`, hours)
+      setCell(`G${rowIndex}`, fee)
+    })
+
+    // 四、其他费用 + 运输费用 + 数量
+    setCell('G24', otherFee)
+    setCell('G25', transportFee)
+    setCell('C26', quantity)
+
+    // 小计 / 含税价格交给模板中的公式计算，这里不覆盖相关单元格
+
+    // 将填充后的工作簿写入临时 xlsx 文件
+    const tmpDir = os.tmpdir()
+    const safeBase = `quotation-${row.id || id}-${Date.now()}`
+    const xlsxPath = path.join(tmpDir, `${safeBase}.xlsx`)
+    const pdfPath = path.join(tmpDir, `${safeBase}.pdf`)
+
+    await workbook.xlsx.writeFile(xlsxPath)
+
+    // 调用 LibreOffice 将 xlsx 转为 pdf
+    const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    try {
+      await execFileAsync(sofficePath, [
+        '--headless',
+        '--convert-to',
+        'pdf',
+        '--outdir',
+        tmpDir,
+        xlsxPath
+      ])
+    } catch (err) {
+      console.error('调用 LibreOffice 失败:', err)
+      try {
+        await fs.promises.unlink(xlsxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '服务器未安装 LibreOffice 或转换 PDF 失败'
+      })
+    }
+
+    // 读取生成的 PDF
+    let pdfBuffer
+    try {
+      pdfBuffer = await fs.promises.readFile(pdfPath)
+    } catch (err) {
+      console.error('读取生成的 PDF 文件失败:', err)
+      try {
+        await fs.promises.unlink(xlsxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '生成 PDF 文件失败'
+      })
+    }
+
+    // 清理临时文件
+    try {
+      await fs.promises.unlink(xlsxPath)
+    } catch {}
+    try {
+      await fs.promises.unlink(pdfPath)
+    } catch {}
+
+    const filenameBase = row.quotationNo || '报价单'
+    const encodedFilename = encodeURIComponent(`${filenameBase}.pdf`)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+
+    return res.send(pdfBuffer)
+  } catch (error) {
+    console.error('导出报价单 PDF 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '导出报价单 PDF 失败',
       error: error.message
     })
   }

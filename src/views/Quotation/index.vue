@@ -534,7 +534,7 @@ import {
   createQuotationApi,
   updateQuotationApi,
   getQuotationListApi,
-  downloadQuotationExcelApi,
+  downloadQuotationPdfApi,
   type QuotationFormData
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
@@ -851,12 +851,12 @@ const handleDownloadExcel = async () => {
   }
 
   try {
-    const resp = await downloadQuotationExcelApi(quotationForm.id)
+    const resp = await downloadQuotationPdfApi(quotationForm.id)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${quotationForm.quotationNo || '报价单'}.xlsx`
+    a.download = `${quotationForm.quotationNo || '报价单'}.pdf`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
