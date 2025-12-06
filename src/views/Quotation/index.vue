@@ -34,7 +34,7 @@
           @keyup.enter="handleSearch"
         />
       </el-form-item>
-      <el-form-item label="加工周期">
+      <el-form-item label="加工日期">
         <el-date-picker
           v-model="queryForm.processingDate"
           type="date"
@@ -222,31 +222,41 @@
       >
         <!-- 顶部字段：报价单号、报价日期、客户名称 -->
         <div class="quotation-top-fields">
-          <el-form-item prop="quotationNo" class="quotation-top-field quotation-top-field--inline">
-            <span class="field-label-inline">报价单号：</span>
-            <el-input
-              v-model="quotationForm.quotationNo"
-              :disabled="true"
-              placeholder="报价单号"
-              class="field-input-inline field-input-quotation-no"
-            />
-          </el-form-item>
+          <div class="quotation-top-left">
+            <el-form-item
+              prop="quotationNo"
+              class="quotation-top-field quotation-top-field--inline"
+            >
+              <span class="field-label-inline">报价单号：</span>
+              <el-input
+                v-model="quotationForm.quotationNo"
+                :disabled="true"
+                placeholder="报价单号"
+                class="field-input-inline field-input-quotation-no"
+              />
+            </el-form-item>
+            <el-form-item
+              prop="quotationDate"
+              class="quotation-top-field quotation-top-field--inline"
+            >
+              <span class="field-label-inline">报价日期：</span>
+              <el-date-picker
+                v-model="quotationForm.quotationDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择报价日期"
+                :disabled="isViewMode"
+                class="field-input-inline field-input-quotation-date"
+                style="width: 140px !important"
+              />
+            </el-form-item>
+          </div>
           <el-form-item
-            prop="quotationDate"
+            prop="customerName"
             class="quotation-top-field quotation-top-field--inline"
+            :show-message="false"
           >
-            <span class="field-label-inline">报价日期：</span>
-            <el-date-picker
-              v-model="quotationForm.quotationDate"
-              type="date"
-              value-format="YYYY-MM-DD"
-              placeholder="请选择报价日期"
-              :disabled="isViewMode"
-              class="field-input-inline field-input-quotation-date"
-              style="width: 120px !important"
-            />
-          </el-form-item>
-          <el-form-item prop="customerName" class="quotation-top-field quotation-top-field--inline">
+            <span class="field-required">*</span>
             <span class="field-label-inline">客户名称：</span>
             <el-select
               v-model="quotationForm.customerName"
@@ -279,7 +289,17 @@
               :disabled="downloading"
               @click="handleDownloadExcel"
             >
-              {{ downloading ? '正在生成 PDF...' : '下载' }}
+              {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
+            </el-button>
+            <el-button
+              v-if="isViewMode && quotationForm.id"
+              size="small"
+              type="primary"
+              :loading="downloading"
+              :disabled="downloading"
+              @click="handleDownloadCompletionPdf"
+            >
+              完工单下载
             </el-button>
           </div>
         </div>
@@ -287,9 +307,9 @@
         <div class="quotation-sheet">
           <table class="qs-table">
             <tbody>
-              <!-- 加工周期 / 更改通知单号 -->
+              <!-- 加工日期 / 更改通知单号 -->
               <tr>
-                <td class="qs-label" colspan="2">加工周期</td>
+                <td class="qs-label" colspan="2">加工日期</td>
                 <td class="qs-input qs-manual" colspan="2">
                   <el-date-picker
                     v-model="quotationForm.processingDate"
@@ -545,6 +565,7 @@ import {
   updateQuotationApi,
   getQuotationListApi,
   downloadQuotationPdfApi,
+  downloadQuotationCompletionPdfApi,
   type QuotationFormData
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
@@ -671,15 +692,10 @@ const createEmptyForm = (): QuotationFormModel => ({
 const quotationForm = reactive<QuotationFormModel>(createEmptyForm())
 
 const formRules: FormRules = {
-  quotationNo: [{ required: true, message: '请输入报价单号', trigger: 'blur' }],
+  // 报价日期、客户名称、加工零件名称 为必填
   quotationDate: [{ required: true, message: '请选择报价日期', trigger: 'change' }],
   customerName: [{ required: true, message: '请选择客户名称', trigger: 'change' }],
-  processingDate: [{ required: true, message: '请选择加工周期', trigger: 'change' }],
-  changeOrderNo: [{ required: false, message: '请输入更改通知单号', trigger: 'blur' }],
-  partName: [{ required: true, message: '请输入加工零件名称', trigger: 'blur' }],
-  moldNo: [{ required: true, message: '请输入模具编号', trigger: 'blur' }],
-  department: [{ required: true, message: '请输入申请更改部门', trigger: 'blur' }],
-  applicant: [{ required: true, message: '请输入申请更改人', trigger: 'blur' }]
+  partName: [{ required: true, message: '请输入加工零件名称', trigger: 'blur' }]
 }
 
 // 金额计算
@@ -863,14 +879,14 @@ const handleDownloadExcel = async () => {
 
   try {
     downloading.value = true
-    ElMessage.info('正在生成 PDF，请稍候...')
+    ElMessage.info('正在生成报价单 PDF，请稍候...')
 
     const resp = await downloadQuotationPdfApi(quotationForm.id)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${quotationForm.quotationNo || '报价单'}.pdf`
+    a.download = `${quotationForm.quotationNo || '报价单'}报价.pdf`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -878,6 +894,48 @@ const handleDownloadExcel = async () => {
   } catch (error) {
     console.error('下载报价单 Excel 失败:', error)
     ElMessage.error('下载报价单失败')
+  } finally {
+    downloading.value = false
+  }
+}
+
+// 下载当前报价单的 完工单 PDF 文件
+const handleDownloadCompletionPdf = async () => {
+  if (!quotationForm.id) {
+    ElMessage.warning('请先保存报价单后再下载')
+    return
+  }
+
+  const missingFields: string[] = []
+  if (!quotationForm.processingDate) missingFields.push('加工日期')
+  if (!quotationForm.partName || !quotationForm.partName.trim()) missingFields.push('加工零件名称')
+  if (!quotationForm.moldNo || !quotationForm.moldNo.trim()) missingFields.push('模具编号')
+  if (!quotationForm.department || !quotationForm.department.trim())
+    missingFields.push('申请更改部门')
+  if (!quotationForm.applicant || !quotationForm.applicant.trim()) missingFields.push('申请更改人')
+
+  if (missingFields.length > 0) {
+    ElMessage.error(`完工单下载前请先填写：${missingFields.join('、')}`)
+    return
+  }
+
+  try {
+    downloading.value = true
+    ElMessage.info('正在生成完工单 PDF，请稍候...')
+
+    const resp = await downloadQuotationCompletionPdfApi(quotationForm.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${quotationForm.quotationNo || '报价单'}完工单.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载完工单 PDF 失败:', error)
+    ElMessage.error('下载完工单失败')
   } finally {
     downloading.value = false
   }
@@ -919,6 +977,12 @@ const handleSubmit = async () => {
 
   try {
     await formRef.value.validate()
+
+    // 额外校验：加工零件名称为必填项（表格区域未使用 el-form-item）
+    if (!quotationForm.partName || !quotationForm.partName.trim()) {
+      ElMessage.error('请输入加工零件名称')
+      return
+    }
 
     const payload: QuotationFormData = {
       quotationNo: quotationForm.quotationNo?.trim() || '',
@@ -1274,8 +1338,14 @@ onMounted(() => {
   margin-bottom: 8px;
   background-color: var(--el-bg-color-overlay);
   border-radius: 4px;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+}
+
+.quotation-top-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .quotation-top-field {
@@ -1315,6 +1385,11 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.field-required {
+  margin-right: 2px;
+  color: var(--el-color-danger);
+}
+
 /* .field-input-inline 默认样式，具体宽度由子类定义 */
 
 /* 报价单号输入框宽度 */
@@ -1330,26 +1405,26 @@ onMounted(() => {
 
 /* 报价日期选择器宽度 */
 .field-input-inline.field-input-quotation-date {
-  width: 120px !important;
-  max-width: 120px !important;
-  min-width: 120px !important;
-  flex: 0 0 120px !important;
+  width: 140px !important;
+  max-width: 140px !important;
+  min-width: 140px !important;
+  flex: 0 0 140px !important;
 }
 
 .field-input-inline.field-input-quotation-date :deep(.el-input__wrapper) {
-  width: 120px !important;
-  max-width: 120px !important;
-  min-width: 120px !important;
+  width: 140px !important;
+  max-width: 140px !important;
+  min-width: 140px !important;
 }
 
 .field-input-inline.field-input-quotation-date :deep(.el-input__inner) {
-  width: 120px !important;
+  width: 140px !important;
 }
 
 .field-input-inline.field-input-quotation-date :deep(.el-input) {
-  width: 120px !important;
-  max-width: 120px !important;
-  min-width: 120px !important;
+  width: 140px !important;
+  max-width: 140px !important;
+  min-width: 140px !important;
 }
 
 /* 客户名称选择框宽度 */
@@ -1437,15 +1512,14 @@ onMounted(() => {
 
 /* 弹窗整体高度控制（PC 端） */
 :deep(.qt-edit-dialog .el-dialog) {
-  max-height: calc(100vh - 0px);
+  max-height: none;
   margin-top: 0;
 }
 
 :deep(.qt-edit-dialog .el-dialog__body) {
   position: relative;
-  max-height: calc(100vh - 40px);
   padding: 0 12px 12px;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 :deep(.qt-edit-dialog .el-dialog__header) {

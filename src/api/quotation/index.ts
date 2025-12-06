@@ -101,10 +101,18 @@ export const downloadQuotationExcelApi = (id: number) => {
   })
 }
 
-// 下载报价单对应的 PDF 文件
+// 下载报价单对应的 报价 PDF 文件
 export const downloadQuotationPdfApi = (id: number) => {
   return request.get<Blob>({
     url: `/api/quotation/${id}/export-pdf`,
+    responseType: 'blob'
+  })
+}
+
+// 下载报价单对应的 完工单 PDF 文件
+export const downloadQuotationCompletionPdfApi = (id: number) => {
+  return request.get<Blob>({
+    url: `/api/quotation/${id}/export-completion-pdf`,
     responseType: 'blob'
   })
 }

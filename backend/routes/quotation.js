@@ -28,9 +28,9 @@ router.get('/list', async (req, res) => {
       params.keyword = `%${keyword}%`
     }
 
-    // 加工周期筛选
+    // 加工日期筛选
     if (processingDate) {
-      whereConditions.push('加工周期 = @processingDate')
+      whereConditions.push('加工日期 = @processingDate')
       params.processingDate = processingDate
     }
 
@@ -57,7 +57,7 @@ router.get('/list', async (req, res) => {
         报价单号 as quotationNo,
         报价日期 as quotationDate,
         客户名称 as customerName,
-        加工周期 as processingDate,
+        加工日期 as processingDate,
         更改通知单号 as changeOrderNo,
         加工零件名称 as partName,
         模具编号 as moldNo,
@@ -253,15 +253,6 @@ router.post('/create', async (req, res) => {
       })
     }
 
-    if (!processingDate) {
-      console.log('验证失败: 加工周期为空')
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '加工周期不能为空'
-      })
-    }
-
     if (!partName) {
       console.log('验证失败: 加工零件名称为空')
       return res.status(400).json({
@@ -271,32 +262,8 @@ router.post('/create', async (req, res) => {
       })
     }
 
-    if (!moldNo) {
-      console.log('验证失败: 模具编号为空')
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '模具编号不能为空'
-      })
-    }
-
-    if (!department) {
-      console.log('验证失败: 申请更改部门为空')
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '申请更改部门不能为空'
-      })
-    }
-
-    if (!applicant) {
-      console.log('验证失败: 申请更改人为空')
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '申请更改人不能为空'
-      })
-    }
+    // 加工日期如果未提供，则默认使用报价日期，确保数据库非空
+    const effectiveProcessingDate = processingDate || quotationDate
 
     // 检查报价单号是否已存在
     const checkQuery = `
@@ -340,7 +307,7 @@ router.post('/create', async (req, res) => {
     request.input('quotationNo', sql.NVarChar(50), quotationNo)
     request.input('quotationDate', sql.Date, quotationDate)
     request.input('customerName', sql.NVarChar(200), customerName)
-    request.input('processingDate', sql.Date, processingDate)
+    request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
     request.input('partName', sql.NVarChar(200), partName)
     request.input('moldNo', sql.NVarChar(100), moldNo)
@@ -356,7 +323,7 @@ router.post('/create', async (req, res) => {
     // 插入报价单
     const insertQuery = `
       INSERT INTO 报价单 (
-        报价单号, 报价日期, 客户名称, 加工周期, 更改通知单号,
+        报价单号, 报价日期, 客户名称, 加工日期, 更改通知单号,
         加工零件名称, 模具编号, 申请更改部门, 申请更改人,
         材料明细, 加工费用明细, 其他费用, 运输费用, 加工数量, 含税价格
       ) VALUES (
@@ -454,6 +421,9 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    // 加工日期如果未提供，则默认使用报价日期，确保数据库非空
+    const effectiveProcessingDate = processingDate || quotationDate
+
     // 计算含税价格
     const materialsTotal = (materials || []).reduce(
       (sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 0),
@@ -479,7 +449,7 @@ router.put('/:id', async (req, res) => {
     request.input('quotationNo', sql.NVarChar(50), quotationNo)
     request.input('quotationDate', sql.Date, quotationDate)
     request.input('customerName', sql.NVarChar(200), customerName)
-    request.input('processingDate', sql.Date, processingDate)
+    request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
     request.input('partName', sql.NVarChar(200), partName)
     request.input('moldNo', sql.NVarChar(100), moldNo)
@@ -498,7 +468,7 @@ router.put('/:id', async (req, res) => {
         报价单号 = @quotationNo,
         报价日期 = @quotationDate,
         客户名称 = @customerName,
-        加工周期 = @processingDate,
+        加工日期 = @processingDate,
         更改通知单号 = @changeOrderNo,
         加工零件名称 = @partName,
         模具编号 = @moldNo,
@@ -545,7 +515,7 @@ router.get('/:id/export-excel', async (req, res) => {
           报价单号 as quotationNo,
           报价日期 as quotationDate,
           客户名称 as customerName,
-          加工周期 as processingDate,
+          加工日期 as processingDate,
           更改通知单号 as changeOrderNo,
           加工零件名称 as partName,
           模具编号 as moldNo,
@@ -646,7 +616,7 @@ router.get('/:id/export-excel', async (req, res) => {
     }
 
     // 一、表头字段
-    setCell('C3', parseDate(row.processingDate)) // 加工周期
+    setCell('C3', parseDate(row.processingDate)) // 加工日期
     setCell('G3', row.changeOrderNo || '') // 更改通知单号
     setCell('C4', row.partName || '') // 加工零件名称
     setCell('G4', row.moldNo || '') // 模具编号
@@ -704,7 +674,7 @@ router.get('/:id/export-excel', async (req, res) => {
   }
 })
 
-// 下载当前报价单对应的 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
+// 下载当前报价单对应的 报价 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
 router.get('/:id/export-pdf', async (req, res) => {
   try {
     const { id } = req.params
@@ -717,7 +687,7 @@ router.get('/:id/export-pdf', async (req, res) => {
           报价单号 as quotationNo,
           报价日期 as quotationDate,
           客户名称 as customerName,
-          加工周期 as processingDate,
+          加工日期 as processingDate,
           更改通知单号 as changeOrderNo,
           加工零件名称 as partName,
           模具编号 as moldNo,
@@ -818,7 +788,7 @@ router.get('/:id/export-pdf', async (req, res) => {
     }
 
     // 一、表头字段
-    setCell('C3', parseDate(row.processingDate)) // 加工周期
+    setCell('C3', parseDate(row.processingDate)) // 加工日期
     setCell('G3', row.changeOrderNo || '') // 更改通知单号
     setCell('C4', row.partName || '') // 加工零件名称
     setCell('G4', row.moldNo || '') // 模具编号
@@ -932,7 +902,7 @@ router.get('/:id/export-pdf', async (req, res) => {
     } catch {}
 
     const filenameBase = row.quotationNo || '报价单'
-    const encodedFilename = encodeURIComponent(`${filenameBase}.pdf`)
+    const encodedFilename = encodeURIComponent(`${filenameBase}报价.pdf`)
 
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
@@ -944,6 +914,274 @@ router.get('/:id/export-pdf', async (req, res) => {
       code: 500,
       success: false,
       message: '导出报价单 PDF 失败',
+      error: error.message
+    })
+  }
+})
+
+// 下载当前报价单对应的 完工单 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
+router.get('/:id/export-completion-pdf', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // 查询报价单详情
+    const rows = await query(
+      `
+        SELECT 
+          报价单ID as id,
+          报价单号 as quotationNo,
+          报价日期 as quotationDate,
+          客户名称 as customerName,
+          加工日期 as processingDate,
+          更改通知单号 as changeOrderNo,
+          加工零件名称 as partName,
+          模具编号 as moldNo,
+          申请更改部门 as department,
+          申请更改人 as applicant,
+          材料明细 as materialsJson,
+          加工费用明细 as processesJson,
+          其他费用 as otherFee,
+          运输费用 as transportFee,
+          加工数量 as quantity,
+          含税价格 as taxIncludedPrice
+        FROM 报价单
+        WHERE 报价单ID = @id
+      `,
+      { id: parseInt(id, 10) }
+    )
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        success: false,
+        message: '报价单不存在'
+      })
+    }
+
+    const row = rows[0]
+
+    // 校验完工单必填字段：加工日期、加工零件名称、模具编号、申请更改部门、申请更改人
+    const requiredFields = [
+      { key: 'processingDate', label: '加工日期' },
+      { key: 'partName', label: '加工零件名称' },
+      { key: 'moldNo', label: '模具编号' },
+      { key: 'department', label: '申请更改部门' },
+      { key: 'applicant', label: '申请更改人' }
+    ]
+
+    const missing = requiredFields.filter((field) => {
+      const value = row[field.key]
+      if (value === null || value === undefined) return true
+      if (value instanceof Date) return false
+      return String(value).trim() === ''
+    })
+
+    if (missing.length > 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: `完工单下载前请先填写：${missing.map((f) => f.label).join('、')}`
+      })
+    }
+
+    // 解析 JSON 字段
+    let materials = []
+    let processes = []
+    try {
+      materials = JSON.parse(row.materialsJson || '[]')
+    } catch (e) {
+      console.error('解析材料明细JSON失败:', e)
+      materials = []
+    }
+    try {
+      processes = JSON.parse(row.processesJson || '[]')
+    } catch (e) {
+      console.error('解析加工费用明细JSON失败:', e)
+      processes = []
+    }
+
+    // 计算金额（与创建/更新时保持一致）
+    const materialsTotal = (materials || []).reduce(
+      (sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+      0
+    )
+    const processingTotal = (processes || []).reduce(
+      (sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.hours) || 0),
+      0
+    )
+    const otherFee = Number(row.otherFee || 0)
+    const transportFee = Number(row.transportFee || 0)
+    const quantity = Number(row.quantity || 0) || 1
+
+    const taxIncludedPrice =
+      row.taxIncludedPrice !== undefined && row.taxIncludedPrice !== null
+        ? Number(row.taxIncludedPrice)
+        : materialsTotal + otherFee + transportFee + processingTotal
+
+    // 读取 Excel 模板（美菱改模完工确认单）
+    const templatePath = path.join(
+      __dirname,
+      '..',
+      'templates',
+      'quotation',
+      '美菱改模完工确认单.xlsx'
+    )
+
+    const workbook = new ExcelJS.Workbook()
+    try {
+      await workbook.xlsx.readFile(templatePath)
+    } catch (err) {
+      console.error('读取完工单模板失败:', err)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '读取完工单模板失败'
+      })
+    }
+
+    const sheet = workbook.worksheets[0]
+
+    const setCell = (addr, value) => {
+      const cell = sheet.getCell(addr)
+      if (value === null || value === undefined || value === '') {
+        cell.value = ''
+      } else if (value instanceof Date || typeof value === 'number') {
+        cell.value = value
+      } else {
+        cell.value = String(value)
+      }
+    }
+    const parseDate = (val) => {
+      if (!val) return null
+      if (val instanceof Date) return val
+      const d = new Date(val)
+      if (Number.isNaN(d.getTime())) {
+        return null
+      }
+      return d
+    }
+
+    // 一、表头字段（与报价单模板的单元格布局相同）
+    setCell('C3', parseDate(row.processingDate)) // 加工日期
+    setCell('G3', row.changeOrderNo || '') // 更改通知单号
+    setCell('C4', row.partName || '') // 加工零件名称
+    setCell('G4', row.moldNo || '') // 模具编号
+    setCell('C5', row.department || '') // 申请更改部门
+    setCell('G5', row.applicant || '') // 申请更改人
+
+    // 二、单位材料费
+    const materialRows = [8, 9]
+    materialRows.forEach((rowIndex, i) => {
+      const item = materials[i] || {}
+      const unitPrice = Number(item.unitPrice) || 0
+      const qty = Number(item.quantity) || 0
+      const fee = unitPrice * qty
+      setCell(`C${rowIndex}`, item.name || '')
+      setCell(`E${rowIndex}`, unitPrice)
+      setCell(`F${rowIndex}`, qty)
+      setCell(`G${rowIndex}`, fee)
+    })
+
+    // 三、加工费用
+    const processStartRow = 14
+    processes.forEach((item, index) => {
+      const rowIndex = processStartRow + index
+      const hours = Number(item.hours) || 0
+      const unitPrice = Number(item.unitPrice) || 0
+      const fee = unitPrice * hours
+      setCell(`F${rowIndex}`, hours)
+      setCell(`G${rowIndex}`, fee)
+    })
+
+    // 四、其他费用 + 运输费用 + 数量
+    setCell('G24', otherFee)
+    setCell('G25', transportFee)
+    setCell('C26', quantity)
+
+    // 小计 / 含税价格交给模板中的公式计算，这里不覆盖相关单元格
+
+    // 将填充后的工作簿写入临时 xlsx 文件
+    const tmpDir = os.tmpdir()
+    const safeBase = `quotation-completion-${row.id || id}-${Date.now()}`
+    const xlsxPath = path.join(tmpDir, `${safeBase}.xlsx`)
+    const pdfPath = path.join(tmpDir, `${safeBase}.pdf`)
+
+    await workbook.xlsx.writeFile(xlsxPath)
+
+    const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    try {
+      const loUserDir = path.join(tmpDir, 'libreoffice-profile')
+      try {
+        await fs.promises.mkdir(loUserDir, { recursive: true })
+      } catch {}
+
+      const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+
+      const env = {
+        ...process.env,
+        HOME: loUserDir
+      }
+
+      await execFileAsync(
+        sofficePath,
+        [
+          '--headless',
+          `-env:UserInstallation=${loUserDirUrl}`,
+          '--convert-to',
+          'pdf',
+          '--outdir',
+          tmpDir,
+          xlsxPath
+        ],
+        { env }
+      )
+    } catch (err) {
+      console.error('调用 LibreOffice 失败（完工单）:', err)
+      try {
+        await fs.promises.unlink(xlsxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '服务器未安装 LibreOffice 或转换完工单 PDF 失败'
+      })
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await fs.promises.readFile(pdfPath)
+    } catch (err) {
+      console.error('读取生成的完工单 PDF 文件失败:', err)
+      try {
+        await fs.promises.unlink(xlsxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '生成完工单 PDF 文件失败'
+      })
+    }
+
+    try {
+      await fs.promises.unlink(xlsxPath)
+    } catch {}
+    try {
+      await fs.promises.unlink(pdfPath)
+    } catch {}
+
+    const filenameBase = row.quotationNo || '报价单'
+    const encodedFilename = encodeURIComponent(`${filenameBase}完工单.pdf`)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+
+    return res.send(pdfBuffer)
+  } catch (error) {
+    console.error('导出完工单 PDF 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '导出完工单 PDF 失败',
       error: error.message
     })
   }

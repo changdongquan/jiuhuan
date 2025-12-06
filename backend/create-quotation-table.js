@@ -24,6 +24,7 @@ async function createQuotationTable() {
         await pool.request().query('DROP INDEX IF EXISTS IX_报价单_报价日期 ON 报价单')
         await pool.request().query('DROP INDEX IF EXISTS IX_报价单_客户名称 ON 报价单')
         await pool.request().query('DROP INDEX IF EXISTS IX_报价单_加工周期 ON 报价单')
+        await pool.request().query('DROP INDEX IF EXISTS IX_报价单_加工日期 ON 报价单')
       } catch (err) {
         console.log('⚠️  删除索引时出错（可能不存在）:', err.message)
       }
@@ -39,7 +40,7 @@ async function createQuotationTable() {
         报价单号 NVARCHAR(50) NOT NULL UNIQUE,
         报价日期 DATE NOT NULL,
         客户名称 NVARCHAR(200) NOT NULL,
-        加工周期 DATE NOT NULL,
+        加工日期 DATE NOT NULL,
         更改通知单号 NVARCHAR(50) NULL,
         加工零件名称 NVARCHAR(200) NOT NULL,
         模具编号 NVARCHAR(100) NOT NULL,
@@ -62,7 +63,7 @@ async function createQuotationTable() {
     const indexes = [
       'CREATE INDEX IX_报价单_报价日期 ON 报价单(报价日期)',
       'CREATE INDEX IX_报价单_客户名称 ON 报价单(客户名称)',
-      'CREATE INDEX IX_报价单_加工周期 ON 报价单(加工周期)'
+      'CREATE INDEX IX_报价单_加工日期 ON 报价单(加工日期)'
     ]
 
     for (const indexSQL of indexes) {
