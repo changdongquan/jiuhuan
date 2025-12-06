@@ -979,6 +979,12 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+@media (width <= 768px) {
+  .query-form__actions {
+    margin-top: 8px;
+  }
+}
+
 :deep(.query-form .el-form-item:not(.query-form__actions)) {
   margin-right: 18px;
   margin-bottom: 0;

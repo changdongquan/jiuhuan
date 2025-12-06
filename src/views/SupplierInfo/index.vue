@@ -685,7 +685,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 查询表单垂直居中对齐 */
+
+
+@media (width <= 768px) {
+  .query-form__actions {
+    margin-top: 8px;
+  }
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -903,4 +910,6 @@ onMounted(async () => {
   justify-content: flex-end;
   margin-top: 6px;
 }
+
+/* 查询表单垂直居中对齐 */
 </style>

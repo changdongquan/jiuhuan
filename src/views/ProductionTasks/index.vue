@@ -1059,6 +1059,12 @@ onMounted(() => {
   }
 }
 
+@media (width <= 768px) {
+  .query-form__actions {
+    margin-top: 8px;
+  }
+}
+
 .pt-page {
   position: relative;
 }

@@ -1130,6 +1130,10 @@ onMounted(() => {
   .field-input-inline {
     width: 100% !important;
   }
+
+  .query-form__actions {
+    margin-top: 8px;
+  }
 }
 
 @media (width <= 768px) {
@@ -1349,8 +1353,9 @@ onMounted(() => {
 }
 
 .quotation-top-field {
-  flex: 1;
+  position: relative;
   margin-bottom: 0;
+  flex: 1;
 }
 
 .quotation-top-field .field-label {
@@ -1379,6 +1384,7 @@ onMounted(() => {
 }
 
 .field-label-inline {
+  margin-left: 10px;
   font-size: 13px;
   font-weight: 500;
   color: #606266;
@@ -1386,6 +1392,8 @@ onMounted(() => {
 }
 
 .field-required {
+  position: absolute;
+  left: 0;
   margin-right: 2px;
   color: var(--el-color-danger);
 }
