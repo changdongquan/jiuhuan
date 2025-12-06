@@ -635,6 +635,8 @@ router.get('/:id/export-excel', async (req, res) => {
       setCell(`F${rowIndex}`, qty)
       setCell(`G${rowIndex}`, fee)
     })
+    // 单位材料费总价：I8
+    setCell('I8', materialsTotal)
     // 三、加工费用（10 行，对应数组顺序）
     const processStartRow = 14
     processes.forEach((item, index) => {
@@ -645,10 +647,14 @@ router.get('/:id/export-excel', async (req, res) => {
       setCell(`F${rowIndex}`, hours)
       setCell(`G${rowIndex}`, fee)
     })
+    // 加工费总价：I14
+    setCell('I14', processingTotal)
     // 四、其他费用 + 运输费用 + 数量 + 含税价格
     setCell('G24', otherFee)
     setCell('G25', transportFee)
     setCell('C26', quantity)
+    // 含税价格（程序计算后直接写入 H26，便于模板引用）
+    setCell('H26', taxIncludedPrice)
 
     // 导出为 Excel 文件（不保存到服务器磁盘，直接返回 Buffer）
     const buffer = await workbook.xlsx.writeBuffer()
@@ -807,6 +813,10 @@ router.get('/:id/export-pdf', async (req, res) => {
       setCell(`F${rowIndex}`, qty)
       setCell(`G${rowIndex}`, fee)
     })
+    // 单位材料费总价：I8
+    setCell('I8', materialsTotal)
+    // 单位材料费总价：I8
+    setCell('I8', materialsTotal)
 
     // 三、加工费用
     const processStartRow = 14
@@ -818,13 +828,17 @@ router.get('/:id/export-pdf', async (req, res) => {
       setCell(`F${rowIndex}`, hours)
       setCell(`G${rowIndex}`, fee)
     })
+    // 加工费总价：I14
+    setCell('I14', processingTotal)
+    // 加工费总价：I14
+    setCell('I14', processingTotal)
 
-    // 四、其他费用 + 运输费用 + 数量
+    // 四、其他费用 + 运输费用 + 数量 + 含税价格
     setCell('G24', otherFee)
     setCell('G25', transportFee)
     setCell('C26', quantity)
-
-    // 小计 / 含税价格交给模板中的公式计算，这里不覆盖相关单元格
+    // 含税价格（程序计算后直接写入 H26，便于模板引用）
+    setCell('H26', taxIncludedPrice)
 
     // 将填充后的工作簿写入临时 xlsx 文件
     const tmpDir = os.tmpdir()
@@ -1093,12 +1107,12 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       setCell(`G${rowIndex}`, fee)
     })
 
-    // 四、其他费用 + 运输费用 + 数量
+    // 四、其他费用 + 运输费用 + 数量 + 含税价格
     setCell('G24', otherFee)
     setCell('G25', transportFee)
     setCell('C26', quantity)
-
-    // 小计 / 含税价格交给模板中的公式计算，这里不覆盖相关单元格
+    // 含税价格（程序计算后直接写入 H26，便于模板引用）
+    setCell('H26', taxIncludedPrice)
 
     // 将填充后的工作簿写入临时 xlsx 文件
     const tmpDir = os.tmpdir()
