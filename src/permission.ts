@@ -182,7 +182,14 @@ router.beforeEach(async (to, from, next) => {
       next(nextData)
     }
   } else {
-    if (NO_REDIRECT_WHITE_LIST.indexOf(to.path) !== -1) {
+    // 开发模式下，每次进入都重新尝试自动登录，避免之前失败时 autoTried 被持久化导致后续不再尝试
+    if (isDev) {
+      userStore.setAutoTried(false)
+    }
+
+    const inWhiteList = NO_REDIRECT_WHITE_LIST.indexOf(to.path) !== -1
+    // 开发环境下，对 /login 也尝试自动登录，方便本地免登录
+    if (inWhiteList && !(isDev && to.path === '/login')) {
       next()
     } else {
       // 未登录时，优先尝试一次 Windows 域自动登录（仅尝试一次）
@@ -239,7 +246,12 @@ router.beforeEach(async (to, from, next) => {
           } else {
             // 自动登录失败（可能不在域环境中或未配置 SSO），静默跳转到登录页
             // 不显示错误提示，因为不在域环境中是正常情况
-            next(`/login?redirect=${to.path}`)
+            if (isDev && to.path === '/login') {
+              // 本地开发环境下，自动登录失败时直接停留在登录页
+              next()
+            } else {
+              next(`/login?redirect=${to.path}`)
+            }
             return
           }
         } catch (error: any) {
@@ -249,13 +261,21 @@ router.beforeEach(async (to, from, next) => {
           if (error?.code !== 'ERR_NETWORK' && error?.response?.status !== 401) {
             console.warn('[SSO] 自动登录失败（可能不在域环境中）:', error?.message || error)
           }
-          next(`/login?redirect=${to.path}`)
+          if (isDev && to.path === '/login') {
+            next()
+          } else {
+            next(`/login?redirect=${to.path}`)
+          }
           return
         }
       }
 
       // 已经尝试过自动登录，直接跳转到登录页
-      next(`/login?redirect=${to.path}`)
+      if (isDev && to.path === '/login') {
+        next()
+      } else {
+        next(`/login?redirect=${to.path}`)
+      }
     }
   }
 })
