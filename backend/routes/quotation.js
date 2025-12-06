@@ -1096,6 +1096,9 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       setCell(`G${rowIndex}`, fee)
     })
 
+    // 单位材料费总价：I8
+    setCell('I8', materialsTotal)
+
     // 三、加工费用
     const processStartRow = 14
     processes.forEach((item, index) => {
@@ -1106,6 +1109,9 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       setCell(`F${rowIndex}`, hours)
       setCell(`G${rowIndex}`, fee)
     })
+
+    // 加工费总价：I14
+    setCell('I14', processingTotal)
 
     // 四、其他费用 + 运输费用 + 数量 + 含税价格
     setCell('G24', otherFee)
