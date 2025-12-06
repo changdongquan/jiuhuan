@@ -364,7 +364,11 @@
               </tr>
 
               <!-- 单位材料费明细 -->
-              <tr v-for="(item, index) in quotationForm.materials" :key="`material-${index}`">
+              <tr
+                v-for="(item, index) in quotationForm.materials"
+                :key="`material-${index}`"
+                class="qs-row-material"
+              >
                 <td class="qs-input qs-manual">
                   <el-input v-model="item.name" :disabled="isViewMode" placeholder="材料名称" />
                 </td>
@@ -416,7 +420,11 @@
               </tr>
 
               <!-- 加工费用明细 -->
-              <tr v-for="(item, index) in quotationForm.processes" :key="item.key">
+              <tr
+                v-for="(item, index) in quotationForm.processes"
+                :key="item.key"
+                class="qs-row-process"
+              >
                 <td>{{ item.name }}</td>
                 <td>{{ item.unitPriceLabel }}</td>
                 <td class="qs-input qs-manual qs-number">
@@ -1372,6 +1380,13 @@ onMounted(() => {
   padding: 4px 6px;
   border: 1px solid #000;
   box-sizing: border-box;
+}
+
+/* 单位材料费 / 加工费用明细行：行高略微减小 */
+.qs-row-material td,
+.qs-row-process td {
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 .qs-title {
