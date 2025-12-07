@@ -43,56 +43,38 @@ router.get('/list', async (req, res) => {
 
     // 构建查询条件
     if (keyword) {
-      // 关键词搜索：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
-      whereConditions.push(`(
-        p.项目编号 LIKE @keyword 
-        OR p.项目名称 LIKE @keyword 
-        OR p.客户模号 LIKE @keyword
-        OR EXISTS (
-          SELECT 1 
-          FROM 货物信息 g_search 
-          WHERE g_search.项目编号 = p.项目编号 
-            AND CAST(g_search.IsNew AS INT) != 1
-            AND (g_search.产品名称 LIKE @keyword OR g_search.产品图号 LIKE @keyword)
+      // 关键词搜索：只在「货物信息」表中按项目编号进行模糊查询
+      whereConditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM 货物信息 g_code
+          WHERE g_code.项目编号 = p.项目编号
+            AND g_code.项目编号 LIKE @keyword
         )
-      )`)
+      `)
       params.keyword = `%${keyword}%`
     }
 
-    if (status && status.trim() !== '') {
-      // 显式选择了项目状态时，按所选状态精确筛选（兼容字段中可能存在的前后空格）
-      whereConditions.push(`RTRIM(LTRIM(p.项目状态)) = @status`)
-      params.status = status.trim()
-    } else {
-      // 默认情况下（未选择项目状态），不显示「已经移模」的记录
-      // 兼容数据库中「已经移模」字段值前后可能存在空格的情况
-      whereConditions.push(`RTRIM(LTRIM(ISNULL(p.项目状态, ''))) <> '已经移模'`)
-    }
-
-    // 分类条件：需要在子查询中检查货物信息，排除 IsNew = 1 的记录
+    // 分类条件：在货物信息表中按分类筛选（例如：塑胶模具）
     if (category) {
-      whereConditions.push(`EXISTS (
-        SELECT 1 
-        FROM 货物信息 g_cat 
-        WHERE g_cat.项目编号 = p.项目编号 
-          AND g_cat.分类 = @category
-          AND CAST(g_cat.IsNew AS INT) != 1
-      )`)
+      whereConditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM 货物信息 g_cat
+          WHERE g_cat.项目编号 = p.项目编号
+            AND g_cat.分类 = @category
+        )
+      `)
       params.category = category
     }
 
-    // 排除条件：不显示货物信息表中 IsNew = 1 的项目
-    // 使用 NOT EXISTS 子查询，排除在货物信息表中存在 IsNew = 1 记录的项目
-    const excludeCondition = `NOT EXISTS (
-      SELECT 1 
-      FROM 货物信息 g_exclude 
-      WHERE g_exclude.项目编号 = p.项目编号 
-        AND CAST(g_exclude.IsNew AS INT) = 1
-    )`
+    // 其余条件（项目状态等）全部取消，仅保留：
+    // - 货物信息表中的项目编号模糊查询
+    // - 可选的分类筛选（如：塑胶模具）
 
     // 构建完整的 WHERE 子句
-    const allConditions = [...whereConditions, excludeCondition]
-    const finalWhereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : ''
+    const finalWhereClause =
+      whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
 
     // 计算分页
     const pageNum = parseInt(page)
