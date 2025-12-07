@@ -71,6 +71,17 @@ export const updateQuotationApi = (id: number, data: QuotationFormData) => {
   })
 }
 
+// 删除报价单
+export const deleteQuotationApi = (id: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message: string
+  }>({
+    url: `/api/quotation/${id}`
+  })
+}
+
 // 获取报价单列表
 export const getQuotationListApi = (params?: {
   keyword?: string

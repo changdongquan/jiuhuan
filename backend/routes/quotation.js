@@ -502,6 +502,38 @@ router.put('/:id', async (req, res) => {
   }
 })
 
+// 删除报价单
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!id) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '报价单ID不能为空'
+      })
+    }
+
+    const queryString = `DELETE FROM 报价单 WHERE 报价单ID = @id`
+    await query(queryString, { id: parseInt(id, 10) })
+
+    res.json({
+      code: 0,
+      success: true,
+      message: '删除报价单成功'
+    })
+  } catch (error) {
+    console.error('删除报价单失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除报价单失败',
+      error: error.message
+    })
+  }
+})
+
 // 下载当前报价单对应的 Excel 文件（基于美菱改模报价单模板）
 router.get('/:id/export-excel', async (req, res) => {
   try {

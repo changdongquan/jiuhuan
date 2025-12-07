@@ -563,6 +563,7 @@ import {
   generateQuotationNoApi,
   createQuotationApi,
   updateQuotationApi,
+  deleteQuotationApi,
   getQuotationListApi,
   downloadQuotationPdfApi,
   downloadQuotationCompletionPdfApi,
@@ -954,12 +955,17 @@ const handleDelete = async (row: QuotationRecord) => {
     })
 
     if (value === 'Y' || value === 'y') {
-      // TODO: 调用后端删除API
-      // await deleteQuotationApi(row.id)
-      quotations.value = quotations.value.filter((item) => item.id !== row.id)
-      ElMessage.success('删除成功')
-      // 重新加载列表
-      await loadQuotations()
+      const resp = await deleteQuotationApi(row.id)
+      const pr: any = resp
+
+      if (pr?.code === 0 || pr?.success === true) {
+        ElMessage.success(pr?.message || '删除成功')
+        // 重新加载列表，确保与服务器数据一致
+        await loadQuotations()
+      } else {
+        console.error('删除报价单失败，响应数据:', pr)
+        ElMessage.error(pr?.message || '删除失败')
+      }
     }
   } catch {
     // 用户取消或输入错误
