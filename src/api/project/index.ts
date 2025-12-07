@@ -55,6 +55,9 @@ export interface ProjectInfo {
 export interface ProjectQueryParams {
   keyword?: string // 项目编号/项目名称
   status?: string // 项目状态
+  category?: string // 项目分类（例如：塑胶模具）
+  sortField?: string // 排序字段
+  sortOrder?: string // 排序方向 asc/desc
   page?: number
   pageSize?: number
 }

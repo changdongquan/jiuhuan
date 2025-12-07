@@ -204,7 +204,7 @@ router.get('/list', async (req, res) => {
   }
 })
 
-// 根据项目编号获取货物信息（产品名称和产品图号）
+// 根据项目编号获取货物信息（产品名称、产品图号、客户模号）
 // 使用 query 参数，避免项目编号包含斜杠的问题
 router.get('/goods', async (req, res) => {
   try {
@@ -219,10 +219,14 @@ router.get('/goods', async (req, res) => {
 
     const queryString = `
       SELECT TOP 1
-        产品图号 as productDrawing,
-        产品名称 as productName
-      FROM 货物信息
-      WHERE 项目编号 = @projectCode
+        g.产品图号 as productDrawing,
+        g.产品名称 as productName,
+        p.客户模号 as customerModelNo
+      FROM 货物信息 g
+      LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
+      WHERE g.项目编号 = @projectCode
+        AND (g.IsNew IS NULL OR CAST(g.IsNew AS INT) != 1)
+      ORDER BY g.货物ID
     `
 
     const result = await query(queryString, { projectCode })

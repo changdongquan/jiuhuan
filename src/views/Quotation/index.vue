@@ -282,6 +282,17 @@
               保存
             </el-button>
             <el-button
+              v-if="!isViewMode"
+              size="small"
+              type="primary"
+              plain
+              :loading="importingProject"
+              :disabled="importingProject"
+              @click="handleImportFromProject"
+            >
+              项目代入
+            </el-button>
+            <el-button
               v-if="isViewMode && quotationForm.id"
               size="small"
               type="success"
@@ -531,6 +542,63 @@
         </div>
       </el-form>
     </el-dialog>
+
+    <!-- 项目代入对话框 -->
+    <el-dialog
+      v-model="projectImportDialogVisible"
+      title="按项目代入"
+      width="720px"
+      :close-on-click-modal="false"
+    >
+      <div class="project-import-dialog">
+        <el-input
+          v-model="projectSearchKeyword"
+          placeholder="请输入项目编号关键字（仅在分类为“塑胶模具”的项目中查询）"
+          clearable
+          class="project-import-search-input"
+        />
+        <el-table
+          v-loading="projectSearchLoading"
+          :data="projectSearchResults"
+          border
+          height="360"
+          class="project-import-table"
+          @row-dblclick="handleSelectProjectForImport"
+        >
+          <el-table-column prop="项目编号" label="项目编号" min-width="145" />
+          <el-table-column
+            prop="productDrawing"
+            label="产品图号"
+            min-width="150"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="项目名称" label="项目名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="客户模号" label="客户模号" min-width="120" show-overflow-tooltip />
+          <el-table-column label="操作" width="90" align="center">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                type="primary"
+                :loading="importingProject"
+                :disabled="importingProject"
+                @click.stop="handleSelectProjectForImport(row)"
+              >
+                代入
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div
+          v-if="!projectSearchResults.length && projectSearchKeyword && !projectSearchLoading"
+          class="project-import-empty"
+        >
+          在分类为「塑胶模具」的项目中未找到匹配的项目编号
+        </div>
+        <div class="project-import-tip">
+          提示：在输入框中连续输入字符即可逐步缩小项目范围，双击行或点击“代入”按钮即可填充。
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -559,6 +627,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
 import {
   generateQuotationNoApi,
   createQuotationApi,
@@ -657,6 +726,14 @@ const dialogMode = ref<'create' | 'edit' | 'view'>('create')
 const isViewMode = computed(() => dialogMode.value === 'view')
 const formRef = ref<FormInstance>()
 const downloading = ref(false)
+const importingProject = ref(false)
+
+// 项目代入对话框 & 查询状态
+const projectImportDialogVisible = ref(false)
+const projectSearchKeyword = ref('')
+const projectSearchLoading = ref(false)
+const projectSearchResults = ref<any[]>([])
+let projectSearchDebounceTimer: any = null
 
 const createEmptyForm = (): QuotationFormModel => ({
   id: null,
@@ -942,6 +1019,104 @@ const handleDownloadCompletionPdf = async () => {
   }
 }
 
+// 查询项目列表（仅分类为「塑胶模具」，按项目编号关键字模糊查询）
+const searchProjectsForImport = async () => {
+  const keyword = projectSearchKeyword.value.trim()
+
+  if (!keyword) {
+    projectSearchResults.value = []
+    return
+  }
+
+  projectSearchLoading.value = true
+  try {
+    const listParams: any = {
+      keyword,
+      category: '塑胶模具',
+      page: 1,
+      pageSize: 20
+    }
+
+    const listResponse: any = await getProjectListApi(listParams)
+
+    let projectList: any[] = []
+    if (listResponse?.data?.data) {
+      projectList = listResponse.data.data.list || []
+    } else if (listResponse?.data?.list) {
+      projectList = listResponse.data.list || []
+    } else if (Array.isArray(listResponse?.list)) {
+      projectList = listResponse.list
+    }
+
+    projectSearchResults.value = projectList || []
+  } catch (error) {
+    console.error('按项目代入查询失败:', error)
+    ElMessage.error('按项目代入查询失败')
+    projectSearchResults.value = []
+  } finally {
+    projectSearchLoading.value = false
+  }
+}
+
+// 根据项目编号代入项目信息（产品图号 → 加工零件名称，客户模号 → 模具编号）
+const handleImportFromProject = async () => {
+  projectSearchKeyword.value = ''
+  projectSearchResults.value = []
+  projectImportDialogVisible.value = true
+}
+
+// 选中某个项目后代入到表单
+const handleSelectProjectForImport = async (row: any) => {
+  const projectCode = row?.项目编号 || row?.projectCode || ''
+  if (!projectCode) {
+    ElMessage.error('无法获取项目编号')
+    return
+  }
+
+  try {
+    importingProject.value = true
+
+    const response: any = await getProjectGoodsApi(projectCode)
+
+    let data: any = null
+    if (response?.data?.data) {
+      data = response.data.data
+    } else if (response?.data) {
+      data = response.data
+    } else {
+      data = response
+    }
+
+    if (!data) {
+      ElMessage.warning('未找到对应的项目信息，请检查项目编号')
+      return
+    }
+
+    const productDrawing: string = data.productDrawing || ''
+    const productName: string = data.productName || ''
+    const customerModelNo: string = data.customerModelNo || ''
+
+    if (!productDrawing && !productName && !customerModelNo) {
+      ElMessage.warning('该项目没有可用的“产品图号 / 产品名称 / 客户模号”信息')
+      return
+    }
+
+    const partNameValue = [productDrawing, productName].filter((v) => v && v.trim()).join(' ')
+
+    // 直接覆盖当前表单中的值
+    quotationForm.partName = partNameValue
+    quotationForm.moldNo = customerModelNo
+
+    ElMessage.success('已根据项目编号代入：加工零件名称、模具编号')
+    projectImportDialogVisible.value = false
+  } catch (error) {
+    console.error('按项目代入失败:', error)
+    ElMessage.error('按项目代入失败')
+  } finally {
+    importingProject.value = false
+  }
+}
+
 // 删除
 const handleDelete = async (row: QuotationRecord) => {
   try {
@@ -982,6 +1157,12 @@ const handleSubmit = async () => {
   if (!formRef.value) return
 
   try {
+    // 客户名称必填：给出明确提示
+    if (!quotationForm.customerName || !quotationForm.customerName.trim()) {
+      ElMessage.error('请输入客户名称')
+      return
+    }
+
     await formRef.value.validate()
 
     // 额外校验：加工零件名称为必填项（表格区域未使用 el-form-item）
@@ -1081,6 +1262,28 @@ watch(isMobile, (mobile) => {
     viewMode.value = 'table'
   }
 })
+
+// 监听项目编号关键字，输入后自动触发（防抖）查询，仅在分类为「塑胶模具」的项目中模糊搜索
+watch(
+  projectSearchKeyword,
+  (val) => {
+    if (projectSearchDebounceTimer) {
+      clearTimeout(projectSearchDebounceTimer)
+      projectSearchDebounceTimer = null
+    }
+
+    const keyword = (val || '').trim()
+    if (!keyword) {
+      projectSearchResults.value = []
+      return
+    }
+
+    projectSearchDebounceTimer = setTimeout(() => {
+      searchProjectsForImport()
+    }, 300)
+  },
+  { flush: 'post' }
+)
 
 // 页面加载时获取数据
 onMounted(() => {
@@ -1568,5 +1771,32 @@ onMounted(() => {
 :deep(.qt-edit-dialog .el-dialog__headerbtn) {
   position: static;
   margin-left: 8px;
+}
+
+/* 项目代入对话框样式 */
+.project-import-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-import-search-input {
+  max-width: 400px;
+}
+
+.project-import-table {
+  margin-top: 4px;
+}
+
+.project-import-empty {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #999;
+}
+
+.project-import-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #888;
 }
 </style>

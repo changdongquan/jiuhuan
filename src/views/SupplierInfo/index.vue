@@ -685,8 +685,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-
-
 @media (width <= 768px) {
   .query-form__actions {
     margin-top: 8px;
