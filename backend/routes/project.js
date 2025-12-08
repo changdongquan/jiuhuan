@@ -43,13 +43,24 @@ router.get('/list', async (req, res) => {
 
     // 构建查询条件
     if (keyword) {
-      // 关键词搜索：只在「货物信息」表中按项目编号进行模糊查询
+      // 关键词搜索：仍然以「货物信息」表为入口，只在存在对应货物记录的项目中查询
+      // 支持字段：
+      // - 项目编号（货物信息表 g_kw.项目编号）
+      // - 产品名称（货物信息表 g_kw.产品名称）
+      // - 产品图号（货物信息表 g_kw.产品图号）
+      // - 客户模号（项目管理表 p_kw.客户模号，经由 货物信息 关联）
       whereConditions.push(`
         EXISTS (
           SELECT 1
-          FROM 货物信息 g_code
-          WHERE g_code.项目编号 = p.项目编号
-            AND g_code.项目编号 LIKE @keyword
+          FROM 货物信息 g_kw
+          LEFT JOIN 项目管理 p_kw ON g_kw.项目编号 = p_kw.项目编号
+          WHERE g_kw.项目编号 = p.项目编号
+            AND (
+              g_kw.项目编号 LIKE @keyword
+              OR g_kw.产品名称 LIKE @keyword
+              OR g_kw.产品图号 LIKE @keyword
+              OR p_kw.客户模号 LIKE @keyword
+            )
         )
       `)
       params.keyword = `%${keyword}%`

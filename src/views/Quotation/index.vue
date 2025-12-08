@@ -553,7 +553,7 @@
       <div class="project-import-dialog">
         <el-input
           v-model="projectSearchKeyword"
-          placeholder="请输入项目编号关键字（仅在分类为“塑胶模具”的项目中查询）"
+          placeholder="请输入项目编号 / 产品名称 / 产品图号 / 客户模号 关键字（仅在分类为“塑胶模具”的项目中查询）"
           clearable
           class="project-import-search-input"
         />
@@ -572,7 +572,12 @@
             min-width="150"
             show-overflow-tooltip
           />
-          <el-table-column prop="项目名称" label="项目名称" min-width="150" show-overflow-tooltip />
+          <el-table-column
+            prop="productName"
+            label="产品名称"
+            min-width="150"
+            show-overflow-tooltip
+          />
           <el-table-column prop="客户模号" label="客户模号" min-width="120" show-overflow-tooltip />
           <el-table-column label="操作" width="90" align="center">
             <template #default="{ row }">
@@ -588,6 +593,16 @@
             </template>
           </el-table-column>
         </el-table>
+        <div v-if="projectSearchTotal > 0" class="project-import-pagination">
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :current-page="projectSearchPage"
+            :page-size="projectSearchPageSize"
+            :total="projectSearchTotal"
+            @current-change="handleProjectImportPageChange"
+          />
+        </div>
         <div
           v-if="!projectSearchResults.length && projectSearchKeyword && !projectSearchLoading"
           class="project-import-empty"
@@ -733,6 +748,9 @@ const projectImportDialogVisible = ref(false)
 const projectSearchKeyword = ref('')
 const projectSearchLoading = ref(false)
 const projectSearchResults = ref<any[]>([])
+const projectSearchPage = ref(1)
+const projectSearchPageSize = ref(20)
+const projectSearchTotal = ref(0)
 let projectSearchDebounceTimer: any = null
 
 const createEmptyForm = (): QuotationFormModel => ({
@@ -1019,12 +1037,19 @@ const handleDownloadCompletionPdf = async () => {
   }
 }
 
-// 查询项目列表（仅分类为「塑胶模具」，按项目编号关键字模糊查询）
+// 项目代入对话框分页
+const handleProjectImportPageChange = (page: number) => {
+  projectSearchPage.value = page
+  searchProjectsForImport()
+}
+
+// 查询项目列表（仅分类为「塑胶模具」，在货物信息表中按 项目编号 / 产品名称 / 产品图号 模糊查询）
 const searchProjectsForImport = async () => {
   const keyword = projectSearchKeyword.value.trim()
 
   if (!keyword) {
     projectSearchResults.value = []
+    projectSearchTotal.value = 0
     return
   }
 
@@ -1033,26 +1058,40 @@ const searchProjectsForImport = async () => {
     const listParams: any = {
       keyword,
       category: '塑胶模具',
-      page: 1,
-      pageSize: 20
+      page: projectSearchPage.value,
+      pageSize: projectSearchPageSize.value
     }
 
     const listResponse: any = await getProjectListApi(listParams)
 
     let projectList: any[] = []
+    let total = 0
+
     if (listResponse?.data?.data) {
-      projectList = listResponse.data.data.list || []
+      const payload = listResponse.data.data
+      projectList = payload.list || []
+      total = payload.total || 0
+      if (typeof payload.page === 'number') {
+        projectSearchPage.value = payload.page
+      }
+      if (typeof payload.pageSize === 'number') {
+        projectSearchPageSize.value = payload.pageSize
+      }
     } else if (listResponse?.data?.list) {
       projectList = listResponse.data.list || []
+      total = listResponse.data.total || projectList.length || 0
     } else if (Array.isArray(listResponse?.list)) {
       projectList = listResponse.list
+      total = projectList.length
     }
 
     projectSearchResults.value = projectList || []
+    projectSearchTotal.value = total
   } catch (error) {
     console.error('按项目代入查询失败:', error)
     ElMessage.error('按项目代入查询失败')
     projectSearchResults.value = []
+    projectSearchTotal.value = 0
   } finally {
     projectSearchLoading.value = false
   }
@@ -1062,6 +1101,8 @@ const searchProjectsForImport = async () => {
 const handleImportFromProject = async () => {
   projectSearchKeyword.value = ''
   projectSearchResults.value = []
+  projectSearchPage.value = 1
+  projectSearchTotal.value = 0
   projectImportDialogVisible.value = true
 }
 
@@ -1786,6 +1827,12 @@ onMounted(() => {
 
 .project-import-table {
   margin-top: 4px;
+}
+
+.project-import-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .project-import-empty {
