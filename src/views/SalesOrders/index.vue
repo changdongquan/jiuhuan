@@ -1535,7 +1535,8 @@ const timelineGroups = computed<TimelineGroup[]>(() => {
     })
     .map(([date, orders]) => ({
       date,
-      orders: orders.slice().sort((a, b) => a.orderNo.localeCompare(b.orderNo))
+      // 同一天内按订单编号倒序（大的在前）
+      orders: orders.slice().sort((a, b) => b.orderNo.localeCompare(a.orderNo))
     }))
 })
 

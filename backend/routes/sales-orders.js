@@ -349,15 +349,15 @@ router.get('/list', async (req, res) => {
 
     // 转换为数组并按订单日期排序
     const groupedList = Array.from(orderMap.values()).sort((a, b) => {
-      // 按订单日期“倒序”（最新在前），如果日期相同则按订单编号升序
+      // 按订单日期“倒序”（最新在前），如果日期相同则按订单编号倒序（大的在前）
       if (a.orderDate && b.orderDate) {
         const diff = new Date(b.orderDate) - new Date(a.orderDate)
         if (diff !== 0) return diff
-        return a.orderNo.localeCompare(b.orderNo)
+        return b.orderNo.localeCompare(a.orderNo)
       }
       if (a.orderDate) return -1
       if (b.orderDate) return 1
-      return a.orderNo.localeCompare(b.orderNo)
+      return b.orderNo.localeCompare(a.orderNo)
     })
 
     // 计算总数（按订单号分组后的数量）
