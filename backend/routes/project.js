@@ -79,9 +79,16 @@ router.get('/list', async (req, res) => {
       params.category = category
     }
 
-    // 其余条件（项目状态等）全部取消，仅保留：
-    // - 货物信息表中的项目编号模糊查询
-    // - 可选的分类筛选（如：塑胶模具）
+    // 项目状态条件：
+    // - 当显式传入 status 时：按指定状态精确筛选（可以单独查“已经移模”）
+    // - 当未传 status 且没有关键词查询时：默认排除“已经移模”项目
+    // - 当有关键词查询但未传 status 时：不过滤状态（查询结果可包含“已经移模”）
+    if (status) {
+      whereConditions.push(`p.项目状态 = @status`)
+      params.status = status
+    } else if (!keyword) {
+      whereConditions.push(`(p.项目状态 IS NULL OR p.项目状态 <> N'已经移模')`)
+    }
 
     // 构建完整的 WHERE 子句
     const finalWhereClause =

@@ -47,7 +47,15 @@ router.get('/new-products', async (req, res) => {
 // 获取货物信息列表
 router.get('/list', async (req, res) => {
   try {
-    const { keyword, customerName, category, page = 1, pageSize = 10 } = req.query
+    const {
+      keyword,
+      customerName,
+      category,
+      page = 1,
+      pageSize = 10,
+      sortField,
+      sortOrder
+    } = req.query
 
     let whereConditions = []
     let params = {}
@@ -72,6 +80,22 @@ router.get('/list', async (req, res) => {
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
+
+    // 排序字段白名单映射，防止 SQL 注入
+    const sortableFields = {
+      projectCode: 'g.项目编号',
+      productName: 'g.产品名称',
+      productDrawing: 'g.产品图号',
+      customerModelNo: 'p.客户模号',
+      customerName: 'c.客户名称'
+    }
+
+    let orderByClause = 'ORDER BY g.货物ID DESC'
+    const mappedField = sortField && sortableFields[sortField]
+    const sortDir = (sortOrder || '').toString().toLowerCase()
+    if (mappedField && (sortDir === 'asc' || sortDir === 'desc')) {
+      orderByClause = `ORDER BY ${mappedField} ${sortDir.toUpperCase()}, g.货物ID DESC`
+    }
 
     // 计算分页
     const offset = (page - 1) * pageSize
@@ -102,7 +126,7 @@ router.get('/list', async (req, res) => {
       LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
       ${whereClause}
-      ORDER BY g.货物ID DESC
+      ${orderByClause}
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
     `

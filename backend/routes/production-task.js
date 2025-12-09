@@ -69,12 +69,14 @@ router.get('/list', async (req, res) => {
       params.keyword = `%${keyword}%`
     }
 
+    // 生产状态条件：
+    // - 当显式传入 status 时：按指定状态精确筛选（可以单独查“已完成”）
+    // - 当未传 status 且没有关键词查询时：默认排除“已完成”的任务
+    // - 当有关键词查询但未传 status 时：不过滤状态（查询结果可包含“已完成”）
     if (status) {
-      // 显式选择生产状态时按所选状态筛选
       whereConditions.push(`pt.生产状态 = @status`)
       params.status = status
-    } else {
-      // 默认情况下（未选择生产状态），不显示“已完成”的记录，保留状态为空的任务
+    } else if (!keyword) {
       whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
       params.excludeStatus = '已完成'
     }

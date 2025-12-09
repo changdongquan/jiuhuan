@@ -19,6 +19,8 @@ export interface GoodsQueryParams {
   category?: string // 分类
   page?: number // 页码
   pageSize?: number // 每页大小
+  sortField?: string // 排序字段
+  sortOrder?: string // 排序方向 asc/desc
 }
 
 // 分页响应类型

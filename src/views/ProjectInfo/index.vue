@@ -108,6 +108,7 @@
           border
           v-loading="loading"
           @row-dblclick="handleRowDoubleClick"
+          @sort-change="handleSortChange"
           class="pi-table"
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
         >
@@ -117,24 +118,28 @@
             label="项目编号"
             min-width="160"
             show-overflow-tooltip
+            sortable="custom"
           />
           <el-table-column
             prop="productName"
             label="产品名称"
             min-width="200"
             show-overflow-tooltip
+            sortable="custom"
           />
           <el-table-column
             prop="productDrawing"
             label="产品图号"
             min-width="200"
             show-overflow-tooltip
+            sortable="custom"
           />
           <el-table-column
             prop="customerModelNo"
             label="客户模号"
             width="150"
             show-overflow-tooltip
+            sortable="custom"
           />
           <el-table-column prop="category" label="分类" width="120">
             <template #default="{ row }">
@@ -146,6 +151,7 @@
             label="客户名称"
             min-width="200"
             show-overflow-tooltip
+            sortable="custom"
           />
           <el-table-column prop="remarks" label="备注" min-width="150" show-overflow-tooltip />
           <el-table-column label="操作" width="220" align="center" fixed="right">
@@ -425,9 +431,13 @@ const queryForm = reactive({
   category: ''
 })
 
-// 表格数据
+// 表格数据与排序
 const tableData = ref<GoodsInfo[]>([])
 const loading = ref(false)
+const sortState = reactive<{ prop: string; order: '' | 'ascending' | 'descending' }>({
+  prop: '',
+  order: ''
+})
 
 // 客户列表数据
 const customerList = ref<CustomerInfo[]>([])
@@ -566,7 +576,9 @@ const fetchData = async () => {
       keyword: queryForm.keyword || undefined,
       category: queryForm.category || undefined,
       page: currentPage.value,
-      pageSize: pageSize.value
+      pageSize: pageSize.value,
+      sortField: sortState.prop || undefined,
+      sortOrder: sortState.order ? (sortState.order === 'ascending' ? 'asc' : 'desc') : undefined
     }
 
     const response = await getGoodsListApi(params)
@@ -583,6 +595,14 @@ const fetchData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 表格排序变更
+const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending' | null }) => {
+  sortState.prop = sort.order ? sort.prop : ''
+  sortState.order = sort.order || ''
+  currentPage.value = 1
+  fetchData()
 }
 
 // 获取客户列表（仅获取未停用的客户，按 seqNumber 排序）
