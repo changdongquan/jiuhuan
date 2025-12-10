@@ -475,28 +475,68 @@
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="加工中心工时">
-              <el-input-number v-model="dialogForm.加工中心工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.加工中心工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="电极加工工时">
-              <el-input-number v-model="dialogForm.电极加工工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.电极加工工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="线切割工时">
-              <el-input-number v-model="dialogForm.线切割工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.线切割工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="放电工时">
-              <el-input-number v-model="dialogForm.放电工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.放电工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="机加工时">
-              <el-input-number v-model="dialogForm.机加工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.机加工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="抛光工时">
-              <el-input-number v-model="dialogForm.抛光工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.抛光工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="装配工时">
-              <el-input-number v-model="dialogForm.装配工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.装配工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="试模工时">
-              <el-input-number v-model="dialogForm.试模工时" :min="0" style="width: 100%" />
+              <el-input-number
+                v-model="dialogForm.试模工时"
+                :min="0"
+                :precision="1"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -1488,21 +1528,21 @@ onMounted(() => {
 .pt-detail-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-section {
   overflow: hidden;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .detail-section-header {
-  padding: 10px 14px;
+  padding: 6px 10px;
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: #409eff;
   background-color: #f5f7fa;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -1516,8 +1556,8 @@ onMounted(() => {
 
 .detail-cell {
   display: flex;
-  min-height: 48px;
-  padding: 10px 14px;
+  min-height: 32px;
+  padding: 6px 8px;
   border-right: 1px solid #f0f2f5;
   border-bottom: 1px solid #f0f2f5;
   align-items: center;
@@ -1528,9 +1568,9 @@ onMounted(() => {
 }
 
 .detail-label {
-  flex: 0 0 110px;
-  padding-right: 12px;
-  font-size: 13px;
+  flex: 0 0 130px;
+  padding-right: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: #606266;
 }

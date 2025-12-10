@@ -1622,21 +1622,21 @@ onMounted(() => {
 .pm-detail-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-section {
   overflow: hidden;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .detail-section-header {
-  padding: 10px 14px;
+  padding: 6px 10px;
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: #409eff;
   background-color: #f5f7fa;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -1654,17 +1654,17 @@ onMounted(() => {
 
 .detail-cell {
   display: flex;
-  min-height: 48px;
-  padding: 10px 14px;
+  min-height: 32px;
+  padding: 6px 8px;
   border-right: 1px solid #f0f2f5;
   border-bottom: 1px solid #f0f2f5;
   align-items: center;
 }
 
 .detail-label {
-  flex: 0 0 110px;
-  padding-right: 12px;
-  font-size: 13px;
+  flex: 0 0 130px;
+  padding-right: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: #606266;
 }
@@ -1811,12 +1811,12 @@ onMounted(() => {
 
 /* 额外覆盖：调整项目管理主表数据行高度，使在固定表高下正好显示 20 行 */
 :deep(.pm-table .el-table__body-wrapper tbody tr) {
-  height: 24px !important;
+  height: 22px !important;
 }
 
 :deep(.pm-table .el-table__body-wrapper .el-table__cell) {
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
 }
 
 :deep(.pm-op-column .cell) {
