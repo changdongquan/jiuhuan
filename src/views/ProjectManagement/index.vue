@@ -388,351 +388,356 @@
       class="pm-edit-dialog"
       @closed="handleEditDialogClosed"
     >
-      <!-- 顶部关键信息摘要 -->
-      <div class="pm-edit-header">
-        <div class="pm-edit-header-main">
-          <span class="pm-edit-header-code">{{
-            editForm.项目编号 || currentProjectCode || '新项目'
-          }}</span>
-          <el-tag
-            v-if="editForm.项目状态"
-            :type="getStatusTagType(editForm.项目状态)"
-            size="small"
-            class="pm-edit-header-status"
-          >
-            {{ editForm.项目状态 }}
-          </el-tag>
+      <div ref="editDialogBodyRef" class="pm-edit-body" :style="editDialogBodyStyle">
+        <!-- 顶部关键信息（在最上方） -->
+        <div class="pm-edit-header">
+          <div class="pm-edit-header-main">
+            <span class="pm-edit-header-code">{{
+              editForm.项目编号 || currentProjectCode || '新项目'
+            }}</span>
+            <el-tag
+              v-if="editForm.项目状态"
+              :type="getStatusTagType(editForm.项目状态)"
+              size="small"
+              class="pm-edit-header-status"
+            >
+              {{ editForm.项目状态 }}
+            </el-tag>
+          </div>
+          <div class="pm-edit-header-sub">
+            <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
+            <span v-if="editForm.productDrawing" class="pm-edit-header-product">
+              产品图号：{{ editForm.productDrawing }}
+            </span>
+            <span v-if="editForm.客户模号" class="pm-edit-header-product">
+              客户模号：{{ editForm.客户模号 }}
+            </span>
+          </div>
         </div>
-        <div class="pm-edit-header-sub">
-          <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
-          <span v-if="editForm.productDrawing" class="pm-edit-header-product">
-            产品图号：{{ editForm.productDrawing }}
-          </span>
-          <span v-if="editForm.客户模号" class="pm-edit-header-product">
-            客户模号：{{ editForm.客户模号 }}
-          </span>
-        </div>
+
+        <!-- 表单区域：页签 + 详细信息 -->
+        <el-form
+          ref="editFormRef"
+          :model="editForm"
+          :rules="editRules"
+          :label-width="isMobile ? '100px' : '120px'"
+          class="edit-form-container"
+        >
+          <div class="pm-edit-tabs-wrapper">
+            <el-tabs v-model="editActiveTab" class="pm-edit-tabs" tab-position="top">
+              <el-tab-pane name="basic">
+                <template #label>
+                  基本信息
+                  <span v-if="basicTabCompleted" class="pm-tab-complete-dot" />
+                </template>
+                <div class="pm-edit-section">
+                  <div class="pm-edit-section-title">基本信息</div>
+                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
+                    <!-- 第1列：项目与客户 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="项目编号" prop="项目编号">
+                        <el-input
+                          v-model="editForm.项目编号"
+                          placeholder="项目编号"
+                          :disabled="!!currentProjectCode"
+                          @change="handleProjectCodeBlur"
+                        />
+                      </el-form-item>
+                      <el-form-item label="项目状态">
+                        <el-select
+                          v-model="editForm.项目状态"
+                          placeholder="请选择项目状态"
+                          clearable
+                          style="width: 100%"
+                        >
+                          <el-option
+                            v-for="item in projectStatusOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                          />
+                        </el-select>
+                      </el-form-item>
+                      <el-form-item label="项目名称" prop="项目名称">
+                        <el-input v-model="editForm.项目名称" placeholder="项目名称" />
+                      </el-form-item>
+                      <el-form-item label="设计师">
+                        <el-input v-model="editForm.设计师" placeholder="设计师" />
+                      </el-form-item>
+                      <el-form-item label="客户模号">
+                        <el-input v-model="editForm.客户模号" placeholder="客户模号" />
+                      </el-form-item>
+                      <el-form-item label="制件厂家">
+                        <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
+                      </el-form-item>
+                    </el-col>
+
+                    <!-- 第2列：关键日期 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="中标日期">
+                        <el-date-picker
+                          v-model="editForm.中标日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="中标日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="产品3D确认">
+                        <el-date-picker
+                          v-model="editForm.产品3D确认"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="产品3D确认"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="图纸下发日期">
+                        <el-date-picker
+                          v-model="editForm.图纸下发日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="图纸下发日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="计划首样日期">
+                        <el-date-picker
+                          v-model="editForm.计划首样日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="计划首样日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="首次送样日期">
+                        <el-date-picker
+                          v-model="editForm.首次送样日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="首次送样日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="封样时间">
+                        <el-date-picker
+                          v-model="editForm.封样时间"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="封样时间"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="移模日期">
+                        <el-date-picker
+                          v-model="editForm.移模日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="移模日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+
+                    <!-- 第3列：备注 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="进度影响原因">
+                        <el-input v-model="editForm.进度影响原因" placeholder="进度影响原因" />
+                      </el-form-item>
+                      <el-form-item label="备注">
+                        <el-input
+                          v-model="editForm.备注"
+                          type="textarea"
+                          :rows="8"
+                          placeholder="备注"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="part">
+                <template #label>
+                  零件信息
+                  <span v-if="partTabCompleted" class="pm-tab-complete-dot" />
+                </template>
+                <div class="pm-edit-section">
+                  <div class="pm-edit-section-title">零件信息</div>
+                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="产品名称">
+                        <el-input
+                          v-model="editForm.productName"
+                          placeholder="产品名称（自动填充）"
+                          readonly
+                        />
+                      </el-form-item>
+                      <el-form-item label="产品图号">
+                        <el-input
+                          v-model="editForm.productDrawing"
+                          placeholder="产品图号（自动填充）"
+                          readonly
+                        />
+                      </el-form-item>
+                      <el-form-item label="产品尺寸">
+                        <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
+                      </el-form-item>
+                      <el-form-item label="产品重量（克）">
+                        <el-input-number
+                          v-model="editForm.产品重量"
+                          :min="0"
+                          :precision="2"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="产品材质">
+                        <el-input v-model="editForm.产品材质" placeholder="产品材质" />
+                      </el-form-item>
+                      <el-form-item label="产品颜色">
+                        <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
+                      </el-form-item>
+                      <el-form-item label="收缩率">
+                        <el-input-number
+                          v-model="editForm.收缩率"
+                          :min="0"
+                          :precision="4"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="料柄重量">
+                        <el-input-number
+                          v-model="editForm.料柄重量"
+                          :min="0"
+                          :precision="2"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="mould">
+                <template #label>
+                  模具与设备参数
+                  <span v-if="mouldTabCompleted" class="pm-tab-complete-dot" />
+                </template>
+                <div class="pm-edit-section">
+                  <div class="pm-edit-section-title">模具与设备参数</div>
+                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
+                    <!-- 第1列：模具信息 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="模具穴数">
+                        <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
+                      </el-form-item>
+                      <el-form-item label="模具尺寸">
+                        <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
+                      </el-form-item>
+                      <el-form-item label="模具重量（吨）">
+                        <el-input-number
+                          v-model="editForm.模具重量"
+                          :min="0"
+                          :precision="2"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="前模材质">
+                        <el-input v-model="editForm.前模材质" placeholder="前模材质" />
+                      </el-form-item>
+                      <el-form-item label="后模材质">
+                        <el-input v-model="editForm.后模材质" placeholder="后模材质" />
+                      </el-form-item>
+                      <el-form-item label="滑块材质">
+                        <el-input v-model="editForm.滑块材质" placeholder="滑块材质" />
+                      </el-form-item>
+                    </el-col>
+
+                    <!-- 第2列：流道/浇口 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="流道类型">
+                        <el-input v-model="editForm.流道类型" placeholder="流道类型" />
+                      </el-form-item>
+                      <el-form-item label="流道数量">
+                        <el-input-number
+                          v-model="editForm.流道数量"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="浇口类型">
+                        <el-input v-model="editForm.浇口类型" placeholder="浇口类型" />
+                      </el-form-item>
+                      <el-form-item label="浇口数量">
+                        <el-input-number
+                          v-model="editForm.浇口数量"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+
+                    <!-- 第3列：设备参数 -->
+                    <el-col :xs="24" :sm="12" :lg="6">
+                      <el-form-item label="机台吨位（吨）">
+                        <el-input-number
+                          v-model="editForm.机台吨位"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="锁模力">
+                        <el-input-number
+                          v-model="editForm.锁模力"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="定位圈">
+                        <el-input-number
+                          v-model="editForm.定位圈"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="容模量">
+                        <el-input v-model="editForm.容模量" placeholder="容模量" />
+                      </el-form-item>
+                      <el-form-item label="拉杆间距">
+                        <el-input-number
+                          v-model="editForm.拉杆间距"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="成型周期（秒）">
+                        <el-input-number
+                          v-model="editForm.成型周期"
+                          :min="0"
+                          :controls="false"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+        </el-form>
       </div>
-
-      <el-form
-        ref="editFormRef"
-        :model="editForm"
-        :rules="editRules"
-        :label-width="isMobile ? '100px' : '120px'"
-        class="edit-form-container"
-      >
-        <el-tabs v-model="editActiveTab" class="pm-edit-tabs">
-          <el-tab-pane name="basic">
-            <template #label>
-              基本信息
-              <span v-if="basicTabCompleted" class="pm-tab-complete-dot" />
-            </template>
-            <div class="pm-edit-section">
-              <div class="pm-edit-section-title">基本信息</div>
-              <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                <!-- 第1列：项目与客户 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="项目编号" prop="项目编号">
-                    <el-input
-                      v-model="editForm.项目编号"
-                      placeholder="项目编号"
-                      :disabled="!!currentProjectCode"
-                      @change="handleProjectCodeBlur"
-                    />
-                  </el-form-item>
-                  <el-form-item label="项目状态">
-                    <el-select
-                      v-model="editForm.项目状态"
-                      placeholder="请选择项目状态"
-                      clearable
-                      style="width: 100%"
-                    >
-                      <el-option
-                        v-for="item in projectStatusOptions"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                      />
-                    </el-select>
-                  </el-form-item>
-                  <el-form-item label="项目名称" prop="项目名称">
-                    <el-input v-model="editForm.项目名称" placeholder="项目名称" />
-                  </el-form-item>
-                  <el-form-item label="设计师">
-                    <el-input v-model="editForm.设计师" placeholder="设计师" />
-                  </el-form-item>
-                  <el-form-item label="客户模号">
-                    <el-input v-model="editForm.客户模号" placeholder="客户模号" />
-                  </el-form-item>
-                  <el-form-item label="制件厂家">
-                    <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
-                  </el-form-item>
-                </el-col>
-
-                <!-- 第2列：关键日期 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="中标日期">
-                    <el-date-picker
-                      v-model="editForm.中标日期"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="中标日期"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="产品3D确认">
-                    <el-date-picker
-                      v-model="editForm.产品3D确认"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="产品3D确认"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="图纸下发日期">
-                    <el-date-picker
-                      v-model="editForm.图纸下发日期"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="图纸下发日期"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="计划首样日期">
-                    <el-date-picker
-                      v-model="editForm.计划首样日期"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="计划首样日期"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="首次送样日期">
-                    <el-date-picker
-                      v-model="editForm.首次送样日期"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="首次送样日期"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="封样时间">
-                    <el-date-picker
-                      v-model="editForm.封样时间"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="封样时间"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="移模日期">
-                    <el-date-picker
-                      v-model="editForm.移模日期"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      placeholder="移模日期"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
-
-                <!-- 第3列：备注 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="进度影响原因">
-                    <el-input v-model="editForm.进度影响原因" placeholder="进度影响原因" />
-                  </el-form-item>
-                  <el-form-item label="备注">
-                    <el-input
-                      v-model="editForm.备注"
-                      type="textarea"
-                      :rows="8"
-                      placeholder="备注"
-                    />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-            </div>
-          </el-tab-pane>
-
-          <el-tab-pane name="part">
-            <template #label>
-              零件信息
-              <span v-if="partTabCompleted" class="pm-tab-complete-dot" />
-            </template>
-            <div class="pm-edit-section">
-              <div class="pm-edit-section-title">零件信息</div>
-              <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="产品名称">
-                    <el-input
-                      v-model="editForm.productName"
-                      placeholder="产品名称（自动填充）"
-                      readonly
-                    />
-                  </el-form-item>
-                  <el-form-item label="产品图号">
-                    <el-input
-                      v-model="editForm.productDrawing"
-                      placeholder="产品图号（自动填充）"
-                      readonly
-                    />
-                  </el-form-item>
-                  <el-form-item label="产品尺寸">
-                    <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
-                  </el-form-item>
-                  <el-form-item label="产品重量（克）">
-                    <el-input-number
-                      v-model="editForm.产品重量"
-                      :min="0"
-                      :precision="2"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="产品材质">
-                    <el-input v-model="editForm.产品材质" placeholder="产品材质" />
-                  </el-form-item>
-                  <el-form-item label="产品颜色">
-                    <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
-                  </el-form-item>
-                  <el-form-item label="收缩率">
-                    <el-input-number
-                      v-model="editForm.收缩率"
-                      :min="0"
-                      :precision="4"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="料柄重量">
-                    <el-input-number
-                      v-model="editForm.料柄重量"
-                      :min="0"
-                      :precision="2"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-            </div>
-          </el-tab-pane>
-
-          <el-tab-pane name="mould">
-            <template #label>
-              模具与设备参数
-              <span v-if="mouldTabCompleted" class="pm-tab-complete-dot" />
-            </template>
-            <div class="pm-edit-section">
-              <div class="pm-edit-section-title">模具与设备参数</div>
-              <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                <!-- 第1列：模具信息 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="模具穴数">
-                    <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
-                  </el-form-item>
-                  <el-form-item label="模具尺寸">
-                    <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
-                  </el-form-item>
-                  <el-form-item label="模具重量（吨）">
-                    <el-input-number
-                      v-model="editForm.模具重量"
-                      :min="0"
-                      :precision="2"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="前模材质">
-                    <el-input v-model="editForm.前模材质" placeholder="前模材质" />
-                  </el-form-item>
-                  <el-form-item label="后模材质">
-                    <el-input v-model="editForm.后模材质" placeholder="后模材质" />
-                  </el-form-item>
-                  <el-form-item label="滑块材质">
-                    <el-input v-model="editForm.滑块材质" placeholder="滑块材质" />
-                  </el-form-item>
-                </el-col>
-
-                <!-- 第2列：流道/浇口 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="流道类型">
-                    <el-input v-model="editForm.流道类型" placeholder="流道类型" />
-                  </el-form-item>
-                  <el-form-item label="流道数量">
-                    <el-input-number
-                      v-model="editForm.流道数量"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="浇口类型">
-                    <el-input v-model="editForm.浇口类型" placeholder="浇口类型" />
-                  </el-form-item>
-                  <el-form-item label="浇口数量">
-                    <el-input-number
-                      v-model="editForm.浇口数量"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
-
-                <!-- 第3列：设备参数 -->
-                <el-col :xs="24" :sm="12" :lg="6">
-                  <el-form-item label="机台吨位（吨）">
-                    <el-input-number
-                      v-model="editForm.机台吨位"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="锁模力">
-                    <el-input-number
-                      v-model="editForm.锁模力"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="定位圈">
-                    <el-input-number
-                      v-model="editForm.定位圈"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="容模量">
-                    <el-input v-model="editForm.容模量" placeholder="容模量" />
-                  </el-form-item>
-                  <el-form-item label="拉杆间距">
-                    <el-input-number
-                      v-model="editForm.拉杆间距"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                  <el-form-item label="成型周期（秒）">
-                    <el-input-number
-                      v-model="editForm.成型周期"
-                      :min="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-      </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
@@ -744,7 +749,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty } from 'element-plus'
 import {
@@ -825,6 +830,23 @@ const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
 const currentProjectCode = ref('')
+const editDialogBodyRef = ref<HTMLElement>()
+const editDialogBaseHeight = ref<number>()
+
+const editDialogBodyStyle = computed(() =>
+  editDialogBaseHeight.value
+    ? { '--pm-edit-body-fixed-height': `${editDialogBaseHeight.value}px` }
+    : {}
+)
+
+const setEditDialogBaseHeight = () => {
+  const bodyEl = editDialogBodyRef.value
+  if (!bodyEl) return
+
+  const viewportLimit = Math.max(window.innerHeight - 80, 320)
+  const contentHeight = bodyEl.scrollHeight
+  editDialogBaseHeight.value = Math.min(contentHeight, viewportLimit)
+}
 
 const isFieldFilled = (value: unknown) => {
   if (value === null || value === undefined) return false
@@ -1314,6 +1336,10 @@ const handleProjectCodeBlur = async () => {
       editForm.productName = ''
       editForm.productDrawing = ''
     }
+
+    if (editDialogVisible.value) {
+      nextTick(() => setEditDialogBaseHeight())
+    }
   } catch (error) {
     console.error('获取货物信息失败:', error)
     editForm.productName = ''
@@ -1326,6 +1352,18 @@ const handleEditDialogClosed = () => {
   Object.keys(editForm).forEach((key) => delete (editForm as any)[key])
   currentProjectCode.value = ''
 }
+
+watch(
+  () => editDialogVisible.value,
+  (visible) => {
+    if (visible) {
+      editActiveTab.value = 'basic'
+      nextTick(() => setEditDialogBaseHeight())
+    } else {
+      editDialogBaseHeight.value = undefined
+    }
+  }
+)
 
 onMounted(() => {
   loadData()
@@ -1527,11 +1565,28 @@ onMounted(() => {
   }
 }
 
-/* PC 端固定编辑弹窗内容高度（以“基本信息”页签为基准），内部滚动 */
+/* PC 端编辑弹窗：拉高整体高度并收紧头/脚边距，主体自适应填充 */
 @media (width >= 769px) {
+  :deep(.pm-edit-dialog .el-dialog) {
+    display: flex;
+    height: 720px;
+    max-height: 720px;
+    min-height: 720px;
+    margin: auto;
+    flex-direction: column;
+  }
+
   :deep(.pm-edit-dialog .el-dialog__body) {
-    height: 520px;
-    overflow-y: auto;
+    display: flex;
+    min-height: 0;
+    padding: 14px 16px;
+    overflow: hidden;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  :deep(.pm-edit-dialog .el-dialog__footer) {
+    padding: 12px 16px 14px;
   }
 }
 
@@ -1569,6 +1624,42 @@ onMounted(() => {
 /* 特别覆盖数字输入框默认居中样式 */
 :deep(.pm-edit-dialog .el-input-number .el-input__inner) {
   text-align: left !important;
+}
+
+.pm-edit-body {
+  display: flex;
+  max-height: var(--pm-edit-body-fixed-height, none);
+  min-height: var(--pm-edit-body-fixed-height, auto);
+  overflow: hidden;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pm-edit-tabs-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.pm-edit-tabs) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:deep(.pm-edit-tabs .el-tabs__header) {
+  order: 0;
+}
+
+:deep(.pm-edit-tabs .el-tabs__content) {
+  min-height: 0;
+  padding-right: 6px;
+  overflow: auto;
+  order: 1;
+  flex: 1;
 }
 
 .pm-edit-header {
@@ -1611,7 +1702,22 @@ onMounted(() => {
 }
 
 .pm-edit-tabs {
+  display: flex;
+  height: 100%;
   margin-top: 4px;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+/* 固定 tabs 内容区域高度，确保切换页签时弹窗高度不变 */
+:deep(.pm-edit-tabs .el-tabs__content) {
+  min-height: 0;
+  overflow: hidden auto;
+  flex: 1;
+}
+
+:deep(.pm-edit-tabs .el-tab-pane) {
+  height: 100%;
 }
 
 .pm-edit-section {
@@ -1814,8 +1920,18 @@ onMounted(() => {
 }
 
 .edit-form-container {
-  max-height: 70vh;
-  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 确保 el-form 不会撑开容器 */
+:deep(.edit-form-container.el-form) {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  flex-direction: column;
 }
 
 :deep(.el-descriptions__table) {
