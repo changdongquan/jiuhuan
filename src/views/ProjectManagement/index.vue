@@ -1527,10 +1527,10 @@ onMounted(() => {
   }
 }
 
+/* PC 端固定编辑弹窗内容高度（以“基本信息”页签为基准），内部滚动 */
 @media (width >= 769px) {
   :deep(.pm-edit-dialog .el-dialog__body) {
-    max-height: 520px;
-    min-height: 520px;
+    height: 520px;
     overflow-y: auto;
   }
 }
@@ -1559,6 +1559,16 @@ onMounted(() => {
 
 .pm-page {
   position: relative;
+}
+
+/* 编辑弹窗中所有输入框内容左对齐（覆盖默认样式，仅限该弹窗） */
+:deep(.pm-edit-dialog .el-input__inner) {
+  text-align: left;
+}
+
+/* 特别覆盖数字输入框默认居中样式 */
+:deep(.pm-edit-dialog .el-input-number .el-input__inner) {
+  text-align: left !important;
 }
 
 .pm-edit-header {
