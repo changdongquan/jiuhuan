@@ -266,7 +266,23 @@ router.get('/detail', async (req, res) => {
       })
     }
 
-    const queryString = `SELECT p.*, CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期_fmt FROM 项目管理 p WHERE p.项目编号 = @projectCode`
+    const queryString = `
+      SELECT 
+        p.*,
+        CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期_fmt,
+        (SELECT TOP 1 g1.产品名称 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productName,
+        (SELECT TOP 1 g1.产品图号 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productDrawing
+      FROM 项目管理 p 
+      WHERE p.项目编号 = @projectCode
+    `
 
     const result = await query(queryString, { projectCode })
     if (result && result[0] && result[0]['图纸下发日期_fmt'] !== undefined) {
