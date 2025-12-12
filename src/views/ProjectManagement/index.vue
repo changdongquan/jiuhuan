@@ -2100,15 +2100,15 @@ onMounted(() => {
 }
 
 :deep(.el-tag.pm-status--designing) {
-  color: #722ed1 !important;
-  background-color: rgb(114 46 209 / 12%) !important;
-  border-color: rgb(114 46 209 / 45%) !important;
+  color: #67c23a !important;
+  background-color: rgb(103 194 58 / 12%) !important;
+  border-color: rgb(103 194 58 / 45%) !important;
 }
 
 :deep(.el-tag.pm-status--processing) {
-  color: #1890ff !important;
-  background-color: rgb(24 144 255 / 12%) !important;
-  border-color: rgb(24 144 255 / 45%) !important;
+  color: #e6a23c !important;
+  background-color: rgb(230 162 60 / 12%) !important;
+  border-color: rgb(230 162 60 / 45%) !important;
 }
 
 :deep(.el-tag.pm-status--surface) {
