@@ -181,7 +181,12 @@
           sortable="custom"
         >
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row.项目状态)" size="small" class="pm-status-tag">
+            <el-tag
+              :type="getStatusTagType(row.项目状态)"
+              size="small"
+              class="pm-status-tag pm-status-tag--fixed"
+              :class="getStatusTagClass(row.项目状态)"
+            >
               {{ row.项目状态 || '-' }}
             </el-tag>
           </template>
@@ -260,7 +265,12 @@
               <div class="pm-mobile-card__code">项目编号：{{ row.项目编号 || '-' }}</div>
               <div class="pm-mobile-card__name">{{ row.productName || '-' }}</div>
             </div>
-            <el-tag :type="getStatusTagType(row.项目状态)" size="small">
+            <el-tag
+              :type="getStatusTagType(row.项目状态)"
+              size="small"
+              class="pm-status-tag pm-status-tag--fixed"
+              :class="getStatusTagClass(row.项目状态)"
+            >
               {{ row.项目状态 || '未知' }}
             </el-tag>
           </div>
@@ -361,7 +371,13 @@
               <span class="detail-label">{{ item.label }}</span>
               <span class="detail-value">
                 <template v-if="item.tag">
-                  <el-tag :type="getStatusTagType(item.value)">{{ item.value || '-' }}</el-tag>
+                  <el-tag
+                    :type="getStatusTagType(item.value as string)"
+                    class="pm-status-tag"
+                    :class="getStatusTagClass(item.value as string)"
+                  >
+                    {{ item.value || '-' }}
+                  </el-tag>
                 </template>
                 <template v-else>
                   {{ item.value || '-' }}
@@ -399,7 +415,8 @@
               v-if="editForm.项目状态"
               :type="getStatusTagType(editForm.项目状态)"
               size="small"
-              class="pm-edit-header-status"
+              class="pm-edit-header-status pm-status-tag"
+              :class="getStatusTagClass(editForm.项目状态)"
             >
               {{ editForm.项目状态 }}
             </el-tag>
@@ -1004,20 +1021,37 @@ const handleCurrentChange = (page: number) => {
 const getStatusTagType = (status?: string) => {
   if (!status) return 'info'
 
-  // 为不同的项目状态分配不同的颜色
-  const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
-    T0: 'danger', // 红色 - T0阶段（试模）
+  const statusTypeMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
+    T0: 'danger',
     T1: 'warning',
     T2: 'warning',
-    设计中: 'warning', // 橙色 - 设计阶段
-    加工中: 'primary', // 蓝色 - 加工阶段
-    表面处理: 'info', // 灰色 - 表面处理阶段
+    设计中: 'warning',
+    加工中: 'primary',
+    表面处理: 'info',
     封样: 'primary',
     待移模: 'primary',
-    已经移模: 'success' // 绿色 - 已完成
+    已经移模: 'success'
   }
 
-  return statusMap[status] || 'info'
+  return statusTypeMap[status] || 'info'
+}
+
+// 给每个项目状态分配唯一颜色（通过 class 覆盖 el-tag 默认配色）
+const statusClassMap: Record<string, string> = {
+  T0: 'pm-status--t0',
+  T1: 'pm-status--t1',
+  T2: 'pm-status--t2',
+  设计中: 'pm-status--designing',
+  加工中: 'pm-status--processing',
+  表面处理: 'pm-status--surface',
+  封样: 'pm-status--sample',
+  待移模: 'pm-status--pending-move',
+  已经移模: 'pm-status--moved'
+}
+
+const getStatusTagClass = (status?: string) => {
+  if (!status) return ''
+  return statusClassMap[status] || ''
 }
 
 // 格式化日期，只显示年月日
@@ -2044,6 +2078,71 @@ onMounted(() => {
   letter-spacing: 0.5px;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+/* 项目状态颜色覆盖（每个状态独立配色） */
+:deep(.el-tag.pm-status--t0) {
+  color: #f5222d !important;
+  background-color: rgb(245 34 45 / 12%) !important;
+  border-color: rgb(245 34 45 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--t1) {
+  color: #fa541c !important;
+  background-color: rgb(250 84 28 / 12%) !important;
+  border-color: rgb(250 84 28 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--t2) {
+  color: #faad14 !important;
+  background-color: rgb(250 173 20 / 12%) !important;
+  border-color: rgb(250 173 20 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--designing) {
+  color: #722ed1 !important;
+  background-color: rgb(114 46 209 / 12%) !important;
+  border-color: rgb(114 46 209 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--processing) {
+  color: #1890ff !important;
+  background-color: rgb(24 144 255 / 12%) !important;
+  border-color: rgb(24 144 255 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--surface) {
+  color: #13c2c2 !important;
+  background-color: rgb(19 194 194 / 12%) !important;
+  border-color: rgb(19 194 194 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--sample) {
+  color: #2f54eb !important;
+  background-color: rgb(47 84 235 / 12%) !important;
+  border-color: rgb(47 84 235 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--pending-move) {
+  color: #eb2f96 !important;
+  background-color: rgb(235 47 150 / 12%) !important;
+  border-color: rgb(235 47 150 / 45%) !important;
+}
+
+:deep(.el-tag.pm-status--moved) {
+  color: #52c41a !important;
+  background-color: rgb(82 196 26 / 12%) !important;
+  border-color: rgb(82 196 26 / 45%) !important;
+}
+
+/* 列表里的项目状态统一宽度 */
+:deep(.el-tag.pm-status-tag--fixed) {
+  display: inline-flex;
+  width: 80px;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+  justify-content: center;
 }
 
 /* 统计卡片样式 */
