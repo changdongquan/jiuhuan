@@ -369,178 +369,224 @@
       </div>
 
       <!-- 编辑模式：表单展示 -->
-      <el-form
-        v-else
-        ref="dialogFormRef"
-        :model="dialogForm"
-        :rules="dialogRules"
-        label-width="120px"
-        class="production-task-form"
-      >
-        <el-row :gutter="isMobile ? 8 : 20">
-          <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="项目编号" prop="项目编号">
-              <el-input v-model="dialogForm.项目编号" placeholder="项目编号" disabled />
-            </el-form-item>
-            <el-form-item label="产品名称">
-              <el-input v-model="dialogForm.productName" placeholder="产品名称" disabled />
-            </el-form-item>
-            <el-form-item label="产品图号">
-              <el-input v-model="dialogForm.productDrawing" placeholder="产品图号" disabled />
-            </el-form-item>
-            <el-form-item label="客户模号">
-              <el-input v-model="dialogForm.客户模号" placeholder="客户模号" disabled />
-            </el-form-item>
-            <el-form-item label="产品材质">
-              <el-input v-model="dialogForm.产品材质" placeholder="产品材质" disabled />
-            </el-form-item>
-            <el-form-item label="图纸下发日期">
-              <el-input
-                :model-value="formatDate(dialogForm.图纸下发日期 as any)"
-                placeholder="图纸下发日期"
-                disabled
-              />
-            </el-form-item>
-            <el-form-item label="计划首样日期">
-              <el-input
-                :model-value="formatDate(dialogForm.计划首样日期 as any)"
-                placeholder="计划首样日期"
-                disabled
-              />
-            </el-form-item>
+      <div v-else class="pt-edit-body">
+        <div class="pt-edit-header">
+          <div class="pt-edit-header-main">
+            <span class="pt-edit-header-code">{{ dialogForm.项目编号 || '-' }}</span>
+            <el-tag
+              v-if="dialogForm.生产状态"
+              :type="getStatusTagType(dialogForm.生产状态)"
+              size="small"
+              class="pt-edit-header-status"
+            >
+              {{ dialogForm.生产状态 }}
+            </el-tag>
+          </div>
+          <div class="pt-edit-header-meta">
+            <div class="pt-meta-item">
+              <span class="label">产品名称</span>
+              <span class="value">{{ dialogForm.productName || '-' }}</span>
+            </div>
+            <div class="pt-meta-item">
+              <span class="label">产品图号</span>
+              <span class="value">{{ dialogForm.productDrawing || '-' }}</span>
+            </div>
+            <div class="pt-meta-item">
+              <span class="label">客户模号</span>
+              <span class="value">{{ dialogForm.客户模号 || '-' }}</span>
+            </div>
+            <div class="pt-meta-item">
+              <span class="label">产品材质</span>
+              <span class="value">{{ dialogForm.产品材质 || '-' }}</span>
+            </div>
+            <div class="pt-meta-item">
+              <span class="label">图纸下发日期</span>
+              <span class="value">{{ formatDate(dialogForm.图纸下发日期 as any) }}</span>
+            </div>
+            <div class="pt-meta-item">
+              <span class="label">计划首样日期</span>
+              <span class="value">{{ formatDate(dialogForm.计划首样日期 as any) }}</span>
+            </div>
+          </div>
+        </div>
 
-            <el-form-item label="开始日期" prop="开始日期">
-              <el-date-picker
-                v-model="dialogForm.开始日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="开始日期"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="结束日期" prop="结束日期">
-              <el-date-picker
-                v-model="dialogForm.结束日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="结束日期"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="下达日期">
-              <el-date-picker
-                v-model="dialogForm.下达日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="下达日期"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="生产状态" prop="生产状态">
-              <el-select
-                v-model="dialogForm.生产状态"
-                placeholder="请选择生产状态"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="item in statusOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="负责人">
-              <el-select v-model="dialogForm.负责人" placeholder="请选择负责人" style="width: 100%">
-                <el-option label="张晓龙" value="张晓龙" />
-                <el-option label="丁忠寻" value="丁忠寻" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="订单数量">
-              <el-input-number
-                v-model="dialogForm.订单数量"
-                :min="0"
-                style="width: 100%"
-                disabled
-              />
-            </el-form-item>
-            <el-form-item label="投产数量" prop="投产数量">
-              <el-input-number v-model="dialogForm.投产数量" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="已完成数量" prop="已完成数量">
-              <el-input-number v-model="dialogForm.已完成数量" :min="0" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="加工中心工时">
-              <el-input-number
-                v-model="dialogForm.加工中心工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="电极加工工时">
-              <el-input-number
-                v-model="dialogForm.电极加工工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="线切割工时">
-              <el-input-number
-                v-model="dialogForm.线切割工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="放电工时">
-              <el-input-number
-                v-model="dialogForm.放电工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="机加工时">
-              <el-input-number
-                v-model="dialogForm.机加工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="抛光工时">
-              <el-input-number
-                v-model="dialogForm.抛光工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="装配工时">
-              <el-input-number
-                v-model="dialogForm.装配工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-            <el-form-item label="试模工时">
-              <el-input-number
-                v-model="dialogForm.试模工时"
-                :min="0"
-                :precision="1"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
+        <el-form
+          ref="dialogFormRef"
+          :model="dialogForm"
+          :rules="dialogRules"
+          label-width="120px"
+          class="production-task-form"
+        >
+          <div class="pt-edit-tabs-wrapper">
+            <el-tabs v-model="dialogActiveTab" class="pt-edit-tabs" tab-position="top">
+              <el-tab-pane label="投产信息" name="production">
+                <div class="pt-edit-section">
+                  <div class="pt-edit-section-title">投产信息</div>
+                  <el-row :gutter="isMobile ? 8 : 20">
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="开始日期" prop="开始日期">
+                        <el-date-picker
+                          v-model="dialogForm.开始日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="开始日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="结束日期" prop="结束日期">
+                        <el-date-picker
+                          v-model="dialogForm.结束日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="结束日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="下达日期">
+                        <el-date-picker
+                          v-model="dialogForm.下达日期"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          placeholder="下达日期"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="生产状态" prop="生产状态">
+                        <el-select
+                          v-model="dialogForm.生产状态"
+                          placeholder="请选择生产状态"
+                          style="width: 100%"
+                        >
+                          <el-option
+                            v-for="item in statusOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                          />
+                        </el-select>
+                      </el-form-item>
+                      <el-form-item label="负责人">
+                        <el-select
+                          v-model="dialogForm.负责人"
+                          placeholder="请选择负责人"
+                          style="width: 100%"
+                        >
+                          <el-option label="张晓龙" value="张晓龙" />
+                          <el-option label="丁忠寻" value="丁忠寻" />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="订单数量">
+                        <el-input-number
+                          v-model="dialogForm.订单数量"
+                          :min="0"
+                          style="width: 100%"
+                          disabled
+                        />
+                      </el-form-item>
+                      <el-form-item label="投产数量" prop="投产数量">
+                        <el-input-number
+                          v-model="dialogForm.投产数量"
+                          :min="0"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="已完成数量" prop="已完成数量">
+                        <el-input-number
+                          v-model="dialogForm.已完成数量"
+                          :min="0"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="工时记录" name="hours">
+                <div class="pt-edit-section">
+                  <div class="pt-edit-section-title">工时记录</div>
+                  <el-row :gutter="isMobile ? 8 : 20">
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="加工中心工时">
+                        <el-input-number
+                          v-model="dialogForm.加工中心工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="电极加工工时">
+                        <el-input-number
+                          v-model="dialogForm.电极加工工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="线切割工时">
+                        <el-input-number
+                          v-model="dialogForm.线切割工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="放电工时">
+                        <el-input-number
+                          v-model="dialogForm.放电工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="机加工时">
+                        <el-input-number
+                          v-model="dialogForm.机加工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="抛光工时">
+                        <el-input-number
+                          v-model="dialogForm.抛光工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="装配工时">
+                        <el-input-number
+                          v-model="dialogForm.装配工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                      <el-form-item label="试模工时">
+                        <el-input-number
+                          v-model="dialogForm.试模工时"
+                          :min="0"
+                          :precision="1"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+        </el-form>
+      </div>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
         <el-button v-if="isViewMode" type="primary" @click="handleEditFromView">编辑</el-button>
@@ -624,6 +670,7 @@ const dialogFormRef = ref<FormInstance>()
 const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
 const currentProjectCode = ref('')
 const isViewMode = ref(false)
+const dialogActiveTab = ref<'production' | 'hours'>('production')
 
 watch(isMobile, (mobile) => {
   viewMode.value = mobile ? 'card' : 'table'
@@ -898,6 +945,7 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
   try {
     dialogTitle.value = '编辑生产任务'
     isViewMode.value = false
+    dialogActiveTab.value = 'production'
     currentProjectCode.value = row.项目编号 || ''
 
     // 获取详细信息
@@ -917,12 +965,14 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
 const handleEditFromView = () => {
   isViewMode.value = false
   dialogTitle.value = '编辑生产任务'
+  dialogActiveTab.value = 'production'
 }
 
 const handleView = async (row: Partial<ProductionTaskInfo>) => {
   try {
     dialogTitle.value = '查看生产任务'
     isViewMode.value = true
+    dialogActiveTab.value = 'production'
     currentProjectCode.value = row.项目编号 || ''
 
     // 获取详细信息
@@ -971,6 +1021,7 @@ const submitDialogForm = async () => {
 
 const handleDialogClosed = () => {
   isViewMode.value = false
+  dialogActiveTab.value = 'production'
   Object.keys(dialogForm).forEach((key) => {
     delete dialogForm[key as keyof ProductionTaskInfo]
   })
@@ -1161,6 +1212,110 @@ onMounted(() => {
 
 .production-task-form :deep(.el-form-item) {
   margin-bottom: 18px;
+}
+
+.pt-edit-body {
+  display: flex;
+  max-height: 70vh;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-edit-header {
+  display: flex;
+  padding: 12px 14px;
+  background: #f5f7fa;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-edit-header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pt-edit-header-code {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.pt-edit-header-status {
+  margin-left: 4px;
+}
+
+.pt-edit-header-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 12px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.pt-meta-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pt-meta-item .label {
+  color: #909399;
+  flex: 0 0 auto;
+}
+
+.pt-meta-item .value {
+  min-width: 0;
+  color: #303133;
+  word-break: break-all;
+}
+
+.pt-edit-tabs-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.pt-edit-tabs) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:deep(.pt-edit-tabs .el-tabs__header) {
+  order: 0;
+}
+
+:deep(.pt-edit-tabs .el-tabs__content) {
+  min-height: 0;
+  padding-right: 6px;
+  overflow: auto;
+  order: 1;
+  flex: 1;
+}
+
+.pt-edit-section {
+  padding: 12px 14px 6px;
+  margin-top: 8px;
+  background-color: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.pt-edit-section-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
 }
 
 /* 查看表格样式 - 紧凑布局 */
