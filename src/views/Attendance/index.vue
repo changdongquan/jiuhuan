@@ -38,7 +38,8 @@
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleCreate">新增月份</el-button>
+          <el-button type="success" @click="handleCreate">新增</el-button>
+          <el-button type="info" plain @click="downloadTemplate">下载模板</el-button>
         </div>
       </el-form-item>
     </el-form>
@@ -56,15 +57,22 @@
       >
         <el-table-column prop="month" label="月份" width="110" />
         <el-table-column prop="employeeCount" label="人数" width="80" align="center" />
-        <el-table-column label="出勤率" width="110" align="center">
+        <el-table-column label="加班小计" width="110" align="right">
           <template #default="{ row }">
-            {{ formatPercent(row.attendanceRate) }}
+            {{ formatAmount(row.overtimeSubtotalTotal) }}
           </template>
         </el-table-column>
-        <el-table-column prop="leaveDays" label="请假(天)" width="100" align="center" />
-        <el-table-column prop="overtimeHours" label="加班(小时)" width="110" align="center" />
-        <el-table-column prop="lateOrEarlyCount" label="迟到/早退(次)" width="130" align="center" />
-        <el-table-column prop="absenceDays" label="缺勤(天)" width="100" align="center" />
+        <el-table-column label="补助小计" width="110" align="right">
+          <template #default="{ row }">
+            {{ formatAmount(row.subsidySubtotalTotal) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="扣款小计" width="110" align="right">
+          <template #default="{ row }">
+            {{ formatAmount(row.deductionSubtotalTotal) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="lateCountTotal" label="迟到(次)" width="95" align="center" />
         <el-table-column prop="updatedAt" label="更新时间" min-width="140">
           <template #default="{ row }">
             {{ formatDate(row.updatedAt) }}
@@ -114,7 +122,6 @@
               placeholder="选择月份"
               :disabled="dialogLoading || isViewMode"
               style="width: 150px"
-              @change="handleMonthChange"
             />
             <el-button
               v-if="!isViewMode"
@@ -131,7 +138,7 @@
       <div class="att-dialog-body" v-loading="dialogLoading">
         <div class="att-dialog-tip">
           数据来源：在职员工（不含常冬泉），字段：姓名、性别、工号、部门、职级、入职时间。
-          单元格可选择出勤/请假/加班/休息等状态，按天录入。
+          考勤内容录入对齐模板（F-S列）：加班/补助/扣款等汇总项。
         </div>
         <el-table
           v-if="attendanceRows.length"
@@ -141,71 +148,184 @@
           class="att-edit-grid"
           :row-class-name="() => 'att-row'"
         >
+          <el-table-column type="index" label="序号" width="70" fixed="left" align="center" />
+          <el-table-column prop="employeeNumber" label="员工工号" width="110" fixed="left" />
           <el-table-column prop="employeeName" label="姓名" width="120" fixed="left" />
-          <el-table-column prop="gender" label="性别" width="80" fixed="left" />
-          <el-table-column prop="employeeNumber" label="工号" width="90" fixed="left" />
-          <el-table-column prop="department" label="部门" width="120" fixed="left" />
+          <el-table-column prop="department" label="所属部门" width="120" fixed="left" />
           <el-table-column prop="level" label="职级" width="90" fixed="left" />
+          <el-table-column prop="gender" label="性别" width="80" fixed="left" />
           <el-table-column prop="entryDate" label="入职时间" width="120" fixed="left">
             <template #default="{ row }">
               {{ formatDate(row.entryDate) }}
             </template>
           </el-table-column>
 
-          <el-table-column
-            v-for="day in dayColumns"
-            :key="day"
-            :label="day.toString()"
-            width="88"
-            align="center"
-          >
+          <el-table-column label="加班时" width="110" align="center">
             <template #default="{ row }">
-              <el-select
-                v-model="row.days[day]"
-                class="att-day-select"
-                placeholder="-"
-                size="small"
+              <el-input-number
+                v-model="row.overtimeHours"
+                :min="0"
+                :precision="1"
+                :controls="false"
+                class="att-number"
                 :disabled="isViewMode"
-                @change="handleCellChange(row)"
-              >
-                <el-option
-                  v-for="opt in statusOptions"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
+              />
             </template>
           </el-table-column>
-
-          <el-table-column label="出勤天数" width="90" align="center">
+          <el-table-column label="夜班45/次" width="110" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).present }}
+              <el-input-number
+                v-model="row.nightShiftCount"
+                :min="0"
+                :precision="0"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="请假天数" width="90" align="center">
+          <el-table-column label="加班小计" width="120" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).leave }}
+              <el-input-number
+                v-model="row.overtimeSubtotal"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="加班(次)" width="90" align="center">
+          <el-table-column label="工龄数" width="90" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).overtime }}
+              <el-input-number
+                v-model="row.seniorityYears"
+                :min="0"
+                :precision="0"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="迟到" width="70" align="center">
+          <el-table-column label="全勤费" width="90" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).late }}
+              <el-input-number
+                v-model="row.fullAttendanceBonus"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="早退" width="70" align="center">
+          <el-table-column label="误餐15/次" width="110" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).early }}
+              <el-input-number
+                v-model="row.mealAllowanceCount"
+                :min="0"
+                :precision="0"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="旷工" width="70" align="center">
+          <el-table-column label="补助小计" width="120" align="center">
             <template #default="{ row }">
-              {{ getRowSummary(row).absence }}
+              <el-input-number
+                v-model="row.subsidySubtotal"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="迟到次" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.lateCount"
+                :min="0"
+                :precision="0"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="新进及事假时" width="130" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.newOrPersonalLeaveHours"
+                :min="0"
+                :precision="1"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="病假时" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.sickLeaveHours"
+                :min="0"
+                :precision="1"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="旷工时" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.absenceHours"
+                :min="0"
+                :precision="1"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="卫生费" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.hygieneFee"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="水电费" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.utilitiesFee"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="扣款小计" width="120" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.deductionSubtotal"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                class="att-number"
+                :disabled="isViewMode"
+              />
             </template>
           </el-table-column>
         </el-table>
@@ -238,7 +358,6 @@ import {
   getAttendanceListApi,
   getAttendanceDetailApi,
   saveAttendanceApi,
-  type AttendanceCellStatus,
   type AttendanceRecord,
   type AttendanceSummary
 } from '@/api/attendance'
@@ -250,6 +369,7 @@ const isMobile = computed(() => appStore.getMobile)
 const showMobileFilters = ref(false)
 
 const queryForm = reactive({ month: '', keyword: '' })
+const queryFormRef = ref()
 
 const pagination = reactive({ page: 1, size: 10, total: 0 })
 
@@ -267,26 +387,12 @@ const attendanceRows = ref<AttendanceRecord[]>([])
 const remark = ref('')
 const syncingEmployees = ref(false)
 
-const statusOptions = [
-  { label: '出勤', value: '出勤' },
-  { label: '休息', value: '休息' },
-  { label: '请假', value: '请假' },
-  { label: '加班', value: '加班' },
-  { label: '出差', value: '出差' },
-  { label: '迟到', value: '迟到' },
-  { label: '早退', value: '早退' },
-  { label: '旷工', value: '旷工' }
-] as { label: string; value: AttendanceCellStatus }[]
-
 const paginationLayout = computed(() =>
   isMobile.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
 )
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
 
-const dayColumns = computed(() => {
-  const days = getDaysInMonth(editMonth.value || queryForm.month || formatMonth(new Date()))
-  return Array.from({ length: days }, (_, i) => i + 1)
-})
+const templateUrl = '/attendance-template.xlsx'
 
 const handleSearch = () => {
   pagination.page = 1
@@ -383,7 +489,6 @@ const loadDetail = async (id: number) => {
     const detail = response?.data || response || {}
     remark.value = detail.remark || ''
     const records: AttendanceRecord[] = normalizeRecords(detail.records || [])
-    ensureDays(records)
     attendanceRows.value = records
   } catch (error) {
     console.error('获取考勤详情失败:', error)
@@ -398,8 +503,7 @@ const initRows = async () => {
   dialogLoading.value = true
   try {
     const employees = await loadActiveEmployees()
-    const days = getDaysInMonth(editMonth.value || formatMonth(new Date()))
-    attendanceRows.value = employees.map((emp) => buildRecordFromEmployee(emp, days))
+    attendanceRows.value = employees.map((emp) => buildRecordFromEmployee(emp))
   } catch (error) {
     console.error('初始化考勤行失败:', error)
     attendanceRows.value = []
@@ -428,11 +532,7 @@ const loadActiveEmployees = async () => {
   }
 }
 
-const buildRecordFromEmployee = (emp: EmployeeInfo, days: number): AttendanceRecord => {
-  const dayMap: Record<number, AttendanceCellStatus> = {}
-  for (let i = 1; i <= days; i += 1) {
-    dayMap[i] = ''
-  }
+const buildRecordFromEmployee = (emp: EmployeeInfo): AttendanceRecord => {
   return {
     employeeId: emp.id,
     employeeName: emp.employeeName,
@@ -441,95 +541,53 @@ const buildRecordFromEmployee = (emp: EmployeeInfo, days: number): AttendanceRec
     department: emp.department,
     level: emp.level,
     entryDate: emp.entryDate,
-    days: dayMap
+    overtimeHours: 0,
+    nightShiftCount: 0,
+    overtimeSubtotal: 0,
+    seniorityYears: 0,
+    fullAttendanceBonus: 0,
+    mealAllowanceCount: 0,
+    subsidySubtotal: 0,
+    lateCount: 0,
+    newOrPersonalLeaveHours: 0,
+    sickLeaveHours: 0,
+    absenceHours: 0,
+    hygieneFee: 0,
+    utilitiesFee: 0,
+    deductionSubtotal: 0
   }
 }
 
 const normalizeRecords = (records: AttendanceRecord[]) => {
   return records.map((rec) => ({
-    ...rec,
-    days: rec.days || {}
+    employeeId: rec.employeeId,
+    employeeName: rec.employeeName,
+    gender: rec.gender,
+    employeeNumber: rec.employeeNumber,
+    department: rec.department,
+    level: rec.level,
+    entryDate: rec.entryDate,
+    overtimeHours: Number(rec.overtimeHours || 0),
+    nightShiftCount: Number(rec.nightShiftCount || 0),
+    overtimeSubtotal: Number(rec.overtimeSubtotal || 0),
+    seniorityYears: Number(rec.seniorityYears || 0),
+    fullAttendanceBonus: Number(rec.fullAttendanceBonus || 0),
+    mealAllowanceCount: Number(rec.mealAllowanceCount || 0),
+    subsidySubtotal: Number(rec.subsidySubtotal || 0),
+    lateCount: Number(rec.lateCount || 0),
+    newOrPersonalLeaveHours: Number(rec.newOrPersonalLeaveHours || 0),
+    sickLeaveHours: Number(rec.sickLeaveHours || 0),
+    absenceHours: Number(rec.absenceHours || 0),
+    hygieneFee: Number(rec.hygieneFee || 0),
+    utilitiesFee: Number(rec.utilitiesFee || 0),
+    deductionSubtotal: Number(rec.deductionSubtotal || 0)
   }))
-}
-
-const ensureDays = (records: AttendanceRecord[]) => {
-  const days = getDaysInMonth(editMonth.value || formatMonth(new Date()))
-  records.forEach((rec) => {
-    if (!rec.days) rec.days = {}
-    for (let i = 1; i <= days; i += 1) {
-      if (!rec.days[i]) rec.days[i] = ''
-    }
-  })
-}
-
-const handleMonthChange = () => {
-  if (!attendanceRows.value.length) return
-  ensureDays(attendanceRows.value)
-}
-
-const handleCellChange = (row: AttendanceRecord) => {
-  // 触发视图刷新；目前仅用于重算汇总
-  row.employeeId = row.employeeId
-}
-
-const getRowSummary = (row: AttendanceRecord) => {
-  const days = getDaysInMonth(editMonth.value || formatMonth(new Date()))
-  let present = 0
-  let leave = 0
-  let overtime = 0
-  let absence = 0
-  let late = 0
-  let early = 0
-  for (let i = 1; i <= days; i += 1) {
-    const v = row.days?.[i] || ''
-    switch (v) {
-      case '出勤':
-        present += 1
-        break
-      case '休息':
-        break
-      case '请假':
-        leave += 1
-        break
-      case '加班':
-        present += 1
-        overtime += 1
-        break
-      case '出差':
-        present += 1
-        break
-      case '迟到':
-        late += 1
-        present += 1
-        break
-      case '早退':
-        early += 1
-        present += 1
-        break
-      case '旷工':
-        absence += 1
-        break
-      default:
-        break
-    }
-  }
-  return { present, leave, overtime, absence, late, early }
 }
 
 const formatMonth = (date: Date) => {
   const y = date.getFullYear()
   const m = `${date.getMonth() + 1}`.padStart(2, '0')
   return `${y}-${m}`
-}
-
-const getDaysInMonth = (monthStr: string) => {
-  if (!monthStr) {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  }
-  const [y, m] = monthStr.split('-').map((v) => Number(v))
-  if (!y || !m) return 30
-  return new Date(y, m, 0).getDate()
 }
 
 const formatDate = (val?: string) => {
@@ -539,9 +597,9 @@ const formatDate = (val?: string) => {
   return val
 }
 
-const formatPercent = (val?: number) => {
+const formatAmount = (val?: number) => {
   if (val === undefined || val === null || Number.isNaN(val)) return '-'
-  return `${(val * 100).toFixed(1)}%`
+  return Number(val).toFixed(2)
 }
 
 const submit = async () => {
@@ -570,9 +628,12 @@ const submit = async () => {
 }
 
 const syncEmployees = async () => {
-  const days = getDaysInMonth(editMonth.value || formatMonth(new Date()))
   const employees = await loadActiveEmployees()
-  attendanceRows.value = employees.map((emp) => buildRecordFromEmployee(emp, days))
+  attendanceRows.value = employees.map((emp) => buildRecordFromEmployee(emp))
+}
+
+const downloadTemplate = () => {
+  window.open(templateUrl, '_blank')
 }
 
 onMounted(() => {
@@ -702,7 +763,11 @@ onMounted(() => {
   display: none;
 }
 
-:deep(.att-day-select .el-input__wrapper) {
+:deep(.att-number.el-input-number) {
+  width: 92px;
+}
+
+:deep(.att-number .el-input__wrapper) {
   padding: 0 8px;
 }
 

@@ -1,17 +1,6 @@
 import { request } from '@/axios'
 
-// 考勤单元格状态
-export type AttendanceCellStatus =
-  | '出勤'
-  | '休息'
-  | '请假'
-  | '加班'
-  | '出差'
-  | '迟到'
-  | '早退'
-  | '旷工'
-  | ''
-
+// 对齐 /Users/changun/Desktop/考勤表.xlsx 模板的 F-S 列
 export interface AttendanceRecord {
   employeeId: number
   employeeName: string
@@ -20,18 +9,35 @@ export interface AttendanceRecord {
   department: string
   level: string | number
   entryDate: string
-  days: Record<number, AttendanceCellStatus>
+
+  overtimeHours: number // 加班时
+  nightShiftCount: number // 夜班45/次
+  overtimeSubtotal: number // 加班小计
+
+  seniorityYears: number // 工龄数
+  fullAttendanceBonus: number // 全勤费
+
+  mealAllowanceCount: number // 误餐15/次
+  subsidySubtotal: number // 补助小计
+
+  lateCount: number // 迟到次
+  newOrPersonalLeaveHours: number // 新进及事假时
+  sickLeaveHours: number // 病假时
+  absenceHours: number // 旷工时
+
+  hygieneFee: number // 卫生费
+  utilitiesFee: number // 水电费
+  deductionSubtotal: number // 扣款小计
 }
 
 export interface AttendanceSummary {
   id: number
   month: string // YYYY-MM
   employeeCount: number
-  attendanceRate: number
-  leaveDays: number
-  overtimeHours: number
-  absenceDays: number
-  lateOrEarlyCount?: number
+  overtimeSubtotalTotal: number
+  subsidySubtotalTotal: number
+  deductionSubtotalTotal: number
+  lateCountTotal?: number
   updatedAt?: string
   remark?: string
 }
