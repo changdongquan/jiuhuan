@@ -406,6 +406,29 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/attendance',
+    component: Layout,
+    redirect: '/attendance/index',
+    name: 'Attendance',
+    meta: {
+      title: t('router.attendance'),
+      icon: 'vi-ep:calendar'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'AttendanceIndex',
+        component: () => import('@/views/Attendance/index.vue'),
+        meta: {
+          title: t('router.attendance'),
+          icon: 'vi-ep:calendar',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
     path: '/dashboard',
     component: Layout,
     redirect: '/dashboard/analysis',

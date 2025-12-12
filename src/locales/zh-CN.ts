@@ -159,6 +159,7 @@ export default {
     comprehensiveQuery: '综合查询',
     customerInfo: '客户信息',
     employeeInfo: '员工信息',
+    attendance: '考勤',
     procurementOutsourcing: '采购外协',
     materialProcurement: '物料采购',
     processOutsourcing: '工序外协',

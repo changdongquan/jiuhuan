@@ -161,6 +161,7 @@ export default {
     comprehensiveQuery: 'Comprehensive Query',
     customerInfo: 'Customer Info',
     employeeInfo: 'Employee Info',
+    attendance: 'Attendance',
     procurementOutsourcing: 'Procurement Outsourcing',
     materialProcurement: 'Material Procurement',
     processOutsourcing: 'Process Outsourcing',
