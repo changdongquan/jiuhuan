@@ -78,7 +78,6 @@
             {{ formatDate(row.updatedAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="140" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -136,10 +135,6 @@
       </template>
 
       <div class="att-dialog-body" v-loading="dialogLoading">
-        <div class="att-dialog-tip">
-          数据来源：在职员工（不含常冬泉），字段：姓名、性别、工号、部门、职级、入职时间。
-          考勤内容录入对齐模板（F-S列）：加班/补助/扣款等汇总项。
-        </div>
         <el-table
           v-if="attendanceRows.length"
           :data="attendanceRows"
@@ -148,13 +143,64 @@
           class="att-edit-grid"
           :row-class-name="() => 'att-row'"
         >
-          <el-table-column type="index" label="序号" width="70" fixed="left" align="center" />
-          <el-table-column prop="employeeNumber" label="员工工号" width="110" fixed="left" />
-          <el-table-column prop="employeeName" label="姓名" width="120" fixed="left" />
-          <el-table-column prop="department" label="所属部门" width="120" fixed="left" />
-          <el-table-column prop="level" label="职级" width="90" fixed="left" />
-          <el-table-column prop="gender" label="性别" width="80" fixed="left" />
-          <el-table-column prop="entryDate" label="入职时间" width="120" fixed="left">
+          <el-table-column type="index" label="序号" width="55" fixed="left" align="center" />
+          <el-table-column prop="employeeName" width="100" fixed="left">
+            <template #header>
+              <div class="att-name-header">
+                <span>姓名</span>
+                <el-tooltip content="展开/折叠员工信息列" placement="top">
+                  <span
+                    class="att-column-toggle-icon"
+                    @click.stop="showEmployeeExtraColumns = !showEmployeeExtraColumns"
+                  >
+                    <Icon
+                      :size="16"
+                      :icon="
+                        showEmployeeExtraColumns
+                          ? 'vi-ant-design:menu-fold-outlined'
+                          : 'vi-ant-design:menu-unfold-outlined'
+                      "
+                    />
+                  </span>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column
+            v-if="showEmployeeExtraColumns"
+            prop="employeeNumber"
+            label="员工工号"
+            width="80"
+            fixed="left"
+          />
+          <el-table-column
+            v-if="showEmployeeExtraColumns"
+            prop="department"
+            label="所属部门"
+            width="80"
+            fixed="left"
+          />
+          <el-table-column
+            v-if="showEmployeeExtraColumns"
+            prop="level"
+            label="职级"
+            width="60"
+            fixed="left"
+          />
+          <el-table-column
+            v-if="showEmployeeExtraColumns"
+            prop="gender"
+            label="性别"
+            width="40"
+            fixed="left"
+          />
+          <el-table-column
+            v-if="showEmployeeExtraColumns"
+            prop="entryDate"
+            label="入职时间"
+            width="100"
+            fixed="left"
+          >
             <template #default="{ row }">
               {{ formatDate(row.entryDate) }}
             </template>
@@ -167,6 +213,7 @@
                 :min="0"
                 :precision="1"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -179,6 +226,7 @@
                 :min="0"
                 :precision="0"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -191,43 +239,50 @@
                 :min="0"
                 :precision="2"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
             </template>
           </el-table-column>
-          <el-table-column label="工龄数" width="90" align="center">
+          <el-table-column label="工龄数" width="70" align="center">
             <template #default="{ row }">
               <el-input-number
                 v-model="row.seniorityYears"
                 :min="0"
+                :max="99"
                 :precision="0"
                 :controls="false"
-                class="att-number"
+                size="small"
+                class="att-number att-number--2d"
                 :disabled="isViewMode"
               />
             </template>
           </el-table-column>
-          <el-table-column label="全勤费" width="90" align="center">
+          <el-table-column label="全勤费" width="70" align="center">
             <template #default="{ row }">
               <el-input-number
                 v-model="row.fullAttendanceBonus"
                 :min="0"
-                :precision="2"
+                :max="99"
+                :precision="0"
                 :controls="false"
-                class="att-number"
+                size="small"
+                class="att-number att-number--2d"
                 :disabled="isViewMode"
               />
             </template>
           </el-table-column>
-          <el-table-column label="误餐15/次" width="110" align="center">
+          <el-table-column label="误餐15/次" width="90" align="center">
             <template #default="{ row }">
               <el-input-number
                 v-model="row.mealAllowanceCount"
                 :min="0"
+                :max="99"
                 :precision="0"
                 :controls="false"
-                class="att-number"
+                size="small"
+                class="att-number att-number--2d"
                 :disabled="isViewMode"
               />
             </template>
@@ -239,6 +294,7 @@
                 :min="0"
                 :precision="2"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -251,6 +307,7 @@
                 :min="0"
                 :precision="0"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -263,6 +320,7 @@
                 :min="0"
                 :precision="1"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -275,6 +333,7 @@
                 :min="0"
                 :precision="1"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -287,6 +346,7 @@
                 :min="0"
                 :precision="1"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -299,6 +359,7 @@
                 :min="0"
                 :precision="2"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -311,6 +372,7 @@
                 :min="0"
                 :precision="2"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -323,6 +385,7 @@
                 :min="0"
                 :precision="2"
                 :controls="false"
+                size="small"
                 class="att-number"
                 :disabled="isViewMode"
               />
@@ -330,15 +393,6 @@
           </el-table-column>
         </el-table>
         <el-empty v-else description="暂无人员" />
-
-        <el-input
-          v-model="remark"
-          type="textarea"
-          :rows="3"
-          placeholder="备注（选填）"
-          :disabled="isViewMode"
-          class="att-remark"
-        />
       </div>
 
       <template #footer>
@@ -384,8 +438,8 @@ const isViewMode = ref(false)
 const currentId = ref<number | null>(null)
 const editMonth = ref('')
 const attendanceRows = ref<AttendanceRecord[]>([])
-const remark = ref('')
 const syncingEmployees = ref(false)
+const showEmployeeExtraColumns = ref(false)
 
 const paginationLayout = computed(() =>
   isMobile.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
@@ -450,7 +504,6 @@ const handleCreate = () => {
   currentId.value = null
   dialogTitle.value = '新增考勤'
   editMonth.value = queryForm.month || formatMonth(new Date())
-  remark.value = ''
   attendanceRows.value = []
   dialogVisible.value = true
   void initRows()
@@ -465,7 +518,6 @@ const handleEdit = async (row: AttendanceSummary) => {
   dialogTitle.value = `编辑考勤 - ${row.month}`
   currentId.value = row.id
   editMonth.value = row.month
-  remark.value = ''
   attendanceRows.value = []
   dialogVisible.value = true
   await loadDetail(row.id)
@@ -476,7 +528,6 @@ const handleView = async (row: AttendanceSummary) => {
   dialogTitle.value = `查看考勤 - ${row.month}`
   currentId.value = row.id
   editMonth.value = row.month
-  remark.value = ''
   attendanceRows.value = []
   dialogVisible.value = true
   await loadDetail(row.id)
@@ -487,7 +538,6 @@ const loadDetail = async (id: number) => {
   try {
     const response: any = await getAttendanceDetailApi(id)
     const detail = response?.data || response || {}
-    remark.value = detail.remark || ''
     const records: AttendanceRecord[] = normalizeRecords(detail.records || [])
     attendanceRows.value = records
   } catch (error) {
@@ -612,7 +662,6 @@ const submit = async () => {
     const payload = {
       id: currentId.value || undefined,
       month: editMonth.value,
-      remark: remark.value,
       records: attendanceRows.value
     }
     await saveAttendanceApi(payload)
@@ -736,17 +785,8 @@ onMounted(() => {
   gap: 12px;
 }
 
-.att-dialog-tip {
-  padding: 8px 10px;
-  font-size: 12px;
-  color: #606266;
-  background: #f5f7fa;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 6px;
-}
-
 .att-edit-grid {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 :deep(.att-edit-grid .el-table__header-wrapper) {
@@ -756,22 +796,56 @@ onMounted(() => {
 }
 
 :deep(.att-edit-grid .el-table__cell) {
-  padding: 4px 6px;
+  padding: 2px 4px;
 }
 
 :deep(.att-edit-grid .el-table__inner-wrapper::before) {
   display: none;
 }
 
+:deep(.att-edit-grid .el-table__body-wrapper tbody tr) {
+  height: 28px;
+}
+
+:deep(.att-edit-grid .el-table__header-wrapper th.el-table__cell) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 :deep(.att-number.el-input-number) {
-  width: 92px;
+  width: 72px;
+}
+
+:deep(.att-number--2d.el-input-number) {
+  width: 54px;
 }
 
 :deep(.att-number .el-input__wrapper) {
-  padding: 0 8px;
+  padding: 0 6px;
 }
 
-.att-remark {
-  margin-top: 4px;
+:deep(.att-number .el-input__inner) {
+  font-size: 11px;
+}
+
+.att-name-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.att-column-toggle-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  color: var(--el-text-color-placeholder);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.att-column-toggle-icon:hover {
+  color: var(--el-color-primary);
 }
 </style>
