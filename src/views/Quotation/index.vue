@@ -164,7 +164,7 @@
           <template #default="{ row }">
             <div class="operation-buttons">
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button size="small" @click="handleView(row)">查看</el-button>
+              <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
               <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>

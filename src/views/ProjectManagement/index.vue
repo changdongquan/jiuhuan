@@ -428,7 +428,7 @@
               <el-tab-pane name="basic">
                 <template #label>
                   基本信息
-                  <span v-if="basicTabCompleted" class="pm-tab-complete-dot" />
+                  <span v-if="basicTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
                 <div class="pm-edit-section">
                   <div class="pm-edit-section-title">基本信息</div>
@@ -560,7 +560,7 @@
               <el-tab-pane name="part">
                 <template #label>
                   零件信息
-                  <span v-if="partTabCompleted" class="pm-tab-complete-dot" />
+                  <span v-if="partTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
                 <div class="pm-edit-section">
                   <div class="pm-edit-section-title">零件信息</div>
@@ -626,7 +626,7 @@
               <el-tab-pane name="mould">
                 <template #label>
                   模具与设备参数
-                  <span v-if="mouldTabCompleted" class="pm-tab-complete-dot" />
+                  <span v-if="mouldTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
                 <div class="pm-edit-section">
                   <div class="pm-edit-section-title">模具与设备参数</div>

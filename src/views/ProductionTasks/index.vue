@@ -1105,7 +1105,9 @@ onMounted(() => {
   }
 
   :deep(.pt-detail-dialog .el-dialog__body) {
+    max-height: calc(100vh - 96px);
     padding: 4px;
+    overflow-y: auto;
   }
 
   :deep(.pt-detail-dialog .el-dialog__header),
@@ -1216,9 +1218,7 @@ onMounted(() => {
 
 .pt-edit-body {
   display: flex;
-  max-height: 70vh;
   min-height: 0;
-  overflow: hidden;
   flex: 1;
   flex-direction: column;
   gap: 12px;
