@@ -78,7 +78,7 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       VueI18nPlugin({
         runtimeOnly: true,
         compositionOnly: true,
-        include: [resolve(__dirname, 'src/locales/**')]
+        include: [pathResolve('src/locales/**')]
       }),
       createSvgIconsPlugin({
         iconDirs: [pathResolve('src/assets/svgs')],
