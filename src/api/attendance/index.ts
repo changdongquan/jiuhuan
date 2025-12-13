@@ -10,24 +10,26 @@ export interface AttendanceRecord {
   level: string | number
   entryDate: string
 
-  overtimeHours: number // 加班时
-  nightShiftCount: number // 夜班45/次
-  overtimeSubtotal: number // 加班小计
+  overtimeHours: number | null // 加班
+  doubleOvertimeHours: number | null // 两倍加班
+  tripleOvertimeHours: number | null // 三倍加班
+  nightShiftCount: number | null // 夜班45/次
+  overtimeSubtotal: number | null // 加班小计
 
-  seniorityYears: number // 工龄数
-  fullAttendanceBonus: number // 全勤费
+  seniorityYears: number | null // 工龄数
+  fullAttendanceBonus: number | null // 全勤费
 
-  mealAllowanceCount: number // 误餐15/次
-  subsidySubtotal: number // 补助小计
+  mealAllowanceCount: number | null // 误餐15/次
+  subsidySubtotal: number | null // 补助小计
 
-  lateCount: number // 迟到次
-  newOrPersonalLeaveHours: number // 新进及事假时
-  sickLeaveHours: number // 病假时
-  absenceHours: number // 旷工时
+  lateCount: number | null // 迟到次
+  newOrPersonalLeaveHours: number | null // 新进及事假时
+  sickLeaveHours: number | null // 病假时
+  absenceHours: number | null // 旷工时
 
-  hygieneFee: number // 卫生费
-  utilitiesFee: number // 水电费
-  deductionSubtotal: number // 扣款小计
+  hygieneFee: number | null // 卫生费
+  utilitiesFee: number | null // 水电费
+  deductionSubtotal: number | null // 扣款小计
 }
 
 export interface AttendanceSummary {
