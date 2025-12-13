@@ -144,6 +144,14 @@ const routesToSync = [
     parent_route: 'EmployeeInfo'
   },
 
+  // 考勤
+  {
+    route_name: 'AttendanceIndex',
+    route_path: '/attendance/index',
+    page_title: '考勤',
+    parent_route: 'Attendance'
+  },
+
   // 仪表盘
   {
     route_name: 'Analysis',
