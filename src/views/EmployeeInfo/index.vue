@@ -182,7 +182,8 @@
         size="small"
         class="employee-dialog-form"
       >
-        <el-row :gutter="16">
+        <!-- PC 端：左右两列布局 -->
+        <el-row v-if="!isMobile" :gutter="16">
           <!-- 左1：姓名 / 右1：工号 -->
           <el-col :xs="24" :md="12">
             <el-form-item label="姓名" prop="employeeName">
@@ -296,6 +297,112 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
+            <el-form-item label="开户行" prop="bankBranch">
+              <el-input v-model="dialogForm.bankBranch" placeholder="请输入开户行" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 手机端：按指定顺序单列展示 -->
+        <el-row v-else :gutter="12">
+          <el-col :span="24">
+            <el-form-item label="姓名" prop="employeeName">
+              <el-input v-model="dialogForm.employeeName" placeholder="请输入姓名" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="工号" prop="employeeNumber">
+              <el-input v-model="dialogForm.employeeNumber" placeholder="请输入工号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="性别" prop="gender">
+              <el-select v-model="dialogForm.gender" placeholder="请选择性别">
+                <el-option label="男" value="男" />
+                <el-option label="女" value="女" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="身份证号" prop="idCard">
+              <el-input v-model="dialogForm.idCard" placeholder="请输入身份证号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="部门" prop="department">
+              <el-input v-model="dialogForm.department" placeholder="请输入部门" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="岗位" prop="position">
+              <el-input v-model="dialogForm.position" placeholder="请输入岗位" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="职级" prop="level">
+              <el-input-number v-model="dialogForm.level" :min="0" placeholder="请输入职级" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="联系方式" prop="phone">
+              <el-input v-model="dialogForm.phone" placeholder="请输入联系方式" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="紧急联系人" prop="emergencyContact">
+              <el-input v-model="dialogForm.emergencyContact" placeholder="请输入紧急联系人" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="在职状态" prop="status">
+              <el-select v-model="dialogForm.status" placeholder="请选择状态">
+                <el-option label="在职" value="在职" />
+                <el-option label="离职" value="离职" />
+                <el-option label="休假" value="休假" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="入职日期" prop="entryDate">
+              <el-date-picker
+                v-model="dialogForm.entryDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择入职日期"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="转正日期" prop="confirmDate">
+              <el-date-picker
+                v-model="dialogForm.confirmDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择转正日期"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="离职日期" prop="leaveDate">
+              <el-date-picker
+                v-model="dialogForm.leaveDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择离职日期"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="银行名称" prop="bankName">
+              <el-input v-model="dialogForm.bankName" placeholder="请输入银行名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="银行账号" prop="bankAccount">
+              <el-input v-model="dialogForm.bankAccount" placeholder="请输入银行账号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
             <el-form-item label="开户行" prop="bankBranch">
               <el-input v-model="dialogForm.bankBranch" placeholder="请输入开户行" />
             </el-form-item>
