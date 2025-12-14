@@ -174,8 +174,16 @@
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
-      <el-form ref="dialogFormRef" :model="dialogForm" :rules="dialogRules" label-width="100px">
+      <el-form
+        ref="dialogFormRef"
+        :model="dialogForm"
+        :rules="dialogRules"
+        label-width="100px"
+        size="small"
+        class="employee-dialog-form"
+      >
         <el-row :gutter="16">
+          <!-- 左1：姓名 / 右1：工号 -->
           <el-col :xs="24" :md="12">
             <el-form-item label="姓名" prop="employeeName">
               <el-input v-model="dialogForm.employeeName" placeholder="请输入姓名" />
@@ -186,6 +194,13 @@
               <el-input v-model="dialogForm.employeeNumber" placeholder="请输入工号" />
             </el-form-item>
           </el-col>
+
+          <!-- 左2：职级 / 右2：性别 -->
+          <el-col :xs="24" :md="12">
+            <el-form-item label="职级" prop="level">
+              <el-input-number v-model="dialogForm.level" :min="0" placeholder="请输入职级" />
+            </el-form-item>
+          </el-col>
           <el-col :xs="24" :md="12">
             <el-form-item label="性别" prop="gender">
               <el-select v-model="dialogForm.gender" placeholder="请选择性别">
@@ -194,11 +209,32 @@
               </el-select>
             </el-form-item>
           </el-col>
+
+          <!-- 左3：部门 / 右3：身份证号码 -->
           <el-col :xs="24" :md="12">
-            <el-form-item label="职级" prop="level">
-              <el-input-number v-model="dialogForm.level" :min="0" placeholder="请输入职级" />
+            <el-form-item label="部门" prop="department">
+              <el-input v-model="dialogForm.department" placeholder="请输入部门" />
             </el-form-item>
           </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="身份证号码" prop="idCard">
+              <el-input v-model="dialogForm.idCard" placeholder="请输入身份证号码" />
+            </el-form-item>
+          </el-col>
+
+          <!-- 左4：岗位 / 右4：联系方式 -->
+          <el-col :xs="24" :md="12">
+            <el-form-item label="岗位" prop="position">
+              <el-input v-model="dialogForm.position" placeholder="请输入岗位" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="联系方式" prop="phone">
+              <el-input v-model="dialogForm.phone" placeholder="请输入联系方式" />
+            </el-form-item>
+          </el-col>
+
+          <!-- 左5：入职时间 / 右5：紧急联系人 -->
           <el-col :xs="24" :md="12">
             <el-form-item label="入职时间" prop="entryDate">
               <el-date-picker
@@ -210,30 +246,12 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
-            <el-form-item label="身份证号码" prop="idCard">
-              <el-input v-model="dialogForm.idCard" placeholder="请输入身份证号码" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-form-item label="部门" prop="department">
-              <el-input v-model="dialogForm.department" placeholder="请输入部门" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-form-item label="岗位" prop="position">
-              <el-input v-model="dialogForm.position" placeholder="请输入岗位" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-form-item label="联系方式" prop="phone">
-              <el-input v-model="dialogForm.phone" placeholder="请输入联系方式" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
             <el-form-item label="紧急联系人" prop="emergencyContact">
               <el-input v-model="dialogForm.emergencyContact" placeholder="请输入紧急联系人" />
             </el-form-item>
           </el-col>
+
+          <!-- 左6：在职状态 / 右6：银行名称 -->
           <el-col :xs="24" :md="12">
             <el-form-item label="在职状态" prop="status">
               <el-select v-model="dialogForm.status" placeholder="请选择状态">
@@ -243,6 +261,13 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="银行名称" prop="bankName">
+              <el-input v-model="dialogForm.bankName" placeholder="请输入银行名称" />
+            </el-form-item>
+          </el-col>
+
+          <!-- 左7：转正日期 / 右7：银行账号 -->
           <el-col :xs="24" :md="12">
             <el-form-item label="转正日期" prop="confirmDate">
               <el-date-picker
@@ -254,13 +279,20 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
-            <el-form-item label="银行名称" prop="bankName">
-              <el-input v-model="dialogForm.bankName" placeholder="请输入银行名称" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
             <el-form-item label="银行账号" prop="bankAccount">
               <el-input v-model="dialogForm.bankAccount" placeholder="请输入银行账号" />
+            </el-form-item>
+          </el-col>
+
+          <!-- 左8：离职日期 / 右8：开户行 -->
+          <el-col :xs="24" :md="12">
+            <el-form-item label="离职日期" prop="leaveDate">
+              <el-date-picker
+                v-model="dialogForm.leaveDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择离职日期"
+              />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
@@ -369,6 +401,7 @@ const createEmptyEmployee = (): EmployeePayload => ({
   gender: '',
   level: 0,
   entryDate: '',
+  leaveDate: '',
   idCard: '',
   department: '',
   position: '',
@@ -490,6 +523,7 @@ const assignDialogForm = (payload: EmployeePayload) => {
   dialogForm.gender = typeof payload.gender === 'string' ? payload.gender : ''
   dialogForm.level = payload.level || 0
   dialogForm.entryDate = payload.entryDate || ''
+  dialogForm.leaveDate = payload.leaveDate || ''
   dialogForm.idCard = payload.idCard || ''
   dialogForm.department = payload.department || ''
   dialogForm.position = payload.position || ''
@@ -721,5 +755,41 @@ onMounted(() => {
   gap: 8px;
   justify-content: flex-end;
   margin-top: 6px;
+}
+
+.employee-dialog-form {
+  padding-top: 8px;
+  font-size: 14px;
+}
+
+:deep(.employee-dialog-form .el-form-item) {
+  margin-bottom: 12px;
+}
+
+:deep(.employee-dialog-form .el-form-item__label) {
+  font-size: 14px;
+  font-weight: normal;
+  color: #444;
+}
+
+:deep(
+  .employee-dialog-form .el-input,
+  .employee-dialog-form .el-select,
+  .employee-dialog-form .el-date-editor,
+  .employee-dialog-form .el-input-number
+) {
+  width: 100%;
+  font-size: 14px;
+}
+
+:deep(
+  .employee-dialog-form .el-input__inner,
+  .employee-dialog-form .el-textarea__inner,
+  .employee-dialog-form .el-select__selected-item,
+  .employee-dialog-form .el-select__placeholder,
+  .employee-dialog-form .el-date-editor .el-input__inner,
+  .employee-dialog-form .el-input-number .el-input__inner
+) {
+  font-size: 14px;
 }
 </style>

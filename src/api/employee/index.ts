@@ -8,6 +8,7 @@ export interface EmployeeInfo {
   gender: string
   level: number
   entryDate: string
+  leaveDate?: string
   idCard: string
   department: string
   position: string
