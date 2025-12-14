@@ -112,19 +112,20 @@
         row-key="id"
         @row-dblclick="handleRowDblClick"
         class="ei-table"
+        :default-sort="{ prop: 'employeeNumber', order: 'ascending' }"
       >
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="employeeName" label="姓名" width="100" />
-        <el-table-column prop="employeeNumber" label="工号" width="80" />
-        <el-table-column prop="gender" label="性别" width="80" />
-        <el-table-column prop="level" label="职级" width="80" />
-        <el-table-column prop="entryDate" label="入职时间" width="120">
+        <el-table-column prop="employeeName" label="姓名" width="100" sortable />
+        <el-table-column prop="employeeNumber" label="工号" width="80" sortable />
+        <el-table-column prop="gender" label="性别" width="80" sortable />
+        <el-table-column prop="level" label="职级" width="80" sortable />
+        <el-table-column prop="entryDate" label="入职时间" width="120" sortable>
           <template #default="{ row }">
             {{ formatDate(row.entryDate) }}
           </template>
         </el-table-column>
         <el-table-column prop="idCard" label="身份证号码" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="department" label="部门" width="100" />
+        <el-table-column prop="department" label="部门" width="100" sortable />
         <el-table-column prop="position" label="岗位" width="100" />
         <el-table-column prop="phone" label="联系方式" width="140" />
         <el-table-column prop="emergencyContact" label="紧急联系人" min-width="140" />

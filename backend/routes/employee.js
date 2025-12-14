@@ -64,7 +64,7 @@ router.get('/list', async (req, res) => {
         开户行 as bankBranch
       FROM 员工信息 
       ${whereClause}
-      ORDER BY ID
+      ORDER BY 工号
       OFFSET ${offset} ROWS
       FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
     `,
