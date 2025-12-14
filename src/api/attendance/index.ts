@@ -36,12 +36,13 @@ export interface AttendanceSummary {
   id: number
   month: string // YYYY-MM
   employeeCount: number
-  overtimeSubtotalTotal: number
-  subsidySubtotalTotal: number
-  deductionSubtotalTotal: number
+  overtimeNormalTotal?: number
+  overtimeDoubleTotal?: number
+  overtimeTripleTotal?: number
+  overtimeSubtotalTotal?: number
+  fullAttendanceCount?: number
   lateCountTotal?: number
   updatedAt?: string
-  remark?: string
 }
 
 export interface AttendanceDetail {
