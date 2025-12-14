@@ -41,6 +41,28 @@ const computeSummary = (records = []) => {
   }
 }
 
+const isSameMonth = (a, b) => {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+
+const getEditableMonths = () => {
+  const now = new Date()
+  const current = new Date(now.getFullYear(), now.getMonth(), 1)
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return { current, prev }
+}
+
+const isEditableMonthString = (month) => {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''))
+  if (!match) return false
+  const y = Number(match[1])
+  const m = Number(match[2]) - 1
+  if (Number.isNaN(y) || Number.isNaN(m)) return false
+  const selected = new Date(y, m, 1)
+  const { current, prev } = getEditableMonths()
+  return isSameMonth(selected, current) || isSameMonth(selected, prev)
+}
+
 // 获取考勤列表
 router.get('/list', async (req, res) => {
   try {
@@ -79,6 +101,7 @@ router.get('/list', async (req, res) => {
           FROM ${TABLE_DETAIL} d 
           WHERE d.汇总ID = h.ID
         ), 0) as lateCountTotal,
+        h.创建时间 as createdAt,
         h.更新时间 as updatedAt
       FROM ${TABLE_SUMMARY} h
       ${whereClause}
@@ -323,6 +346,9 @@ router.post('/', async (req, res) => {
   try {
     const { month, records = [] } = req.body || {}
     if (!month) return res.status(400).json({ code: 400, message: '月份不能为空' })
+    if (!isEditableMonthString(month)) {
+      return res.status(403).json({ code: 403, message: '只能新增当月和上一个月的考勤记录' })
+    }
     const existed = await query(`SELECT 1 FROM ${TABLE_SUMMARY} WHERE 月份 = @month`, { month })
     if (existed.length) {
       return res.status(400).json({ code: 400, message: '该月份考勤已存在' })
@@ -342,6 +368,9 @@ router.put('/', async (req, res) => {
     const { id, month, records = [] } = req.body || {}
     if (!id) return res.status(400).json({ code: 400, message: 'ID 不能为空' })
     if (!month) return res.status(400).json({ code: 400, message: '月份不能为空' })
+    if (!isEditableMonthString(month)) {
+      return res.status(403).json({ code: 403, message: '只能编辑当月和上一个月的考勤记录' })
+    }
 
     const existed = await query(`SELECT 1 FROM ${TABLE_SUMMARY} WHERE ID = @id`, { id })
     if (!existed.length) {

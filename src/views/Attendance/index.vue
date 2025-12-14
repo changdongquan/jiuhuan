@@ -54,9 +54,47 @@
         row-key="id"
         @row-dblclick="handleRowDblClick"
       >
+        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="month" label="月份" width="110" />
         <el-table-column prop="employeeCount" label="人数" width="80" align="center" />
-        <el-table-column prop="lateCountTotal" label="迟到(次)" width="95" align="center" />
+        <el-table-column
+          prop="overtimeNormalTotal"
+          label="加班小计_普通"
+          min-width="120"
+          align="right"
+        >
+          <template #default="{ row }">{{ formatMoney(row.overtimeNormalTotal) }}</template>
+        </el-table-column>
+        <el-table-column
+          prop="overtimeDoubleTotal"
+          label="加班小计_两倍"
+          min-width="120"
+          align="right"
+        >
+          <template #default="{ row }">{{ formatMoney(row.overtimeDoubleTotal) }}</template>
+        </el-table-column>
+        <el-table-column
+          prop="overtimeTripleTotal"
+          label="加班小计_三倍"
+          min-width="120"
+          align="right"
+        >
+          <template #default="{ row }">{{ formatMoney(row.overtimeTripleTotal) }}</template>
+        </el-table-column>
+        <el-table-column
+          prop="overtimeSubtotalTotal"
+          label="加班小计合计"
+          min-width="120"
+          align="right"
+        >
+          <template #default="{ row }">{{ formatMoney(row.overtimeSubtotalTotal) }}</template>
+        </el-table-column>
+        <el-table-column prop="fullAttendanceCount" label="全勤人数" width="95" align="center" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="140">
+          <template #default="{ row }">
+            {{ formatDate(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" min-width="140">
           <template #default="{ row }">
             {{ formatDate(row.updatedAt) }}
@@ -64,7 +102,14 @@
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button
+              type="primary"
+              size="small"
+              :disabled="!isEditableMonthString(row.month)"
+              @click="handleEdit(row)"
+            >
+              编辑
+            </el-button>
             <el-button size="small" @click="handleView(row)">查看</el-button>
           </template>
         </el-table-column>
@@ -217,7 +262,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(1)(row.overtimeHours ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.overtimeHours"
                 :min="0"
                 :max="9999.9"
@@ -241,7 +288,11 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{
+                formatNumberInput(1)(row.doubleOvertimeHours ?? '-')
+              }}</span>
               <el-input-number
+                v-else
                 v-model="row.doubleOvertimeHours"
                 :min="0"
                 :max="9999.9"
@@ -265,7 +316,11 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{
+                formatNumberInput(1)(row.tripleOvertimeHours ?? '-')
+              }}</span>
               <el-input-number
+                v-else
                 v-model="row.tripleOvertimeHours"
                 :min="0"
                 :max="9999.9"
@@ -289,7 +344,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(0)(row.nightShiftCount ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.nightShiftCount"
                 :min="0"
                 :precision="0"
@@ -312,13 +369,14 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ isFullAttendance(row) ? '是' : '否' }}</span>
               <el-switch
+                v-else
                 :model-value="isFullAttendance(row)"
                 inline-prompt
                 active-text="是"
                 inactive-text="否"
                 size="small"
-                :disabled="isViewMode"
                 @change="(val) => setFullAttendance(row, val === true)"
               />
             </template>
@@ -331,7 +389,11 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{
+                formatNumberInput(0)(row.mealAllowanceCount ?? '-')
+              }}</span>
               <el-input-number
+                v-else
                 v-model="row.mealAllowanceCount"
                 :min="0"
                 :max="99"
@@ -343,7 +405,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number att-number--2d"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -355,7 +416,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(0)(row.lateCount ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.lateCount"
                 :min="0"
                 :precision="0"
@@ -366,7 +429,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -378,7 +440,11 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{
+                formatNumberInput(1)(row.newOrPersonalLeaveHours ?? '-')
+              }}</span>
               <el-input-number
+                v-else
                 v-model="row.newOrPersonalLeaveHours"
                 :min="0"
                 :precision="1"
@@ -389,7 +455,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -401,7 +466,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(1)(row.sickLeaveHours ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.sickLeaveHours"
                 :min="0"
                 :precision="1"
@@ -412,7 +479,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -424,7 +490,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(1)(row.absenceHours ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.absenceHours"
                 :min="0"
                 :precision="1"
@@ -435,7 +503,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -447,7 +514,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(2)(row.hygieneFee ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.hygieneFee"
                 :min="0"
                 :precision="2"
@@ -458,7 +527,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -470,7 +538,9 @@
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(2)(row.utilitiesFee ?? '-') }}</span>
               <el-input-number
+                v-else
                 v-model="row.utilitiesFee"
                 :min="0"
                 :precision="2"
@@ -481,7 +551,6 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isViewMode"
               />
             </template>
           </el-table-column>
@@ -501,7 +570,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getAttendanceListApi,
   getAttendanceDetailApi,
@@ -548,6 +617,22 @@ const toNumberOrNull = (val: unknown) => {
   return Number.isNaN(num) ? null : num
 }
 
+const compareEmployeeNumberAsc = (a: unknown, b: unknown) => {
+  const as = a === null || a === undefined ? '' : String(a).trim()
+  const bs = b === null || b === undefined ? '' : String(b).trim()
+  const an = Number(as)
+  const bn = Number(bs)
+  const aIsNum = as !== '' && !Number.isNaN(an)
+  const bIsNum = bs !== '' && !Number.isNaN(bn)
+  if (aIsNum && bIsNum) return an - bn
+  return as.localeCompare(bs, 'zh-CN', { numeric: true, sensitivity: 'base' })
+}
+
+const sortRowsByEmployeeNumber = (rows: AttendanceRecord[]) => {
+  rows.sort((a, b) => compareEmployeeNumberAsc(a.employeeNumber, b.employeeNumber))
+  return rows
+}
+
 const isSameMonth = (a: Date, b: Date) => {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
@@ -574,6 +659,8 @@ const isAllowedCreateMonthString = (month: string) => {
   const { current, prev } = getAllowedCreateMonths()
   return isSameMonth(selected, current) || isSameMonth(selected, prev)
 }
+
+const isEditableMonthString = (month: string) => isAllowedCreateMonthString(month)
 
 const numberParser = (val: string) => {
   if (val === '-' || val.trim() === '') return null
@@ -645,15 +732,52 @@ const confirmCreate = () => {
     ElMessage.warning('请选择月份')
     return
   }
-  createDialogVisible.value = false
 
-  isViewMode.value = false
-  currentId.value = null
-  dialogTitle.value = '考勤数据'
-  editMonth.value = createForm.month
-  attendanceRows.value = []
-  dialogVisible.value = true
-  void initRows()
+  void (async () => {
+    try {
+      const response: any = await getAttendanceListApi({
+        month: createForm.month,
+        page: 1,
+        pageSize: 1
+      })
+
+      let list: AttendanceSummary[] = []
+      if (response?.code === 0 && response?.data) {
+        list = response.data.list || []
+      } else {
+        list = response?.list || response?.data?.list || response?.data || []
+      }
+
+      const existed = list?.[0]
+      if (existed?.id) {
+        await ElMessageBox.confirm(
+          `【${createForm.month}】考勤记录已存在，不能重复新增。\n是否打开编辑？`,
+          '提示',
+          {
+            confirmButtonText: '打开编辑',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+        createDialogVisible.value = false
+        await handleEdit(existed)
+        return
+      }
+    } catch (error) {
+      console.error('检查考勤月份是否存在失败:', error)
+      ElMessage.error('检查考勤月份是否存在失败')
+      return
+    }
+
+    createDialogVisible.value = false
+    isViewMode.value = false
+    currentId.value = null
+    dialogTitle.value = '考勤数据'
+    editMonth.value = createForm.month
+    attendanceRows.value = []
+    dialogVisible.value = true
+    await initRows()
+  })()
 }
 
 const loadList = async () => {
@@ -695,6 +819,11 @@ const handleRowDblClick = (row: AttendanceSummary) => {
 }
 
 const handleEdit = async (row: AttendanceSummary) => {
+  if (!isEditableMonthString(row.month)) {
+    ElMessage.warning('只能编辑当月和上一个月的考勤记录，已为你打开查看模式')
+    await handleView(row)
+    return
+  }
   isViewMode.value = false
   dialogTitle.value = '考勤数据'
   currentId.value = row.id
@@ -821,11 +950,11 @@ const syncEmployeesMerged = async (options: { keepNonActiveExisting: boolean }) 
     }
   }
 
-  attendanceRows.value = merged
+  attendanceRows.value = sortRowsByEmployeeNumber(merged)
 }
 
 const normalizeRecords = (records: AttendanceRecord[]) => {
-  return records.map((rec) => ({
+  const normalized = records.map((rec) => ({
     employeeId: rec.employeeId,
     employeeName: rec.employeeName,
     gender: rec.gender,
@@ -850,6 +979,7 @@ const normalizeRecords = (records: AttendanceRecord[]) => {
     utilitiesFee: toNumberOrNull(rec.utilitiesFee),
     deductionSubtotal: toNumberOrNull(rec.deductionSubtotal)
   }))
+  return sortRowsByEmployeeNumber(normalized)
 }
 
 const formatMonth = (date: Date) => {
@@ -863,6 +993,13 @@ const formatDate = (val?: string) => {
   if (val.includes('T')) return val.split('T')[0]
   if (val.includes(' ')) return val.split(' ')[0]
   return val
+}
+
+const formatMoney = (val?: number | null) => {
+  if (val === null || val === undefined) return '-'
+  const num = Number(val)
+  if (Number.isNaN(num)) return '-'
+  return num.toFixed(2)
 }
 
 const submit = async () => {

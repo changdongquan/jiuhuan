@@ -42,6 +42,7 @@ export interface AttendanceSummary {
   overtimeSubtotalTotal?: number
   fullAttendanceCount?: number
   lateCountTotal?: number
+  createdAt?: string
   updatedAt?: string
 }
 
