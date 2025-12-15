@@ -64,7 +64,7 @@ const upsertDraftStep1 = async ({ month, employeeIds }) => {
     } else {
       const updateReq = new sql.Request(transaction)
       updateReq.input('id', sql.Int, summaryId)
-      updateReq.query(`
+      await updateReq.query(`
         UPDATE ${TABLE_SUMMARY}
         SET 步骤 = CASE WHEN 步骤 < 1 THEN 1 ELSE 步骤 END,
             状态 = CASE WHEN 状态 = N'已完成' THEN 状态 ELSE N'草稿' END,
