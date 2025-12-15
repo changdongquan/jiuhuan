@@ -28,7 +28,8 @@ export interface AttendanceRecord {
   absenceHours: number | null // 旷工时
 
   hygieneFee: number | null // 卫生费
-  utilitiesFee: number | null // 水电费
+  waterFee: number | null // 水费
+  electricityFee: number | null // 电费
   deductionSubtotal: number | null // 扣款小计
 }
 

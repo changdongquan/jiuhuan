@@ -191,7 +191,7 @@
           class="att-edit-grid"
           :row-class-name="() => 'att-row'"
         >
-          <el-table-column type="index" label="序号" width="85" fixed="left" align="center" />
+          <el-table-column type="index" label="序号" width="70" fixed="left" align="center" />
           <el-table-column prop="employeeName" width="85" fixed="left">
             <template #header>
               <div class="att-name-header">
@@ -363,7 +363,7 @@
           </el-table-column>
           <el-table-column
             label="全勤"
-            width="85"
+            width="62"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
@@ -531,17 +531,41 @@
             </template>
           </el-table-column>
           <el-table-column
-            label="水电费"
+            label="水费"
             width="85"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
           >
             <template #default="{ row }">
-              <span v-if="isViewMode">{{ formatNumberInput(2)(row.utilitiesFee ?? '-') }}</span>
+              <span v-if="isViewMode">{{ formatNumberInput(2)(row.waterFee ?? '-') }}</span>
               <el-input-number
                 v-else
-                v-model="row.utilitiesFee"
+                v-model="row.waterFee"
+                :min="0"
+                :precision="2"
+                :controls="false"
+                :value-on-clear="null"
+                :parser="numberParser"
+                :formatter="formatNumberInput(2)"
+                placeholder="-"
+                size="small"
+                class="att-number"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="电费"
+            width="85"
+            align="center"
+            class-name="att-col-input"
+            label-class-name="att-col-input"
+          >
+            <template #default="{ row }">
+              <span v-if="isViewMode">{{ formatNumberInput(2)(row.electricityFee ?? '-') }}</span>
+              <el-input-number
+                v-else
+                v-model="row.electricityFee"
                 :min="0"
                 :precision="2"
                 :controls="false"
@@ -912,7 +936,8 @@ const buildRecordFromEmployee = (emp: EmployeeInfo): AttendanceRecord => {
     sickLeaveHours: null,
     absenceHours: null,
     hygieneFee: null,
-    utilitiesFee: null,
+    waterFee: null,
+    electricityFee: null,
     deductionSubtotal: null
   }
 }
@@ -940,7 +965,8 @@ const syncEmployeesMerged = async (options: { keepNonActiveExisting: boolean }) 
       sickLeaveHours: existing.sickLeaveHours,
       absenceHours: existing.absenceHours,
       hygieneFee: existing.hygieneFee,
-      utilitiesFee: existing.utilitiesFee
+      waterFee: existing.waterFee,
+      electricityFee: existing.electricityFee
     } satisfies AttendanceRecord
   })
 
@@ -976,7 +1002,11 @@ const normalizeRecords = (records: AttendanceRecord[]) => {
     sickLeaveHours: toNumberOrNull(rec.sickLeaveHours),
     absenceHours: toNumberOrNull(rec.absenceHours),
     hygieneFee: toNumberOrNull(rec.hygieneFee),
-    utilitiesFee: toNumberOrNull(rec.utilitiesFee),
+    waterFee: toNumberOrNull(rec.waterFee),
+    electricityFee: (() => {
+      const val = toNumberOrNull(rec.electricityFee)
+      return val === 0 ? null : val
+    })(),
     deductionSubtotal: toNumberOrNull(rec.deductionSubtotal)
   }))
   return sortRowsByEmployeeNumber(normalized)

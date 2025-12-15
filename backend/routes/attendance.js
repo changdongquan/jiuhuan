@@ -183,7 +183,8 @@ router.get('/:id', async (req, res) => {
         病假小时 as sickLeaveHours,
         旷工小时 as absenceHours,
         卫生费 as hygieneFee,
-        水电费 as utilitiesFee,
+        水费 as waterFee,
+        电费 as electricityFee,
         扣款小计 as deductionSubtotal,
         创建时间 as createdAt,
         更新时间 as updatedAt
@@ -288,19 +289,22 @@ const insertOrUpdate = async ({ id, month, records, isUpdate }) => {
         汇总ID, 员工ID, 姓名, 工号, 性别, 部门, 职级, 入职时间,
         加班小时, 两倍加班小时, 三倍加班小时, 夜班天数, 加班小计,
         工龄数, 全勤费, 误餐次数, 补助小计,
-        迟到次数, 新进及事假小时, 病假小时, 旷工小时, 卫生费, 水电费, 扣款小计,
+        迟到次数, 新进及事假小时, 病假小时, 旷工小时, 卫生费, 水费, 电费, 扣款小计,
         创建时间, 更新时间
       )
       VALUES (
         @summaryId, @employeeId, @employeeName, @employeeNumber, @gender, @department, @level, @entryDate,
         @overtimeHours, @doubleOvertimeHours, @tripleOvertimeHours, @nightShiftCount, @overtimeSubtotal,
         @seniorityYears, @fullAttendanceBonus, @mealAllowanceCount, @subsidySubtotal,
-        @lateCount, @newOrPersonalLeaveHours, @sickLeaveHours, @absenceHours, @hygieneFee, @utilitiesFee, @deductionSubtotal,
+        @lateCount, @newOrPersonalLeaveHours, @sickLeaveHours, @absenceHours, @hygieneFee, @waterFee, @electricityFee, @deductionSubtotal,
         SYSDATETIME(), SYSDATETIME()
       )
     `
 
     for (const rec of records || []) {
+      const waterFee = rec.waterFee ?? rec.utilitiesFee ?? null
+      const electricityFee = rec.electricityFee ?? null
+
       const req = new sql.Request(transaction)
       req.input('summaryId', sql.Int, summaryId)
       req.input('employeeId', sql.Int, rec.employeeId || null)
@@ -328,7 +332,8 @@ const insertOrUpdate = async ({ id, month, records, isUpdate }) => {
       req.input('sickLeaveHours', sql.Decimal(10, 1), rec.sickLeaveHours ?? null)
       req.input('absenceHours', sql.Decimal(10, 1), rec.absenceHours ?? null)
       req.input('hygieneFee', sql.Decimal(10, 2), rec.hygieneFee ?? null)
-      req.input('utilitiesFee', sql.Decimal(10, 2), rec.utilitiesFee ?? null)
+      req.input('waterFee', sql.Decimal(10, 2), waterFee)
+      req.input('electricityFee', sql.Decimal(10, 2), electricityFee)
       req.input('deductionSubtotal', sql.Decimal(10, 2), rec.deductionSubtotal ?? null)
       await req.query(detailSql)
     }
