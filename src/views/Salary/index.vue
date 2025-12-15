@@ -104,7 +104,7 @@
     <el-dialog
       v-model="paramsDialogVisible"
       title="参数"
-      :width="isMobile ? '100%' : '960px'"
+      :width="isMobile ? '100%' : '760px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="params-dialog"
@@ -118,13 +118,13 @@
               <el-table-column
                 prop="employeeNumber"
                 label="员工工号"
-                width="120"
+                width="100"
                 show-overflow-tooltip
               />
               <el-table-column
                 prop="department"
                 label="所属部门"
-                min-width="140"
+                width="110"
                 show-overflow-tooltip
               />
               <el-table-column
@@ -256,7 +256,7 @@
           <div class="params-tab-body" v-loading="subsidyLoading">
             <el-table v-if="subsidyRows.length" :data="subsidyRows" border height="560">
               <el-table-column type="index" label="序号" width="70" align="center" />
-              <el-table-column prop="name" label="补助" min-width="180" />
+              <el-table-column prop="name" label="补助" width="110" />
               <el-table-column label="金额" width="140" align="center" class-name="sub-col-input">
                 <template #default="{ row }">
                   <el-input-number
@@ -301,6 +301,174 @@
         <el-button type="primary" @click="handleParamsSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="addDialogVisible"
+      title="新增工资"
+      :width="isMobile ? '100%' : '1100px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+      class="salary-add-dialog"
+      @closed="resetAddWizard"
+    >
+      <el-steps :active="addStep" align-center finish-status="success">
+        <el-step title="步骤1" description="选择月份/员工" />
+        <el-step title="步骤2" description="填写明细" />
+        <el-step title="步骤3" description="确认完成" />
+      </el-steps>
+
+      <div class="salary-add-body" v-loading="addSaving">
+        <div v-show="addStep === 0" class="salary-add-step">
+          <el-form :model="addForm" label-width="90px" class="salary-add-form">
+            <el-form-item label="月份" required>
+              <el-date-picker
+                v-model="addForm.month"
+                type="month"
+                value-format="YYYY-MM"
+                placeholder="选择月份"
+                :style="{ width: isMobile ? '100%' : '220px' }"
+              />
+            </el-form-item>
+            <el-form-item label="员工范围" required>
+              <el-radio-group v-model="addForm.applyToAll">
+                <el-radio :value="true">全部在职员工</el-radio>
+                <el-radio :value="false">指定员工</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item v-if="!addForm.applyToAll" label="选择员工" required>
+              <el-select
+                v-model="addForm.employeeIds"
+                filterable
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="请选择员工"
+                :loading="addEmployeesLoading"
+                :style="{ width: isMobile ? '100%' : '520px' }"
+              >
+                <el-option
+                  v-for="emp in addEmployees"
+                  :key="emp.id"
+                  :label="`${emp.employeeName}（${emp.employeeNumber}）`"
+                  :value="emp.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <div v-show="addStep === 1" class="salary-add-step">
+          <el-table v-if="addRows.length" :data="addRows" border height="560">
+            <el-table-column type="index" label="序号" width="70" align="center" />
+            <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
+            <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
+            <el-table-column label="基本工资" width="140" align="center" class-name="sa-col-input">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.baseSalary"
+                  :min="0"
+                  :max="99999999"
+                  :precision="2"
+                  :controls="false"
+                  :value-on-clear="null"
+                  placeholder="-"
+                  size="small"
+                  class="sa-number"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="绩效/奖金" width="140" align="center" class-name="sa-col-input">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.bonus"
+                  :min="0"
+                  :max="99999999"
+                  :precision="2"
+                  :controls="false"
+                  :value-on-clear="null"
+                  placeholder="-"
+                  size="small"
+                  class="sa-number"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="扣款" width="140" align="center" class-name="sa-col-input">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.deduction"
+                  :min="0"
+                  :max="99999999"
+                  :precision="2"
+                  :controls="false"
+                  :value-on-clear="null"
+                  placeholder="-"
+                  size="small"
+                  class="sa-number"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="合计" width="140" align="right">
+              <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="160">
+              <template #default="{ row }">
+                <el-input v-model="row.remark" placeholder="-" clearable />
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="暂无人员" />
+        </div>
+
+        <div v-show="addStep === 2" class="salary-add-step">
+          <div class="salary-add-summary">
+            <div>月份：{{ addForm.month || '-' }}</div>
+            <div>人数：{{ addRows.length }}</div>
+            <div>合计汇总：{{ formatMoney(addRowsTotal) }}</div>
+          </div>
+          <el-table v-if="addRows.length" :data="addRows" border height="560">
+            <el-table-column type="index" label="序号" width="70" align="center" />
+            <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
+            <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
+            <el-table-column prop="baseSalary" label="基本工资" width="140" align="right">
+              <template #default="{ row }">{{ formatMoney(row.baseSalary) }}</template>
+            </el-table-column>
+            <el-table-column prop="bonus" label="绩效/奖金" width="140" align="right">
+              <template #default="{ row }">{{ formatMoney(row.bonus) }}</template>
+            </el-table-column>
+            <el-table-column prop="deduction" label="扣款" width="140" align="right">
+              <template #default="{ row }">{{ formatMoney(row.deduction) }}</template>
+            </el-table-column>
+            <el-table-column prop="total" label="合计" width="140" align="right">
+              <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-else description="暂无人员" />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="addDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addSaving" @click="saveAddStep">保存</el-button>
+        <el-button
+          v-if="addStep < 2"
+          type="success"
+          :disabled="!addStepSaved[addStep]"
+          @click="goNextStep"
+        >
+          下一步
+        </el-button>
+        <el-button
+          v-else
+          type="success"
+          :disabled="!addStepSaved[2]"
+          :loading="addCompleting"
+          @click="completeAdd"
+        >
+          完成
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -309,18 +477,16 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
-
-type SalaryRow = {
-  id?: number
-  month: string
-  employeeName: string
-  employeeNumber: string
-  baseSalary?: number | null
-  bonus?: number | null
-  deduction?: number | null
-  total?: number | null
-  remark?: string
-}
+import {
+  completeSalaryApi,
+  getSalaryDraftApi,
+  getSalaryListApi,
+  saveSalaryDraftStep1Api,
+  saveSalaryDraftStep2Api,
+  saveSalaryDraftStep3Api,
+  type SalaryDraftRow,
+  type SalaryRow
+} from '@/api/salary'
 
 type SalaryBaseRow = {
   employeeId: number
@@ -375,6 +541,22 @@ const subsidyRows = ref<SubsidyRow[]>([])
 const paramsDialogVisible = ref(false)
 const paramsActiveTab = ref<'salaryBase' | 'level' | 'subsidy'>('salaryBase')
 
+const addDialogVisible = ref(false)
+const addStep = ref(0)
+const addSaving = ref(false)
+const addCompleting = ref(false)
+const addStepSaved = reactive([false, false, false])
+const addDraftId = ref<number | null>(null)
+
+const addEmployeesLoading = ref(false)
+const addEmployees = ref<EmployeeInfo[]>([])
+const addForm = reactive({
+  month: '',
+  applyToAll: true,
+  employeeIds: [] as number[]
+})
+const addRows = ref<SalaryDraftRow[]>([])
+
 const formatMoney = (val?: number | null) => {
   if (val === null || val === undefined) return '-'
   const num = Number(val)
@@ -382,11 +564,36 @@ const formatMoney = (val?: number | null) => {
   return num.toFixed(2)
 }
 
+const computeRowTotal = (row: Pick<SalaryDraftRow, 'baseSalary' | 'bonus' | 'deduction'>) => {
+  const base = Number(row.baseSalary || 0)
+  const bonus = Number(row.bonus || 0)
+  const deduction = Number(row.deduction || 0)
+  const total = base + bonus - deduction
+  return Number.isNaN(total) ? null : total
+}
+
+const addRowsTotal = computed(() => {
+  return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
+})
+
 const loadList = async () => {
   loading.value = true
   try {
-    tableData.value = []
-    pagination.total = 0
+    const params: Record<string, any> = {
+      page: pagination.page,
+      pageSize: pagination.size
+    }
+    if (queryForm.month) params.month = queryForm.month
+    if (queryForm.keyword) params.keyword = queryForm.keyword
+    const response: any = await getSalaryListApi(params)
+    if (response?.code === 0 && response?.data) {
+      tableData.value = response.data.list || []
+      pagination.total = response.data.total || 0
+    } else {
+      tableData.value = response?.list || response?.data?.list || response?.data || []
+      pagination.total =
+        response?.total || response?.data?.total || (tableData.value ? tableData.value.length : 0)
+    }
   } finally {
     loading.value = false
   }
@@ -506,8 +713,164 @@ const handleParamsSave = () => {
   handleNotReady()
 }
 
-const handleAdd = () => {
-  handleNotReady()
+const resetAddWizard = () => {
+  addStep.value = 0
+  addSaving.value = false
+  addCompleting.value = false
+  addDraftId.value = null
+  addStepSaved[0] = false
+  addStepSaved[1] = false
+  addStepSaved[2] = false
+  addForm.month = queryForm.month || ''
+  addForm.applyToAll = true
+  addForm.employeeIds = []
+  addRows.value = []
+}
+
+const loadAddEmployees = async () => {
+  addEmployeesLoading.value = true
+  try {
+    addEmployees.value = await loadActiveEmployees()
+  } catch (error) {
+    console.error('加载员工列表失败:', error)
+    ElMessage.error('加载员工列表失败')
+    addEmployees.value = []
+  } finally {
+    addEmployeesLoading.value = false
+  }
+}
+
+const handleAdd = async () => {
+  resetAddWizard()
+  addDialogVisible.value = true
+  await loadAddEmployees()
+}
+
+const getStep1EmployeeIds = () => {
+  if (addForm.applyToAll) return addEmployees.value.map((emp) => emp.id)
+  return addForm.employeeIds
+}
+
+const saveAddStep = async () => {
+  if (addStep.value === 0) {
+    if (!addForm.month) {
+      ElMessage.warning('请选择月份')
+      return
+    }
+    const employeeIds = getStep1EmployeeIds()
+    if (!employeeIds.length) {
+      ElMessage.warning('请选择员工')
+      return
+    }
+
+    addSaving.value = true
+    try {
+      const response: any = await saveSalaryDraftStep1Api({ month: addForm.month, employeeIds })
+      if (response?.code !== 0 || !response?.data?.id) {
+        throw new Error(response?.message || '保存失败')
+      }
+      addDraftId.value = response.data.id
+
+      const draftResp: any = await getSalaryDraftApi(response.data.id)
+      const draft = draftResp?.data || draftResp
+      addRows.value = (draft?.rows || []).map((r: any) => ({
+        employeeId: r.employeeId,
+        employeeName: r.employeeName,
+        employeeNumber: String(r.employeeNumber ?? ''),
+        baseSalary: r.baseSalary ?? null,
+        bonus: r.bonus ?? null,
+        deduction: r.deduction ?? null,
+        total: r.total ?? null,
+        remark: r.remark || ''
+      }))
+
+      addStepSaved[0] = true
+      ElMessage.success('步骤1已保存')
+    } catch (error: any) {
+      console.error('保存步骤1失败:', error)
+      ElMessage.error(error?.message || '保存步骤1失败')
+    } finally {
+      addSaving.value = false
+    }
+    return
+  }
+
+  if (addStep.value === 1) {
+    if (!addDraftId.value) {
+      ElMessage.error('草稿不存在，请返回步骤1重新保存')
+      return
+    }
+
+    addSaving.value = true
+    try {
+      const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
+      addRows.value = rows
+      const response: any = await saveSalaryDraftStep2Api(addDraftId.value, { rows })
+      if (response?.code !== 0) throw new Error(response?.message || '保存失败')
+      addStepSaved[1] = true
+      ElMessage.success('步骤2已保存')
+    } catch (error: any) {
+      console.error('保存步骤2失败:', error)
+      ElMessage.error(error?.message || '保存步骤2失败')
+    } finally {
+      addSaving.value = false
+    }
+    return
+  }
+
+  if (addStep.value === 2) {
+    if (!addDraftId.value) {
+      ElMessage.error('草稿不存在，请返回步骤1重新保存')
+      return
+    }
+
+    addSaving.value = true
+    try {
+      const response: any = await saveSalaryDraftStep3Api(addDraftId.value)
+      if (response?.code !== 0) throw new Error(response?.message || '保存失败')
+      addStepSaved[2] = true
+      ElMessage.success('步骤3已保存')
+    } catch (error: any) {
+      console.error('保存步骤3失败:', error)
+      ElMessage.error(error?.message || '保存步骤3失败')
+    } finally {
+      addSaving.value = false
+    }
+  }
+}
+
+const goNextStep = () => {
+  if (!addStepSaved[addStep.value]) {
+    ElMessage.warning('请先保存当前步骤')
+    return
+  }
+  addStep.value = Math.min(addStep.value + 1, 2)
+}
+
+const completeAdd = async () => {
+  if (!addDraftId.value) {
+    ElMessage.error('草稿不存在，请返回步骤1重新保存')
+    return
+  }
+  if (!addStepSaved[2]) {
+    ElMessage.warning('请先保存步骤3')
+    return
+  }
+
+  addCompleting.value = true
+  try {
+    const response: any = await completeSalaryApi(addDraftId.value)
+    if (response?.code !== 0) throw new Error(response?.message || '完成失败')
+    ElMessage.success('新增完成')
+    addDialogVisible.value = false
+    pagination.page = 1
+    await loadList()
+  } catch (error: any) {
+    console.error('完成失败:', error)
+    ElMessage.error(error?.message || '完成失败')
+  } finally {
+    addCompleting.value = false
+  }
 }
 
 onMounted(() => {
@@ -578,6 +941,30 @@ onMounted(() => {
   padding: 4px;
   background: var(--el-bg-color);
   border-radius: 8px;
+}
+
+.salary-add-body {
+  margin-top: 12px;
+}
+
+.salary-add-step {
+  margin-top: 12px;
+}
+
+.salary-add-summary {
+  display: flex;
+  gap: 18px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+:deep(.salary-add-dialog .sa-col-input .cell) {
+  padding: 0 !important;
+}
+
+:deep(.salary-add-dialog .sa-number.el-input-number) {
+  width: 120px;
 }
 
 .pagination-footer {

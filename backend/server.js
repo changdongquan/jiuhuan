@@ -22,6 +22,7 @@ const analysisRoutes = require('./routes/analysis')
 const permissionRoutes = require('./routes/permission')
 const userRoutes = require('./routes/user')
 const attendanceRoutes = require('./routes/attendance')
+const salaryRoutes = require('./routes/salary')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -89,6 +90,7 @@ app.use('/api/analysis', analysisRoutes)
 app.use('/api/permission', permissionRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/attendance', attendanceRoutes)
+app.use('/api/salary', salaryRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
