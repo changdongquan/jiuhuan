@@ -201,6 +201,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         }
       },
       {
+        path: 'salary',
+        name: 'Salary',
+        component: () => import('@/views/Salary/index.vue'),
+        meta: {
+          title: '工资',
+          icon: 'vi-ep:money',
+          roles: ['*'],
+          noCache: true
+        }
+      },
+      {
         path: 'comprehensive-query',
         name: 'ComprehensiveQuery',
         component: () => import('@/views/ComprehensiveQuery/index.vue'),
