@@ -57,6 +57,12 @@ const routesToSync = [
     page_title: '回款单据',
     parent_route: 'FinancialManagement'
   },
+  {
+    route_name: 'Salary',
+    route_path: '/financial-management/salary',
+    page_title: '工资',
+    parent_route: 'FinancialManagement'
+  },
 
   // 库存管理
   {
