@@ -5,6 +5,9 @@ const { query, getPool } = require('../database')
 
 const TABLE_SUMMARY = '工资汇总'
 const TABLE_DETAIL = '工资明细'
+const TABLE_SALARY_BASE = '工资_工资基数'
+const TABLE_OVERTIME_BASE = '工资_加班费基数'
+const TABLE_SUBSIDY = '工资_补助'
 
 const toNumberOrNull = (val) => {
   if (val === null || val === undefined || val === '') return null
@@ -26,6 +29,11 @@ const computeTotal = (baseSalary, bonus, deduction) => {
 }
 
 const isValidMonth = (month) => /^(\d{4})-(\d{2})$/.test(String(month || ''))
+const parseDateOrNull = (val) => {
+  if (!val) return null
+  const d = new Date(val)
+  return Number.isNaN(d.getTime()) ? null : d
+}
 
 const upsertDraftStep1 = async ({ month, employeeIds }) => {
   if (!isValidMonth(month)) throw new Error('月份格式无效')
@@ -360,6 +368,188 @@ router.put('/complete/:id', async (req, res) => {
   } catch (error) {
     console.error('完成工资失败:', error)
     res.status(500).json({ code: 500, message: '完成失败' })
+  }
+})
+
+// -----------------------------
+// 参数接口（工资计算参数）
+// -----------------------------
+
+router.get('/params/salary-base', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT
+        员工ID as employeeId,
+        工资基数 as salaryBase,
+        调整日期 as adjustDate,
+        更新时间 as updatedAt
+      FROM ${TABLE_SALARY_BASE}
+      ORDER BY 员工ID
+    `)
+    res.json({ code: 0, data: rows })
+  } catch (error) {
+    console.error('获取工资基数失败:', error)
+    res.status(500).json({ code: 500, message: '获取工资基数失败' })
+  }
+})
+
+router.put('/params/salary-base', async (req, res) => {
+  let transaction = null
+  try {
+    const { rows } = req.body || {}
+    if (!Array.isArray(rows)) return res.status(400).json({ code: 400, message: 'rows 必须是数组' })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    for (const row of rows) {
+      const employeeId = Number(row.employeeId)
+      if (!employeeId) continue
+
+      const upsertReq = new sql.Request(transaction)
+      upsertReq.input('employeeId', sql.Int, employeeId)
+      upsertReq.input('salaryBase', sql.Decimal(12, 2), toMoney(row.salaryBase))
+      upsertReq.input('adjustDate', sql.DateTime2, parseDateOrNull(row.adjustDate))
+      await upsertReq.query(`
+        MERGE ${TABLE_SALARY_BASE} AS t
+        USING (SELECT @employeeId AS 员工ID) AS s
+        ON (t.员工ID = s.员工ID)
+        WHEN MATCHED THEN
+          UPDATE SET 工资基数 = @salaryBase, 调整日期 = @adjustDate, 更新时间 = SYSDATETIME()
+        WHEN NOT MATCHED THEN
+          INSERT (员工ID, 工资基数, 调整日期, 创建时间, 更新时间)
+          VALUES (@employeeId, @salaryBase, @adjustDate, SYSDATETIME(), SYSDATETIME());
+      `)
+    }
+
+    await transaction.commit()
+    res.json({ code: 0, message: '保存成功' })
+  } catch (error) {
+    if (transaction) await transaction.rollback()
+    console.error('保存工资基数失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '保存工资基数失败' })
+  }
+})
+
+router.get('/params/overtime-base', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT
+        职级 as level,
+        加班 as overtime,
+        两倍加班 as doubleOvertime,
+        三倍加班 as tripleOvertime,
+        调整日期 as adjustDate,
+        更新时间 as updatedAt
+      FROM ${TABLE_OVERTIME_BASE}
+      ORDER BY 职级
+    `)
+    res.json({ code: 0, data: rows })
+  } catch (error) {
+    console.error('获取加班费基数失败:', error)
+    res.status(500).json({ code: 500, message: '获取加班费基数失败' })
+  }
+})
+
+router.put('/params/overtime-base', async (req, res) => {
+  let transaction = null
+  try {
+    const { rows } = req.body || {}
+    if (!Array.isArray(rows)) return res.status(400).json({ code: 400, message: 'rows 必须是数组' })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    for (const row of rows) {
+      const level = Number(row.level)
+      if (!level) continue
+
+      const upsertReq = new sql.Request(transaction)
+      upsertReq.input('level', sql.Int, level)
+      upsertReq.input('overtime', sql.Decimal(12, 2), toMoney(row.overtime))
+      upsertReq.input('doubleOvertime', sql.Decimal(12, 2), toMoney(row.doubleOvertime))
+      upsertReq.input('tripleOvertime', sql.Decimal(12, 2), toMoney(row.tripleOvertime))
+      upsertReq.input('adjustDate', sql.DateTime2, parseDateOrNull(row.adjustDate))
+      await upsertReq.query(`
+        MERGE ${TABLE_OVERTIME_BASE} AS t
+        USING (SELECT @level AS 职级) AS s
+        ON (t.职级 = s.职级)
+        WHEN MATCHED THEN
+          UPDATE SET 加班 = @overtime, 两倍加班 = @doubleOvertime, 三倍加班 = @tripleOvertime,
+                     调整日期 = @adjustDate, 更新时间 = SYSDATETIME()
+        WHEN NOT MATCHED THEN
+          INSERT (职级, 加班, 两倍加班, 三倍加班, 调整日期, 创建时间, 更新时间)
+          VALUES (@level, @overtime, @doubleOvertime, @tripleOvertime, @adjustDate, SYSDATETIME(), SYSDATETIME());
+      `)
+    }
+
+    await transaction.commit()
+    res.json({ code: 0, message: '保存成功' })
+  } catch (error) {
+    if (transaction) await transaction.rollback()
+    console.error('保存加班费基数失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '保存加班费基数失败' })
+  }
+})
+
+router.get('/params/subsidy', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT
+        补助名称 as name,
+        计量方式 as unit,
+        金额 as amount,
+        调整日期 as adjustDate,
+        更新时间 as updatedAt
+      FROM ${TABLE_SUBSIDY}
+      ORDER BY 补助名称
+    `)
+    res.json({ code: 0, data: rows })
+  } catch (error) {
+    console.error('获取补助参数失败:', error)
+    res.status(500).json({ code: 500, message: '获取补助参数失败' })
+  }
+})
+
+router.put('/params/subsidy', async (req, res) => {
+  let transaction = null
+  try {
+    const { rows } = req.body || {}
+    if (!Array.isArray(rows)) return res.status(400).json({ code: 400, message: 'rows 必须是数组' })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    for (const row of rows) {
+      const name = String(row.name || '').trim()
+      if (!name) continue
+
+      const upsertReq = new sql.Request(transaction)
+      upsertReq.input('name', sql.NVarChar, name)
+      upsertReq.input('unit', sql.NVarChar, row.unit ? String(row.unit) : '按次')
+      upsertReq.input('amount', sql.Decimal(12, 2), toMoney(row.amount))
+      upsertReq.input('adjustDate', sql.DateTime2, parseDateOrNull(row.adjustDate))
+      await upsertReq.query(`
+        MERGE ${TABLE_SUBSIDY} AS t
+        USING (SELECT @name AS 补助名称) AS s
+        ON (t.补助名称 = s.补助名称)
+        WHEN MATCHED THEN
+          UPDATE SET 计量方式 = @unit, 金额 = @amount, 调整日期 = @adjustDate, 更新时间 = SYSDATETIME()
+        WHEN NOT MATCHED THEN
+          INSERT (补助名称, 计量方式, 金额, 调整日期, 创建时间, 更新时间)
+          VALUES (@name, @unit, @amount, @adjustDate, SYSDATETIME(), SYSDATETIME());
+      `)
+    }
+
+    await transaction.commit()
+    res.json({ code: 0, message: '保存成功' })
+  } catch (error) {
+    if (transaction) await transaction.rollback()
+    console.error('保存补助参数失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '保存补助参数失败' })
   }
 })
 

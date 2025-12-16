@@ -170,7 +170,7 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="职级" name="level">
+        <el-tab-pane label="加班费基数" name="level">
           <div class="params-tab-body" v-loading="levelLoading">
             <el-table v-if="levelRows.length" :data="levelRows" border height="560">
               <el-table-column prop="level" label="职级" width="80" align="center" />
@@ -303,6 +303,57 @@
     </el-dialog>
 
     <el-dialog
+      v-model="rangeDialogVisible"
+      title="选择工资计算范围"
+      :width="isMobile ? '100%' : '560px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+      class="salary-range-dialog"
+    >
+      <el-form :model="rangeForm" label-width="90px" class="salary-range-form">
+        <el-form-item label="月份" required>
+          <el-date-picker
+            v-model="rangeForm.month"
+            type="month"
+            value-format="YYYY-MM"
+            placeholder="选择月份"
+            :style="{ width: isMobile ? '100%' : '220px' }"
+          />
+        </el-form-item>
+        <el-form-item label="员工范围" required>
+          <el-radio-group v-model="rangeForm.applyToAll">
+            <el-radio :value="true">全部在职员工</el-radio>
+            <el-radio :value="false">指定员工</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="!rangeForm.applyToAll" label="选择员工" required>
+          <el-select
+            v-model="rangeForm.employeeIds"
+            filterable
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="请选择员工"
+            :loading="addEmployeesLoading"
+            :style="{ width: isMobile ? '100%' : '420px' }"
+          >
+            <el-option
+              v-for="emp in addEmployees"
+              :key="emp.id"
+              :label="`${emp.employeeName}（${emp.employeeNumber}）`"
+              :value="emp.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="cancelRange">取消</el-button>
+        <el-button type="primary" :loading="rangeSaving" @click="saveRange">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="addDialogVisible"
       title="新增工资"
       :width="isMobile ? '100%' : '1100px'"
@@ -311,53 +362,23 @@
       class="salary-add-dialog"
       @closed="resetAddWizard"
     >
+      <template #header>
+        <div class="salary-add-header">
+          <div class="salary-add-header__title">新增工资</div>
+          <div class="salary-add-header__meta">
+            <el-tag size="small" type="info">{{ rangeForm.month || '-' }}</el-tag>
+            <span class="salary-add-header__meta-text">{{ rangeLabel }}</span>
+          </div>
+        </div>
+      </template>
+
       <el-steps :active="addStep" align-center finish-status="success">
-        <el-step title="步骤1" description="选择月份/员工" />
-        <el-step title="步骤2" description="填写明细" />
-        <el-step title="步骤3" description="确认完成" />
+        <el-step title="步骤1" description="填写明细" />
+        <el-step title="步骤2" description="确认完成" />
       </el-steps>
 
       <div class="salary-add-body" v-loading="addSaving">
         <div v-show="addStep === 0" class="salary-add-step">
-          <el-form :model="addForm" label-width="90px" class="salary-add-form">
-            <el-form-item label="月份" required>
-              <el-date-picker
-                v-model="addForm.month"
-                type="month"
-                value-format="YYYY-MM"
-                placeholder="选择月份"
-                :style="{ width: isMobile ? '100%' : '220px' }"
-              />
-            </el-form-item>
-            <el-form-item label="员工范围" required>
-              <el-radio-group v-model="addForm.applyToAll">
-                <el-radio :value="true">全部在职员工</el-radio>
-                <el-radio :value="false">指定员工</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            <el-form-item v-if="!addForm.applyToAll" label="选择员工" required>
-              <el-select
-                v-model="addForm.employeeIds"
-                filterable
-                multiple
-                collapse-tags
-                collapse-tags-tooltip
-                placeholder="请选择员工"
-                :loading="addEmployeesLoading"
-                :style="{ width: isMobile ? '100%' : '520px' }"
-              >
-                <el-option
-                  v-for="emp in addEmployees"
-                  :key="emp.id"
-                  :label="`${emp.employeeName}（${emp.employeeNumber}）`"
-                  :value="emp.id"
-                />
-              </el-select>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <div v-show="addStep === 1" class="salary-add-step">
           <el-table v-if="addRows.length" :data="addRows" border height="560">
             <el-table-column type="index" label="序号" width="70" align="center" />
             <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
@@ -419,9 +440,9 @@
           <el-empty v-else description="暂无人员" />
         </div>
 
-        <div v-show="addStep === 2" class="salary-add-step">
+        <div v-show="addStep === 1" class="salary-add-step">
           <div class="salary-add-summary">
-            <div>月份：{{ addForm.month || '-' }}</div>
+            <div>月份：{{ rangeForm.month || '-' }}</div>
             <div>人数：{{ addRows.length }}</div>
             <div>合计汇总：{{ formatMoney(addRowsTotal) }}</div>
           </div>
@@ -451,7 +472,7 @@
         <el-button @click="addDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="addSaving" @click="saveAddStep">保存</el-button>
         <el-button
-          v-if="addStep < 2"
+          v-if="addStep < 1"
           type="success"
           :disabled="!addStepSaved[addStep]"
           @click="goNextStep"
@@ -461,7 +482,7 @@
         <el-button
           v-else
           type="success"
-          :disabled="!addStepSaved[2]"
+          :disabled="!addStepSaved[1]"
           :loading="addCompleting"
           @click="completeAdd"
         >
@@ -478,15 +499,16 @@ import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import {
-  completeSalaryApi,
-  getSalaryDraftApi,
-  getSalaryListApi,
-  saveSalaryDraftStep1Api,
-  saveSalaryDraftStep2Api,
-  saveSalaryDraftStep3Api,
-  type SalaryDraftRow,
-  type SalaryRow
-} from '@/api/salary'
+  getOvertimeBaseParamsApi,
+  getSalaryBaseParamsApi,
+  getSubsidyParamsApi,
+  saveOvertimeBaseParamsApi,
+  saveSalaryBaseParamsApi,
+  saveSubsidyParamsApi,
+  type OvertimeBaseParamRow,
+  type SalaryBaseParamRow,
+  type SubsidyParamRow
+} from '@/api/salary-params'
 
 type SalaryBaseRow = {
   employeeId: number
@@ -509,6 +531,29 @@ type SubsidyRow = {
   name: string
   amount: number | null
   adjustDate: string
+}
+
+type SalaryRow = {
+  id?: number
+  month: string
+  employeeName: string
+  employeeNumber: string
+  baseSalary?: number | null
+  bonus?: number | null
+  deduction?: number | null
+  total?: number | null
+  remark?: string
+}
+
+type SalaryDraftRow = {
+  employeeId: number
+  employeeName: string
+  employeeNumber: string
+  baseSalary: number | null
+  bonus: number | null
+  deduction: number | null
+  total: number | null
+  remark: string
 }
 
 const appStore = useAppStore()
@@ -541,20 +586,22 @@ const subsidyRows = ref<SubsidyRow[]>([])
 const paramsDialogVisible = ref(false)
 const paramsActiveTab = ref<'salaryBase' | 'level' | 'subsidy'>('salaryBase')
 
-const addDialogVisible = ref(false)
-const addStep = ref(0)
-const addSaving = ref(false)
-const addCompleting = ref(false)
-const addStepSaved = reactive([false, false, false])
-const addDraftId = ref<number | null>(null)
-
-const addEmployeesLoading = ref(false)
-const addEmployees = ref<EmployeeInfo[]>([])
-const addForm = reactive({
+const rangeDialogVisible = ref(false)
+const rangeSaving = ref(false)
+const rangeForm = reactive({
   month: '',
   applyToAll: true,
   employeeIds: [] as number[]
 })
+
+const addDialogVisible = ref(false)
+const addStep = ref(0)
+const addSaving = ref(false)
+const addCompleting = ref(false)
+const addStepSaved = reactive([false, false])
+
+const addEmployeesLoading = ref(false)
+const addEmployees = ref<EmployeeInfo[]>([])
 const addRows = ref<SalaryDraftRow[]>([])
 
 const formatMoney = (val?: number | null) => {
@@ -579,21 +626,9 @@ const addRowsTotal = computed(() => {
 const loadList = async () => {
   loading.value = true
   try {
-    const params: Record<string, any> = {
-      page: pagination.page,
-      pageSize: pagination.size
-    }
-    if (queryForm.month) params.month = queryForm.month
-    if (queryForm.keyword) params.keyword = queryForm.keyword
-    const response: any = await getSalaryListApi(params)
-    if (response?.code === 0 && response?.data) {
-      tableData.value = response.data.list || []
-      pagination.total = response.data.total || 0
-    } else {
-      tableData.value = response?.list || response?.data?.list || response?.data || []
-      pagination.total =
-        response?.total || response?.data?.total || (tableData.value ? tableData.value.length : 0)
-    }
+    // 先断开工资新增弹窗与后端：工资列表暂不从数据库加载
+    tableData.value = []
+    pagination.total = 0
   } finally {
     loading.value = false
   }
@@ -646,14 +681,22 @@ const ensureSalaryBaseLoaded = async () => {
   salaryBaseLoading.value = true
   try {
     const employees = await loadActiveEmployees()
-    salaryBaseRows.value = employees.map((emp) => ({
-      employeeId: emp.id,
-      employeeName: emp.employeeName,
-      employeeNumber: String(emp.employeeNumber ?? ''),
-      department: emp.department || '',
-      salaryBase: null,
-      adjustDate: ''
-    }))
+    const paramsResp: any = await getSalaryBaseParamsApi()
+    const paramsList: SalaryBaseParamRow[] = paramsResp?.data || paramsResp || []
+    const paramsByEmployeeId = new Map<number, SalaryBaseParamRow>()
+    for (const item of paramsList) paramsByEmployeeId.set(item.employeeId, item)
+
+    salaryBaseRows.value = employees.map((emp) => {
+      const param = paramsByEmployeeId.get(emp.id)
+      return {
+        employeeId: emp.id,
+        employeeName: emp.employeeName,
+        employeeNumber: String(emp.employeeNumber ?? ''),
+        department: emp.department || '',
+        salaryBase: param?.salaryBase ?? null,
+        adjustDate: (param?.adjustDate as any) || ''
+      }
+    })
   } catch (error) {
     console.error('加载员工列表失败:', error)
     ElMessage.error('加载员工列表失败')
@@ -665,23 +708,62 @@ const ensureSalaryBaseLoaded = async () => {
 
 const ensureLevelLoaded = () => {
   if (levelRows.value.length) return
-  levelRows.value = Array.from({ length: 10 }, (_, idx) => ({
-    level: idx + 1,
-    overtime: null,
-    doubleOvertime: null,
-    tripleOvertime: null,
-    adjustDate: ''
-  }))
+  void (async () => {
+    levelLoading.value = true
+    try {
+      const paramsResp: any = await getOvertimeBaseParamsApi()
+      const paramsList: OvertimeBaseParamRow[] = paramsResp?.data || paramsResp || []
+      const paramsByLevel = new Map<number, OvertimeBaseParamRow>()
+      for (const item of paramsList) paramsByLevel.set(item.level, item)
+
+      levelRows.value = Array.from({ length: 10 }, (_, idx) => {
+        const level = idx + 1
+        const param = paramsByLevel.get(level)
+        return {
+          level,
+          overtime: param?.overtime ?? null,
+          doubleOvertime: param?.doubleOvertime ?? null,
+          tripleOvertime: param?.tripleOvertime ?? null,
+          adjustDate: (param?.adjustDate as any) || ''
+        }
+      })
+    } catch (error) {
+      console.error('加载加班费基数失败:', error)
+      ElMessage.error('加载加班费基数失败')
+      levelRows.value = []
+    } finally {
+      levelLoading.value = false
+    }
+  })()
 }
 
 const ensureSubsidyLoaded = () => {
   if (subsidyRows.value.length) return
-  if (!subsidyRows.value.length) {
-    subsidyRows.value = [
-      { name: '夜班补助', amount: null, adjustDate: '' },
-      { name: '误餐补助', amount: null, adjustDate: '' }
-    ]
-  }
+  void (async () => {
+    subsidyLoading.value = true
+    try {
+      const resp: any = await getSubsidyParamsApi()
+      const list: SubsidyParamRow[] = resp?.data || resp || []
+      if (list.length) {
+        subsidyRows.value = list.map((item) => ({
+          name: item.name,
+          amount: item.amount ?? null,
+          adjustDate: (item.adjustDate as any) || ''
+        }))
+      } else {
+        subsidyRows.value = [
+          { name: '夜班补助', amount: null, adjustDate: '' },
+          { name: '误餐补助', amount: null, adjustDate: '' }
+        ]
+      }
+    } catch (error) {
+      console.error('加载补助参数失败:', error)
+      ElMessage.error('加载补助参数失败')
+      subsidyRows.value = []
+    } finally {
+      subsidyLoading.value = false
+    }
+  })()
 }
 
 const ensureParamsTabLoaded = async (tab: 'salaryBase' | 'level' | 'subsidy') => {
@@ -710,20 +792,69 @@ const handleParamsTabChange = (tabName: string | number) => {
 }
 
 const handleParamsSave = () => {
-  handleNotReady()
+  void (async () => {
+    try {
+      if (paramsActiveTab.value === 'salaryBase') {
+        const rows: SalaryBaseParamRow[] = salaryBaseRows.value.map((r) => ({
+          employeeId: r.employeeId,
+          salaryBase: r.salaryBase ?? null,
+          adjustDate: r.adjustDate || null
+        }))
+        const resp: any = await saveSalaryBaseParamsApi(rows)
+        if (resp?.code !== 0) throw new Error(resp?.message || '保存失败')
+        ElMessage.success('工资基数已保存')
+        salaryBaseRows.value = []
+        await ensureSalaryBaseLoaded()
+        return
+      }
+
+      if (paramsActiveTab.value === 'level') {
+        const rows: OvertimeBaseParamRow[] = levelRows.value.map((r) => ({
+          level: r.level,
+          overtime: r.overtime ?? null,
+          doubleOvertime: r.doubleOvertime ?? null,
+          tripleOvertime: r.tripleOvertime ?? null,
+          adjustDate: r.adjustDate || null
+        }))
+        const resp: any = await saveOvertimeBaseParamsApi(rows)
+        if (resp?.code !== 0) throw new Error(resp?.message || '保存失败')
+        ElMessage.success('加班费基数已保存')
+        levelRows.value = []
+        ensureLevelLoaded()
+        return
+      }
+
+      if (paramsActiveTab.value === 'subsidy') {
+        const rows: SubsidyParamRow[] = subsidyRows.value.map((r) => ({
+          name: r.name,
+          unit: '按次',
+          amount: r.amount ?? null,
+          adjustDate: r.adjustDate || null
+        }))
+        const resp: any = await saveSubsidyParamsApi(rows)
+        if (resp?.code !== 0) throw new Error(resp?.message || '保存失败')
+        ElMessage.success('补助已保存')
+        subsidyRows.value = []
+        ensureSubsidyLoaded()
+      }
+    } catch (error: any) {
+      console.error('保存参数失败:', error)
+      ElMessage.error(error?.message || '保存失败')
+    }
+  })()
 }
+
+const rangeLabel = computed(() => {
+  if (rangeForm.applyToAll) return '范围：全部在职员工'
+  return `范围：指定员工（${rangeForm.employeeIds.length}人）`
+})
 
 const resetAddWizard = () => {
   addStep.value = 0
   addSaving.value = false
   addCompleting.value = false
-  addDraftId.value = null
   addStepSaved[0] = false
   addStepSaved[1] = false
-  addStepSaved[2] = false
-  addForm.month = queryForm.month || ''
-  addForm.applyToAll = true
-  addForm.employeeIds = []
   addRows.value = []
 }
 
@@ -742,53 +873,74 @@ const loadAddEmployees = async () => {
 
 const handleAdd = async () => {
   resetAddWizard()
-  addDialogVisible.value = true
   await loadAddEmployees()
+  resetRangeDialog()
+  rangeDialogVisible.value = true
 }
 
 const getStep1EmployeeIds = () => {
-  if (addForm.applyToAll) return addEmployees.value.map((emp) => emp.id)
-  return addForm.employeeIds
+  if (rangeForm.applyToAll) return addEmployees.value.map((emp) => emp.id)
+  return rangeForm.employeeIds
+}
+
+const buildDraftRowsFromEmployees = (employeeIds: number[]) => {
+  const selectedEmployees = addEmployees.value.filter((emp) => employeeIds.includes(emp.id))
+  return selectedEmployees.map((emp) => ({
+    employeeId: emp.id,
+    employeeName: emp.employeeName,
+    employeeNumber: String(emp.employeeNumber ?? ''),
+    baseSalary: null,
+    bonus: null,
+    deduction: null,
+    total: null,
+    remark: ''
+  }))
+}
+
+const resetRangeDialog = () => {
+  rangeSaving.value = false
+  rangeForm.month = queryForm.month || ''
+  rangeForm.applyToAll = true
+  rangeForm.employeeIds = []
+}
+
+const cancelRange = () => {
+  resetRangeDialog()
+  rangeDialogVisible.value = false
+}
+
+const saveRange = async () => {
+  if (!rangeForm.month) {
+    ElMessage.warning('请选择月份')
+    return
+  }
+  const employeeIds = getStep1EmployeeIds()
+  if (!employeeIds.length) {
+    ElMessage.warning('请选择员工')
+    return
+  }
+
+  rangeSaving.value = true
+  try {
+    addRows.value = buildDraftRowsFromEmployees(employeeIds)
+    addStep.value = 0
+    addStepSaved[0] = false
+    addStepSaved[1] = false
+    rangeDialogVisible.value = false
+    addDialogVisible.value = true
+  } finally {
+    rangeSaving.value = false
+  }
 }
 
 const saveAddStep = async () => {
   if (addStep.value === 0) {
-    if (!addForm.month) {
-      ElMessage.warning('请选择月份')
-      return
-    }
-    const employeeIds = getStep1EmployeeIds()
-    if (!employeeIds.length) {
-      ElMessage.warning('请选择员工')
-      return
-    }
-
     addSaving.value = true
     try {
-      const response: any = await saveSalaryDraftStep1Api({ month: addForm.month, employeeIds })
-      if (response?.code !== 0 || !response?.data?.id) {
-        throw new Error(response?.message || '保存失败')
-      }
-      addDraftId.value = response.data.id
-
-      const draftResp: any = await getSalaryDraftApi(response.data.id)
-      const draft = draftResp?.data || draftResp
-      addRows.value = (draft?.rows || []).map((r: any) => ({
-        employeeId: r.employeeId,
-        employeeName: r.employeeName,
-        employeeNumber: String(r.employeeNumber ?? ''),
-        baseSalary: r.baseSalary ?? null,
-        bonus: r.bonus ?? null,
-        deduction: r.deduction ?? null,
-        total: r.total ?? null,
-        remark: r.remark || ''
-      }))
-
+      const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
+      addRows.value = rows
       addStepSaved[0] = true
-      ElMessage.success('步骤1已保存')
-    } catch (error: any) {
-      console.error('保存步骤1失败:', error)
-      ElMessage.error(error?.message || '保存步骤1失败')
+      ElMessage.success('步骤1已保存（未写入数据库）')
     } finally {
       addSaving.value = false
     }
@@ -796,47 +948,17 @@ const saveAddStep = async () => {
   }
 
   if (addStep.value === 1) {
-    if (!addDraftId.value) {
-      ElMessage.error('草稿不存在，请返回步骤1重新保存')
-      return
-    }
-
     addSaving.value = true
     try {
-      const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
-      addRows.value = rows
-      const response: any = await saveSalaryDraftStep2Api(addDraftId.value, { rows })
-      if (response?.code !== 0) throw new Error(response?.message || '保存失败')
       addStepSaved[1] = true
-      ElMessage.success('步骤2已保存')
-    } catch (error: any) {
-      console.error('保存步骤2失败:', error)
-      ElMessage.error(error?.message || '保存步骤2失败')
+      ElMessage.success('步骤2已保存（未写入数据库）')
     } finally {
       addSaving.value = false
     }
     return
   }
 
-  if (addStep.value === 2) {
-    if (!addDraftId.value) {
-      ElMessage.error('草稿不存在，请返回步骤1重新保存')
-      return
-    }
-
-    addSaving.value = true
-    try {
-      const response: any = await saveSalaryDraftStep3Api(addDraftId.value)
-      if (response?.code !== 0) throw new Error(response?.message || '保存失败')
-      addStepSaved[2] = true
-      ElMessage.success('步骤3已保存')
-    } catch (error: any) {
-      console.error('保存步骤3失败:', error)
-      ElMessage.error(error?.message || '保存步骤3失败')
-    } finally {
-      addSaving.value = false
-    }
-  }
+  // 没有第三步
 }
 
 const goNextStep = () => {
@@ -844,30 +966,32 @@ const goNextStep = () => {
     ElMessage.warning('请先保存当前步骤')
     return
   }
-  addStep.value = Math.min(addStep.value + 1, 2)
+  addStep.value = Math.min(addStep.value + 1, 1)
 }
 
 const completeAdd = async () => {
-  if (!addDraftId.value) {
-    ElMessage.error('草稿不存在，请返回步骤1重新保存')
-    return
-  }
-  if (!addStepSaved[2]) {
-    ElMessage.warning('请先保存步骤3')
+  if (!addStepSaved[1]) {
+    ElMessage.warning('请先保存步骤2')
     return
   }
 
   addCompleting.value = true
   try {
-    const response: any = await completeSalaryApi(addDraftId.value)
-    if (response?.code !== 0) throw new Error(response?.message || '完成失败')
-    ElMessage.success('新增完成')
+    const month = rangeForm.month
+    const newRows: SalaryRow[] = addRows.value.map((row) => ({
+      month,
+      employeeName: row.employeeName,
+      employeeNumber: row.employeeNumber,
+      baseSalary: row.baseSalary,
+      bonus: row.bonus,
+      deduction: row.deduction,
+      total: computeRowTotal(row),
+      remark: row.remark
+    }))
+    tableData.value = [...newRows, ...tableData.value]
+    pagination.total = tableData.value.length
+    ElMessage.success('新增完成（未写入数据库）')
     addDialogVisible.value = false
-    pagination.page = 1
-    await loadList()
-  } catch (error: any) {
-    console.error('完成失败:', error)
-    ElMessage.error(error?.message || '完成失败')
   } finally {
     addCompleting.value = false
   }
@@ -965,6 +1089,29 @@ onMounted(() => {
 
 :deep(.salary-add-dialog .sa-number.el-input-number) {
   width: 120px;
+}
+
+.salary-add-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.salary-add-header__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.salary-add-header__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.salary-add-header__meta-text {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
 }
 
 .pagination-footer {
