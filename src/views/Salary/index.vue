@@ -380,61 +380,25 @@
       <div class="salary-add-body" v-loading="addSaving">
         <div v-show="addStep === 0" class="salary-add-step">
           <el-table v-if="addRows.length" :data="addRows" border height="560">
-            <el-table-column type="index" label="序号" width="70" align="center" />
-            <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
-            <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
-            <el-table-column label="基本工资" width="140" align="center" class-name="sa-col-input">
+            <el-table-column type="index" label="序号" width="55" align="center" />
+            <el-table-column prop="employeeName" label="姓名" width="90" show-overflow-tooltip />
+            <el-table-column prop="employeeNumber" label="工号" width="60" show-overflow-tooltip />
+            <el-table-column label="基本工资" width="85" align="right">
               <template #default="{ row }">
-                <el-input-number
-                  v-model="row.baseSalary"
-                  :min="0"
-                  :max="99999999"
-                  :precision="2"
-                  :controls="false"
-                  :value-on-clear="null"
-                  placeholder="-"
-                  size="small"
-                  class="sa-number"
-                />
+                {{ formatMoney(row.baseSalary) }}
               </template>
             </el-table-column>
-            <el-table-column label="绩效/奖金" width="140" align="center" class-name="sa-col-input">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.bonus"
-                  :min="0"
-                  :max="99999999"
-                  :precision="2"
-                  :controls="false"
-                  :value-on-clear="null"
-                  placeholder="-"
-                  size="small"
-                  class="sa-number"
-                />
-              </template>
+            <el-table-column label="加班费" width="85" align="right">
+              <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
             </el-table-column>
-            <el-table-column label="扣款" width="140" align="center" class-name="sa-col-input">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.deduction"
-                  :min="0"
-                  :max="99999999"
-                  :precision="2"
-                  :controls="false"
-                  :value-on-clear="null"
-                  placeholder="-"
-                  size="small"
-                  class="sa-number"
-                />
-              </template>
+            <el-table-column label="两倍加班费" width="100" align="right">
+              <template #default="{ row }">{{ formatMoney(row.doubleOvertimePay) }}</template>
             </el-table-column>
-            <el-table-column label="合计" width="140" align="right">
+            <el-table-column label="三倍加班费" width="100" align="right">
+              <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
+            </el-table-column>
+            <el-table-column label="合计" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="160">
-              <template #default="{ row }">
-                <el-input v-model="row.remark" placeholder="-" clearable />
-              </template>
             </el-table-column>
           </el-table>
           <el-empty v-else description="暂无人员" />
@@ -450,14 +414,17 @@
             <el-table-column type="index" label="序号" width="70" align="center" />
             <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
             <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
-            <el-table-column prop="baseSalary" label="基本工资" width="140" align="right">
+            <el-table-column prop="baseSalary" label="基本工资" width="120" align="right">
               <template #default="{ row }">{{ formatMoney(row.baseSalary) }}</template>
             </el-table-column>
-            <el-table-column prop="bonus" label="绩效/奖金" width="140" align="right">
-              <template #default="{ row }">{{ formatMoney(row.bonus) }}</template>
+            <el-table-column prop="overtimePay" label="加班费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
             </el-table-column>
-            <el-table-column prop="deduction" label="扣款" width="140" align="right">
-              <template #default="{ row }">{{ formatMoney(row.deduction) }}</template>
+            <el-table-column prop="doubleOvertimePay" label="两倍加班费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.doubleOvertimePay) }}</template>
+            </el-table-column>
+            <el-table-column prop="tripleOvertimePay" label="三倍加班费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
             </el-table-column>
             <el-table-column prop="total" label="合计" width="140" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
@@ -550,8 +517,9 @@ type SalaryDraftRow = {
   employeeName: string
   employeeNumber: string
   baseSalary: number | null
-  bonus: number | null
-  deduction: number | null
+  overtimePay: number | null
+  doubleOvertimePay: number | null
+  tripleOvertimePay: number | null
   total: number | null
   remark: string
 }
@@ -611,11 +579,17 @@ const formatMoney = (val?: number | null) => {
   return num.toFixed(2)
 }
 
-const computeRowTotal = (row: Pick<SalaryDraftRow, 'baseSalary' | 'bonus' | 'deduction'>) => {
+const computeRowTotal = (
+  row: Pick<
+    SalaryDraftRow,
+    'baseSalary' | 'overtimePay' | 'doubleOvertimePay' | 'tripleOvertimePay'
+  >
+) => {
   const base = Number(row.baseSalary || 0)
-  const bonus = Number(row.bonus || 0)
-  const deduction = Number(row.deduction || 0)
-  const total = base + bonus - deduction
+  const overtimePay = Number(row.overtimePay || 0)
+  const doubleOvertimePay = Number(row.doubleOvertimePay || 0)
+  const tripleOvertimePay = Number(row.tripleOvertimePay || 0)
+  const total = base + overtimePay + doubleOvertimePay + tripleOvertimePay
   return Number.isNaN(total) ? null : total
 }
 
@@ -889,12 +863,23 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]) => {
     employeeId: emp.id,
     employeeName: emp.employeeName,
     employeeNumber: String(emp.employeeNumber ?? ''),
-    baseSalary: null,
-    bonus: null,
-    deduction: null,
+    baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
+    overtimePay: null,
+    doubleOvertimePay: null,
+    tripleOvertimePay: null,
     total: null,
     remark: ''
   }))
+}
+
+const salaryBaseByEmployeeId = ref(new Map<number, number | null>())
+
+const refreshSalaryBaseParams = async () => {
+  const paramsResp: any = await getSalaryBaseParamsApi()
+  const paramsList: SalaryBaseParamRow[] = paramsResp?.data || paramsResp || []
+  const map = new Map<number, number | null>()
+  for (const item of paramsList) map.set(item.employeeId, item.salaryBase ?? null)
+  salaryBaseByEmployeeId.value = map
 }
 
 const resetRangeDialog = () => {
@@ -922,6 +907,7 @@ const saveRange = async () => {
 
   rangeSaving.value = true
   try {
+    await refreshSalaryBaseParams()
     addRows.value = buildDraftRowsFromEmployees(employeeIds)
     addStep.value = 0
     addStepSaved[0] = false
@@ -983,8 +969,6 @@ const completeAdd = async () => {
       employeeName: row.employeeName,
       employeeNumber: row.employeeNumber,
       baseSalary: row.baseSalary,
-      bonus: row.bonus,
-      deduction: row.deduction,
       total: computeRowTotal(row),
       remark: row.remark
     }))
