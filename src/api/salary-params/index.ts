@@ -24,6 +24,14 @@ export type SubsidyParamRow = {
   updatedAt?: string
 }
 
+export type PenaltyParamRow = {
+  name: string
+  unit?: string
+  amount: number | null
+  adjustDate: string | null
+  updatedAt?: string
+}
+
 export const getSalaryBaseParamsApi = () => {
   return request({
     url: '/api/salary/params/salary-base',
@@ -64,6 +72,21 @@ export const getSubsidyParamsApi = () => {
 export const saveSubsidyParamsApi = (rows: SubsidyParamRow[]) => {
   return request({
     url: '/api/salary/params/subsidy',
+    method: 'put',
+    data: { rows }
+  })
+}
+
+export const getPenaltyParamsApi = () => {
+  return request({
+    url: '/api/salary/params/penalty',
+    method: 'get'
+  })
+}
+
+export const savePenaltyParamsApi = (rows: PenaltyParamRow[]) => {
+  return request({
+    url: '/api/salary/params/penalty',
     method: 'put',
     data: { rows }
   })

@@ -294,6 +294,49 @@
             <el-empty v-else description="暂无补助配置" />
           </div>
         </el-tab-pane>
+
+        <el-tab-pane label="罚扣" name="penalty">
+          <div class="params-tab-body" v-loading="penaltyLoading">
+            <el-table v-if="penaltyRows.length" :data="penaltyRows" border height="560">
+              <el-table-column type="index" label="序号" width="70" align="center" />
+              <el-table-column prop="name" label="罚扣" width="110" />
+              <el-table-column label="金额" width="140" align="center" class-name="sub-col-input">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.amount"
+                    :min="0"
+                    :max="999999"
+                    :precision="0"
+                    :controls="false"
+                    :value-on-clear="null"
+                    placeholder="-"
+                    size="small"
+                    class="sub-number"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="调整日期"
+                width="180"
+                align="center"
+                class-name="sub-col-input"
+              >
+                <template #default="{ row }">
+                  <el-date-picker
+                    v-model="row.adjustDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="-"
+                    clearable
+                    size="small"
+                    style="width: 160px"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-else description="暂无罚扣配置" />
+          </div>
+        </el-tab-pane>
       </el-tabs>
 
       <template #footer>
@@ -550,12 +593,15 @@ import {
 } from '@/api/attendance'
 import {
   getOvertimeBaseParamsApi,
+  getPenaltyParamsApi,
   getSalaryBaseParamsApi,
   getSubsidyParamsApi,
+  savePenaltyParamsApi,
   saveOvertimeBaseParamsApi,
   saveSalaryBaseParamsApi,
   saveSubsidyParamsApi,
   type OvertimeBaseParamRow,
+  type PenaltyParamRow,
   type SalaryBaseParamRow,
   type SubsidyParamRow
 } from '@/api/salary-params'
@@ -578,6 +624,12 @@ type LevelRow = {
 }
 
 type SubsidyRow = {
+  name: string
+  amount: number | null
+  adjustDate: string
+}
+
+type PenaltyRow = {
   name: string
   amount: number | null
   adjustDate: string
@@ -660,8 +712,11 @@ const levelRows = ref<LevelRow[]>([])
 const subsidyLoading = ref(false)
 const subsidyRows = ref<SubsidyRow[]>([])
 
+const penaltyLoading = ref(false)
+const penaltyRows = ref<PenaltyRow[]>([])
+
 const paramsDialogVisible = ref(false)
-const paramsActiveTab = ref<'salaryBase' | 'level' | 'subsidy'>('salaryBase')
+const paramsActiveTab = ref<'salaryBase' | 'level' | 'subsidy' | 'penalty'>('salaryBase')
 
 const rangeDialogVisible = ref(false)
 const rangeSaving = ref(false)
@@ -1037,7 +1092,60 @@ const ensureSubsidyLoaded = () => {
   })()
 }
 
-const ensureParamsTabLoaded = async (tab: 'salaryBase' | 'level' | 'subsidy') => {
+const ensurePenaltyLoaded = () => {
+  if (penaltyRows.value.length) return
+  void (async () => {
+    penaltyLoading.value = true
+    try {
+      const resp: any = await getPenaltyParamsApi()
+      const list: PenaltyParamRow[] = resp?.data || resp || []
+      const required = [
+        '迟到扣款',
+        '新进及事假扣款',
+        '病假扣款',
+        '旷工扣款',
+        '卫生费',
+        '水费',
+        '电费'
+      ]
+
+      const map = new Map<string, PenaltyParamRow>()
+      for (const item of list) map.set(String(item?.name || '').trim(), item)
+
+      const rows: PenaltyRow[] = required.map((name) => {
+        const item = map.get(name)
+        return {
+          name,
+          amount: item?.amount ?? null,
+          adjustDate: (item?.adjustDate as any) || ''
+        }
+      })
+
+      const extras = list
+        .map((item) => String(item?.name || '').trim())
+        .filter((name) => name && !required.includes(name))
+
+      for (const name of extras) {
+        const item = map.get(name)
+        rows.push({
+          name,
+          amount: item?.amount ?? null,
+          adjustDate: (item?.adjustDate as any) || ''
+        })
+      }
+
+      penaltyRows.value = rows
+    } catch (error) {
+      console.error('加载罚扣参数失败:', error)
+      ElMessage.error('加载罚扣参数失败')
+      penaltyRows.value = []
+    } finally {
+      penaltyLoading.value = false
+    }
+  })()
+}
+
+const ensureParamsTabLoaded = async (tab: 'salaryBase' | 'level' | 'subsidy' | 'penalty') => {
   if (tab === 'salaryBase') {
     await ensureSalaryBaseLoaded()
     return
@@ -1048,6 +1156,10 @@ const ensureParamsTabLoaded = async (tab: 'salaryBase' | 'level' | 'subsidy') =>
   }
   if (tab === 'subsidy') {
     ensureSubsidyLoaded()
+    return
+  }
+  if (tab === 'penalty') {
+    ensurePenaltyLoaded()
   }
 }
 
@@ -1057,7 +1169,12 @@ const handleParams = () => {
 }
 
 const handleParamsTabChange = (tabName: string | number) => {
-  if (tabName === 'salaryBase' || tabName === 'level' || tabName === 'subsidy') {
+  if (
+    tabName === 'salaryBase' ||
+    tabName === 'level' ||
+    tabName === 'subsidy' ||
+    tabName === 'penalty'
+  ) {
     void ensureParamsTabLoaded(tabName)
   }
 }
@@ -1107,6 +1224,21 @@ const handleParamsSave = () => {
         ElMessage.success('补助已保存')
         subsidyRows.value = []
         ensureSubsidyLoaded()
+        return
+      }
+
+      if (paramsActiveTab.value === 'penalty') {
+        const rows: PenaltyParamRow[] = penaltyRows.value.map((r) => ({
+          name: r.name,
+          unit: '按次',
+          amount: r.amount ?? null,
+          adjustDate: r.adjustDate || null
+        }))
+        const resp: any = await savePenaltyParamsApi(rows)
+        if (resp?.code !== 0) throw new Error(resp?.message || '保存失败')
+        ElMessage.success('罚扣已保存')
+        penaltyRows.value = []
+        ensurePenaltyLoaded()
       }
     } catch (error: any) {
       console.error('保存参数失败:', error)

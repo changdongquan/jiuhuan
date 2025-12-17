@@ -8,6 +8,7 @@ const TABLE_DETAIL = '工资明细'
 const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
+const TABLE_PENALTY = '工资_罚扣'
 
 const toNumberOrNull = (val) => {
   if (val === null || val === undefined || val === '') return null
@@ -550,6 +551,65 @@ router.put('/params/subsidy', async (req, res) => {
     if (transaction) await transaction.rollback()
     console.error('保存补助参数失败:', error)
     res.status(500).json({ code: 500, message: error.message || '保存补助参数失败' })
+  }
+})
+
+router.get('/params/penalty', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT
+        罚扣名称 as name,
+        计量方式 as unit,
+        金额 as amount,
+        调整日期 as adjustDate,
+        更新时间 as updatedAt
+      FROM ${TABLE_PENALTY}
+      ORDER BY 罚扣名称
+    `)
+    res.json({ code: 0, data: rows })
+  } catch (error) {
+    console.error('获取罚扣参数失败:', error)
+    res.status(500).json({ code: 500, message: '获取罚扣参数失败' })
+  }
+})
+
+router.put('/params/penalty', async (req, res) => {
+  let transaction = null
+  try {
+    const { rows } = req.body || {}
+    if (!Array.isArray(rows)) return res.status(400).json({ code: 400, message: 'rows 必须是数组' })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    for (const row of rows) {
+      const name = String(row.name || '').trim()
+      if (!name) continue
+
+      const upsertReq = new sql.Request(transaction)
+      upsertReq.input('name', sql.NVarChar, name)
+      upsertReq.input('unit', sql.NVarChar, row.unit ? String(row.unit) : '按次')
+      upsertReq.input('amount', sql.Decimal(12, 2), toMoney(row.amount))
+      upsertReq.input('adjustDate', sql.DateTime2, parseDateOrNull(row.adjustDate))
+      await upsertReq.query(`
+        MERGE ${TABLE_PENALTY} AS t
+        USING (SELECT @name AS 罚扣名称) AS s
+        ON (t.罚扣名称 = s.罚扣名称)
+        WHEN MATCHED THEN
+          UPDATE SET 计量方式 = @unit, 金额 = @amount, 调整日期 = @adjustDate, 更新时间 = SYSDATETIME()
+        WHEN NOT MATCHED THEN
+          INSERT (罚扣名称, 计量方式, 金额, 调整日期, 创建时间, 更新时间)
+          VALUES (@name, @unit, @amount, @adjustDate, SYSDATETIME(), SYSDATETIME());
+      `)
+    }
+
+    await transaction.commit()
+    res.json({ code: 0, message: '保存成功' })
+  } catch (error) {
+    if (transaction) await transaction.rollback()
+    console.error('保存罚扣参数失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '保存罚扣参数失败' })
   }
 })
 

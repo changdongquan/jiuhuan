@@ -4,6 +4,7 @@ const config = require('./config')
 const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
+const TABLE_PENALTY = '工资_罚扣'
 
 async function ensureSalaryParamsTables() {
   let pool = null
@@ -70,6 +71,21 @@ async function ensureSalaryParamsTables() {
     `
     )
 
+    await ensureTable(
+      TABLE_PENALTY,
+      `
+      CREATE TABLE ${TABLE_PENALTY} (
+        ID INT IDENTITY(1,1) PRIMARY KEY,
+        罚扣名称 NVARCHAR(50) NOT NULL UNIQUE,
+        计量方式 NVARCHAR(20) NOT NULL DEFAULT N'按次',
+        金额 DECIMAL(12,2) NULL,
+        调整日期 DATE NULL,
+        创建时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        更新时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+      )
+    `
+    )
+
     // 初始化默认补助项（按次），若不存在则插入
     const defaults = [
       { name: '夜班补助', amount: null },
@@ -94,6 +110,34 @@ async function ensureSalaryParamsTables() {
            VALUES (@name, N'按次', @amount, NULL, SYSDATETIME(), SYSDATETIME())`
         )
       console.log(`已初始化补助项：${name}`)
+    }
+
+    // 初始化默认罚扣项（按次），若不存在则插入
+    const penaltyDefaults = [
+      { name: '迟到扣款', amount: null },
+      { name: '新进及事假扣款', amount: null },
+      { name: '病假扣款', amount: null },
+      { name: '旷工扣款', amount: null },
+      { name: '卫生费', amount: null },
+      { name: '水费', amount: null },
+      { name: '电费', amount: null }
+    ]
+    for (const item of penaltyDefaults) {
+      const name = item.name
+      const exists = await pool
+        .request()
+        .input('name', sql.NVarChar, name)
+        .query(`SELECT 1 FROM ${TABLE_PENALTY} WHERE 罚扣名称 = @name`)
+      if (exists.recordset.length) continue
+      await pool
+        .request()
+        .input('name', sql.NVarChar, name)
+        .input('amount', sql.Decimal(12, 2), item.amount)
+        .query(
+          `INSERT INTO ${TABLE_PENALTY} (罚扣名称, 计量方式, 金额, 调整日期, 创建时间, 更新时间)
+           VALUES (@name, N'按次', @amount, NULL, SYSDATETIME(), SYSDATETIME())`
+        )
+      console.log(`已初始化罚扣项：${name}`)
     }
 
     console.log('\n✅ 工资参数表结构检查完成')
