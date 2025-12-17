@@ -375,10 +375,24 @@
               </div>
               <div
                 class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 0 }"
+                :class="{
+                  'salary-add-header__meta-row--sub-hidden': !(addStep === 0 || addStep === 1)
+                }"
               >
                 <span>人数：{{ addRows.length }}</span>
                 <span>应发合计：{{ formatMoney(addRowsTotal) }}</span>
+              </div>
+              <div
+                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
+                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 1 }"
+              >
+                <span>第一次发放合计：{{ formatMoney(addRowsFirstPayTotal) }}</span>
+              </div>
+              <div
+                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
+                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 1 }"
+              >
+                <span>第二次发放合计：{{ formatMoney(addRowsSecondPayTotal) }}</span>
               </div>
             </div>
           </div>
@@ -471,6 +485,16 @@
             <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
             <el-table-column prop="total" label="应发" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
+            </el-table-column>
+            <el-table-column label="第一次发放" width="100" align="right">
+              <template #default="{ row }">
+                {{ formatMoney(computePaySplit(computeRowTotal(row)).first) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="第二次发放" width="100" align="right">
+              <template #default="{ row }">
+                {{ formatMoney(computePaySplit(computeRowTotal(row)).second) }}
+              </template>
             </el-table-column>
           </el-table>
           <el-empty v-else description="暂无人员" />
@@ -809,8 +833,49 @@ const computeRowTotal = (
   return Math.round(total * 100) / 100
 }
 
+const PAY_SPLIT_LIMIT = 4300
+
+const computePaySplit = (total: number | null, limit = PAY_SPLIT_LIMIT) => {
+  if (total === null || total === undefined) return { first: null as number | null, second: null }
+
+  const totalCents = Math.round(Number(total) * 100)
+  const limitCents = Math.round(Number(limit) * 100)
+  if (Number.isNaN(totalCents) || Number.isNaN(limitCents)) {
+    return { first: null as number | null, second: null }
+  }
+
+  if (totalCents <= limitCents) {
+    return { first: total, second: 0 }
+  }
+
+  const diffCents = totalCents - limitCents
+  const stepCents = 10000 // 100 元
+  const secondCents = Math.ceil(diffCents / stepCents) * stepCents
+  const safeSecondCents = Math.min(Math.max(secondCents, 0), totalCents)
+  const firstCents = totalCents - safeSecondCents
+
+  return {
+    first: Math.round(firstCents) / 100,
+    second: Math.round(safeSecondCents) / 100
+  }
+}
+
 const addRowsTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
+})
+
+const addRowsFirstPayTotal = computed(() => {
+  return addRows.value.reduce((acc, row) => {
+    const split = computePaySplit(computeRowTotal(row))
+    return acc + (split.first || 0)
+  }, 0)
+})
+
+const addRowsSecondPayTotal = computed(() => {
+  return addRows.value.reduce((acc, row) => {
+    const split = computePaySplit(computeRowTotal(row))
+    return acc + (split.second || 0)
+  }, 0)
 })
 
 const loadList = async () => {
@@ -1522,7 +1587,7 @@ onMounted(() => {
 
 .salary-add-steps {
   padding: 0 4px;
-  margin-top: -37px;
+  margin-top: -77px;
 }
 
 :deep(.salary-add-dialog .el-dialog__header) {
