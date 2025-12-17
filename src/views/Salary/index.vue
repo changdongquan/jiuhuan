@@ -317,6 +317,7 @@
             type="month"
             value-format="YYYY-MM"
             placeholder="选择月份"
+            :disabled-date="isRangeMonthDisabled"
             :style="{ width: isMobile ? '100%' : '220px' }"
           />
         </el-form-item>
@@ -356,7 +357,8 @@
     <el-dialog
       v-model="addDialogVisible"
       title="新增工资"
-      :width="isMobile ? '100%' : '1100px'"
+      :width="isMobile ? '100%' : '1580px'"
+      :style="isMobile ? {} : { maxWidth: 'calc(100vw - 48px)' }"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="salary-add-dialog"
@@ -374,33 +376,80 @@
 
       <el-steps :active="addStep" align-center finish-status="success">
         <el-step title="步骤1" description="填写明细" />
-        <el-step title="步骤2" description="确认完成" />
+        <el-step title="步骤2" description="拆分两次发放" />
+        <el-step title="步骤3" description="个税社保申报" />
       </el-steps>
 
       <div class="salary-add-body" v-loading="addSaving">
         <div v-show="addStep === 0" class="salary-add-step">
-          <el-table v-if="addRows.length" :data="addRows" border height="560">
-            <el-table-column type="index" label="序号" width="55" align="center" />
-            <el-table-column prop="employeeName" label="姓名" width="90" show-overflow-tooltip />
-            <el-table-column prop="employeeNumber" label="工号" width="60" show-overflow-tooltip />
-            <el-table-column label="基本工资" width="85" align="right">
-              <template #default="{ row }">
-                {{ formatMoney(row.baseSalary) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="加班费" width="85" align="right">
-              <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
-            </el-table-column>
-            <el-table-column label="两倍加班费" width="100" align="right">
-              <template #default="{ row }">{{ formatMoney(row.doubleOvertimePay) }}</template>
-            </el-table-column>
-            <el-table-column label="三倍加班费" width="100" align="right">
-              <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
-            </el-table-column>
-            <el-table-column label="合计" width="85" align="right">
-              <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
-            </el-table-column>
-          </el-table>
+          <div v-if="addRows.length" class="salary-add-table-wrap salary-add-table-wrap--step1">
+            <el-table :data="addRows" border height="560" :fit="false" style="width: 1495px">
+              <el-table-column type="index" label="序号" width="55" align="center" />
+              <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
+              <el-table-column
+                prop="employeeNumber"
+                label="工号"
+                width="55"
+                show-overflow-tooltip
+              />
+              <el-table-column label="基本工资" width="85" align="right">
+                <template #default="{ row }">
+                  {{ formatMoney(row.baseSalary) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="加班费" width="75" align="right">
+                <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
+              </el-table-column>
+              <el-table-column label="两倍加班费" width="100" align="right">
+                <template #default="{ row }">{{ formatMoney(row.doubleOvertimePay) }}</template>
+              </el-table-column>
+              <el-table-column label="三倍加班费" width="100" align="right">
+                <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
+              </el-table-column>
+              <el-table-column label="夜班补助" width="85" align="right">
+                <template #default="{ row }">{{ formatMoney(row.nightShiftSubsidy) }}</template>
+              </el-table-column>
+              <el-table-column label="误餐补助" width="85" align="right">
+                <template #default="{ row }">{{ formatMoney(row.mealSubsidy) }}</template>
+              </el-table-column>
+              <el-table-column label="全勤" width="65" align="right">
+                <template #default="{ row }">{{ formatMoney(row.fullAttendanceBonus) }}</template>
+              </el-table-column>
+              <el-table-column label="工龄工资" width="85" align="right">
+                <template #default="{ row }">
+                  <el-tooltip :content="formatYmd(row.entryDate) || '-'" placement="top">
+                    <span>{{ formatMoney(row.seniorityPay) }}</span>
+                  </el-tooltip>
+                </template>
+              </el-table-column>
+              <el-table-column label="迟到扣款" width="85" align="right">
+                <template #default="{ row }">{{ formatMoney(row.lateDeduction) }}</template>
+              </el-table-column>
+              <el-table-column label="新进及事假" width="100" align="right">
+                <template #default="{ row }">{{
+                  formatMoney(row.newOrPersonalLeaveDeduction)
+                }}</template>
+              </el-table-column>
+              <el-table-column label="病假" width="60" align="right">
+                <template #default="{ row }">{{ formatMoney(row.sickLeaveDeduction) }}</template>
+              </el-table-column>
+              <el-table-column label="旷工扣款" width="85" align="right">
+                <template #default="{ row }">{{ formatMoney(row.absenceDeduction) }}</template>
+              </el-table-column>
+              <el-table-column label="卫生费" width="75" align="right">
+                <template #default="{ row }">{{ formatMoney(row.hygieneFee) }}</template>
+              </el-table-column>
+              <el-table-column label="水费" width="65" align="right">
+                <template #default="{ row }">{{ formatMoney(row.waterFee) }}</template>
+              </el-table-column>
+              <el-table-column label="电费" width="65" align="right">
+                <template #default="{ row }">{{ formatMoney(row.electricityFee) }}</template>
+              </el-table-column>
+              <el-table-column label="应发" width="85" align="right">
+                <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
           <el-empty v-else description="暂无人员" />
         </div>
 
@@ -408,7 +457,7 @@
           <div class="salary-add-summary">
             <div>月份：{{ rangeForm.month || '-' }}</div>
             <div>人数：{{ addRows.length }}</div>
-            <div>合计汇总：{{ formatMoney(addRowsTotal) }}</div>
+            <div>应发汇总：{{ formatMoney(addRowsTotal) }}</div>
           </div>
           <el-table v-if="addRows.length" :data="addRows" border height="560">
             <el-table-column type="index" label="序号" width="70" align="center" />
@@ -417,7 +466,7 @@
             <el-table-column prop="baseSalary" label="基本工资" width="120" align="right">
               <template #default="{ row }">{{ formatMoney(row.baseSalary) }}</template>
             </el-table-column>
-            <el-table-column prop="overtimePay" label="加班费" width="120" align="right">
+            <el-table-column prop="overtimePay" label="加班费" width="70" align="right">
               <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
             </el-table-column>
             <el-table-column prop="doubleOvertimePay" label="两倍加班费" width="120" align="right">
@@ -426,22 +475,78 @@
             <el-table-column prop="tripleOvertimePay" label="三倍加班费" width="120" align="right">
               <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
             </el-table-column>
-            <el-table-column prop="total" label="合计" width="140" align="right">
+            <el-table-column prop="nightShiftSubsidy" label="夜班补助" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.nightShiftSubsidy) }}</template>
+            </el-table-column>
+            <el-table-column prop="mealSubsidy" label="误餐补助" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.mealSubsidy) }}</template>
+            </el-table-column>
+            <el-table-column prop="fullAttendanceBonus" label="全勤" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.fullAttendanceBonus) }}</template>
+            </el-table-column>
+            <el-table-column prop="seniorityPay" label="工龄工资" width="75" align="right">
+              <template #default="{ row }">
+                <el-tooltip :content="formatYmd(row.entryDate) || '-'" placement="top">
+                  <span>{{ formatMoney(row.seniorityPay) }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="lateDeduction" label="迟到扣款" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.lateDeduction) }}</template>
+            </el-table-column>
+            <el-table-column
+              prop="newOrPersonalLeaveDeduction"
+              label="新进及事假"
+              width="120"
+              align="right"
+            >
+              <template #default="{ row }">{{
+                formatMoney(row.newOrPersonalLeaveDeduction)
+              }}</template>
+            </el-table-column>
+            <el-table-column prop="sickLeaveDeduction" label="病假" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.sickLeaveDeduction) }}</template>
+            </el-table-column>
+            <el-table-column prop="absenceDeduction" label="旷工扣款" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.absenceDeduction) }}</template>
+            </el-table-column>
+            <el-table-column prop="hygieneFee" label="卫生费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.hygieneFee) }}</template>
+            </el-table-column>
+            <el-table-column prop="waterFee" label="水费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.waterFee) }}</template>
+            </el-table-column>
+            <el-table-column prop="electricityFee" label="电费" width="120" align="right">
+              <template #default="{ row }">{{ formatMoney(row.electricityFee) }}</template>
+            </el-table-column>
+            <el-table-column prop="total" label="应发" width="140" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
           </el-table>
           <el-empty v-else description="暂无人员" />
         </div>
+
+        <div v-show="addStep === 2" class="salary-add-step">
+          <div class="salary-add-summary">
+            <div>月份：{{ rangeForm.month || '-' }}</div>
+            <div>人数：{{ addRows.length }}</div>
+            <div>应发汇总：{{ formatMoney(addRowsTotal) }}</div>
+          </div>
+          <el-alert title="个税/社保申报：暂未接入接口" type="info" :closable="false" show-icon />
+        </div>
       </div>
 
       <template #footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="addSaving" @click="saveAddStep">保存</el-button>
+        <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
+          保存
+        </el-button>
+        <el-button v-if="addStep > 0" @click="goPrevStep">上一步</el-button>
         <el-button
-          v-if="addStep < 1"
+          v-if="addStep < 2"
           type="success"
-          :disabled="!addStepSaved[addStep]"
+          :disabled="addStep !== 0 && !addStepSaved[addStep]"
           @click="goNextStep"
         >
           下一步
@@ -449,7 +554,7 @@
         <el-button
           v-else
           type="success"
-          :disabled="!addStepSaved[1]"
+          :disabled="!addStepSaved[2]"
           :loading="addCompleting"
           @click="completeAdd"
         >
@@ -465,6 +570,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
+import {
+  getAttendanceDetailApi,
+  getAttendanceListApi,
+  type AttendanceRecord
+} from '@/api/attendance'
 import {
   getOvertimeBaseParamsApi,
   getSalaryBaseParamsApi,
@@ -506,6 +616,20 @@ type SalaryRow = {
   employeeName: string
   employeeNumber: string
   baseSalary?: number | null
+  overtimePay?: number | null
+  doubleOvertimePay?: number | null
+  tripleOvertimePay?: number | null
+  nightShiftSubsidy?: number | null
+  mealSubsidy?: number | null
+  fullAttendanceBonus?: number | null
+  seniorityPay?: number | null
+  lateDeduction?: number | null
+  newOrPersonalLeaveDeduction?: number | null
+  sickLeaveDeduction?: number | null
+  absenceDeduction?: number | null
+  hygieneFee?: number | null
+  waterFee?: number | null
+  electricityFee?: number | null
   bonus?: number | null
   deduction?: number | null
   total?: number | null
@@ -516,10 +640,22 @@ type SalaryDraftRow = {
   employeeId: number
   employeeName: string
   employeeNumber: string
+  entryDate: string
   baseSalary: number | null
   overtimePay: number | null
   doubleOvertimePay: number | null
   tripleOvertimePay: number | null
+  nightShiftSubsidy: number | null
+  mealSubsidy: number | null
+  fullAttendanceBonus: number | null
+  seniorityPay: number | null
+  lateDeduction: number | null
+  newOrPersonalLeaveDeduction: number | null
+  sickLeaveDeduction: number | null
+  absenceDeduction: number | null
+  hygieneFee: number | null
+  waterFee: number | null
+  electricityFee: number | null
   total: number | null
   remark: string
 }
@@ -566,7 +702,7 @@ const addDialogVisible = ref(false)
 const addStep = ref(0)
 const addSaving = ref(false)
 const addCompleting = ref(false)
-const addStepSaved = reactive([false, false])
+const addStepSaved = reactive([false, false, false])
 
 const addEmployeesLoading = ref(false)
 const addEmployees = ref<EmployeeInfo[]>([])
@@ -579,18 +715,149 @@ const formatMoney = (val?: number | null) => {
   return num.toFixed(2)
 }
 
+const formatMonth = (date: Date) => {
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, '0')
+  return `${y}-${m}`
+}
+
+const formatYmd = (val: unknown) => {
+  const text = String(val ?? '').trim()
+  if (!text) return ''
+  if (text.includes('T')) return text.split('T')[0]
+  if (text.includes(' ')) return text.split(' ')[0]
+  return text
+}
+
+const toNumberOrNull = (val: unknown) => {
+  if (val === null || val === undefined || val === '') return null
+  const num = Number(val)
+  return Number.isNaN(num) ? null : num
+}
+
+const multiplyMoneyOrNull = (left: unknown, right: unknown) => {
+  const l = toNumberOrNull(left)
+  const r = toNumberOrNull(right)
+  if (l === null || r === null) return null
+  const result = l * r
+  if (Number.isNaN(result)) return null
+  return Math.round(result * 100) / 100
+}
+
+const isAttendanceFullAttendance = (val: unknown) => {
+  const num = toNumberOrNull(val)
+  if (num === null) return false
+  return num !== 0
+}
+
+const parseYmdToLocalDate = (val: string) => {
+  const ymd = formatYmd(val)
+  const match = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(String(ymd || '').trim())
+  if (!match) return null
+  const y = Number(match[1])
+  const m = Number(match[2])
+  const d = Number(match[3])
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null
+  return new Date(y, m - 1, d)
+}
+
+const getMonthEndDate = (month: string) => {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || '').trim())
+  if (!match) return null
+  const y = Number(match[1])
+  const m = Number(match[2])
+  if (Number.isNaN(y) || Number.isNaN(m)) return null
+  return new Date(y, m, 0)
+}
+
+const computeSeniorityYearsByMonth = (entryDate: string, month: string) => {
+  const entry = parseYmdToLocalDate(entryDate)
+  const asOf = getMonthEndDate(month)
+  if (!entry || !asOf) return 0
+  if (asOf < entry) return 0
+
+  let years = asOf.getFullYear() - entry.getFullYear()
+  const anniversaryMonth = entry.getMonth()
+  const anniversaryDay = entry.getDate()
+  if (
+    asOf.getMonth() < anniversaryMonth ||
+    (asOf.getMonth() === anniversaryMonth && asOf.getDate() < anniversaryDay)
+  ) {
+    years -= 1
+  }
+  if (years < 1) return 0
+  return Math.min(years, 10)
+}
+
+const isSameMonth = (a: Date, b: Date) => {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+
+const getAllowedRangeMonths = () => {
+  const now = new Date()
+  const current = new Date(now.getFullYear(), now.getMonth(), 1)
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  return { current, prev }
+}
+
+const isRangeMonthDisabled = (date: Date) => {
+  const { current, prev } = getAllowedRangeMonths()
+  return !(isSameMonth(date, current) || isSameMonth(date, prev))
+}
+
+const isAllowedRangeMonthString = (month: string) => {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || '').trim())
+  if (!match) return false
+  const y = Number(match[1])
+  const m = Number(match[2]) - 1
+  if (Number.isNaN(y) || Number.isNaN(m)) return false
+  const selected = new Date(y, m, 1)
+  const { current, prev } = getAllowedRangeMonths()
+  return isSameMonth(selected, current) || isSameMonth(selected, prev)
+}
+
 const computeRowTotal = (
   row: Pick<
     SalaryDraftRow,
-    'baseSalary' | 'overtimePay' | 'doubleOvertimePay' | 'tripleOvertimePay'
+    | 'baseSalary'
+    | 'overtimePay'
+    | 'doubleOvertimePay'
+    | 'tripleOvertimePay'
+    | 'nightShiftSubsidy'
+    | 'mealSubsidy'
+    | 'fullAttendanceBonus'
+    | 'seniorityPay'
+    | 'lateDeduction'
+    | 'newOrPersonalLeaveDeduction'
+    | 'sickLeaveDeduction'
+    | 'absenceDeduction'
+    | 'hygieneFee'
+    | 'waterFee'
+    | 'electricityFee'
   >
 ) => {
-  const base = Number(row.baseSalary || 0)
-  const overtimePay = Number(row.overtimePay || 0)
-  const doubleOvertimePay = Number(row.doubleOvertimePay || 0)
-  const tripleOvertimePay = Number(row.tripleOvertimePay || 0)
-  const total = base + overtimePay + doubleOvertimePay + tripleOvertimePay
-  return Number.isNaN(total) ? null : total
+  const positive =
+    Number(row.baseSalary || 0) +
+    Number(row.overtimePay || 0) +
+    Number(row.doubleOvertimePay || 0) +
+    Number(row.tripleOvertimePay || 0) +
+    Number(row.nightShiftSubsidy || 0) +
+    Number(row.mealSubsidy || 0) +
+    Number(row.fullAttendanceBonus || 0) +
+    Number(row.seniorityPay || 0)
+
+  const negative =
+    Number(row.lateDeduction || 0) +
+    Number(row.newOrPersonalLeaveDeduction || 0) +
+    Number(row.sickLeaveDeduction || 0) +
+    Number(row.absenceDeduction || 0) +
+    Number(row.hygieneFee || 0) +
+    Number(row.waterFee || 0) +
+    Number(row.electricityFee || 0)
+
+  const total = positive - negative
+  if (Number.isNaN(total)) return null
+  return Math.round(total * 100) / 100
 }
 
 const addRowsTotal = computed(() => {
@@ -718,18 +985,33 @@ const ensureSubsidyLoaded = () => {
     try {
       const resp: any = await getSubsidyParamsApi()
       const list: SubsidyParamRow[] = resp?.data || resp || []
-      if (list.length) {
-        subsidyRows.value = list.map((item) => ({
-          name: item.name,
-          amount: item.amount ?? null,
-          adjustDate: (item.adjustDate as any) || ''
-        }))
-      } else {
-        subsidyRows.value = [
-          { name: '夜班补助', amount: null, adjustDate: '' },
-          { name: '误餐补助', amount: null, adjustDate: '' }
-        ]
+      const required = ['夜班补助', '误餐补助', '全勤补助', '工龄补助']
+      const map = new Map<string, SubsidyParamRow>()
+      for (const item of list) map.set(String(item?.name || '').trim(), item)
+
+      const rows: SubsidyRow[] = required.map((name) => {
+        const item = map.get(name)
+        return {
+          name,
+          amount: item?.amount ?? null,
+          adjustDate: (item?.adjustDate as any) || ''
+        }
+      })
+
+      const extras = list
+        .map((item) => String(item?.name || '').trim())
+        .filter((name) => name && !required.includes(name))
+
+      for (const name of extras) {
+        const item = map.get(name)
+        rows.push({
+          name,
+          amount: item?.amount ?? null,
+          adjustDate: (item?.adjustDate as any) || ''
+        })
       }
+
+      subsidyRows.value = rows
     } catch (error) {
       console.error('加载补助参数失败:', error)
       ElMessage.error('加载补助参数失败')
@@ -829,6 +1111,7 @@ const resetAddWizard = () => {
   addCompleting.value = false
   addStepSaved[0] = false
   addStepSaved[1] = false
+  addStepSaved[2] = false
   addRows.value = []
 }
 
@@ -857,19 +1140,34 @@ const getStep1EmployeeIds = () => {
   return rangeForm.employeeIds
 }
 
-const buildDraftRowsFromEmployees = (employeeIds: number[]) => {
+const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] => {
   const selectedEmployees = addEmployees.value.filter((emp) => employeeIds.includes(emp.id))
-  return selectedEmployees.map((emp) => ({
-    employeeId: emp.id,
-    employeeName: emp.employeeName,
-    employeeNumber: String(emp.employeeNumber ?? ''),
-    baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
-    overtimePay: null,
-    doubleOvertimePay: null,
-    tripleOvertimePay: null,
-    total: null,
-    remark: ''
-  }))
+  return selectedEmployees.map(
+    (emp) =>
+      ({
+        employeeId: emp.id,
+        employeeName: emp.employeeName,
+        employeeNumber: String(emp.employeeNumber ?? ''),
+        entryDate: String(emp.entryDate || ''),
+        baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
+        overtimePay: null,
+        doubleOvertimePay: null,
+        tripleOvertimePay: null,
+        nightShiftSubsidy: null,
+        mealSubsidy: null,
+        fullAttendanceBonus: null,
+        seniorityPay: null,
+        lateDeduction: null,
+        newOrPersonalLeaveDeduction: null,
+        sickLeaveDeduction: null,
+        absenceDeduction: null,
+        hygieneFee: null,
+        waterFee: null,
+        electricityFee: null,
+        total: null,
+        remark: ''
+      }) satisfies SalaryDraftRow
+  )
 }
 
 const salaryBaseByEmployeeId = ref(new Map<number, number | null>())
@@ -882,9 +1180,91 @@ const refreshSalaryBaseParams = async () => {
   salaryBaseByEmployeeId.value = map
 }
 
+const loadOvertimeBaseByLevel = async () => {
+  const paramsResp: any = await getOvertimeBaseParamsApi()
+  const paramsList: OvertimeBaseParamRow[] = paramsResp?.data || paramsResp || []
+  const map = new Map<number, OvertimeBaseParamRow>()
+  for (const item of paramsList) map.set(item.level, item)
+  return map
+}
+
+const loadSubsidyAmountByName = async (name: string) => {
+  const paramsResp: any = await getSubsidyParamsApi()
+  const paramsList: SubsidyParamRow[] = paramsResp?.data || paramsResp || []
+  const matched = paramsList.find((item) => String(item?.name || '').trim() === name)
+  return matched?.amount ?? null
+}
+
+const loadAttendanceRecordsByMonth = async (month: string) => {
+  const resp: any = await getAttendanceListApi({ month, page: 1, pageSize: 1 })
+  let list: any[] = []
+  if (resp?.code === 0 && resp?.data) {
+    list = resp.data.list || []
+  } else {
+    list = resp?.list || resp?.data?.list || resp?.data || []
+  }
+  const summary = list?.[0]
+  const attendanceId = toNumberOrNull(summary?.id)
+  if (!attendanceId) return []
+
+  const detailResp: any = await getAttendanceDetailApi(attendanceId)
+  const detail = detailResp?.data || detailResp || {}
+  const records: AttendanceRecord[] = detail.records || []
+  return Array.isArray(records) ? records : []
+}
+
+const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDraftRow[]) => {
+  const [
+    attendanceRecords,
+    overtimeBaseByLevel,
+    nightShiftSubsidyAmount,
+    mealSubsidyAmount,
+    fullAttendanceSubsidyAmount,
+    senioritySubsidyAmount
+  ] = await Promise.all([
+    loadAttendanceRecordsByMonth(month),
+    loadOvertimeBaseByLevel(),
+    loadSubsidyAmountByName('夜班补助'),
+    loadSubsidyAmountByName('误餐补助'),
+    loadSubsidyAmountByName('全勤补助'),
+    loadSubsidyAmountByName('工龄补助')
+  ])
+
+  const attByEmployeeId = new Map<number, AttendanceRecord>()
+  for (const rec of attendanceRecords) attByEmployeeId.set(rec.employeeId, rec)
+
+  return rows.map((row) => {
+    const entryDate = String(row.entryDate || '').trim()
+    const seniorityYears = entryDate ? computeSeniorityYearsByMonth(entryDate, month) : 0
+    const seniorityPay = multiplyMoneyOrNull(seniorityYears, senioritySubsidyAmount)
+
+    const att = attByEmployeeId.get(row.employeeId)
+    if (!att) return { ...row, seniorityPay }
+
+    const level = toNumberOrNull(att.level)
+    const base = level ? overtimeBaseByLevel.get(level) : undefined
+
+    return {
+      ...row,
+      overtimePay: multiplyMoneyOrNull(att.overtimeHours, base?.overtime),
+      doubleOvertimePay: multiplyMoneyOrNull(att.doubleOvertimeHours, base?.doubleOvertime),
+      tripleOvertimePay: multiplyMoneyOrNull(att.tripleOvertimeHours, base?.tripleOvertime),
+      nightShiftSubsidy: multiplyMoneyOrNull(att.nightShiftCount, nightShiftSubsidyAmount),
+      mealSubsidy: multiplyMoneyOrNull(att.mealAllowanceCount, mealSubsidyAmount),
+      fullAttendanceBonus: multiplyMoneyOrNull(
+        isAttendanceFullAttendance(att.fullAttendanceBonus) ? 1 : null,
+        fullAttendanceSubsidyAmount
+      ),
+      seniorityPay
+    }
+  })
+}
+
 const resetRangeDialog = () => {
   rangeSaving.value = false
-  rangeForm.month = queryForm.month || ''
+  const { current } = getAllowedRangeMonths()
+  const preset = queryForm.month || ''
+  rangeForm.month = preset && isAllowedRangeMonthString(preset) ? preset : formatMonth(current)
   rangeForm.applyToAll = true
   rangeForm.employeeIds = []
 }
@@ -899,6 +1279,10 @@ const saveRange = async () => {
     ElMessage.warning('请选择月份')
     return
   }
+  if (!isAllowedRangeMonthString(rangeForm.month)) {
+    ElMessage.warning('月份只允许选择当月和上一月')
+    return
+  }
   const employeeIds = getStep1EmployeeIds()
   if (!employeeIds.length) {
     ElMessage.warning('请选择员工')
@@ -908,10 +1292,32 @@ const saveRange = async () => {
   rangeSaving.value = true
   try {
     await refreshSalaryBaseParams()
-    addRows.value = buildDraftRowsFromEmployees(employeeIds)
+    const baseRows = buildDraftRowsFromEmployees(employeeIds)
+    let mergedRows = baseRows
+    try {
+      mergedRows = await applyAttendanceOvertimeToDraftRows(rangeForm.month, baseRows)
+      const hasAnyOvertimeComputed = mergedRows.some(
+        (r) =>
+          r.overtimePay !== null ||
+          r.doubleOvertimePay !== null ||
+          r.tripleOvertimePay !== null ||
+          r.nightShiftSubsidy !== null ||
+          r.mealSubsidy !== null ||
+          r.fullAttendanceBonus !== null ||
+          r.seniorityPay !== null
+      )
+      if (!hasAnyOvertimeComputed) {
+        ElMessage.warning(`未找到【${rangeForm.month}】考勤数据或加班基数，已仅初始化工资基数`)
+      }
+    } catch (error) {
+      console.error('加载考勤/加班基数失败:', error)
+      ElMessage.error('加载考勤/加班基数失败，已仅初始化工资基数')
+    }
+    addRows.value = mergedRows
     addStep.value = 0
     addStepSaved[0] = false
     addStepSaved[1] = false
+    addStepSaved[2] = false
     rangeDialogVisible.value = false
     addDialogVisible.value = true
   } finally {
@@ -944,20 +1350,40 @@ const saveAddStep = async () => {
     return
   }
 
-  // 没有第三步
+  if (addStep.value === 2) {
+    addSaving.value = true
+    try {
+      addStepSaved[2] = true
+      ElMessage.success('步骤3已保存（未写入数据库）')
+    } finally {
+      addSaving.value = false
+    }
+  }
 }
 
 const goNextStep = () => {
+  if (addStep.value === 0) {
+    const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
+    addRows.value = rows
+    addStepSaved[0] = true
+    addStep.value = 1
+    return
+  }
+
   if (!addStepSaved[addStep.value]) {
     ElMessage.warning('请先保存当前步骤')
     return
   }
-  addStep.value = Math.min(addStep.value + 1, 1)
+  addStep.value = Math.min(addStep.value + 1, 2)
+}
+
+const goPrevStep = () => {
+  addStep.value = Math.max(addStep.value - 1, 0)
 }
 
 const completeAdd = async () => {
-  if (!addStepSaved[1]) {
-    ElMessage.warning('请先保存步骤2')
+  if (!addStepSaved[2]) {
+    ElMessage.warning('请先保存步骤3')
     return
   }
 
@@ -969,6 +1395,20 @@ const completeAdd = async () => {
       employeeName: row.employeeName,
       employeeNumber: row.employeeNumber,
       baseSalary: row.baseSalary,
+      overtimePay: row.overtimePay,
+      doubleOvertimePay: row.doubleOvertimePay,
+      tripleOvertimePay: row.tripleOvertimePay,
+      nightShiftSubsidy: row.nightShiftSubsidy,
+      mealSubsidy: row.mealSubsidy,
+      fullAttendanceBonus: row.fullAttendanceBonus,
+      seniorityPay: row.seniorityPay,
+      lateDeduction: row.lateDeduction,
+      newOrPersonalLeaveDeduction: row.newOrPersonalLeaveDeduction,
+      sickLeaveDeduction: row.sickLeaveDeduction,
+      absenceDeduction: row.absenceDeduction,
+      hygieneFee: row.hygieneFee,
+      waterFee: row.waterFee,
+      electricityFee: row.electricityFee,
       total: computeRowTotal(row),
       remark: row.remark
     }))
@@ -1053,6 +1493,16 @@ onMounted(() => {
 
 .salary-add-body {
   margin-top: 12px;
+}
+
+.salary-add-table-wrap {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.salary-add-table-wrap--step1 {
+  padding-bottom: 6px;
 }
 
 .salary-add-step {

@@ -71,7 +71,7 @@ async function ensureSalaryParamsTables() {
     )
 
     // 初始化默认补助项（按次），若不存在则插入
-    const defaults = ['夜班补助', '误餐补助']
+    const defaults = ['夜班补助', '误餐补助', '全勤补助', '工龄补助']
     for (const name of defaults) {
       const exists = await pool
         .request()

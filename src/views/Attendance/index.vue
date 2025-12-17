@@ -357,27 +357,7 @@
                 placeholder="-"
                 size="small"
                 class="att-number"
-                :disabled="isOvertimeInputDisabled(row)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="全勤"
-            width="62"
-            align="center"
-            class-name="att-col-input"
-            label-class-name="att-col-input"
-          >
-            <template #default="{ row }">
-              <span v-if="isViewMode">{{ isFullAttendance(row) ? '是' : '否' }}</span>
-              <el-switch
-                v-else
-                :model-value="isFullAttendance(row)"
-                inline-prompt
-                active-text="是"
-                inactive-text="否"
-                size="small"
-                @change="(val) => setFullAttendance(row, val === true)"
+                :disabled="isNightShiftInputDisabled()"
               />
             </template>
           </el-table-column>
@@ -405,6 +385,26 @@
                 placeholder="-"
                 size="small"
                 class="att-number att-number--2d"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="全勤"
+            width="62"
+            align="center"
+            class-name="att-col-input"
+            label-class-name="att-col-input"
+          >
+            <template #default="{ row }">
+              <span v-if="isViewMode">{{ isFullAttendance(row) ? '是' : '否' }}</span>
+              <el-switch
+                v-else
+                :model-value="isFullAttendance(row)"
+                inline-prompt
+                active-text="是"
+                inactive-text="否"
+                size="small"
+                @change="(val) => setFullAttendance(row, val === true)"
               />
             </template>
           </el-table-column>
@@ -714,6 +714,10 @@ const isLevelEmptyOrZero = (level: unknown) => {
 const isOvertimeInputDisabled = (row: AttendanceRecord) => {
   if (isViewMode.value) return true
   return isLevelEmptyOrZero(row.level)
+}
+
+const isNightShiftInputDisabled = () => {
+  return isViewMode.value
 }
 
 const isFullAttendance = (row: AttendanceRecord) => {
