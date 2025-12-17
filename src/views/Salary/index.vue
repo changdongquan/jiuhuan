@@ -136,6 +136,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.salaryBase"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="0"
@@ -178,6 +179,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.overtime"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="2"
@@ -198,6 +200,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.doubleOvertime"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="2"
@@ -218,6 +221,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.tripleOvertime"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="2"
@@ -261,6 +265,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.amount"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="0"
@@ -304,6 +309,7 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.amount"
+                    @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
                     :precision="0"
@@ -755,6 +761,18 @@ const formatYmd = (val: unknown) => {
   if (text.includes('T')) return text.split('T')[0]
   if (text.includes(' ')) return text.split(' ')[0]
   return text
+}
+
+const getTodayYmd = () => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = `${now.getMonth() + 1}`.padStart(2, '0')
+  const d = `${now.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const touchAdjustDate = (row: { adjustDate: string }) => {
+  row.adjustDate = getTodayYmd()
 }
 
 const toNumberOrNull = (val: unknown) => {
