@@ -1099,15 +1099,7 @@ const ensurePenaltyLoaded = () => {
     try {
       const resp: any = await getPenaltyParamsApi()
       const list: PenaltyParamRow[] = resp?.data || resp || []
-      const required = [
-        '迟到扣款',
-        '新进及事假扣款',
-        '病假扣款',
-        '旷工扣款',
-        '卫生费',
-        '水费',
-        '电费'
-      ]
+      const required = ['迟到扣款']
 
       const map = new Map<string, PenaltyParamRow>()
       for (const item of list) map.set(String(item?.name || '').trim(), item)
@@ -1120,19 +1112,6 @@ const ensurePenaltyLoaded = () => {
           adjustDate: (item?.adjustDate as any) || ''
         }
       })
-
-      const extras = list
-        .map((item) => String(item?.name || '').trim())
-        .filter((name) => name && !required.includes(name))
-
-      for (const name of extras) {
-        const item = map.get(name)
-        rows.push({
-          name,
-          amount: item?.amount ?? null,
-          adjustDate: (item?.adjustDate as any) || ''
-        })
-      }
 
       penaltyRows.value = rows
     } catch (error) {

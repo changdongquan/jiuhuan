@@ -113,15 +113,7 @@ async function ensureSalaryParamsTables() {
     }
 
     // 初始化默认罚扣项（按次），若不存在则插入
-    const penaltyDefaults = [
-      { name: '迟到扣款', amount: null },
-      { name: '新进及事假扣款', amount: null },
-      { name: '病假扣款', amount: null },
-      { name: '旷工扣款', amount: null },
-      { name: '卫生费', amount: null },
-      { name: '水费', amount: null },
-      { name: '电费', amount: null }
-    ]
+    const penaltyDefaults = [{ name: '迟到扣款', amount: null }]
     for (const item of penaltyDefaults) {
       const name = item.name
       const exists = await pool
