@@ -366,19 +366,30 @@
     >
       <template #header>
         <div class="salary-add-header">
-          <div class="salary-add-header__title">新增工资</div>
-          <div class="salary-add-header__meta">
-            <el-tag size="small" type="info">{{ rangeForm.month || '-' }}</el-tag>
-            <span class="salary-add-header__meta-text">{{ rangeLabel }}</span>
+          <div class="salary-add-header__top">
+            <div class="salary-add-header__title">新增工资</div>
+            <div class="salary-add-header__meta">
+              <div class="salary-add-header__meta-row">
+                <el-tag size="small" type="info">{{ rangeForm.month || '-' }}</el-tag>
+                <span class="salary-add-header__meta-text">{{ rangeLabel }}</span>
+              </div>
+              <div
+                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
+                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 0 }"
+              >
+                <span>人数：{{ addRows.length }}</span>
+                <span>应发合计：{{ formatMoney(addRowsTotal) }}</span>
+              </div>
+            </div>
           </div>
+
+          <el-steps :active="addStep" align-center finish-status="success" class="salary-add-steps">
+            <el-step title="步骤1" description="填写明细" />
+            <el-step title="步骤2" description="拆分两次发放" />
+            <el-step title="步骤3" description="个税社保申报" />
+          </el-steps>
         </div>
       </template>
-
-      <el-steps :active="addStep" align-center finish-status="success">
-        <el-step title="步骤1" description="填写明细" />
-        <el-step title="步骤2" description="拆分两次发放" />
-        <el-step title="步骤3" description="个税社保申报" />
-      </el-steps>
 
       <div class="salary-add-body" v-loading="addSaving">
         <div v-show="addStep === 0" class="salary-add-step">
@@ -454,75 +465,13 @@
         </div>
 
         <div v-show="addStep === 1" class="salary-add-step">
-          <div class="salary-add-summary">
-            <div>月份：{{ rangeForm.month || '-' }}</div>
-            <div>人数：{{ addRows.length }}</div>
-            <div>应发汇总：{{ formatMoney(addRowsTotal) }}</div>
-          </div>
           <el-table v-if="addRows.length" :data="addRows" border height="560">
-            <el-table-column type="index" label="序号" width="70" align="center" />
-            <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
-            <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
-            <el-table-column prop="baseSalary" label="基本工资" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.baseSalary) }}</template>
-            </el-table-column>
-            <el-table-column prop="overtimePay" label="加班费" width="70" align="right">
-              <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
-            </el-table-column>
-            <el-table-column prop="doubleOvertimePay" label="两倍加班费" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.doubleOvertimePay) }}</template>
-            </el-table-column>
-            <el-table-column prop="tripleOvertimePay" label="三倍加班费" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.tripleOvertimePay) }}</template>
-            </el-table-column>
-            <el-table-column prop="nightShiftSubsidy" label="夜班补助" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.nightShiftSubsidy) }}</template>
-            </el-table-column>
-            <el-table-column prop="mealSubsidy" label="误餐补助" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.mealSubsidy) }}</template>
-            </el-table-column>
-            <el-table-column prop="fullAttendanceBonus" label="全勤" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.fullAttendanceBonus) }}</template>
-            </el-table-column>
-            <el-table-column prop="seniorityPay" label="工龄工资" width="75" align="right">
-              <template #default="{ row }">
-                <el-tooltip :content="formatYmd(row.entryDate) || '-'" placement="top">
-                  <span>{{ formatMoney(row.seniorityPay) }}</span>
-                </el-tooltip>
-              </template>
-            </el-table-column>
-            <el-table-column prop="lateDeduction" label="迟到扣款" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.lateDeduction) }}</template>
-            </el-table-column>
-            <el-table-column
-              prop="newOrPersonalLeaveDeduction"
-              label="新进及事假"
-              width="120"
-              align="right"
-            >
-              <template #default="{ row }">{{
-                formatMoney(row.newOrPersonalLeaveDeduction)
-              }}</template>
-            </el-table-column>
-            <el-table-column prop="sickLeaveDeduction" label="病假" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.sickLeaveDeduction) }}</template>
-            </el-table-column>
-            <el-table-column prop="absenceDeduction" label="旷工扣款" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.absenceDeduction) }}</template>
-            </el-table-column>
-            <el-table-column prop="hygieneFee" label="卫生费" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.hygieneFee) }}</template>
-            </el-table-column>
-            <el-table-column prop="waterFee" label="水费" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.waterFee) }}</template>
-            </el-table-column>
-            <el-table-column prop="electricityFee" label="电费" width="120" align="right">
-              <template #default="{ row }">{{ formatMoney(row.electricityFee) }}</template>
-            </el-table-column>
-            <el-table-column prop="total" label="应发" width="140" align="right">
+            <el-table-column type="index" label="序号" width="55" align="center" />
+            <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
+            <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
+            <el-table-column prop="total" label="应发" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
             </el-table-column>
-            <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
           </el-table>
           <el-empty v-else description="暂无人员" />
         </div>
@@ -1527,6 +1476,12 @@ onMounted(() => {
 
 .salary-add-header {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.salary-add-header__top {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1538,14 +1493,46 @@ onMounted(() => {
 }
 
 .salary-add-header__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.salary-add-header__meta-row {
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
 
+.salary-add-header__meta-row--sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.salary-add-header__meta-row--sub-hidden {
+  visibility: hidden;
+}
+
 .salary-add-header__meta-text {
   font-size: 13px;
   color: var(--el-text-color-regular);
+}
+
+.salary-add-steps {
+  padding: 0 4px;
+  margin-top: -37px;
+}
+
+:deep(.salary-add-dialog .el-dialog__header) {
+  min-height: 96px;
+  padding-top: 12px;
+  padding-bottom: 10px;
+}
+
+:deep(.salary-add-dialog .el-dialog__headerbtn) {
+  top: 12px;
 }
 
 .pagination-footer {
