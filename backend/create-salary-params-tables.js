@@ -71,8 +71,15 @@ async function ensureSalaryParamsTables() {
     )
 
     // 初始化默认补助项（按次），若不存在则插入
-    const defaults = ['夜班补助', '误餐补助', '全勤补助', '工龄补助']
-    for (const name of defaults) {
+    const defaults = [
+      { name: '夜班补助', amount: null },
+      { name: '误餐补助', amount: null },
+      { name: '全勤补助', amount: null },
+      { name: '工龄补助', amount: null },
+      { name: '拆分基数', amount: 4300 }
+    ]
+    for (const item of defaults) {
+      const name = item.name
       const exists = await pool
         .request()
         .input('name', sql.NVarChar, name)
@@ -81,9 +88,10 @@ async function ensureSalaryParamsTables() {
       await pool
         .request()
         .input('name', sql.NVarChar, name)
+        .input('amount', sql.Decimal(12, 2), item.amount)
         .query(
           `INSERT INTO ${TABLE_SUBSIDY} (补助名称, 计量方式, 金额, 调整日期, 创建时间, 更新时间)
-           VALUES (@name, N'按次', NULL, NULL, SYSDATETIME(), SYSDATETIME())`
+           VALUES (@name, N'按次', @amount, NULL, SYSDATETIME(), SYSDATETIME())`
         )
       console.log(`已初始化补助项：${name}`)
     }

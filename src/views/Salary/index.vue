@@ -833,9 +833,10 @@ const computeRowTotal = (
   return Math.round(total * 100) / 100
 }
 
-const PAY_SPLIT_LIMIT = 4300
+const DEFAULT_PAY_SPLIT_LIMIT = 4300
+const paySplitLimit = ref<number>(DEFAULT_PAY_SPLIT_LIMIT)
 
-const computePaySplit = (total: number | null, limit = PAY_SPLIT_LIMIT) => {
+const computePaySplit = (total: number | null, limit = paySplitLimit.value) => {
   if (total === null || total === undefined) return { first: null as number | null, second: null }
 
   const totalCents = Math.round(Number(total) * 100)
@@ -999,7 +1000,7 @@ const ensureSubsidyLoaded = () => {
     try {
       const resp: any = await getSubsidyParamsApi()
       const list: SubsidyParamRow[] = resp?.data || resp || []
-      const required = ['夜班补助', '误餐补助', '全勤补助', '工龄补助']
+      const required = ['夜班补助', '误餐补助', '全勤补助', '工龄补助', '拆分基数']
       const map = new Map<string, SubsidyParamRow>()
       for (const item of list) map.set(String(item?.name || '').trim(), item)
 
@@ -1234,15 +1235,22 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     nightShiftSubsidyAmount,
     mealSubsidyAmount,
     fullAttendanceSubsidyAmount,
-    senioritySubsidyAmount
+    senioritySubsidyAmount,
+    splitBaseAmount
   ] = await Promise.all([
     loadAttendanceRecordsByMonth(month),
     loadOvertimeBaseByLevel(),
     loadSubsidyAmountByName('夜班补助'),
     loadSubsidyAmountByName('误餐补助'),
     loadSubsidyAmountByName('全勤补助'),
-    loadSubsidyAmountByName('工龄补助')
+    loadSubsidyAmountByName('工龄补助'),
+    loadSubsidyAmountByName('拆分基数')
   ])
+
+  paySplitLimit.value =
+    typeof splitBaseAmount === 'number' && !Number.isNaN(splitBaseAmount) && splitBaseAmount > 0
+      ? splitBaseAmount
+      : DEFAULT_PAY_SPLIT_LIMIT
 
   const attByEmployeeId = new Map<number, AttendanceRecord>()
   for (const rec of attendanceRecords) attByEmployeeId.set(rec.employeeId, rec)
@@ -1521,6 +1529,10 @@ onMounted(() => {
 
 .salary-add-step {
   margin-top: 12px;
+}
+
+:deep(.salary-add-dialog .salary-add-step) {
+  min-height: 590px;
 }
 
 .salary-add-summary {
