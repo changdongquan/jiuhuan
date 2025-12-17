@@ -108,6 +108,7 @@
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="params-dialog"
+      @closed="resetParamsDialog"
     >
       <el-tabs v-model="paramsActiveTab" @tab-change="handleParamsTabChange">
         <el-tab-pane label="工资基数" name="salaryBase">
@@ -723,6 +724,18 @@ const penaltyRows = ref<PenaltyRow[]>([])
 
 const paramsDialogVisible = ref(false)
 const paramsActiveTab = ref<'salaryBase' | 'level' | 'subsidy' | 'penalty'>('salaryBase')
+
+const resetParamsDialog = () => {
+  salaryBaseLoading.value = false
+  levelLoading.value = false
+  subsidyLoading.value = false
+  penaltyLoading.value = false
+  salaryBaseRows.value = []
+  levelRows.value = []
+  subsidyRows.value = []
+  penaltyRows.value = []
+  paramsActiveTab.value = 'salaryBase'
+}
 
 const rangeDialogVisible = ref(false)
 const rangeSaving = ref(false)
