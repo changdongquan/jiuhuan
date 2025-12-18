@@ -644,12 +644,24 @@
         </div>
 
         <div v-show="addStep === 2" class="salary-add-step">
-          <div class="salary-add-summary">
-            <div>月份：{{ rangeForm.month || '-' }}</div>
-            <div>人数：{{ addRows.length }}</div>
-            <div>应发汇总：{{ formatMoney(addRowsTotal) }}</div>
-          </div>
-          <el-alert title="个税/社保申报：暂未接入接口" type="info" :closable="false" show-icon />
+          <el-table v-if="addRows.length" :data="addRows" border height="560">
+            <el-table-column type="index" label="序号" width="55" align="center" />
+            <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
+            <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
+            <el-table-column prop="total" label="应发" width="85" align="right">
+              <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
+            </el-table-column>
+            <el-table-column label="第二次应发" width="110" align="right">
+              <template #default="{ row }">{{ formatMoney(getRowPaySplit(row).second) }}</template>
+            </el-table-column>
+            <el-table-column label="个税" width="85" align="right">
+              <template #default="{ row }">{{ formatMoney(row.incomeTax) }}</template>
+            </el-table-column>
+            <el-table-column label="第二次实发" width="110" align="right">
+              <template #default="{ row }">{{ formatMoney(computeSecondActualPay(row)) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="暂无人员" />
         </div>
       </div>
 
@@ -657,6 +669,9 @@
         <el-button @click="addDialogVisible = false">取消</el-button>
         <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
           个税导入
+        </el-button>
+        <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
+          读取个税
         </el-button>
         <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
           保存
@@ -780,6 +795,7 @@ type SalaryDraftRow = {
   unemploymentInsuranceFee: number | null
   firstPay: number | null
   secondPay: number | null
+  incomeTax: number | null
   overtimePay: number | null
   doubleOvertimePay: number | null
   tripleOvertimePay: number | null
@@ -857,6 +873,7 @@ const addSaving = ref(false)
 const addCompleting = ref(false)
 const addStepSaved = reactive([false, false, false])
 const taxImporting = ref(false)
+const taxLoading = ref(false)
 
 const addEmployeesLoading = ref(false)
 const addEmployees = ref<EmployeeInfo[]>([])
@@ -1107,6 +1124,14 @@ const computeFirstActualPay = (row: SalaryDraftRow) => {
   return Math.max(0, Math.round(actual * 100) / 100)
 }
 
+const computeSecondActualPay = (row: SalaryDraftRow) => {
+  const split = getRowPaySplit(row)
+  const second = toNumberOrNull(split.second) ?? 0
+  const incomeTax = toNumberOrNull(row.incomeTax) ?? 0
+  const actual = second - incomeTax
+  return Math.max(0, Math.round(actual * 100) / 100)
+}
+
 const addRowsTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
 })
@@ -1212,6 +1237,10 @@ const handleTaxImport = () => {
       taxImporting.value = false
     }
   })()
+}
+
+const handleLoadTax = () => {
+  ElMessage.info('读取个税：暂未接入')
 }
 
 const loadActiveEmployees = async () => {
@@ -1534,6 +1563,7 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
           insuranceFeesByEmployeeId.value.get(emp.id)?.unemploymentInsuranceFee ?? null,
         firstPay: null,
         secondPay: null,
+        incomeTax: null,
         overtimePay: null,
         doubleOvertimePay: null,
         tripleOvertimePay: null,
