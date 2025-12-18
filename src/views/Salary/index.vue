@@ -104,7 +104,7 @@
     <el-dialog
       v-model="paramsDialogVisible"
       title="参数"
-      :width="isMobile ? '100%' : '760px'"
+      :width="isMobile ? '100%' : '1260px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="params-dialog"
