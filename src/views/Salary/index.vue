@@ -150,6 +150,69 @@
                 </template>
               </el-table-column>
               <el-table-column
+                label="基本养老保险费"
+                width="140"
+                align="center"
+                class-name="sb-col-input"
+              >
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.pensionInsuranceFee"
+                    @change="touchAdjustDate(row)"
+                    :min="0"
+                    :max="999999"
+                    :precision="2"
+                    :controls="false"
+                    :value-on-clear="null"
+                    placeholder="-"
+                    size="small"
+                    class="sb-number"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="基本医疗保险费"
+                width="140"
+                align="center"
+                class-name="sb-col-input"
+              >
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.medicalInsuranceFee"
+                    @change="touchAdjustDate(row)"
+                    :min="0"
+                    :max="999999"
+                    :precision="2"
+                    :controls="false"
+                    :value-on-clear="null"
+                    placeholder="-"
+                    size="small"
+                    class="sb-number"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="失业保险费"
+                width="120"
+                align="center"
+                class-name="sb-col-input"
+              >
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.unemploymentInsuranceFee"
+                    @change="touchAdjustDate(row)"
+                    :min="0"
+                    :max="999999"
+                    :precision="2"
+                    :controls="false"
+                    :value-on-clear="null"
+                    placeholder="-"
+                    size="small"
+                    class="sb-number"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
                 label="调整日期"
                 width="140"
                 align="center"
@@ -619,6 +682,9 @@ type SalaryBaseRow = {
   employeeNumber: string
   department: string
   salaryBase: number | null
+  pensionInsuranceFee: number | null
+  medicalInsuranceFee: number | null
+  unemploymentInsuranceFee: number | null
   adjustDate: string
 }
 
@@ -1036,6 +1102,9 @@ const ensureSalaryBaseLoaded = async () => {
         employeeNumber: String(emp.employeeNumber ?? ''),
         department: emp.department || '',
         salaryBase: param?.salaryBase ?? null,
+        pensionInsuranceFee: param?.pensionInsuranceFee ?? null,
+        medicalInsuranceFee: param?.medicalInsuranceFee ?? null,
+        unemploymentInsuranceFee: param?.unemploymentInsuranceFee ?? null,
         adjustDate: (param?.adjustDate as any) || ''
       }
     })
@@ -1196,6 +1265,9 @@ const handleParamsSave = () => {
         const rows: SalaryBaseParamRow[] = salaryBaseRows.value.map((r) => ({
           employeeId: r.employeeId,
           salaryBase: r.salaryBase ?? null,
+          pensionInsuranceFee: r.pensionInsuranceFee ?? null,
+          medicalInsuranceFee: r.medicalInsuranceFee ?? null,
+          unemploymentInsuranceFee: r.unemploymentInsuranceFee ?? null,
           adjustDate: r.adjustDate || null
         }))
         const resp: any = await saveSalaryBaseParamsApi(rows)

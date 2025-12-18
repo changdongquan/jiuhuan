@@ -3,6 +3,9 @@ import { request } from '@/axios'
 export type SalaryBaseParamRow = {
   employeeId: number
   salaryBase: number | null
+  pensionInsuranceFee: number | null
+  medicalInsuranceFee: number | null
+  unemploymentInsuranceFee: number | null
   adjustDate: string | null
   updatedAt?: string
 }

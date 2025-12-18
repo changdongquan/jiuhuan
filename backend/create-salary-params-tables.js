@@ -33,12 +33,28 @@ async function ensureSalaryParamsTables() {
         ID INT IDENTITY(1,1) PRIMARY KEY,
         员工ID INT NOT NULL UNIQUE,
         工资基数 DECIMAL(12,2) NULL,
+        基本养老保险费 DECIMAL(12,2) NULL,
+        基本医疗保险费 DECIMAL(12,2) NULL,
+        失业保险费 DECIMAL(12,2) NULL,
         调整日期 DATE NULL,
         创建时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
         更新时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME()
       )
     `
     )
+
+    // 兼容历史库：为工资基数表补齐新增字段
+    const ensureColumn = async (tableName, columnName, columnSql) => {
+      await pool.request().query(`
+        IF COL_LENGTH(N'${tableName}', N'${columnName}') IS NULL
+        BEGIN
+          ALTER TABLE ${tableName} ADD ${columnSql};
+        END
+      `)
+    }
+    await ensureColumn(TABLE_SALARY_BASE, '基本养老保险费', '基本养老保险费 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_SALARY_BASE, '基本医疗保险费', '基本医疗保险费 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_SALARY_BASE, '失业保险费', '失业保险费 DECIMAL(12,2) NULL')
 
     await ensureTable(
       TABLE_OVERTIME_BASE,

@@ -382,6 +382,9 @@ router.get('/params/salary-base', async (req, res) => {
       SELECT
         员工ID as employeeId,
         工资基数 as salaryBase,
+        基本养老保险费 as pensionInsuranceFee,
+        基本医疗保险费 as medicalInsuranceFee,
+        失业保险费 as unemploymentInsuranceFee,
         调整日期 as adjustDate,
         更新时间 as updatedAt
       FROM ${TABLE_SALARY_BASE}
@@ -411,16 +414,47 @@ router.put('/params/salary-base', async (req, res) => {
       const upsertReq = new sql.Request(transaction)
       upsertReq.input('employeeId', sql.Int, employeeId)
       upsertReq.input('salaryBase', sql.Decimal(12, 2), toMoney(row.salaryBase))
+      upsertReq.input('pensionInsuranceFee', sql.Decimal(12, 2), toMoney(row.pensionInsuranceFee))
+      upsertReq.input('medicalInsuranceFee', sql.Decimal(12, 2), toMoney(row.medicalInsuranceFee))
+      upsertReq.input(
+        'unemploymentInsuranceFee',
+        sql.Decimal(12, 2),
+        toMoney(row.unemploymentInsuranceFee)
+      )
       upsertReq.input('adjustDate', sql.DateTime2, parseDateOrNull(row.adjustDate))
       await upsertReq.query(`
         MERGE ${TABLE_SALARY_BASE} AS t
         USING (SELECT @employeeId AS 员工ID) AS s
         ON (t.员工ID = s.员工ID)
         WHEN MATCHED THEN
-          UPDATE SET 工资基数 = @salaryBase, 调整日期 = @adjustDate, 更新时间 = SYSDATETIME()
+          UPDATE SET
+            工资基数 = @salaryBase,
+            基本养老保险费 = @pensionInsuranceFee,
+            基本医疗保险费 = @medicalInsuranceFee,
+            失业保险费 = @unemploymentInsuranceFee,
+            调整日期 = @adjustDate,
+            更新时间 = SYSDATETIME()
         WHEN NOT MATCHED THEN
-          INSERT (员工ID, 工资基数, 调整日期, 创建时间, 更新时间)
-          VALUES (@employeeId, @salaryBase, @adjustDate, SYSDATETIME(), SYSDATETIME());
+          INSERT (
+            员工ID,
+            工资基数,
+            基本养老保险费,
+            基本医疗保险费,
+            失业保险费,
+            调整日期,
+            创建时间,
+            更新时间
+          )
+          VALUES (
+            @employeeId,
+            @salaryBase,
+            @pensionInsuranceFee,
+            @medicalInsuranceFee,
+            @unemploymentInsuranceFee,
+            @adjustDate,
+            SYSDATETIME(),
+            SYSDATETIME()
+          );
       `)
     }
 
