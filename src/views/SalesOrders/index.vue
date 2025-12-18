@@ -65,7 +65,7 @@
       </el-form-item>
       <el-form-item label="客户名称">
         <el-select
-          v-model="queryForm.customerName"
+          v-model="queryForm.customerId"
           placeholder="请选择客户"
           clearable
           filterable
@@ -75,7 +75,7 @@
             v-for="customer in customerList"
             :key="customer.id"
             :label="customer.customerName"
-            :value="customer.customerName"
+            :value="customer.id"
           />
         </el-select>
       </el-form-item>
@@ -1384,7 +1384,7 @@ import { useAppStore } from '@/store/modules/app'
 
 interface OrderQuery {
   searchText: string
-  customerName: string
+  customerId?: number
   category: string
   contractNo: string
   orderDateRange: string[]
@@ -1445,7 +1445,7 @@ const formatDate = (date: string | Date | null | undefined): string => {
 
 const queryForm = reactive<OrderQuery>({
   searchText: '',
-  customerName: '',
+  customerId: undefined,
   category: '',
   contractNo: '',
   orderDateRange: []
@@ -1841,8 +1841,8 @@ const loadData = async () => {
       params.searchText = queryForm.searchText.trim()
     }
 
-    if (queryForm.customerName && queryForm.customerName.trim()) {
-      params.customerName = queryForm.customerName.trim()
+    if (queryForm.customerId) {
+      params.customerId = queryForm.customerId
     }
 
     if (queryForm.category && queryForm.category.trim()) {
@@ -1908,7 +1908,7 @@ const handleSearch = () => {
 
 const handleReset = () => {
   queryForm.searchText = ''
-  queryForm.customerName = ''
+  queryForm.customerId = undefined
   queryForm.category = ''
   queryForm.contractNo = ''
   queryForm.orderDateRange = []
