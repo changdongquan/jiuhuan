@@ -1,5 +1,7 @@
 const express = require('express')
 const sql = require('mssql')
+const ExcelJS = require('exceljs')
+const path = require('path')
 const router = express.Router()
 const { query, getPool } = require('../database')
 
@@ -9,11 +11,23 @@ const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
 const TABLE_PENALTY = '工资_罚扣'
+const TAX_IMPORT_TEMPLATE_PATH = path.join(
+  __dirname,
+  '..',
+  'templates',
+  'salary',
+  '个税导入模板01.xlsx'
+)
 
 const toNumberOrNull = (val) => {
   if (val === null || val === undefined || val === '') return null
   const num = Number(val)
   return Number.isNaN(num) ? null : num
+}
+
+const toNumberOrZero = (val) => {
+  const num = toNumberOrNull(val)
+  return num === null ? 0 : num
 }
 
 const toMoney = (val) => {
@@ -644,6 +658,70 @@ router.put('/params/penalty', async (req, res) => {
     if (transaction) await transaction.rollback()
     console.error('保存罚扣参数失败:', error)
     res.status(500).json({ code: 500, message: error.message || '保存罚扣参数失败' })
+  }
+})
+
+// 个税导入：按模板生成 Excel（步骤2数据）
+router.post('/tax-import/export', async (req, res) => {
+  try {
+    const { month, rows } = req.body || {}
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ code: 400, message: 'rows 必须是数组且不能为空' })
+    }
+
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(TAX_IMPORT_TEMPLATE_PATH)
+    const worksheet = workbook.worksheets[0]
+    if (!worksheet) throw new Error('模板工作表不存在')
+
+    let rowIndex = 2 // 模板第 1 行是表头
+    for (const item of rows) {
+      const employeeName = String(item?.employeeName ?? item?.name ?? '').trim()
+      if (!employeeName) continue
+
+      const idCard = String(item?.idCard ?? '').trim()
+      const firstPay = toNumberOrZero(item?.firstPay)
+      const pensionInsuranceFee = toNumberOrZero(item?.pensionInsuranceFee)
+      const medicalInsuranceFee = toNumberOrZero(item?.medicalInsuranceFee)
+      const unemploymentInsuranceFee = toNumberOrZero(item?.unemploymentInsuranceFee)
+
+      worksheet.getCell(`B${rowIndex}`).value = employeeName
+      worksheet.getCell(`C${rowIndex}`).value = '居民身份证'
+      worksheet.getCell(`D${rowIndex}`).value = idCard
+
+      const incomeCell = worksheet.getCell(`E${rowIndex}`)
+      incomeCell.value = firstPay
+      incomeCell.numFmt = '0.00'
+
+      const pensionCell = worksheet.getCell(`G${rowIndex}`)
+      pensionCell.value = pensionInsuranceFee
+      pensionCell.numFmt = '0.00'
+
+      const medicalCell = worksheet.getCell(`H${rowIndex}`)
+      medicalCell.value = medicalInsuranceFee
+      medicalCell.numFmt = '0.00'
+
+      const unemploymentCell = worksheet.getCell(`I${rowIndex}`)
+      unemploymentCell.value = unemploymentInsuranceFee
+      unemploymentCell.numFmt = '0.00'
+
+      rowIndex += 1
+    }
+
+    const fileName = `个税导入_${String(month || '').trim() || '模板'}.xlsx`
+    const buffer = await workbook.xlsx.writeBuffer()
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    )
+    res.send(Buffer.from(buffer))
+  } catch (error) {
+    console.error('生成个税导入模板失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '生成个税导入模板失败' })
   }
 })
 

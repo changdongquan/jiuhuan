@@ -84,3 +84,22 @@ export const completeSalaryApi = (id: number) => {
     method: 'put'
   })
 }
+
+export const exportSalaryTaxImportTemplateApi = (data: {
+  month: string
+  rows: Array<{
+    employeeName: string
+    idCard: string
+    firstPay: number
+    pensionInsuranceFee: number
+    medicalInsuranceFee: number
+    unemploymentInsuranceFee: number
+  }>
+}) => {
+  return request({
+    url: '/api/salary/tax-import/export',
+    method: 'post',
+    data,
+    responseType: 'blob'
+  })
+}

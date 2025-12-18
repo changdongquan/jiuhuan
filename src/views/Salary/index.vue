@@ -599,14 +599,44 @@
             <el-table-column prop="total" label="应发" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
             </el-table-column>
-            <el-table-column label="第一次发放" width="100" align="right">
+            <el-table-column
+              label="第一次应发"
+              width="110"
+              align="center"
+              class-name="sa-col-input sa-col-input--center"
+            >
               <template #default="{ row }">
-                {{ formatMoney(computePaySplit(computeRowTotal(row)).first) }}
+                <el-input-number
+                  v-model="row.firstPay"
+                  :min="0"
+                  :max="computeRowTotal(row) ?? 999999"
+                  :precision="2"
+                  :controls="false"
+                  :value-on-clear="null"
+                  placeholder="-"
+                  size="small"
+                  class="sa-number sa-number--narrow"
+                  @update:model-value="(val) => handleFirstPayChange(row, val)"
+                />
               </template>
             </el-table-column>
-            <el-table-column label="第二次发放" width="100" align="right">
+            <el-table-column label="基本养老保险费" width="130" align="right">
+              <template #default="{ row }">{{ formatMoney(row.pensionInsuranceFee) }}</template>
+            </el-table-column>
+            <el-table-column label="基本医疗保险费" width="130" align="right">
+              <template #default="{ row }">{{ formatMoney(row.medicalInsuranceFee) }}</template>
+            </el-table-column>
+            <el-table-column label="失业保险费" width="110" align="right">
+              <template #default="{ row }">{{
+                formatMoney(row.unemploymentInsuranceFee)
+              }}</template>
+            </el-table-column>
+            <el-table-column label="第一次实发" width="110" align="right">
+              <template #default="{ row }">{{ formatMoney(computeFirstActualPay(row)) }}</template>
+            </el-table-column>
+            <el-table-column label="第二次应发" width="100" align="right">
               <template #default="{ row }">
-                {{ formatMoney(computePaySplit(computeRowTotal(row)).second) }}
+                {{ formatMoney(getRowPaySplit(row).second) }}
               </template>
             </el-table-column>
           </el-table>
@@ -625,6 +655,9 @@
 
       <template #footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
+        <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
+          个税导入
+        </el-button>
         <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
           保存
         </el-button>
@@ -656,6 +689,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
+import { exportSalaryTaxImportTemplateApi } from '@/api/salary'
 import {
   getAttendanceDetailApi,
   getAttendanceListApi,
@@ -738,8 +772,14 @@ type SalaryDraftRow = {
   employeeId: number
   employeeName: string
   employeeNumber: string
+  idCard: string
   entryDate: string
   baseSalary: number | null
+  pensionInsuranceFee: number | null
+  medicalInsuranceFee: number | null
+  unemploymentInsuranceFee: number | null
+  firstPay: number | null
+  secondPay: number | null
   overtimePay: number | null
   doubleOvertimePay: number | null
   tripleOvertimePay: number | null
@@ -816,6 +856,7 @@ const addStep = ref(0)
 const addSaving = ref(false)
 const addCompleting = ref(false)
 const addStepSaved = reactive([false, false, false])
+const taxImporting = ref(false)
 
 const addEmployeesLoading = ref(false)
 const addEmployees = ref<EmployeeInfo[]>([])
@@ -1013,20 +1054,73 @@ const computePaySplit = (total: number | null, limit = paySplitLimit.value) => {
   }
 }
 
+const roundMoney2 = (val: unknown) => {
+  const num = toNumberOrNull(val)
+  if (num === null) return null
+  return Math.round(num * 100) / 100
+}
+
+const getRowPaySplit = (row: Pick<SalaryDraftRow, 'firstPay' | 'secondPay'> & SalaryDraftRow) => {
+  const total = computeRowTotal(row)
+  const fallback = computePaySplit(total)
+  if (total === null) return { first: fallback.first, second: fallback.second }
+
+  const first = row.firstPay ?? fallback.first
+  const second =
+    row.secondPay ??
+    (first === null || first === undefined ? fallback.second : roundMoney2(total - first))
+
+  return {
+    first: first ?? null,
+    second: second ?? null
+  }
+}
+
+const handleFirstPayChange = (row: SalaryDraftRow, val: number | null | undefined) => {
+  const total = computeRowTotal(row)
+  if (val === null || val === undefined || Number.isNaN(Number(val))) {
+    row.firstPay = null
+    row.secondPay = null
+    return
+  }
+  if (total === null) {
+    row.firstPay = roundMoney2(val)
+    row.secondPay = null
+    return
+  }
+
+  const desired = Math.max(0, Math.min(Number(val), Number(total)))
+  const first = roundMoney2(desired) ?? 0
+  const second = roundMoney2(Number(total) - first) ?? 0
+
+  row.firstPay = first
+  row.secondPay = Math.max(0, second)
+}
+
+const computeFirstActualPay = (row: SalaryDraftRow) => {
+  const split = getRowPaySplit(row)
+  const first = toNumberOrNull(split.first) ?? 0
+  const pension = toNumberOrNull(row.pensionInsuranceFee) ?? 0
+  const medical = toNumberOrNull(row.medicalInsuranceFee) ?? 0
+  const unemployment = toNumberOrNull(row.unemploymentInsuranceFee) ?? 0
+  const actual = first - pension - medical - unemployment
+  return Math.max(0, Math.round(actual * 100) / 100)
+}
+
 const addRowsTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
 })
 
 const addRowsFirstPayTotal = computed(() => {
   return addRows.value.reduce((acc, row) => {
-    const split = computePaySplit(computeRowTotal(row))
+    const split = getRowPaySplit(row)
     return acc + (split.first || 0)
   }, 0)
 })
 
 const addRowsSecondPayTotal = computed(() => {
   return addRows.value.reduce((acc, row) => {
-    const split = computePaySplit(computeRowTotal(row))
+    const split = getRowPaySplit(row)
     return acc + (split.second || 0)
   }, 0)
 })
@@ -1066,6 +1160,58 @@ const handleCurrentChange = (page: number) => {
 
 const handleNotReady = () => {
   ElMessage.info('工资功能接口暂未接入')
+}
+
+const handleTaxImport = () => {
+  void (async () => {
+    if (addStep.value !== 1) return
+    if (!addRows.value.length) {
+      ElMessage.warning('暂无数据可导出')
+      return
+    }
+
+    const missingIdCard = addRows.value.filter((r) => !String(r.idCard || '').trim())
+    if (missingIdCard.length) {
+      ElMessage.warning(
+        `存在未填写身份证号码的员工：${missingIdCard.map((r) => r.employeeName).join('、')}`
+      )
+      return
+    }
+
+    taxImporting.value = true
+    try {
+      const exportRows = addRows.value.map((row) => {
+        const split = getRowPaySplit(row)
+        return {
+          employeeName: row.employeeName,
+          idCard: String(row.idCard || '').trim(),
+          firstPay: Number(split.first ?? 0),
+          pensionInsuranceFee: Number(row.pensionInsuranceFee ?? 0),
+          medicalInsuranceFee: Number(row.medicalInsuranceFee ?? 0),
+          unemploymentInsuranceFee: Number(row.unemploymentInsuranceFee ?? 0)
+        }
+      })
+
+      const resp = await exportSalaryTaxImportTemplateApi({
+        month: rangeForm.month,
+        rows: exportRows
+      })
+      const blob = (resp as any)?.data ?? resp
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `个税导入_${rangeForm.month || '模板'}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('个税导入导出失败:', error)
+      ElMessage.error('个税导入导出失败')
+    } finally {
+      taxImporting.value = false
+    }
+  })()
 }
 
 const loadActiveEmployees = async () => {
@@ -1377,8 +1523,17 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
         employeeId: emp.id,
         employeeName: emp.employeeName,
         employeeNumber: String(emp.employeeNumber ?? ''),
+        idCard: emp.idCard || '',
         entryDate: String(emp.entryDate || ''),
         baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
+        pensionInsuranceFee:
+          insuranceFeesByEmployeeId.value.get(emp.id)?.pensionInsuranceFee ?? null,
+        medicalInsuranceFee:
+          insuranceFeesByEmployeeId.value.get(emp.id)?.medicalInsuranceFee ?? null,
+        unemploymentInsuranceFee:
+          insuranceFeesByEmployeeId.value.get(emp.id)?.unemploymentInsuranceFee ?? null,
+        firstPay: null,
+        secondPay: null,
         overtimePay: null,
         doubleOvertimePay: null,
         tripleOvertimePay: null,
@@ -1400,13 +1555,39 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
 }
 
 const salaryBaseByEmployeeId = ref(new Map<number, number | null>())
+const insuranceFeesByEmployeeId = ref(
+  new Map<
+    number,
+    {
+      pensionInsuranceFee: number | null
+      medicalInsuranceFee: number | null
+      unemploymentInsuranceFee: number | null
+    }
+  >()
+)
 
 const refreshSalaryBaseParams = async () => {
   const paramsResp: any = await getSalaryBaseParamsApi()
   const paramsList: SalaryBaseParamRow[] = paramsResp?.data || paramsResp || []
   const map = new Map<number, number | null>()
-  for (const item of paramsList) map.set(item.employeeId, item.salaryBase ?? null)
+  const feeMap = new Map<
+    number,
+    {
+      pensionInsuranceFee: number | null
+      medicalInsuranceFee: number | null
+      unemploymentInsuranceFee: number | null
+    }
+  >()
+  for (const item of paramsList) {
+    map.set(item.employeeId, item.salaryBase ?? null)
+    feeMap.set(item.employeeId, {
+      pensionInsuranceFee: item.pensionInsuranceFee ?? null,
+      medicalInsuranceFee: item.medicalInsuranceFee ?? null,
+      unemploymentInsuranceFee: item.unemploymentInsuranceFee ?? null
+    })
+  }
   salaryBaseByEmployeeId.value = map
+  insuranceFeesByEmployeeId.value = feeMap
 }
 
 const loadOvertimeBaseByLevel = async () => {
@@ -1565,7 +1746,16 @@ const saveAddStep = async () => {
   if (addStep.value === 0) {
     addSaving.value = true
     try {
-      const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
+      const rows = addRows.value.map((r) => {
+        const total = computeRowTotal(r)
+        const split = computePaySplit(total)
+        return {
+          ...r,
+          total,
+          firstPay: r.firstPay ?? split.first,
+          secondPay: r.secondPay ?? split.second
+        }
+      })
       addRows.value = rows
       addStepSaved[0] = true
       ElMessage.success('步骤1已保存（未写入数据库）')
@@ -1599,7 +1789,16 @@ const saveAddStep = async () => {
 
 const goNextStep = () => {
   if (addStep.value === 0) {
-    const rows = addRows.value.map((r) => ({ ...r, total: computeRowTotal(r) }))
+    const rows = addRows.value.map((r) => {
+      const total = computeRowTotal(r)
+      const split = computePaySplit(total)
+      return {
+        ...r,
+        total,
+        firstPay: r.firstPay ?? split.first,
+        secondPay: r.secondPay ?? split.second
+      }
+    })
     addRows.value = rows
     addStepSaved[0] = true
     addStep.value = 1
@@ -1761,8 +1960,18 @@ onMounted(() => {
   padding: 0 !important;
 }
 
+:deep(.salary-add-dialog .sa-col-input--center .cell) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 :deep(.salary-add-dialog .sa-number.el-input-number) {
   width: 120px;
+}
+
+:deep(.salary-add-dialog .sa-number--narrow.el-input-number) {
+  width: 80px;
 }
 
 .salary-add-header {
