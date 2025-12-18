@@ -535,7 +535,7 @@
                   {{ formatMoney(row.baseSalary) }}
                 </template>
               </el-table-column>
-              <el-table-column label="加班费" width="75" align="right">
+              <el-table-column label="加班费" width="80" align="right">
                 <template #default="{ row }">{{ formatMoney(row.overtimePay) }}</template>
               </el-table-column>
               <el-table-column label="两倍加班费" width="100" align="right">
