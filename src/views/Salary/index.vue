@@ -1822,7 +1822,10 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
       lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount),
       newOrPersonalLeaveDeduction: multiplyMoneyOrNull(att.newOrPersonalLeaveHours, hourlyRate),
       sickLeaveDeduction: multiplyMoneyOrNull(att.sickLeaveHours, sickHourlyRate),
-      absenceDeduction: multiplyMoneyOrNull(att.absenceHours, multiplyMoneyOrNull(hourlyRate, 3))
+      absenceDeduction: multiplyMoneyOrNull(att.absenceHours, multiplyMoneyOrNull(hourlyRate, 3)),
+      hygieneFee: toNumberOrNull(att.hygieneFee),
+      waterFee: toNumberOrNull(att.waterFee),
+      electricityFee: toNumberOrNull(att.electricityFee)
     }
   })
 }
