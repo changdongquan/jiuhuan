@@ -538,7 +538,7 @@
                   >第一批工资合计：{{ formatMoneyWithThousands(addRowsFirstPayTotal) }}</span
                 >
                 <span v-else
-                  >第一次应发合计：{{ formatMoneyWithThousands(addRowsFirstPayTotal) }}</span
+                  >第一次应发合计：{{ formatMoneyWithThousands(addRowsFirstActualPayTotal) }}</span
                 >
               </div>
               <div
@@ -551,7 +551,7 @@
                   >第二批工资合计：{{ formatMoneyWithThousands(addRowsSecondPayTotal) }}</span
                 >
                 <span v-else
-                  >第二次应发合计：{{ formatMoneyWithThousands(addRowsSecondPayTotal) }}</span
+                  >第二次应发合计：{{ formatMoneyWithThousands(addRowsSecondActualPayTotal) }}</span
                 >
               </div>
             </div>
@@ -799,12 +799,12 @@
           </el-table-column>
           <el-table-column label="第一次应发" width="120" align="right">
             <template #default="{ row }">{{
-              formatMoneyWithThousands(getRowPaySplit(row).first)
+              formatMoneyWithThousands(computeFirstActualPay(row))
             }}</template>
           </el-table-column>
           <el-table-column label="第二次应发" width="120" align="right">
             <template #default="{ row }">{{
-              formatMoneyWithThousands(getRowPaySplit(row).second)
+              formatMoneyWithThousands(computeSecondActualPay(row))
             }}</template>
           </el-table-column>
         </el-table>
@@ -1331,6 +1331,14 @@ const addRowsSecondPayTotal = computed(() => {
   }, 0)
 })
 
+const addRowsFirstActualPayTotal = computed(() => {
+  return addRows.value.reduce((acc, row) => acc + computeFirstActualPay(row), 0)
+})
+
+const addRowsSecondActualPayTotal = computed(() => {
+  return addRows.value.reduce((acc, row) => acc + computeSecondActualPay(row), 0)
+})
+
 const loadList = async () => {
   loading.value = true
   try {
@@ -1782,6 +1790,28 @@ const loadAddEmployees = async () => {
 }
 
 const handleAdd = async () => {
+  const now = new Date()
+  const currentMonth = formatMonth(new Date(now.getFullYear(), now.getMonth(), 1))
+  const existed = tableData.value.find((r) => r.month === currentMonth)
+  if (existed) {
+    try {
+      await ElMessageBox.confirm(
+        `【${currentMonth}】工资记录已存在，不能重复新增。是否打开编辑？`,
+        '提示',
+        {
+          confirmButtonText: '打开编辑',
+          cancelButtonText: '取消',
+          type: 'warning',
+          closeOnClickModal: false
+        }
+      )
+      handleSummaryEdit(existed)
+    } catch {
+      // 用户取消
+    }
+    return
+  }
+
   resetAddWizard()
   await loadAddEmployees()
   resetRangeDialog()
@@ -2149,8 +2179,8 @@ const completeAdd = async () => {
       doubleOvertimePayTotal: sumMoney(addRows.value, (r) => r.doubleOvertimePay),
       tripleOvertimePayTotal: sumMoney(addRows.value, (r) => r.tripleOvertimePay),
       currentSalaryTotal: Math.round(addRowsTotal.value * 100) / 100,
-      firstPayTotal: Math.round(addRowsFirstPayTotal.value * 100) / 100,
-      secondPayTotal: Math.round(addRowsSecondPayTotal.value * 100) / 100,
+      firstPayTotal: Math.round(addRowsFirstActualPayTotal.value * 100) / 100,
+      secondPayTotal: Math.round(addRowsSecondActualPayTotal.value * 100) / 100,
       createdAt,
       rows: rowsSnapshot
     }
