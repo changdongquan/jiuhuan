@@ -937,6 +937,14 @@ const multiplyMoneyOrNull = (left: unknown, right: unknown) => {
   return Math.round(result * 100) / 100
 }
 
+const computeHourlyRateFromSalaryBase = (salaryBase: unknown) => {
+  const base = toNumberOrNull(salaryBase)
+  if (base === null) return null
+  const rate = base / 26 / 8
+  if (Number.isNaN(rate)) return null
+  return rate
+}
+
 const isAttendanceFullAttendance = (val: unknown) => {
   const num = toNumberOrNull(val)
   if (num === null) return false
@@ -1787,6 +1795,7 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
 
     const level = toNumberOrNull(att.level)
     const base = level ? overtimeBaseByLevel.get(level) : undefined
+    const hourlyRate = computeHourlyRateFromSalaryBase(row.baseSalary)
 
     return {
       ...row,
@@ -1800,7 +1809,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
         fullAttendanceSubsidyAmount
       ),
       seniorityPay,
-      lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount)
+      lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount),
+      newOrPersonalLeaveDeduction: multiplyMoneyOrNull(att.newOrPersonalLeaveHours, hourlyRate)
     }
   })
 }
