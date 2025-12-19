@@ -471,31 +471,6 @@
             :style="{ width: isMobile ? '100%' : '220px' }"
           />
         </el-form-item>
-        <el-form-item label="员工范围" required>
-          <el-radio-group v-model="rangeForm.applyToAll">
-            <el-radio :value="true">全部在职员工</el-radio>
-            <el-radio :value="false">指定员工</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="!rangeForm.applyToAll" label="选择员工" required>
-          <el-select
-            v-model="rangeForm.employeeIds"
-            filterable
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            placeholder="请选择员工"
-            :loading="addEmployeesLoading"
-            :style="{ width: isMobile ? '100%' : '420px' }"
-          >
-            <el-option
-              v-for="emp in addEmployees"
-              :key="emp.id"
-              :label="`${emp.employeeName}（${emp.employeeNumber}）`"
-              :value="emp.id"
-            />
-          </el-select>
-        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -724,7 +699,13 @@
           <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
             读取个税
           </el-button>
-          <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
+          <el-button
+            v-if="addStep !== 0"
+            type="primary"
+            :loading="addSaving"
+            :disabled="isAddStepSaveDisabled"
+            @click="saveAddStep"
+          >
             保存
           </el-button>
           <el-button v-if="addStep > 0" @click="goPrevStep">上一步</el-button>
@@ -1000,9 +981,7 @@ const resetParamsDialog = () => {
 const rangeDialogVisible = ref(false)
 const rangeSaving = ref(false)
 const rangeForm = reactive({
-  month: '',
-  applyToAll: true,
-  employeeIds: [] as number[]
+  month: ''
 })
 
 const addDialogVisible = ref(false)
@@ -1074,6 +1053,17 @@ const sumMoney = <T,>(list: T[], getVal: (row: T) => unknown) => {
   if (Number.isNaN(total)) return 0
   return Math.round(total * 100) / 100
 }
+
+const isTaxReady = computed(() => {
+  if (!addRows.value.length) return false
+  return addRows.value.every((row) => row.incomeTax !== null && row.incomeTax !== undefined)
+})
+
+const isAddStepSaveDisabled = computed(() => {
+  if (addSaving.value) return true
+  if (addStep.value !== 2) return false
+  return taxLoading.value || !isTaxReady.value
+})
 
 const multiplyMoneyOrNull = (left: unknown, right: unknown) => {
   const l = toNumberOrNull(left)
@@ -1802,8 +1792,7 @@ const handleAdd = async () => {
 }
 
 const getStep1EmployeeIds = () => {
-  if (rangeForm.applyToAll) return addEmployees.value.map((emp) => emp.id)
-  return rangeForm.employeeIds
+  return addEmployees.value.map((emp) => emp.id)
 }
 
 const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] => {
@@ -2002,8 +1991,6 @@ const resetRangeDialog = () => {
   const { current } = getAllowedRangeMonths()
   const preset = queryForm.month || ''
   rangeForm.month = preset && isAllowedRangeMonthString(preset) ? preset : formatMonth(current)
-  rangeForm.applyToAll = true
-  rangeForm.employeeIds = []
 }
 
 const cancelRange = () => {
@@ -2040,6 +2027,19 @@ const saveRange = async () => {
     } catch {
       // 用户取消
     }
+    return
+  }
+
+  // 没有考勤记录则不允许继续新建
+  try {
+    const attendanceRecords = await loadAttendanceRecordsByMonth(rangeForm.month)
+    if (!attendanceRecords.length) {
+      ElMessage.warning(`未找到【${rangeForm.month}】考勤记录，不能继续新建`)
+      return
+    }
+  } catch (error) {
+    console.error('检查考勤记录失败:', error)
+    ElMessage.error(`检查【${rangeForm.month}】考勤记录失败，不能继续新建`)
     return
   }
 
@@ -2120,6 +2120,10 @@ const saveAddStep = async () => {
   }
 
   if (addStep.value === 2) {
+    if (!isTaxReady.value) {
+      ElMessage.warning('请先读取个税并确保所有人员已填充个税')
+      return
+    }
     addSaving.value = true
     try {
       addStepSaved[2] = true
