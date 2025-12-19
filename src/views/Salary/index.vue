@@ -96,6 +96,24 @@
               formatMoneyWithThousands(row.secondPayTotal)
             }}</template>
           </el-table-column>
+          <el-table-column label="两次发放合计" width="130" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(getSummaryTwoPayTotal(row))
+            }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="205" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
+                >编辑</el-button
+              >
+              <el-button type="success" size="small" @click="handleSummaryView(row)"
+                >查看</el-button
+              >
+              <el-button type="danger" size="small" @click="handleSummaryDelete(row)"
+                >删除</el-button
+              >
+            </template>
+          </el-table-column>
         </el-table>
       </div>
 
@@ -488,7 +506,7 @@
 
     <el-dialog
       v-model="addDialogVisible"
-      title="新增工资"
+      :title="addDialogTitle"
       :width="isMobile ? '100%' : '1580px'"
       :style="isMobile ? {} : { maxWidth: 'calc(100vw - 48px)' }"
       :fullscreen="isMobile"
@@ -499,7 +517,7 @@
       <template #header>
         <div class="salary-add-header">
           <div class="salary-add-header__top">
-            <div class="salary-add-header__title">新增工资</div>
+            <div class="salary-add-header__title">{{ addDialogTitle }}</div>
             <div class="salary-add-header__meta">
               <div class="salary-add-header__meta-row">
                 <el-tag size="small" type="info">{{ rangeForm.month || '-' }}</el-tag>
@@ -737,12 +755,70 @@
         />
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="viewSummaryVisible"
+      :title="`工资汇总 - ${viewSummaryRow?.month || ''}`"
+      :width="isMobile ? '100%' : '980px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+    >
+      <div v-if="viewSummaryRow" class="space-y-3">
+        <div class="flex flex-wrap gap-4 text-sm">
+          <span>人数：{{ formatCount(viewSummaryRow.employeeCount) }}</span>
+          <span>加班费合计：{{ formatMoneyWithThousands(viewSummaryRow.overtimePayTotal) }}</span>
+          <span
+            >两倍加班费合计：{{
+              formatMoneyWithThousands(viewSummaryRow.doubleOvertimePayTotal)
+            }}</span
+          >
+          <span
+            >三倍加班费合计：{{
+              formatMoneyWithThousands(viewSummaryRow.tripleOvertimePayTotal)
+            }}</span
+          >
+          <span
+            >本期工资合计：{{ formatMoneyWithThousands(viewSummaryRow.currentSalaryTotal) }}</span
+          >
+          <span>第一次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.firstPayTotal) }}</span>
+          <span>第二次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.secondPayTotal) }}</span>
+          <span
+            >两次发放合计：{{
+              formatMoneyWithThousands(getSummaryTwoPayTotal(viewSummaryRow))
+            }}</span
+          >
+        </div>
+        <el-table :data="viewSummaryRow.rows" border height="520" size="small">
+          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
+          <el-table-column prop="employeeNumber" label="工号" width="120" show-overflow-tooltip />
+          <el-table-column label="本期工资" width="120" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(computeRowTotal(row))
+            }}</template>
+          </el-table-column>
+          <el-table-column label="第一次应发" width="120" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(getRowPaySplit(row).first)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="第二次应发" width="120" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(getRowPaySplit(row).second)
+            }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="viewSummaryVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import { exportSalaryTaxImportTemplateApi, readSalaryIncomeTaxApi } from '@/api/salary'
@@ -809,6 +885,7 @@ type SalarySummaryRow = {
   firstPayTotal: number
   secondPayTotal: number
   createdAt: string
+  rows: SalaryDraftRow[]
 }
 
 type SalaryDraftRow = {
@@ -873,6 +950,20 @@ const summaryTableRows = computed(() => {
   const end = start + pagination.size
   return rows.slice(start, end)
 })
+
+const viewSummaryVisible = ref(false)
+const viewSummaryRow = ref<SalarySummaryRow | null>(null)
+const editingSummaryId = ref<string | null>(null)
+
+const isEditMode = computed(() => Boolean(editingSummaryId.value))
+
+const addDialogTitle = computed(() => (isEditMode.value ? '编辑工资' : '新增工资'))
+
+const getSummaryTwoPayTotal = (row: Pick<SalarySummaryRow, 'firstPayTotal' | 'secondPayTotal'>) => {
+  const total = Number(row.firstPayTotal || 0) + Number(row.secondPayTotal || 0)
+  if (Number.isNaN(total)) return 0
+  return Math.round(total * 100) / 100
+}
 
 const salaryBaseLoading = ref(false)
 const salaryBaseRows = ref<SalaryBaseRow[]>([])
@@ -1667,6 +1758,7 @@ const handleParamsSave = () => {
 }
 
 const resetAddWizard = () => {
+  editingSummaryId.value = null
   addStep.value = 0
   addSaving.value = false
   addCompleting.value = false
@@ -2047,8 +2139,10 @@ const completeAdd = async () => {
       now.getMinutes()
     ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
 
+    const rowsSnapshot: SalaryDraftRow[] = addRows.value.map((r) => ({ ...r }))
+    const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const summary: SalarySummaryRow = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: editingSummaryId.value || newId,
       month,
       employeeCount: addRows.value.length,
       overtimePayTotal: sumMoney(addRows.value, (r) => r.overtimePay),
@@ -2057,15 +2151,77 @@ const completeAdd = async () => {
       currentSalaryTotal: Math.round(addRowsTotal.value * 100) / 100,
       firstPayTotal: Math.round(addRowsFirstPayTotal.value * 100) / 100,
       secondPayTotal: Math.round(addRowsSecondPayTotal.value * 100) / 100,
-      createdAt
+      createdAt,
+      rows: rowsSnapshot
     }
 
-    tableData.value = [summary, ...tableData.value]
+    if (editingSummaryId.value) {
+      const idx = tableData.value.findIndex((r) => r.id === editingSummaryId.value)
+      if (idx >= 0) {
+        summary.createdAt = tableData.value[idx].createdAt
+        tableData.value.splice(idx, 1, summary)
+      } else {
+        tableData.value = [summary, ...tableData.value]
+      }
+    } else {
+      tableData.value = [summary, ...tableData.value]
+    }
     pagination.total = tableData.value.length
-    ElMessage.success('新增完成（已生成汇总，未写入数据库）')
+    ElMessage.success(
+      isEditMode.value ? '编辑完成（未写入数据库）' : '新增完成（已生成汇总，未写入数据库）'
+    )
     addDialogVisible.value = false
   } finally {
     addCompleting.value = false
+  }
+}
+
+const handleSummaryView = (row: SalarySummaryRow) => {
+  viewSummaryRow.value = row
+  viewSummaryVisible.value = true
+}
+
+const handleSummaryEdit = (row: SalarySummaryRow) => {
+  editingSummaryId.value = row.id
+  rangeForm.month = row.month
+  addRows.value = row.rows.map((r) => ({ ...r }))
+  addStep.value = 0
+  addStepSaved[0] = false
+  addStepSaved[1] = false
+  addStepSaved[2] = false
+  addDialogVisible.value = true
+}
+
+const handleSummaryDelete = async (row: SalarySummaryRow) => {
+  try {
+    const message = `<div style="line-height: 1.8;">
+      <div>确定删除工资汇总 ${row.month} 吗？删除后将无法恢复！</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
+    })
+
+    if (value && value.toUpperCase() === 'Y') {
+      const idx = tableData.value.findIndex((r) => r.id === row.id)
+      if (idx >= 0) tableData.value.splice(idx, 1)
+
+      const maxPage = Math.max(1, Math.ceil(tableData.value.length / pagination.size))
+      if (pagination.page > maxPage) pagination.page = maxPage
+      pagination.total = tableData.value.length
+      ElMessage.success('删除成功')
+    }
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      console.error('删除工资汇总失败:', err)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
