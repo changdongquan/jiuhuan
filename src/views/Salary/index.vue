@@ -960,6 +960,18 @@ const multiplyMoneyOrNull = (left: unknown, right: unknown) => {
   return Math.round(result * 100) / 100
 }
 
+const toNegativeMoneyOrNull = (val: unknown) => {
+  const num = toNumberOrNull(val)
+  if (num === null) return null
+  const rounded = Math.round(num * 100) / 100
+  return rounded === 0 ? 0 : -Math.abs(rounded)
+}
+
+const negateMoneyOrNull = (val: number | null) => {
+  if (val === null) return null
+  return val === 0 ? 0 : -Math.abs(val)
+}
+
 const computeHourlyRateFromSalaryBase = (salaryBase: unknown) => {
   const base = toNumberOrNull(salaryBase)
   if (base === null) return null
@@ -1088,7 +1100,7 @@ const computeRowTotal = (
     Number(row.waterFee || 0) +
     Number(row.electricityFee || 0)
 
-  const total = positive - negative
+  const total = positive + negative
   if (Number.isNaN(total)) return null
   return Math.round(total * 100) / 100
 }
@@ -1170,7 +1182,7 @@ const computeFirstActualPay = (row: SalaryDraftRow) => {
   const pension = toNumberOrNull(row.pensionInsuranceFee) ?? 0
   const medical = toNumberOrNull(row.medicalInsuranceFee) ?? 0
   const unemployment = toNumberOrNull(row.unemploymentInsuranceFee) ?? 0
-  const actual = first - pension - medical - unemployment
+  const actual = first + pension + medical + unemployment
   return Math.max(0, Math.round(actual * 100) / 100)
 }
 
@@ -1679,11 +1691,15 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
         entryDate: String(emp.entryDate || ''),
         baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
         pensionInsuranceFee:
-          insuranceFeesByEmployeeId.value.get(emp.id)?.pensionInsuranceFee ?? null,
+          toNegativeMoneyOrNull(insuranceFeesByEmployeeId.value.get(emp.id)?.pensionInsuranceFee) ??
+          null,
         medicalInsuranceFee:
-          insuranceFeesByEmployeeId.value.get(emp.id)?.medicalInsuranceFee ?? null,
+          toNegativeMoneyOrNull(insuranceFeesByEmployeeId.value.get(emp.id)?.medicalInsuranceFee) ??
+          null,
         unemploymentInsuranceFee:
-          insuranceFeesByEmployeeId.value.get(emp.id)?.unemploymentInsuranceFee ?? null,
+          toNegativeMoneyOrNull(
+            insuranceFeesByEmployeeId.value.get(emp.id)?.unemploymentInsuranceFee
+          ) ?? null,
         firstPay: null,
         secondPay: null,
         incomeTax: null,
@@ -1837,13 +1853,19 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
         fullAttendanceSubsidyAmount
       ),
       seniorityPay,
-      lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount),
-      newOrPersonalLeaveDeduction: multiplyMoneyOrNull(att.newOrPersonalLeaveHours, hourlyRate),
-      sickLeaveDeduction: multiplyMoneyOrNull(att.sickLeaveHours, sickHourlyRate),
-      absenceDeduction: multiplyMoneyOrNull(att.absenceHours, multiplyMoneyOrNull(hourlyRate, 3)),
-      hygieneFee: toNumberOrNull(att.hygieneFee),
-      waterFee: toNumberOrNull(att.waterFee),
-      electricityFee: toNumberOrNull(att.electricityFee)
+      lateDeduction: negateMoneyOrNull(multiplyMoneyOrNull(att.lateCount, latePenaltyAmount)),
+      newOrPersonalLeaveDeduction: negateMoneyOrNull(
+        multiplyMoneyOrNull(att.newOrPersonalLeaveHours, hourlyRate)
+      ),
+      sickLeaveDeduction: negateMoneyOrNull(
+        multiplyMoneyOrNull(att.sickLeaveHours, sickHourlyRate)
+      ),
+      absenceDeduction: negateMoneyOrNull(
+        multiplyMoneyOrNull(att.absenceHours, multiplyMoneyOrNull(hourlyRate, 3))
+      ),
+      hygieneFee: toNegativeMoneyOrNull(att.hygieneFee),
+      waterFee: toNegativeMoneyOrNull(att.waterFee),
+      electricityFee: toNegativeMoneyOrNull(att.electricityFee)
     }
   })
 }
