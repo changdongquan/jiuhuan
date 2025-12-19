@@ -1821,7 +1821,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
       seniorityPay,
       lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount),
       newOrPersonalLeaveDeduction: multiplyMoneyOrNull(att.newOrPersonalLeaveHours, hourlyRate),
-      sickLeaveDeduction: multiplyMoneyOrNull(att.sickLeaveHours, sickHourlyRate)
+      sickLeaveDeduction: multiplyMoneyOrNull(att.sickLeaveHours, sickHourlyRate),
+      absenceDeduction: multiplyMoneyOrNull(att.absenceHours, multiplyMoneyOrNull(hourlyRate, 3))
     }
   })
 }
