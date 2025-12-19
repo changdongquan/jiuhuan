@@ -1795,28 +1795,6 @@ const loadAddEmployees = async () => {
 }
 
 const handleAdd = async () => {
-  const now = new Date()
-  const currentMonth = formatMonth(new Date(now.getFullYear(), now.getMonth(), 1))
-  const existed = tableData.value.find((r) => r.month === currentMonth)
-  if (existed) {
-    try {
-      await ElMessageBox.confirm(
-        `【${currentMonth}】工资记录已存在，不能重复新增。是否打开编辑？`,
-        '提示',
-        {
-          confirmButtonText: '打开编辑',
-          cancelButtonText: '取消',
-          type: 'warning',
-          closeOnClickModal: false
-        }
-      )
-      handleSummaryEdit(existed)
-    } catch {
-      // 用户取消
-    }
-    return
-  }
-
   resetAddWizard()
   await loadAddEmployees()
   resetRangeDialog()
@@ -2042,6 +2020,29 @@ const saveRange = async () => {
     ElMessage.warning('月份只允许选择当月和上一月')
     return
   }
+
+  // 先检查该月份是否已有工资记录：有则提示打开编辑
+  const existed = tableData.value.find((r) => r.month === rangeForm.month)
+  if (existed) {
+    try {
+      await ElMessageBox.confirm(
+        `【${rangeForm.month}】工资记录已存在，不能重复新增。是否打开编辑？`,
+        '提示',
+        {
+          confirmButtonText: '打开编辑',
+          cancelButtonText: '取消',
+          type: 'warning',
+          closeOnClickModal: false
+        }
+      )
+      rangeDialogVisible.value = false
+      handleSummaryEdit(existed)
+    } catch {
+      // 用户取消
+    }
+    return
+  }
+
   const employeeIds = getStep1EmployeeIds()
   if (!employeeIds.length) {
     ElMessage.warning('请选择员工')
