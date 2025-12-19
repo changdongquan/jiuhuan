@@ -658,7 +658,10 @@
               <template #default="{ row }">{{ formatMoney(row.incomeTax) }}</template>
             </el-table-column>
             <el-table-column label="第二次实发" width="110" align="right">
-              <template #default="{ row }">{{ formatMoney(computeSecondActualPay(row)) }}</template>
+              <template #default="{ row }">
+                <span v-if="row.incomeTax === null || row.incomeTax === undefined">-</span>
+                <span v-else>{{ formatMoney(computeSecondActualPay(row)) }}</span>
+              </template>
             </el-table-column>
           </el-table>
           <el-empty v-else description="暂无人员" />
@@ -673,6 +676,13 @@
         <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
           读取个税
         </el-button>
+        <input
+          ref="taxFileInputRef"
+          type="file"
+          accept=".xls,.xlsx"
+          style="display: none"
+          @change="handleTaxFileChange"
+        />
         <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
           保存
         </el-button>
@@ -704,7 +714,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
-import { exportSalaryTaxImportTemplateApi } from '@/api/salary'
+import { exportSalaryTaxImportTemplateApi, readSalaryIncomeTaxApi } from '@/api/salary'
 import {
   getAttendanceDetailApi,
   getAttendanceListApi,
@@ -1240,7 +1250,85 @@ const handleTaxImport = () => {
 }
 
 const handleLoadTax = () => {
-  ElMessage.info('读取个税：暂未接入')
+  if (taxLoading.value) return
+  if (!addRows.value.length) {
+    ElMessage.warning('暂无人员')
+    return
+  }
+  taxFileInputRef.value?.click()
+}
+
+const taxFileInputRef = ref<HTMLInputElement | null>(null)
+const normalizeName = (val: unknown) => String(val ?? '').trim()
+const normalizeIdCard = (val: unknown) => String(val ?? '').trim()
+
+const parseTaxItems = (resp: any) => {
+  const payload = resp?.data ?? resp
+  if (payload?.code && payload.code !== 0) throw new Error(payload?.message || '读取个税失败')
+  const list = payload?.data ?? payload ?? []
+  return Array.isArray(list) ? list : []
+}
+
+const handleTaxFileChange = (event: Event) => {
+  void (async () => {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+
+    taxLoading.value = true
+    try {
+      const resp: any = await readSalaryIncomeTaxApi(file)
+      const list: Array<{ employeeName?: string; idCard?: string; incomeTax?: number | null }> =
+        parseTaxItems(resp)
+
+      const taxByIdCard = new Map<string, { employeeName: string; incomeTax: number | null }>()
+      for (const item of list) {
+        const idCard = normalizeIdCard(item?.idCard)
+        const employeeName = normalizeName(item?.employeeName)
+        if (!idCard || !employeeName) continue
+        taxByIdCard.set(idCard, { employeeName, incomeTax: item?.incomeTax ?? null })
+      }
+
+      let matched = 0
+      const nameMismatch: string[] = []
+      const notFound: string[] = []
+
+      for (const row of addRows.value) {
+        const idCard = normalizeIdCard(row.idCard)
+        const employeeName = normalizeName(row.employeeName)
+        if (!idCard || !employeeName) continue
+
+        const item = taxByIdCard.get(idCard)
+        if (!item) {
+          notFound.push(`${employeeName}(${idCard.slice(-4)})`)
+          continue
+        }
+        if (normalizeName(item.employeeName) !== employeeName) {
+          nameMismatch.push(`${employeeName}(${idCard.slice(-4)})`)
+          continue
+        }
+
+        row.incomeTax = item.incomeTax ?? null
+        matched += 1
+      }
+
+      if (matched === 0) {
+        ElMessage.warning('未匹配到任何个税数据，请检查模板与人员身份证/姓名')
+        return
+      }
+
+      const parts = [`匹配成功 ${matched} 人`]
+      if (notFound.length) parts.push(`未找到 ${notFound.length} 人`)
+      if (nameMismatch.length) parts.push(`姓名不一致 ${nameMismatch.length} 人`)
+      ElMessage.success(`读取个税成功：${parts.join('，')}`)
+    } catch (error: any) {
+      console.error('读取个税失败:', error)
+      ElMessage.error(error?.message || '读取个税失败')
+    } finally {
+      taxLoading.value = false
+    }
+  })()
 }
 
 const loadActiveEmployees = async () => {

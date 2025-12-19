@@ -2,6 +2,8 @@ const express = require('express')
 const sql = require('mssql')
 const ExcelJS = require('exceljs')
 const path = require('path')
+const multer = require('multer')
+const XLSX = require('xlsx')
 const router = express.Router()
 const { query, getPool } = require('../database')
 
@@ -18,6 +20,11 @@ const TAX_IMPORT_TEMPLATE_PATH = path.join(
   'salary',
   '个税导入模板01.xlsx'
 )
+
+const uploadTaxFile = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }
+})
 
 const toNumberOrNull = (val) => {
   if (val === null || val === undefined || val === '') return null
@@ -722,6 +729,74 @@ router.post('/tax-import/export', async (req, res) => {
   } catch (error) {
     console.error('生成个税导入模板失败:', error)
     res.status(500).json({ code: 500, message: error.message || '生成个税导入模板失败' })
+  }
+})
+
+// 个税导入：读取外部 Excel（步骤3按身份证号+姓名匹配回填个税）
+router.post('/tax-import/read', uploadTaxFile.single('file'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file) return res.status(400).json({ code: 400, message: '缺少上传文件' })
+
+    const originalName = String(file.originalname || '').toLowerCase()
+    if (!originalName.endsWith('.xls') && !originalName.endsWith('.xlsx')) {
+      return res.status(400).json({ code: 400, message: '仅支持 .xls 或 .xlsx 文件' })
+    }
+
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' })
+    const targetSheetName = '个人所得税扣缴申报表'
+    const sheetName =
+      workbook.SheetNames?.find((n) => String(n || '').trim() === targetSheetName) || null
+    if (!sheetName) {
+      return res.status(400).json({
+        code: 400,
+        message: `未找到工作表：${targetSheetName}`,
+        data: { sheetNames: workbook.SheetNames || [] }
+      })
+    }
+
+    const worksheet = workbook.Sheets[sheetName]
+    const ref = worksheet?.['!ref']
+    if (!worksheet || !ref) return res.status(400).json({ code: 400, message: 'Excel 工作表为空' })
+
+    const range = XLSX.utils.decode_range(ref)
+    const normalizeText = (val) => String(val ?? '').trim()
+    const getCellText = (c, r) => {
+      const cell = worksheet[XLSX.utils.encode_cell({ c, r })]
+      if (!cell) return ''
+      return normalizeText(cell.w ?? cell.v)
+    }
+    const parseMoney = (val) => {
+      if (val === null || val === undefined || val === '') return null
+      if (typeof val === 'number') return Number.isFinite(val) ? val : null
+      const text = String(val).trim()
+      if (!text) return null
+      const num = Number(text.replace(/,/g, ''))
+      return Number.isNaN(num) ? null : num
+    }
+
+    const items = []
+    const START_ROW_NUMBER = 9
+    const rStart = Math.max(range.s.r, START_ROW_NUMBER - 1)
+
+    // B=姓名(1), D=身份证(3), AO=个税(40)
+    for (let r = rStart; r <= range.e.r; r += 1) {
+      const employeeName = getCellText(1, r)
+      const idCard = getCellText(3, r)
+      const incomeTaxRawCell = worksheet[XLSX.utils.encode_cell({ c: 40, r })]
+      const incomeTax = parseMoney(
+        incomeTaxRawCell ? (incomeTaxRawCell.w ?? incomeTaxRawCell.v) : ''
+      )
+
+      if (!employeeName && !idCard) continue
+      if (!employeeName || !idCard) continue
+      items.push({ employeeName, idCard, incomeTax })
+    }
+
+    res.json({ code: 0, data: items })
+  } catch (error) {
+    console.error('读取个税Excel失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '读取个税Excel失败' })
   }
 })
 

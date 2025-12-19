@@ -6,6 +6,23 @@ const request = (option: AxiosConfig) => {
   const { url, method, params, data, headers, responseType, withCredentials } = option
 
   const userStore = useUserStoreWithOut()
+  const isFormData =
+    typeof FormData !== 'undefined' &&
+    data !== null &&
+    data !== undefined &&
+    data instanceof FormData
+
+  const mergedHeaders: Record<string, any> = {
+    [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
+    'X-Username': userStore.getUserInfo?.username || '',
+    ...headers
+  }
+
+  // 默认使用 JSON；若是 FormData 则不强制 Content-Type（让浏览器/axios 自动带 boundary）
+  if (!isFormData && mergedHeaders['Content-Type'] === undefined) {
+    mergedHeaders['Content-Type'] = CONTENT_TYPE
+  }
+
   return service.request({
     url: url,
     method,
@@ -13,12 +30,7 @@ const request = (option: AxiosConfig) => {
     data: data,
     responseType: responseType,
     withCredentials: withCredentials, // 支持携带凭据（用于 Kerberos SSO）
-    headers: {
-      'Content-Type': CONTENT_TYPE,
-      [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
-      'X-Username': userStore.getUserInfo?.username || '',
-      ...headers
-    }
+    headers: mergedHeaders
   })
 }
 

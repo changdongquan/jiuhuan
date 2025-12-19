@@ -103,3 +103,13 @@ export const exportSalaryTaxImportTemplateApi = (data: {
     responseType: 'blob'
   })
 }
+
+export const readSalaryIncomeTaxApi = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/api/salary/tax-import/read',
+    method: 'post',
+    data: formData
+  })
+}
