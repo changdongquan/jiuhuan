@@ -578,7 +578,7 @@
                   formatMoney(row.newOrPersonalLeaveDeduction)
                 }}</template>
               </el-table-column>
-              <el-table-column label="病假" width="60" align="right">
+              <el-table-column label="病假" width="80" align="right">
                 <template #default="{ row }">{{ formatMoney(row.sickLeaveDeduction) }}</template>
               </el-table-column>
               <el-table-column label="旷工扣款" width="85" align="right">
@@ -587,10 +587,10 @@
               <el-table-column label="卫生费" width="75" align="right">
                 <template #default="{ row }">{{ formatMoney(row.hygieneFee) }}</template>
               </el-table-column>
-              <el-table-column label="水费" width="65" align="right">
+              <el-table-column label="水费" width="79" align="right">
                 <template #default="{ row }">{{ formatMoney(row.waterFee) }}</template>
               </el-table-column>
-              <el-table-column label="电费" width="65" align="right">
+              <el-table-column label="电费" width="79" align="right">
                 <template #default="{ row }">{{ formatMoney(row.electricityFee) }}</template>
               </el-table-column>
               <el-table-column label="本期工资" width="85" align="right">
