@@ -484,28 +484,38 @@
             <div class="salary-add-header__meta">
               <div class="salary-add-header__meta-row">
                 <el-tag size="small" type="info">{{ rangeForm.month || '-' }}</el-tag>
-                <span class="salary-add-header__meta-text">{{ rangeLabel }}</span>
+                <span class="salary-add-header__meta-text"
+                  >人数：{{ formatCount(addRows.length) }}</span
+                >
+              </div>
+              <div class="salary-add-header__meta-row salary-add-header__meta-row--sub">
+                <span>本期工资合计：{{ formatMoneyWithThousands(addRowsTotal) }}</span>
               </div>
               <div
                 class="salary-add-header__meta-row salary-add-header__meta-row--sub"
                 :class="{
-                  'salary-add-header__meta-row--sub-hidden': !(addStep === 0 || addStep === 1)
+                  'salary-add-header__meta-row--sub-hidden': !(addStep === 1 || addStep === 2)
                 }"
               >
-                <span>人数：{{ addRows.length }}</span>
-                <span>应发合计：{{ formatMoney(addRowsTotal) }}</span>
+                <span v-if="addStep === 1"
+                  >第一批工资合计：{{ formatMoneyWithThousands(addRowsFirstPayTotal) }}</span
+                >
+                <span v-else
+                  >第一次应发合计：{{ formatMoneyWithThousands(addRowsFirstPayTotal) }}</span
+                >
               </div>
               <div
                 class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 1 }"
+                :class="{
+                  'salary-add-header__meta-row--sub-hidden': !(addStep === 1 || addStep === 2)
+                }"
               >
-                <span>第一次发放合计：{{ formatMoney(addRowsFirstPayTotal) }}</span>
-              </div>
-              <div
-                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 1 }"
-              >
-                <span>第二次发放合计：{{ formatMoney(addRowsSecondPayTotal) }}</span>
+                <span v-if="addStep === 1"
+                  >第二批工资合计：{{ formatMoneyWithThousands(addRowsSecondPayTotal) }}</span
+                >
+                <span v-else
+                  >第二次应发合计：{{ formatMoneyWithThousands(addRowsSecondPayTotal) }}</span
+                >
               </div>
             </div>
           </div>
@@ -583,7 +593,7 @@
               <el-table-column label="电费" width="65" align="right">
                 <template #default="{ row }">{{ formatMoney(row.electricityFee) }}</template>
               </el-table-column>
-              <el-table-column label="应发" width="85" align="right">
+              <el-table-column label="本期工资" width="85" align="right">
                 <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
               </el-table-column>
             </el-table>
@@ -596,11 +606,11 @@
             <el-table-column type="index" label="序号" width="55" align="center" />
             <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
             <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
-            <el-table-column prop="total" label="应发" width="85" align="right">
+            <el-table-column prop="total" label="本期工资" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
             </el-table-column>
             <el-table-column
-              label="第一次应发"
+              label="第一批工资"
               width="110"
               align="center"
               class-name="sa-col-input sa-col-input--center"
@@ -631,10 +641,10 @@
                 formatMoney(row.unemploymentInsuranceFee)
               }}</template>
             </el-table-column>
-            <el-table-column label="第一次实发" width="110" align="right">
+            <el-table-column label="第一次应发" width="110" align="right">
               <template #default="{ row }">{{ formatMoney(computeFirstActualPay(row)) }}</template>
             </el-table-column>
-            <el-table-column label="第二次应发" width="100" align="right">
+            <el-table-column label="第二批工资" width="100" align="right">
               <template #default="{ row }">
                 {{ formatMoney(getRowPaySplit(row).second) }}
               </template>
@@ -648,16 +658,16 @@
             <el-table-column type="index" label="序号" width="55" align="center" />
             <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
             <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
-            <el-table-column prop="total" label="应发" width="85" align="right">
+            <el-table-column prop="total" label="本期工资" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(computeRowTotal(row)) }}</template>
             </el-table-column>
-            <el-table-column label="第二次应发" width="110" align="right">
+            <el-table-column label="第二批工资" width="110" align="right">
               <template #default="{ row }">{{ formatMoney(getRowPaySplit(row).second) }}</template>
             </el-table-column>
             <el-table-column label="个税" width="85" align="right">
               <template #default="{ row }">{{ formatMoney(row.incomeTax) }}</template>
             </el-table-column>
-            <el-table-column label="第二次实发" width="110" align="right">
+            <el-table-column label="第二次应发" width="110" align="right">
               <template #default="{ row }">
                 <span v-if="row.incomeTax === null || row.incomeTax === undefined">-</span>
                 <span v-else>{{ formatMoney(computeSecondActualPay(row)) }}</span>
@@ -671,7 +681,7 @@
       <template #footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
         <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
-          个税导入
+          个税申报文件
         </el-button>
         <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
           读取个税
@@ -894,6 +904,19 @@ const formatMoney = (val?: number | null) => {
   const num = Number(val)
   if (Number.isNaN(num)) return '-'
   return num.toFixed(2)
+}
+
+const formatMoneyWithThousands = (val?: number | null) => {
+  if (val === null || val === undefined) return '-'
+  const num = Number(val)
+  if (Number.isNaN(num)) return '-'
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const formatCount = (val: unknown) => {
+  const num = Number(val)
+  if (!Number.isFinite(num)) return '-'
+  return Math.trunc(num).toLocaleString('zh-CN')
 }
 
 const formatMonth = (date: Date) => {
@@ -1252,14 +1275,14 @@ const handleTaxImport = () => {
       const url = window.URL.createObjectURL(blob as Blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `个税导入_${rangeForm.month || '模板'}.xlsx`
+      a.download = `个税申报文件_${rangeForm.month || '模板'}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('个税导入导出失败:', error)
-      ElMessage.error('个税导入导出失败')
+      console.error('个税申报文件导出失败:', error)
+      ElMessage.error('个税申报文件导出失败')
     } finally {
       taxImporting.value = false
     }
@@ -1608,11 +1631,6 @@ const handleParamsSave = () => {
     }
   })()
 }
-
-const rangeLabel = computed(() => {
-  if (rangeForm.applyToAll) return '范围：全部在职员工'
-  return `范围：指定员工（${rangeForm.employeeIds.length}人）`
-})
 
 const resetAddWizard = () => {
   addStep.value = 0
@@ -2175,7 +2193,7 @@ onMounted(() => {
 
 .salary-add-steps {
   padding: 0 4px;
-  margin-top: -77px;
+  margin-top: -92px;
 }
 
 :deep(.salary-add-dialog .el-dialog__header) {
