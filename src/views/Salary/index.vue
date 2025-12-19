@@ -679,13 +679,36 @@
       </div>
 
       <template #footer>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
-          个税申报文件
-        </el-button>
-        <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
-          读取个税
-        </el-button>
+        <div class="salary-add-footer">
+          <el-button @click="addDialogVisible = false">取消</el-button>
+          <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
+            个税申报文件
+          </el-button>
+          <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
+            读取个税
+          </el-button>
+          <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
+            保存
+          </el-button>
+          <el-button v-if="addStep > 0" @click="goPrevStep">上一步</el-button>
+          <el-button
+            v-if="addStep < 2"
+            type="success"
+            :disabled="addStep !== 0 && !addStepSaved[addStep]"
+            @click="goNextStep"
+          >
+            下一步
+          </el-button>
+          <el-button
+            v-else
+            type="success"
+            :disabled="!addStepSaved[2]"
+            :loading="addCompleting"
+            @click="completeAdd"
+          >
+            完成
+          </el-button>
+        </div>
         <input
           ref="taxFileInputRef"
           type="file"
@@ -693,27 +716,6 @@
           style="display: none"
           @change="handleTaxFileChange"
         />
-        <el-button v-if="addStep !== 0" type="primary" :loading="addSaving" @click="saveAddStep">
-          保存
-        </el-button>
-        <el-button v-if="addStep > 0" @click="goPrevStep">上一步</el-button>
-        <el-button
-          v-if="addStep < 2"
-          type="success"
-          :disabled="addStep !== 0 && !addStepSaved[addStep]"
-          @click="goNextStep"
-        >
-          下一步
-        </el-button>
-        <el-button
-          v-else
-          type="success"
-          :disabled="!addStepSaved[2]"
-          :loading="addCompleting"
-          @click="completeAdd"
-        >
-          完成
-        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -2216,6 +2218,18 @@ onMounted(() => {
 .salary-add-steps {
   padding: 0 4px;
   margin-top: -92px;
+}
+
+.salary-add-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+:deep(.salary-add-footer .el-button + .el-button) {
+  margin-left: 0;
 }
 
 :deep(.salary-add-dialog .el-dialog__header) {
