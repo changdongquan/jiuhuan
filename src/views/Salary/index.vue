@@ -1723,6 +1723,13 @@ const loadSubsidyAmountByName = async (name: string) => {
   return matched?.amount ?? null
 }
 
+const loadPenaltyAmountByName = async (name: string) => {
+  const paramsResp: any = await getPenaltyParamsApi()
+  const paramsList: PenaltyParamRow[] = paramsResp?.data || paramsResp || []
+  const matched = paramsList.find((item) => String(item?.name || '').trim() === name)
+  return matched?.amount ?? null
+}
+
 const loadAttendanceRecordsByMonth = async (month: string) => {
   const resp: any = await getAttendanceListApi({ month, page: 1, pageSize: 1 })
   let list: any[] = []
@@ -1749,7 +1756,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     mealSubsidyAmount,
     fullAttendanceSubsidyAmount,
     senioritySubsidyAmount,
-    splitBaseAmount
+    splitBaseAmount,
+    latePenaltyAmount
   ] = await Promise.all([
     loadAttendanceRecordsByMonth(month),
     loadOvertimeBaseByLevel(),
@@ -1757,7 +1765,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     loadSubsidyAmountByName('误餐补助'),
     loadSubsidyAmountByName('全勤补助'),
     loadSubsidyAmountByName('工龄补助'),
-    loadSubsidyAmountByName('拆分基数')
+    loadSubsidyAmountByName('拆分基数'),
+    loadPenaltyAmountByName('迟到扣款')
   ])
 
   paySplitLimit.value =
@@ -1790,7 +1799,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
         isAttendanceFullAttendance(att.fullAttendanceBonus) ? 1 : null,
         fullAttendanceSubsidyAmount
       ),
-      seniorityPay
+      seniorityPay,
+      lateDeduction: multiplyMoneyOrNull(att.lateCount, latePenaltyAmount)
     }
   })
 }
