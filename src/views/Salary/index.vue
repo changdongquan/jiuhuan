@@ -45,10 +45,10 @@
       </el-form-item>
     </el-form>
 
-    <template v-if="summaryTableRows.length">
+    <template v-if="tableData.length">
       <div class="salary-table-wrapper">
         <el-table
-          :data="summaryTableRows"
+          :data="tableData"
           border
           v-loading="loading"
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
@@ -86,19 +86,29 @@
               formatMoneyWithThousands(row.currentSalaryTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="firstPayTotal" label="第一次应发合计" width="130" align="right">
+          <el-table-column
+            prop="firstPayableTotal"
+            label="第一次应发合计"
+            width="130"
+            align="right"
+          >
             <template #default="{ row }">{{
-              formatMoneyWithThousands(row.firstPayTotal)
+              formatMoneyWithThousands(row.firstPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="secondPayTotal" label="第二次应发合计" width="130" align="right">
+          <el-table-column
+            prop="secondPayableTotal"
+            label="第二次应发合计"
+            width="130"
+            align="right"
+          >
             <template #default="{ row }">{{
-              formatMoneyWithThousands(row.secondPayTotal)
+              formatMoneyWithThousands(row.secondPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column label="两次应发合计" width="130" align="right">
+          <el-table-column prop="twoPayableTotal" label="两次应发合计" width="130" align="right">
             <template #default="{ row }">{{
-              formatMoneyWithThousands(getSummaryTwoPayTotal(row))
+              formatMoneyWithThousands(row.twoPayableTotal)
             }}</template>
           </el-table-column>
           <el-table-column label="操作" width="205" fixed="right" align="center">
@@ -761,13 +771,13 @@
           <span
             >本期工资合计：{{ formatMoneyWithThousands(viewSummaryRow.currentSalaryTotal) }}</span
           >
-          <span>第一次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.firstPayTotal) }}</span>
-          <span>第二次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.secondPayTotal) }}</span>
           <span
-            >两次应发合计：{{
-              formatMoneyWithThousands(getSummaryTwoPayTotal(viewSummaryRow))
-            }}</span
+            >第一次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.firstPayableTotal) }}</span
           >
+          <span
+            >第二次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.secondPayableTotal) }}</span
+          >
+          <span>两次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.twoPayableTotal) }}</span>
         </div>
         <el-table :data="viewSummaryRow.rows" border height="520" size="small">
           <el-table-column type="index" label="序号" width="60" align="center" />
@@ -807,7 +817,17 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
-import { exportSalaryTaxImportTemplateApi, readSalaryIncomeTaxApi } from '@/api/salary'
+import {
+  completeSalaryApi,
+  deleteSalaryApi,
+  exportSalaryTaxImportTemplateApi,
+  getSalaryDraftApi,
+  getSalaryListApi,
+  readSalaryIncomeTaxApi,
+  saveSalaryDraftStep1Api,
+  saveSalaryDraftStep2Api,
+  saveSalaryDraftStep3Api
+} from '@/api/salary'
 import {
   getAttendanceDetailApi,
   getAttendanceListApi,
@@ -861,17 +881,21 @@ type PenaltyRow = {
 }
 
 type SalarySummaryRow = {
-  id: string
+  id: number
   month: string // YYYY-MM
+  step: number
+  status: string
   employeeCount: number
-  overtimePayTotal: number
-  doubleOvertimePayTotal: number
-  tripleOvertimePayTotal: number
-  currentSalaryTotal: number
-  firstPayTotal: number
-  secondPayTotal: number
-  createdAt: string
-  rows: SalaryDraftRow[]
+  overtimePayTotal: number | null
+  doubleOvertimePayTotal: number | null
+  tripleOvertimePayTotal: number | null
+  currentSalaryTotal: number | null
+  firstPayableTotal: number | null
+  secondPayableTotal: number | null
+  twoPayableTotal: number | null
+  createdAt?: string
+  updatedAt?: string
+  rows?: SalaryDraftRow[]
 }
 
 type SalaryDraftRow = {
@@ -880,6 +904,7 @@ type SalaryDraftRow = {
   employeeNumber: string
   idCard: string
   entryDate: string
+  level: number | null
   baseSalary: number | null
   pensionInsuranceFee: number | null
   medicalInsuranceFee: number | null
@@ -923,33 +948,14 @@ const paginationLayout = computed(() =>
 )
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
 
-const summaryTableRows = computed(() => {
-  const month = String(queryForm.month || '').trim()
-  const keyword = String(queryForm.keyword || '').trim()
-  let rows = tableData.value
-
-  if (month) rows = rows.filter((r) => r.month === month)
-  if (keyword) rows = rows.filter((r) => r.month.includes(keyword))
-
-  pagination.total = rows.length
-  const start = (pagination.page - 1) * pagination.size
-  const end = start + pagination.size
-  return rows.slice(start, end)
-})
-
 const viewSummaryVisible = ref(false)
 const viewSummaryRow = ref<SalarySummaryRow | null>(null)
-const editingSummaryId = ref<string | null>(null)
+const editingSummaryId = ref<number | null>(null)
+const currentDraftId = ref<number | null>(null)
 
 const isEditMode = computed(() => Boolean(editingSummaryId.value))
 
 const addDialogTitle = computed(() => (isEditMode.value ? '编辑工资' : '新增工资'))
-
-const getSummaryTwoPayTotal = (row: Pick<SalarySummaryRow, 'firstPayTotal' | 'secondPayTotal'>) => {
-  const total = Number(row.firstPayTotal || 0) + Number(row.secondPayTotal || 0)
-  if (Number.isNaN(total)) return 0
-  return Math.round(total * 100) / 100
-}
 
 const salaryBaseLoading = ref(false)
 const salaryBaseRows = ref<SalaryBaseRow[]>([])
@@ -1046,12 +1052,6 @@ const toNumberOrNull = (val: unknown) => {
   if (val === null || val === undefined || val === '') return null
   const num = Number(val)
   return Number.isNaN(num) ? null : num
-}
-
-const sumMoney = <T,>(list: T[], getVal: (row: T) => unknown) => {
-  const total = list.reduce((acc, row) => acc + (toNumberOrNull(getVal(row)) ?? 0), 0)
-  if (Number.isNaN(total)) return 0
-  return Math.round(total * 100) / 100
 }
 
 const isTaxReady = computed(() => {
@@ -1337,7 +1337,16 @@ const addRowsSecondActualPayTotal = computed(() => {
 const loadList = async () => {
   loading.value = true
   try {
-    // 汇总列表暂不从数据库加载（前端内存数据）
+    const resp: any = await getSalaryListApi({
+      month: queryForm.month || undefined,
+      keyword: queryForm.keyword || undefined,
+      page: pagination.page,
+      pageSize: pagination.size
+    })
+    const payload = resp?.data ?? resp ?? {}
+    const list = payload?.list ?? []
+    tableData.value = Array.isArray(list) ? list : []
+    pagination.total = Number(payload?.total ?? 0) || 0
   } finally {
     loading.value = false
   }
@@ -1762,6 +1771,7 @@ const handleParamsSave = () => {
 
 const resetAddWizard = () => {
   editingSummaryId.value = null
+  currentDraftId.value = null
   addStep.value = 0
   addSaving.value = false
   addCompleting.value = false
@@ -1805,6 +1815,7 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
         employeeNumber: String(emp.employeeNumber ?? ''),
         idCard: emp.idCard || '',
         entryDate: String(emp.entryDate || ''),
+        level: null,
         baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
         pensionInsuranceFee:
           toNegativeMoneyOrNull(insuranceFeesByEmployeeId.value.get(emp.id)?.pensionInsuranceFee) ??
@@ -1959,6 +1970,7 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
 
     return {
       ...row,
+      level: level ?? null,
       overtimePay: multiplyMoneyOrNull(att.overtimeHours, base?.overtime),
       doubleOvertimePay: multiplyMoneyOrNull(att.doubleOvertimeHours, base?.doubleOvertime),
       tripleOvertimePay: multiplyMoneyOrNull(att.tripleOvertimeHours, base?.tripleOvertime),
@@ -2009,7 +2021,16 @@ const saveRange = async () => {
   }
 
   // 先检查该月份是否已有工资记录：有则提示打开编辑
-  const existed = tableData.value.find((r) => r.month === rangeForm.month)
+  let existed: SalarySummaryRow | null = null
+  try {
+    const listResp: any = await getSalaryListApi({ month: rangeForm.month, page: 1, pageSize: 1 })
+    const payload = listResp?.data ?? listResp ?? {}
+    const list = payload?.list ?? []
+    existed = Array.isArray(list) && list.length ? (list[0] as SalarySummaryRow) : null
+  } catch (error) {
+    console.error('检查工资记录失败:', error)
+  }
+
   if (existed) {
     try {
       await ElMessageBox.confirm(
@@ -2023,7 +2044,7 @@ const saveRange = async () => {
         }
       )
       rangeDialogVisible.value = false
-      handleSummaryEdit(existed)
+      await handleSummaryEdit(existed)
     } catch {
       // 用户取消
     }
@@ -2043,14 +2064,22 @@ const saveRange = async () => {
     return
   }
 
-  const employeeIds = getStep1EmployeeIds()
-  if (!employeeIds.length) {
-    ElMessage.warning('请选择员工')
-    return
-  }
-
   rangeSaving.value = true
   try {
+    const employeeIds = getStep1EmployeeIds()
+    if (!employeeIds.length) {
+      ElMessage.warning('未找到在职员工，不能继续')
+      return
+    }
+
+    const step1Resp: any = await saveSalaryDraftStep1Api({ month: rangeForm.month })
+    const step1Payload = step1Resp?.data ?? step1Resp ?? {}
+    const draftId = Number(step1Payload?.id)
+    if (!draftId) throw new Error('创建工资草稿失败')
+    currentDraftId.value = draftId
+    editingSummaryId.value = null
+    await syncPaySplitLimitFromParams()
+
     await refreshSalaryBaseParams()
     const baseRows = buildDraftRowsFromEmployees(employeeIds)
     let mergedRows = baseRows
@@ -2080,15 +2109,19 @@ const saveRange = async () => {
     addStepSaved[2] = false
     rangeDialogVisible.value = false
     addDialogVisible.value = true
+  } catch (error: any) {
+    console.error('新建工资失败:', error)
+    ElMessage.error(error?.message || '新建工资失败')
   } finally {
     rangeSaving.value = false
   }
 }
 
 const saveAddStep = async () => {
-  if (addStep.value === 0) {
+  if (addStep.value === 1) {
     addSaving.value = true
     try {
+      if (!currentDraftId.value) throw new Error('草稿ID不存在')
       const rows = addRows.value.map((r) => {
         const total = computeRowTotal(r)
         const split = computePaySplit(total)
@@ -2100,19 +2133,12 @@ const saveAddStep = async () => {
         }
       })
       addRows.value = rows
-      addStepSaved[0] = true
-      ElMessage.success('步骤1已保存（未写入数据库）')
-    } finally {
-      addSaving.value = false
-    }
-    return
-  }
-
-  if (addStep.value === 1) {
-    addSaving.value = true
-    try {
+      await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
       addStepSaved[1] = true
-      ElMessage.success('步骤2已保存（未写入数据库）')
+      ElMessage.success('步骤2已保存')
+    } catch (error: any) {
+      console.error('保存步骤2失败:', error)
+      ElMessage.error(error?.message || '保存步骤2失败')
     } finally {
       addSaving.value = false
     }
@@ -2126,8 +2152,25 @@ const saveAddStep = async () => {
     }
     addSaving.value = true
     try {
+      if (!currentDraftId.value) throw new Error('草稿ID不存在')
+      const rows = addRows.value.map((r) => {
+        const total = computeRowTotal(r)
+        const split = computePaySplit(total)
+        return {
+          ...r,
+          total,
+          firstPay: r.firstPay ?? split.first,
+          secondPay: r.secondPay ?? split.second
+        }
+      })
+      addRows.value = rows
+      await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
+      await saveSalaryDraftStep3Api(currentDraftId.value)
       addStepSaved[2] = true
-      ElMessage.success('步骤3已保存（未写入数据库）')
+      ElMessage.success('步骤3已保存')
+    } catch (error: any) {
+      console.error('保存步骤3失败:', error)
+      ElMessage.error(error?.message || '保存步骤3失败')
     } finally {
       addSaving.value = false
     }
@@ -2171,65 +2214,71 @@ const completeAdd = async () => {
 
   addCompleting.value = true
   try {
-    const month = String(rangeForm.month || '').trim() || '-'
-    const now = new Date()
-    const createdAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-      now.getDate()
-    ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
-      now.getMinutes()
-    ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-
-    const rowsSnapshot: SalaryDraftRow[] = addRows.value.map((r) => ({ ...r }))
-    const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const summary: SalarySummaryRow = {
-      id: editingSummaryId.value || newId,
-      month,
-      employeeCount: addRows.value.length,
-      overtimePayTotal: sumMoney(addRows.value, (r) => r.overtimePay),
-      doubleOvertimePayTotal: sumMoney(addRows.value, (r) => r.doubleOvertimePay),
-      tripleOvertimePayTotal: sumMoney(addRows.value, (r) => r.tripleOvertimePay),
-      currentSalaryTotal: Math.round(addRowsTotal.value * 100) / 100,
-      firstPayTotal: Math.round(addRowsFirstActualPayTotal.value * 100) / 100,
-      secondPayTotal: Math.round(addRowsSecondActualPayTotal.value * 100) / 100,
-      createdAt,
-      rows: rowsSnapshot
-    }
-
-    if (editingSummaryId.value) {
-      const idx = tableData.value.findIndex((r) => r.id === editingSummaryId.value)
-      if (idx >= 0) {
-        summary.createdAt = tableData.value[idx].createdAt
-        tableData.value.splice(idx, 1, summary)
-      } else {
-        tableData.value = [summary, ...tableData.value]
-      }
-    } else {
-      tableData.value = [summary, ...tableData.value]
-    }
-    pagination.total = tableData.value.length
-    ElMessage.success(
-      isEditMode.value ? '编辑完成（未写入数据库）' : '新增完成（已生成汇总，未写入数据库）'
-    )
+    if (!currentDraftId.value) throw new Error('草稿ID不存在')
+    await completeSalaryApi(currentDraftId.value)
+    ElMessage.success('已完成')
     addDialogVisible.value = false
+    await loadList()
+  } catch (error: any) {
+    console.error('完成工资失败:', error)
+    ElMessage.error(error?.message || '完成失败')
   } finally {
     addCompleting.value = false
   }
 }
 
-const handleSummaryView = (row: SalarySummaryRow) => {
-  viewSummaryRow.value = row
-  viewSummaryVisible.value = true
+const syncPaySplitLimitFromParams = async () => {
+  try {
+    const splitBaseAmount = await loadSubsidyAmountByName('拆分基数')
+    paySplitLimit.value =
+      typeof splitBaseAmount === 'number' && !Number.isNaN(splitBaseAmount) && splitBaseAmount > 0
+        ? splitBaseAmount
+        : DEFAULT_PAY_SPLIT_LIMIT
+  } catch (error) {
+    console.error('加载拆分基数失败:', error)
+    paySplitLimit.value = DEFAULT_PAY_SPLIT_LIMIT
+  }
 }
 
-const handleSummaryEdit = (row: SalarySummaryRow) => {
-  editingSummaryId.value = row.id
-  rangeForm.month = row.month
-  addRows.value = row.rows.map((r) => ({ ...r }))
-  addStep.value = 0
-  addStepSaved[0] = false
-  addStepSaved[1] = false
-  addStepSaved[2] = false
-  addDialogVisible.value = true
+const handleSummaryView = async (row: SalarySummaryRow) => {
+  try {
+    loading.value = true
+    const resp: any = await getSalaryDraftApi(row.id)
+    const payload = resp?.data ?? resp
+    viewSummaryRow.value = payload
+    viewSummaryVisible.value = true
+  } catch (error) {
+    console.error('加载工资汇总失败:', error)
+    ElMessage.error('加载工资汇总失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSummaryEdit = async (row: SalarySummaryRow) => {
+  await syncPaySplitLimitFromParams()
+  try {
+    addSaving.value = true
+    const resp: any = await getSalaryDraftApi(row.id)
+    const payload = resp?.data ?? resp
+    const step = Number(payload?.step ?? 1)
+    const mappedStep = step <= 1 ? 0 : step === 2 ? 1 : 2
+
+    editingSummaryId.value = row.id
+    currentDraftId.value = row.id
+    rangeForm.month = String(payload?.month || row.month || '')
+    addRows.value = Array.isArray(payload?.rows) ? payload.rows : []
+    addStep.value = mappedStep
+    addStepSaved[0] = step >= 2
+    addStepSaved[1] = step >= 2
+    addStepSaved[2] = step >= 3
+    addDialogVisible.value = true
+  } catch (error) {
+    console.error('加载工资草稿失败:', error)
+    ElMessage.error('加载工资草稿失败')
+  } finally {
+    addSaving.value = false
+  }
 }
 
 const handleSummaryDelete = async (row: SalarySummaryRow) => {
@@ -2249,12 +2298,11 @@ const handleSummaryDelete = async (row: SalarySummaryRow) => {
     })
 
     if (value && value.toUpperCase() === 'Y') {
-      const idx = tableData.value.findIndex((r) => r.id === row.id)
-      if (idx >= 0) tableData.value.splice(idx, 1)
-
-      const maxPage = Math.max(1, Math.ceil(tableData.value.length / pagination.size))
+      await deleteSalaryApi(row.id)
+      const nextTotal = Math.max(pagination.total - 1, 0)
+      const maxPage = Math.max(1, Math.ceil(nextTotal / pagination.size))
       if (pagination.page > maxPage) pagination.page = maxPage
-      pagination.total = tableData.value.length
+      await loadList()
       ElMessage.success('删除成功')
     }
   } catch (err: any) {

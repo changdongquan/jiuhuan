@@ -42,12 +42,50 @@ const toMoney = (val) => {
   return num === null ? null : num
 }
 
+const toNegativeMoney = (val) => {
+  const num = toNumberOrNull(val)
+  if (num === null) return null
+  const rounded = Math.round(num * 100) / 100
+  return rounded === 0 ? 0 : -Math.abs(rounded)
+}
+
 const computeTotal = (baseSalary, bonus, deduction) => {
   const base = Number(baseSalary || 0)
   const bon = Number(bonus || 0)
   const ded = Number(deduction || 0)
   const total = base + bon - ded
   return Number.isNaN(total) ? null : total
+}
+
+const computeSummaryTotals = (rows) => {
+  const safeMoney = (val) => toNumberOrNull(val) ?? 0
+  const round2 = (num) => Math.round(Number(num) * 100) / 100
+
+  const list = Array.isArray(rows) ? rows : []
+  const employeeCount = list.length
+
+  const overtimePayTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.overtimePay), 0))
+  const doubleOvertimePayTotal = round2(
+    list.reduce((acc, r) => acc + safeMoney(r.doubleOvertimePay), 0)
+  )
+  const tripleOvertimePayTotal = round2(
+    list.reduce((acc, r) => acc + safeMoney(r.tripleOvertimePay), 0)
+  )
+  const currentSalaryTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.currentSalary), 0))
+  const firstPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.firstPayable), 0))
+  const secondPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.secondPayable), 0))
+  const twoPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.twoPayableTotal), 0))
+
+  return {
+    employeeCount,
+    overtimePayTotal,
+    doubleOvertimePayTotal,
+    tripleOvertimePayTotal,
+    currentSalaryTotal,
+    firstPayableTotal,
+    secondPayableTotal,
+    twoPayableTotal
+  }
 }
 
 const isValidMonth = (month) => /^(\d{4})-(\d{2})$/.test(String(month || ''))
@@ -59,7 +97,7 @@ const parseDateOrNull = (val) => {
 
 const upsertDraftStep1 = async ({ month, employeeIds }) => {
   if (!isValidMonth(month)) throw new Error('月份格式无效')
-  if (!Array.isArray(employeeIds) || employeeIds.length === 0) throw new Error('请选择员工')
+  const hasEmployeeIds = Array.isArray(employeeIds) && employeeIds.length > 0
 
   const pool = await getPool()
   const transaction = new sql.Transaction(pool)
@@ -107,18 +145,27 @@ const upsertDraftStep1 = async ({ month, employeeIds }) => {
     delReq.input('summaryId', sql.Int, summaryId)
     await delReq.query(`DELETE FROM ${TABLE_DETAIL} WHERE 汇总ID = @summaryId`)
 
-    const idParams = employeeIds.map((_, idx) => `@id${idx}`).join(', ')
-
     const employeesReq = new sql.Request(transaction)
-    employeeIds.forEach((id, idx) => {
-      employeesReq.input(`id${idx}`, sql.Int, Number(id))
-    })
-
-    const employeeRows = await employeesReq.query(`
-      SELECT ID, 姓名, 工号
-      FROM 员工信息
-      WHERE ID IN (${idParams})
-    `)
+    let employeeRows = null
+    if (hasEmployeeIds) {
+      const idParams = employeeIds.map((_, idx) => `@id${idx}`).join(', ')
+      employeeIds.forEach((id, idx) => {
+        employeesReq.input(`id${idx}`, sql.Int, Number(id))
+      })
+      employeeRows = await employeesReq.query(`
+        SELECT ID, 姓名, 工号, 身份证号码, 入职时间, 职级
+        FROM 员工信息
+        WHERE ID IN (${idParams})
+        ORDER BY 工号
+      `)
+    } else {
+      employeeRows = await employeesReq.query(`
+        SELECT ID, 姓名, 工号, 身份证号码, 入职时间, 职级
+        FROM 员工信息
+        WHERE 在职状态 = N'在职'
+        ORDER BY 工号
+      `)
+    }
 
     if (!employeeRows.recordset.length) throw new Error('未找到员工信息')
 
@@ -128,16 +175,30 @@ const upsertDraftStep1 = async ({ month, employeeIds }) => {
       insReq.input('employeeId', sql.Int, emp.ID)
       insReq.input('employeeName', sql.NVarChar, emp.姓名 || '')
       insReq.input('employeeNumber', sql.NVarChar, String(emp.工号 ?? ''))
+      insReq.input('idCard', sql.NVarChar, emp.身份证号码 ? String(emp.身份证号码) : null)
+      insReq.input('entryDate', sql.Date, parseDateOrNull(emp.入职时间))
+      insReq.input('level', sql.Int, toNumberOrNull(emp.职级))
       await insReq.query(`
         INSERT INTO ${TABLE_DETAIL} (
-          汇总ID, 员工ID, 姓名, 工号, 基本工资, 绩效奖金, 扣款, 合计, 备注, 创建时间, 更新时间
+          汇总ID, 员工ID, 姓名, 工号, 身份证号, 入职日期, 职级,
+          基本工资, 绩效奖金, 扣款, 合计, 备注, 创建时间, 更新时间
         )
         VALUES (
           @summaryId, @employeeId, @employeeName, @employeeNumber,
+          @idCard, @entryDate, @level,
           NULL, NULL, NULL, NULL, NULL, SYSDATETIME(), SYSDATETIME()
         )
       `)
     }
+
+    const updateTotalsReq = new sql.Request(transaction)
+    updateTotalsReq.input('id', sql.Int, summaryId)
+    updateTotalsReq.input('employeeCount', sql.Int, employeeRows.recordset.length)
+    await updateTotalsReq.query(`
+      UPDATE ${TABLE_SUMMARY}
+      SET 人数 = @employeeCount, 更新时间 = SYSDATETIME()
+      WHERE ID = @id
+    `)
 
     await transaction.commit()
     return { id: summaryId, step }
@@ -147,11 +208,11 @@ const upsertDraftStep1 = async ({ month, employeeIds }) => {
   }
 }
 
-// 列表（只展示已完成）
+// 列表（汇总）
 router.get('/list', async (req, res) => {
   try {
     const { month, keyword, page = 1, pageSize = 10 } = req.query
-    let whereClause = `WHERE h.状态 = N'已完成'`
+    let whereClause = `WHERE 1=1`
     const params = {}
 
     if (month) {
@@ -159,15 +220,20 @@ router.get('/list', async (req, res) => {
       params.month = month
     }
     if (keyword) {
-      whereClause += ' AND (d.姓名 LIKE @keyword OR d.工号 LIKE @keyword)'
+      whereClause += ` AND (
+        h.月份 LIKE @keyword OR h.备注 LIKE @keyword OR
+        EXISTS (
+          SELECT 1 FROM ${TABLE_DETAIL} d
+          WHERE d.汇总ID = h.ID AND (d.姓名 LIKE @keyword OR d.工号 LIKE @keyword)
+        )
+      )`
       params.keyword = `%${keyword}%`
     }
 
     const countResult = await query(
       `
       SELECT COUNT(*) as total
-      FROM ${TABLE_DETAIL} d
-      INNER JOIN ${TABLE_SUMMARY} h ON d.汇总ID = h.ID
+      FROM ${TABLE_SUMMARY} h
       ${whereClause}
     `,
       params
@@ -178,19 +244,23 @@ router.get('/list', async (req, res) => {
     const list = await query(
       `
       SELECT
-        d.ID as id,
+        h.ID as id,
         h.月份 as month,
-        d.姓名 as employeeName,
-        d.工号 as employeeNumber,
-        d.基本工资 as baseSalary,
-        d.绩效奖金 as bonus,
-        d.扣款 as deduction,
-        d.合计 as total,
-        d.备注 as remark
-      FROM ${TABLE_DETAIL} d
-      INNER JOIN ${TABLE_SUMMARY} h ON d.汇总ID = h.ID
+        h.步骤 as step,
+        h.状态 as status,
+        h.人数 as employeeCount,
+        h.加班费合计 as overtimePayTotal,
+        h.两倍加班费合计 as doubleOvertimePayTotal,
+        h.三倍加班费合计 as tripleOvertimePayTotal,
+        h.本期工资合计 as currentSalaryTotal,
+        h.第一次应发合计 as firstPayableTotal,
+        h.第二次应发合计 as secondPayableTotal,
+        h.两次应发合计 as twoPayableTotal,
+        h.创建时间 as createdAt,
+        h.更新时间 as updatedAt
+      FROM ${TABLE_SUMMARY} h
       ${whereClause}
-      ORDER BY h.月份 DESC, d.工号
+      ORDER BY h.月份 DESC
       OFFSET ${offset} ROWS FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
     `,
       params
@@ -208,6 +278,32 @@ router.get('/list', async (req, res) => {
   } catch (error) {
     console.error('获取工资列表失败:', error)
     res.status(500).json({ code: 500, message: '获取工资列表失败' })
+  }
+})
+
+// 按月份查询汇总（用于新增时判断是否已存在）
+router.get('/by-month', async (req, res) => {
+  try {
+    const { month } = req.query
+    if (!isValidMonth(month)) return res.status(400).json({ code: 400, message: '月份格式无效' })
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        ID as id,
+        月份 as month,
+        步骤 as step,
+        状态 as status
+      FROM ${TABLE_SUMMARY}
+      WHERE 月份 = @month
+    `,
+      { month }
+    )
+    if (!rows.length) return res.status(404).json({ code: 404, message: '不存在' })
+    res.json({ code: 0, data: rows[0] })
+  } catch (error) {
+    console.error('按月份获取工资汇总失败:', error)
+    res.status(500).json({ code: 500, message: '按月份获取工资汇总失败' })
   }
 })
 
@@ -236,6 +332,14 @@ router.get('/draft/:id', async (req, res) => {
         月份 as month,
         步骤 as step,
         状态 as status,
+        人数 as employeeCount,
+        加班费合计 as overtimePayTotal,
+        两倍加班费合计 as doubleOvertimePayTotal,
+        三倍加班费合计 as tripleOvertimePayTotal,
+        本期工资合计 as currentSalaryTotal,
+        第一次应发合计 as firstPayableTotal,
+        第二次应发合计 as secondPayableTotal,
+        两次应发合计 as twoPayableTotal,
         创建时间 as createdAt,
         更新时间 as updatedAt
       FROM ${TABLE_SUMMARY}
@@ -251,10 +355,36 @@ router.get('/draft/:id', async (req, res) => {
         员工ID as employeeId,
         姓名 as employeeName,
         工号 as employeeNumber,
+        身份证号 as idCard,
+        入职日期 as entryDate,
+        职级 as level,
+
         基本工资 as baseSalary,
-        绩效奖金 as bonus,
-        扣款 as deduction,
-        合计 as total,
+        加班费 as overtimePay,
+        两倍加班费 as doubleOvertimePay,
+        三倍加班费 as tripleOvertimePay,
+        夜班补助 as nightShiftSubsidy,
+        误餐补助 as mealSubsidy,
+        全勤 as fullAttendanceBonus,
+        工龄工资 as seniorityPay,
+
+        迟到扣款 as lateDeduction,
+        新进及事假 as newOrPersonalLeaveDeduction,
+        病假 as sickLeaveDeduction,
+        旷工扣款 as absenceDeduction,
+        卫生费 as hygieneFee,
+        水费 as waterFee,
+        电费 as electricityFee,
+
+        基本养老保险费 as pensionInsuranceFee,
+        基本医疗保险费 as medicalInsuranceFee,
+        失业保险费 as unemploymentInsuranceFee,
+
+        第一批工资 as firstPay,
+        第二批工资 as secondPay,
+        个税 as incomeTax,
+
+        本期工资 as total,
         备注 as remark
       FROM ${TABLE_DETAIL}
       WHERE 汇总ID = @id
@@ -303,33 +433,165 @@ router.put('/draft/:id/step2', async (req, res) => {
     delReq.input('id', sql.Int, id)
     await delReq.query(`DELETE FROM ${TABLE_DETAIL} WHERE 汇总ID = @id`)
 
-    for (const row of rows) {
-      const baseSalary = toMoney(row.baseSalary)
-      const bonus = toMoney(row.bonus)
-      const deduction = toMoney(row.deduction)
-      const total = toMoney(row.total ?? computeTotal(baseSalary, bonus, deduction))
+    const normalizedRows = rows.map((r) => {
+      const firstPay = toMoney(r.firstPay)
+      const secondPay = toMoney(r.secondPay)
+      const pensionInsuranceFee = toNegativeMoney(r.pensionInsuranceFee)
+      const medicalInsuranceFee = toNegativeMoney(r.medicalInsuranceFee)
+      const unemploymentInsuranceFee = toNegativeMoney(r.unemploymentInsuranceFee)
 
+      const firstPayable = toMoney(
+        (toNumberOrNull(firstPay) ?? 0) +
+          (toNumberOrNull(pensionInsuranceFee) ?? 0) +
+          (toNumberOrNull(medicalInsuranceFee) ?? 0) +
+          (toNumberOrNull(unemploymentInsuranceFee) ?? 0)
+      )
+
+      const incomeTax = toMoney(r.incomeTax)
+      const secondPayable = toMoney(
+        (toNumberOrNull(secondPay) ?? 0) - (toNumberOrNull(incomeTax) ?? 0)
+      )
+
+      const twoPayableTotal = toMoney(
+        (toNumberOrNull(firstPayable) ?? 0) + (toNumberOrNull(secondPayable) ?? 0)
+      )
+
+      return {
+        ...r,
+        baseSalary: toMoney(r.baseSalary),
+        overtimePay: toMoney(r.overtimePay),
+        doubleOvertimePay: toMoney(r.doubleOvertimePay),
+        tripleOvertimePay: toMoney(r.tripleOvertimePay),
+        nightShiftSubsidy: toMoney(r.nightShiftSubsidy),
+        mealSubsidy: toMoney(r.mealSubsidy),
+        fullAttendanceBonus: toMoney(r.fullAttendanceBonus),
+        seniorityPay: toMoney(r.seniorityPay),
+        lateDeduction: toNegativeMoney(r.lateDeduction),
+        newOrPersonalLeaveDeduction: toNegativeMoney(r.newOrPersonalLeaveDeduction),
+        sickLeaveDeduction: toNegativeMoney(r.sickLeaveDeduction),
+        absenceDeduction: toNegativeMoney(r.absenceDeduction),
+        hygieneFee: toNegativeMoney(r.hygieneFee),
+        waterFee: toNegativeMoney(r.waterFee),
+        electricityFee: toNegativeMoney(r.electricityFee),
+        pensionInsuranceFee,
+        medicalInsuranceFee,
+        unemploymentInsuranceFee,
+        firstPay,
+        secondPay,
+        firstPayable,
+        incomeTax,
+        secondPayable,
+        twoPayableTotal,
+        currentSalary: toMoney(r.total),
+        bonus: toMoney(r.bonus),
+        deduction: toMoney(r.deduction),
+        total: toMoney(r.total)
+      }
+    })
+
+    for (const row of normalizedRows) {
       const insReq = new sql.Request(transaction)
       insReq.input('summaryId', sql.Int, id)
       insReq.input('employeeId', sql.Int, row.employeeId || null)
       insReq.input('employeeName', sql.NVarChar, row.employeeName || '')
       insReq.input('employeeNumber', sql.NVarChar, String(row.employeeNumber ?? ''))
-      insReq.input('baseSalary', sql.Decimal(12, 2), baseSalary)
-      insReq.input('bonus', sql.Decimal(12, 2), bonus)
-      insReq.input('deduction', sql.Decimal(12, 2), deduction)
-      insReq.input('total', sql.Decimal(12, 2), total)
+      insReq.input('idCard', sql.NVarChar, row.idCard ? String(row.idCard) : null)
+      insReq.input('entryDate', sql.Date, parseDateOrNull(row.entryDate))
+      insReq.input('level', sql.Int, toNumberOrNull(row.level))
+
+      insReq.input('baseSalary', sql.Decimal(12, 2), row.baseSalary)
+      insReq.input('overtimePay', sql.Decimal(12, 2), row.overtimePay)
+      insReq.input('doubleOvertimePay', sql.Decimal(12, 2), row.doubleOvertimePay)
+      insReq.input('tripleOvertimePay', sql.Decimal(12, 2), row.tripleOvertimePay)
+      insReq.input('nightShiftSubsidy', sql.Decimal(12, 2), row.nightShiftSubsidy)
+      insReq.input('mealSubsidy', sql.Decimal(12, 2), row.mealSubsidy)
+      insReq.input('fullAttendanceBonus', sql.Decimal(12, 2), row.fullAttendanceBonus)
+      insReq.input('seniorityPay', sql.Decimal(12, 2), row.seniorityPay)
+
+      insReq.input('lateDeduction', sql.Decimal(12, 2), row.lateDeduction)
+      insReq.input(
+        'newOrPersonalLeaveDeduction',
+        sql.Decimal(12, 2),
+        row.newOrPersonalLeaveDeduction
+      )
+      insReq.input('sickLeaveDeduction', sql.Decimal(12, 2), row.sickLeaveDeduction)
+      insReq.input('absenceDeduction', sql.Decimal(12, 2), row.absenceDeduction)
+      insReq.input('hygieneFee', sql.Decimal(12, 2), row.hygieneFee)
+      insReq.input('waterFee', sql.Decimal(12, 2), row.waterFee)
+      insReq.input('electricityFee', sql.Decimal(12, 2), row.electricityFee)
+
+      insReq.input('pensionInsuranceFee', sql.Decimal(12, 2), row.pensionInsuranceFee)
+      insReq.input('medicalInsuranceFee', sql.Decimal(12, 2), row.medicalInsuranceFee)
+      insReq.input('unemploymentInsuranceFee', sql.Decimal(12, 2), row.unemploymentInsuranceFee)
+
+      insReq.input('firstPay', sql.Decimal(12, 2), row.firstPay)
+      insReq.input('secondPay', sql.Decimal(12, 2), row.secondPay)
+      insReq.input('firstPayable', sql.Decimal(12, 2), row.firstPayable)
+      insReq.input('incomeTax', sql.Decimal(12, 2), row.incomeTax)
+      insReq.input('secondPayable', sql.Decimal(12, 2), row.secondPayable)
+      insReq.input('twoPayableTotal', sql.Decimal(12, 2), row.twoPayableTotal)
+      insReq.input('currentSalary', sql.Decimal(12, 2), row.currentSalary)
+
+      insReq.input('bonus', sql.Decimal(12, 2), row.bonus)
+      insReq.input('deduction', sql.Decimal(12, 2), row.deduction)
+      insReq.input('total', sql.Decimal(12, 2), row.total)
       insReq.input('remark', sql.NVarChar, row.remark || null)
 
       await insReq.query(`
         INSERT INTO ${TABLE_DETAIL} (
-          汇总ID, 员工ID, 姓名, 工号, 基本工资, 绩效奖金, 扣款, 合计, 备注, 创建时间, 更新时间
+          汇总ID, 员工ID, 姓名, 工号, 身份证号, 入职日期, 职级,
+          基本工资, 加班费, 两倍加班费, 三倍加班费, 夜班补助, 误餐补助, 全勤, 工龄工资,
+          迟到扣款, 新进及事假, 病假, 旷工扣款, 卫生费, 水费, 电费,
+          基本养老保险费, 基本医疗保险费, 失业保险费,
+          第一批工资, 第二批工资, 第一次应发, 个税, 第二次应发, 两次应发合计, 本期工资,
+          绩效奖金, 扣款, 合计, 备注,
+          创建时间, 更新时间
         )
         VALUES (
-          @summaryId, @employeeId, @employeeName, @employeeNumber,
-          @baseSalary, @bonus, @deduction, @total, @remark, SYSDATETIME(), SYSDATETIME()
+          @summaryId, @employeeId, @employeeName, @employeeNumber, @idCard, @entryDate, @level,
+          @baseSalary, @overtimePay, @doubleOvertimePay, @tripleOvertimePay, @nightShiftSubsidy, @mealSubsidy, @fullAttendanceBonus, @seniorityPay,
+          @lateDeduction, @newOrPersonalLeaveDeduction, @sickLeaveDeduction, @absenceDeduction, @hygieneFee, @waterFee, @electricityFee,
+          @pensionInsuranceFee, @medicalInsuranceFee, @unemploymentInsuranceFee,
+          @firstPay, @secondPay, @firstPayable, @incomeTax, @secondPayable, @twoPayableTotal, @currentSalary,
+          @bonus, @deduction, @total, @remark,
+          SYSDATETIME(), SYSDATETIME()
         )
       `)
     }
+
+    const totals = computeSummaryTotals(normalizedRows)
+    const updateSummaryReq = new sql.Request(transaction)
+    updateSummaryReq.input('id', sql.Int, id)
+    updateSummaryReq.input('employeeCount', sql.Int, totals.employeeCount)
+    updateSummaryReq.input('overtimePayTotal', sql.Decimal(12, 2), totals.overtimePayTotal)
+    updateSummaryReq.input(
+      'doubleOvertimePayTotal',
+      sql.Decimal(12, 2),
+      totals.doubleOvertimePayTotal
+    )
+    updateSummaryReq.input(
+      'tripleOvertimePayTotal',
+      sql.Decimal(12, 2),
+      totals.tripleOvertimePayTotal
+    )
+    updateSummaryReq.input('currentSalaryTotal', sql.Decimal(12, 2), totals.currentSalaryTotal)
+    updateSummaryReq.input('firstPayableTotal', sql.Decimal(12, 2), totals.firstPayableTotal)
+    updateSummaryReq.input('secondPayableTotal', sql.Decimal(12, 2), totals.secondPayableTotal)
+    updateSummaryReq.input('twoPayableTotal', sql.Decimal(12, 2), totals.twoPayableTotal)
+    await updateSummaryReq.query(`
+      UPDATE ${TABLE_SUMMARY}
+      SET
+        人数 = @employeeCount,
+        加班费合计 = @overtimePayTotal,
+        两倍加班费合计 = @doubleOvertimePayTotal,
+        三倍加班费合计 = @tripleOvertimePayTotal,
+        本期工资合计 = @currentSalaryTotal,
+        第一次应发合计 = @firstPayableTotal,
+        第二次应发合计 = @secondPayableTotal,
+        两次应发合计 = @twoPayableTotal,
+        更新时间 = SYSDATETIME()
+      WHERE ID = @id
+    `)
 
     const updateReq = new sql.Request(transaction)
     updateReq.input('id', sql.Int, id)
@@ -390,6 +652,19 @@ router.put('/complete/:id', async (req, res) => {
   } catch (error) {
     console.error('完成工资失败:', error)
     res.status(500).json({ code: 500, message: '完成失败' })
+  }
+})
+
+// 删除（删除汇总，级联删除明细）
+router.delete('/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id)
+    if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
+    await query(`DELETE FROM ${TABLE_SUMMARY} WHERE ID = @id`, { id })
+    res.json({ code: 0, message: '删除成功' })
+  } catch (error) {
+    console.error('删除工资失败:', error)
+    res.status(500).json({ code: 500, message: '删除失败' })
   }
 })
 
