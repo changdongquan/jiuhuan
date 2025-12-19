@@ -45,37 +45,56 @@
       </el-form-item>
     </el-form>
 
-    <template v-if="tableData.length">
+    <template v-if="summaryTableRows.length">
       <div class="salary-table-wrapper">
         <el-table
-          :data="tableData"
+          :data="summaryTableRows"
           border
           v-loading="loading"
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
         >
           <el-table-column type="index" label="序号" width="60" align="center" />
           <el-table-column prop="month" label="月份" width="110" />
-          <el-table-column prop="employeeName" label="姓名" width="110" show-overflow-tooltip />
-          <el-table-column prop="employeeNumber" label="工号" width="110" show-overflow-tooltip />
-          <el-table-column prop="baseSalary" label="基本工资" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.baseSalary) }}</template>
+          <el-table-column prop="employeeCount" label="人数" width="90" align="right" />
+          <el-table-column prop="overtimePayTotal" label="加班费合计" width="120" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.overtimePayTotal)
+            }}</template>
           </el-table-column>
-          <el-table-column prop="bonus" label="绩效/奖金" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.bonus) }}</template>
+          <el-table-column
+            prop="doubleOvertimePayTotal"
+            label="两倍加班费合计"
+            width="140"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.doubleOvertimePayTotal)
+            }}</template>
           </el-table-column>
-          <el-table-column prop="deduction" label="扣款" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.deduction) }}</template>
+          <el-table-column
+            prop="tripleOvertimePayTotal"
+            label="三倍加班费合计"
+            width="140"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.tripleOvertimePayTotal)
+            }}</template>
           </el-table-column>
-          <el-table-column prop="total" label="合计" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.total) }}</template>
+          <el-table-column prop="currentSalaryTotal" label="本期工资合计" width="130" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.currentSalaryTotal)
+            }}</template>
           </el-table-column>
-          <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
-          <el-table-column label="操作" width="180" align="center" fixed="right">
-            <template #default>
-              <el-button size="small" type="primary" @click="handleNotReady">编辑</el-button>
-              <el-button size="small" @click="handleNotReady">查看</el-button>
-              <el-button size="small" type="danger" @click="handleNotReady">删除</el-button>
-            </template>
+          <el-table-column prop="firstPayTotal" label="第一次应发合计" width="130" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.firstPayTotal)
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="secondPayTotal" label="第二次应发合计" width="130" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.secondPayTotal)
+            }}</template>
           </el-table-column>
         </el-table>
       </div>
@@ -96,7 +115,7 @@
     </template>
     <el-empty
       v-else
-      description="暂无工资数据"
+      description="暂无工资汇总数据"
       class="rounded-lg bg-[var(--el-bg-color-overlay)] py-16"
       :image-size="180"
     />
@@ -779,30 +798,17 @@ type PenaltyRow = {
   adjustDate: string
 }
 
-type SalaryRow = {
-  id?: number
-  month: string
-  employeeName: string
-  employeeNumber: string
-  baseSalary?: number | null
-  overtimePay?: number | null
-  doubleOvertimePay?: number | null
-  tripleOvertimePay?: number | null
-  nightShiftSubsidy?: number | null
-  mealSubsidy?: number | null
-  fullAttendanceBonus?: number | null
-  seniorityPay?: number | null
-  lateDeduction?: number | null
-  newOrPersonalLeaveDeduction?: number | null
-  sickLeaveDeduction?: number | null
-  absenceDeduction?: number | null
-  hygieneFee?: number | null
-  waterFee?: number | null
-  electricityFee?: number | null
-  bonus?: number | null
-  deduction?: number | null
-  total?: number | null
-  remark?: string
+type SalarySummaryRow = {
+  id: string
+  month: string // YYYY-MM
+  employeeCount: number
+  overtimePayTotal: number
+  doubleOvertimePayTotal: number
+  tripleOvertimePayTotal: number
+  currentSalaryTotal: number
+  firstPayTotal: number
+  secondPayTotal: number
+  createdAt: string
 }
 
 type SalaryDraftRow = {
@@ -846,13 +852,27 @@ const queryForm = reactive({
 })
 
 const loading = ref(false)
-const tableData = ref<SalaryRow[]>([])
+const tableData = ref<SalarySummaryRow[]>([])
 const pagination = reactive({ page: 1, size: 10, total: 0 })
 
 const paginationLayout = computed(() =>
   isMobile.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
 )
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
+
+const summaryTableRows = computed(() => {
+  const month = String(queryForm.month || '').trim()
+  const keyword = String(queryForm.keyword || '').trim()
+  let rows = tableData.value
+
+  if (month) rows = rows.filter((r) => r.month === month)
+  if (keyword) rows = rows.filter((r) => r.month.includes(keyword))
+
+  pagination.total = rows.length
+  const start = (pagination.page - 1) * pagination.size
+  const end = start + pagination.size
+  return rows.slice(start, end)
+})
 
 const salaryBaseLoading = ref(false)
 const salaryBaseRows = ref<SalaryBaseRow[]>([])
@@ -951,6 +971,12 @@ const toNumberOrNull = (val: unknown) => {
   if (val === null || val === undefined || val === '') return null
   const num = Number(val)
   return Number.isNaN(num) ? null : num
+}
+
+const sumMoney = <T,>(list: T[], getVal: (row: T) => unknown) => {
+  const total = list.reduce((acc, row) => acc + (toNumberOrNull(getVal(row)) ?? 0), 0)
+  if (Number.isNaN(total)) return 0
+  return Math.round(total * 100) / 100
 }
 
 const multiplyMoneyOrNull = (left: unknown, right: unknown) => {
@@ -1217,9 +1243,7 @@ const addRowsSecondPayTotal = computed(() => {
 const loadList = async () => {
   loading.value = true
   try {
-    // 先断开工资新增弹窗与后端：工资列表暂不从数据库加载
-    tableData.value = []
-    pagination.total = 0
+    // 汇总列表暂不从数据库加载（前端内存数据）
   } finally {
     loading.value = false
   }
@@ -1245,10 +1269,6 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (page: number) => {
   pagination.page = page
   void loadList()
-}
-
-const handleNotReady = () => {
-  ElMessage.info('工资功能接口暂未接入')
 }
 
 const handleTaxImport = () => {
@@ -2019,32 +2039,30 @@ const completeAdd = async () => {
 
   addCompleting.value = true
   try {
-    const month = rangeForm.month
-    const newRows: SalaryRow[] = addRows.value.map((row) => ({
+    const month = String(rangeForm.month || '').trim() || '-'
+    const now = new Date()
+    const createdAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+
+    const summary: SalarySummaryRow = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       month,
-      employeeName: row.employeeName,
-      employeeNumber: row.employeeNumber,
-      baseSalary: row.baseSalary,
-      overtimePay: row.overtimePay,
-      doubleOvertimePay: row.doubleOvertimePay,
-      tripleOvertimePay: row.tripleOvertimePay,
-      nightShiftSubsidy: row.nightShiftSubsidy,
-      mealSubsidy: row.mealSubsidy,
-      fullAttendanceBonus: row.fullAttendanceBonus,
-      seniorityPay: row.seniorityPay,
-      lateDeduction: row.lateDeduction,
-      newOrPersonalLeaveDeduction: row.newOrPersonalLeaveDeduction,
-      sickLeaveDeduction: row.sickLeaveDeduction,
-      absenceDeduction: row.absenceDeduction,
-      hygieneFee: row.hygieneFee,
-      waterFee: row.waterFee,
-      electricityFee: row.electricityFee,
-      total: computeRowTotal(row),
-      remark: row.remark
-    }))
-    tableData.value = [...newRows, ...tableData.value]
+      employeeCount: addRows.value.length,
+      overtimePayTotal: sumMoney(addRows.value, (r) => r.overtimePay),
+      doubleOvertimePayTotal: sumMoney(addRows.value, (r) => r.doubleOvertimePay),
+      tripleOvertimePayTotal: sumMoney(addRows.value, (r) => r.tripleOvertimePay),
+      currentSalaryTotal: Math.round(addRowsTotal.value * 100) / 100,
+      firstPayTotal: Math.round(addRowsFirstPayTotal.value * 100) / 100,
+      secondPayTotal: Math.round(addRowsSecondPayTotal.value * 100) / 100,
+      createdAt
+    }
+
+    tableData.value = [summary, ...tableData.value]
     pagination.total = tableData.value.length
-    ElMessage.success('新增完成（未写入数据库）')
+    ElMessage.success('新增完成（已生成汇总，未写入数据库）')
     addDialogVisible.value = false
   } finally {
     addCompleting.value = false
