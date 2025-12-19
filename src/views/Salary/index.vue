@@ -96,7 +96,7 @@
               formatMoneyWithThousands(row.secondPayTotal)
             }}</template>
           </el-table-column>
-          <el-table-column label="两次发放合计" width="130" align="right">
+          <el-table-column label="两次应发合计" width="130" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(getSummaryTwoPayTotal(row))
             }}</template>
@@ -783,7 +783,7 @@
           <span>第一次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.firstPayTotal) }}</span>
           <span>第二次应发合计：{{ formatMoneyWithThousands(viewSummaryRow.secondPayTotal) }}</span>
           <span
-            >两次发放合计：{{
+            >两次应发合计：{{
               formatMoneyWithThousands(getSummaryTwoPayTotal(viewSummaryRow))
             }}</span
           >
@@ -805,6 +805,11 @@
           <el-table-column label="第二次应发" width="120" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(computeSecondActualPay(row))
+            }}</template>
+          </el-table-column>
+          <el-table-column label="两次应发合计" width="120" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(computeFirstActualPay(row) + computeSecondActualPay(row))
             }}</template>
           </el-table-column>
         </el-table>
