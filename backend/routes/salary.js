@@ -2,7 +2,6 @@ const express = require('express')
 const sql = require('mssql')
 const ExcelJS = require('exceljs')
 const path = require('path')
-const fs = require('fs')
 const multer = require('multer')
 const XLSX = require('xlsx')
 const router = express.Router()
@@ -14,21 +13,33 @@ const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
 const TABLE_PENALTY = '工资_罚扣'
-const TAX_IMPORT_TEMPLATE_PATH = path.join(
-  __dirname,
-  '..',
-  'templates',
-  'salary',
-  '个税导入模板01.xlsx'
-)
-const TAX_IMPORT_TEMPLATE_BUFFER = (() => {
-  try {
-    return fs.readFileSync(TAX_IMPORT_TEMPLATE_PATH)
-  } catch (error) {
-    console.error('读取个税导入模板失败:', error)
-    return null
-  }
-})()
+const TAX_IMPORT_SHEET_NAME = '正常工资薪金收入'
+const TAX_IMPORT_HEADERS = [
+  '工号',
+  '*姓名',
+  '*证件类型',
+  '*证件号码',
+  '本期收入',
+  '本期免税收入',
+  '基本养老保险费',
+  '基本医疗保险费',
+  '失业保险费',
+  '住房公积金',
+  '累计子女教育',
+  '累计继续教育',
+  '累计住房贷款利息',
+  '累计住房租金',
+  '累计赡养老人',
+  '累计3岁以下婴幼儿照护',
+  '累计个人养老金',
+  '企业(职业)年金',
+  '商业健康保险',
+  '税延养老保险',
+  '其他',
+  '准予扣除的捐赠额',
+  '减免税额',
+  '备注'
+]
 
 const uploadTaxFile = multer({
   storage: multer.memoryStorage(),
@@ -952,21 +963,16 @@ router.put('/params/penalty', async (req, res) => {
   }
 })
 
-// 个税导入：按模板生成 Excel（步骤2数据）
+// 个税申报文件：生成 Excel（步骤2数据）
 router.post('/tax-import/export', async (req, res) => {
   try {
     const { month, rows } = req.body || {}
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ code: 400, message: 'rows 必须是数组且不能为空' })
     }
-    if (!TAX_IMPORT_TEMPLATE_BUFFER) {
-      return res.status(500).json({ code: 500, message: '个税导入模板缺失或不可读取' })
-    }
-
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(TAX_IMPORT_TEMPLATE_BUFFER)
-    const worksheet = workbook.worksheets[0]
-    if (!worksheet) throw new Error('模板工作表不存在')
+    const worksheet = workbook.addWorksheet(TAX_IMPORT_SHEET_NAME)
+    worksheet.getRow(1).values = TAX_IMPORT_HEADERS
 
     let rowIndex = 2 // 模板第 1 行是表头
     for (const item of rows) {
@@ -985,11 +991,13 @@ router.post('/tax-import/export', async (req, res) => {
 
       worksheet.getCell(`E${rowIndex}`).value = firstPay
 
-      worksheet.getCell(`G${rowIndex}`).value = pensionInsuranceFee
-
-      worksheet.getCell(`H${rowIndex}`).value = medicalInsuranceFee
-
-      worksheet.getCell(`I${rowIndex}`).value = unemploymentInsuranceFee
+      if (
+        !(pensionInsuranceFee === 0 && medicalInsuranceFee === 0 && unemploymentInsuranceFee === 0)
+      ) {
+        worksheet.getCell(`G${rowIndex}`).value = pensionInsuranceFee
+        worksheet.getCell(`H${rowIndex}`).value = medicalInsuranceFee
+        worksheet.getCell(`I${rowIndex}`).value = unemploymentInsuranceFee
+      }
 
       rowIndex += 1
     }

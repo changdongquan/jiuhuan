@@ -158,6 +158,8 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+          timeout: 180000,
+          proxyTimeout: 180000,
           rewrite: (path) => path.replace(/^\/api/, '/api')
         }
       },
