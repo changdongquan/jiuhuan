@@ -151,6 +151,7 @@ export const exportSalaryTaxImportTemplateApi = (data: {
     medicalInsuranceFee: number
     unemploymentInsuranceFee: number
   }>
+  batch?: 1 | 2
 }) => {
   return request({
     url: '/api/salary/tax-import/export',

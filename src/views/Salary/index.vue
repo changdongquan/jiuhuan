@@ -1605,7 +1605,7 @@ const handleTaxImport = () => {
 
     taxImporting.value = true
     try {
-      const exportRows = addRows.value.map((row) => {
+      const firstBatchRows = addRows.value.map((row) => {
         const split = getRowPaySplit(row)
         return {
           employeeName: row.employeeName,
@@ -1617,19 +1617,49 @@ const handleTaxImport = () => {
         }
       })
 
-      const resp = await exportSalaryTaxImportTemplateApi({
-        month: rangeForm.month,
-        rows: exportRows
+      const secondBatchRows = addRows.value.map((row) => {
+        const split = getRowPaySplit(row)
+        return {
+          employeeName: row.employeeName,
+          idCard: String(row.idCard || '').trim(),
+          firstPay: Number(split.second ?? 0),
+          pensionInsuranceFee: 0,
+          medicalInsuranceFee: 0,
+          unemploymentInsuranceFee: 0
+        }
       })
-      const blob = (resp as any)?.data ?? resp
-      const url = window.URL.createObjectURL(blob as Blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `个税申报文件_${rangeForm.month || '模板'}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+
+      const downloadBlob = (blob: Blob, fileName: string) => {
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      }
+
+      const firstResp = await exportSalaryTaxImportTemplateApi({
+        month: rangeForm.month,
+        rows: firstBatchRows,
+        batch: 1
+      })
+      downloadBlob(
+        ((firstResp as any)?.data ?? firstResp) as Blob,
+        `第一批工资_个税导入_${rangeForm.month || '模板'}.xlsx`
+      )
+
+      const secondResp = await exportSalaryTaxImportTemplateApi({
+        month: rangeForm.month,
+        rows: secondBatchRows,
+        batch: 2
+      })
+      downloadBlob(
+        ((secondResp as any)?.data ?? secondResp) as Blob,
+        `第二批工资_个税导入_${rangeForm.month || '模板'}.xlsx`
+      )
+
       taxTemplateExported.value = true
       ElMessage.success('个税申报文件已生成')
     } catch (error) {

@@ -966,10 +966,12 @@ router.put('/params/penalty', async (req, res) => {
 // 个税申报文件：生成 Excel（步骤2数据）
 router.post('/tax-import/export', async (req, res) => {
   try {
-    const { month, rows } = req.body || {}
+    const { month, rows, batch } = req.body || {}
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ code: 400, message: 'rows 必须是数组且不能为空' })
     }
+    const batchNo = Number(batch || 1)
+    const isSecondBatch = batchNo === 2
     const workbook = new ExcelJS.Workbook()
     const worksheet = workbook.addWorksheet(TAX_IMPORT_SHEET_NAME)
     worksheet.getRow(1).values = TAX_IMPORT_HEADERS
@@ -980,29 +982,37 @@ router.post('/tax-import/export', async (req, res) => {
       if (!employeeName) continue
 
       const idCard = String(item?.idCard ?? '').trim()
-      const firstPay = toNumberOrZero(item?.firstPay)
       const pensionInsuranceFee = toNumberOrZero(item?.pensionInsuranceFee)
       const medicalInsuranceFee = toNumberOrZero(item?.medicalInsuranceFee)
       const unemploymentInsuranceFee = toNumberOrZero(item?.unemploymentInsuranceFee)
+
+      // 第一批：若三项保险费都为 0，则整行不导出
+      if (
+        !isSecondBatch &&
+        pensionInsuranceFee === 0 &&
+        medicalInsuranceFee === 0 &&
+        unemploymentInsuranceFee === 0
+      ) {
+        continue
+      }
 
       worksheet.getCell(`B${rowIndex}`).value = employeeName
       worksheet.getCell(`C${rowIndex}`).value = '居民身份证'
       worksheet.getCell(`D${rowIndex}`).value = idCard
 
-      worksheet.getCell(`E${rowIndex}`).value = firstPay
+      // E 列：第一批/第二批工资
+      worksheet.getCell(`E${rowIndex}`).value = toNumberOrZero(item?.firstPay)
 
-      if (
-        !(pensionInsuranceFee === 0 && medicalInsuranceFee === 0 && unemploymentInsuranceFee === 0)
-      ) {
-        worksheet.getCell(`G${rowIndex}`).value = pensionInsuranceFee
-        worksheet.getCell(`H${rowIndex}`).value = medicalInsuranceFee
-        worksheet.getCell(`I${rowIndex}`).value = unemploymentInsuranceFee
-      }
+      // 第二批：三项保险费固定填 0；第一批：填实际值
+      worksheet.getCell(`G${rowIndex}`).value = isSecondBatch ? 0 : pensionInsuranceFee
+      worksheet.getCell(`H${rowIndex}`).value = isSecondBatch ? 0 : medicalInsuranceFee
+      worksheet.getCell(`I${rowIndex}`).value = isSecondBatch ? 0 : unemploymentInsuranceFee
 
       rowIndex += 1
     }
 
-    const fileName = `个税导入_${String(month || '').trim() || '模板'}.xlsx`
+    const filePrefix = isSecondBatch ? '第二批工资' : '第一批工资'
+    const fileName = `${filePrefix}_个税导入_${String(month || '').trim() || '模板'}.xlsx`
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
