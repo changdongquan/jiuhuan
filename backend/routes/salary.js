@@ -1029,6 +1029,114 @@ router.post('/tax-import/export', async (req, res) => {
   }
 })
 
+// 工资代发文件：生成 Excel（按汇总ID导出第一批/第二批实际代发金额）
+router.post('/payroll/export', async (req, res) => {
+  try {
+    const { id, batch } = req.body || {}
+    const summaryId = Number(id)
+    if (!Number.isFinite(summaryId) || summaryId <= 0) {
+      return res.status(400).json({ code: 400, message: 'id 无效' })
+    }
+    const batchNo = Number(batch || 1)
+    if (batchNo !== 1 && batchNo !== 2) {
+      return res.status(400).json({ code: 400, message: 'batch 必须是 1 或 2' })
+    }
+
+    const summary = await query(
+      `
+      SELECT TOP 1 月份 as month
+      FROM ${TABLE_SUMMARY}
+      WHERE ID = @id
+    `,
+      { id: summaryId }
+    )
+    if (!summary.length) return res.status(404).json({ code: 404, message: '工资汇总不存在' })
+
+    const totals = await query(
+      `
+      SELECT TOP 1
+        第一次应发合计 as firstPayableTotal,
+        第二次应发合计 as secondPayableTotal
+      FROM ${TABLE_SUMMARY}
+      WHERE ID = @id
+    `,
+      { id: summaryId }
+    )
+
+    const detailRows = await query(
+      `
+      SELECT
+        d.身份证号 as idCard,
+        d.姓名 as employeeName,
+        d.第一次应发 as firstPayable,
+        d.第二次应发 as secondPayable
+      FROM ${TABLE_DETAIL} d
+      WHERE d.汇总ID = @id
+      ORDER BY d.工号
+    `,
+      { id: summaryId }
+    )
+
+    if (!detailRows.length) {
+      return res.status(400).json({ code: 400, message: '工资明细为空，无法导出代发文件' })
+    }
+
+    const month = String(summary[0]?.month || '').trim()
+    const firstPayableTotal = totals?.[0]?.firstPayableTotal
+    const secondPayableTotal = totals?.[0]?.secondPayableTotal
+
+    const workbook = new ExcelJS.Workbook()
+    const amountLabel = batchNo === 2 ? '第二次应发合计' : '第一次应发合计'
+    const totalAmount = batchNo === 2 ? secondPayableTotal : firstPayableTotal
+
+    const totalText = (() => {
+      const num = toNumberOrNull(totalAmount)
+      if (num === null) return '0'
+      const rounded = Math.round(num * 100) / 100
+      return Number.isInteger(rounded) ? String(rounded) : String(rounded.toFixed(2))
+    })()
+
+    const rawSheetName = `${batchNo === 2 ? '邦可欣代发' : '模具代发'}${totalText}`
+    const safeSheetName = String(rawSheetName).slice(0, 31)
+    const worksheet = workbook.addWorksheet(safeSheetName)
+    worksheet.getColumn(1).width = 20
+    worksheet.getColumn(2).width = 20
+    worksheet.getColumn(3).width = 20
+    worksheet.getColumn(4).width = 20
+
+    const round2 = (num) => Math.round(Number(num) * 100) / 100
+    let rowIndex = 2
+    for (const item of detailRows) {
+      const idCard = String(item?.idCard ?? '').trim()
+      const employeeName = String(item?.employeeName ?? '').trim()
+      const payable = batchNo === 2 ? item?.secondPayable : item?.firstPayable
+      const amount = round2(toNumberOrNull(payable) ?? 0)
+
+      worksheet.getCell(`A${rowIndex}`).value = idCard
+      worksheet.getCell(`B${rowIndex}`).value = employeeName
+      worksheet.getCell(`C${rowIndex}`).value = amount
+      worksheet.getCell(`D${rowIndex}`).value = 'B'
+      rowIndex += 1
+    }
+
+    const filePrefix = batchNo === 2 ? '第二次代发' : '第一次代发'
+    const fileName = `${filePrefix}${month || summaryId}.xlsx`
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    )
+    await workbook.xlsx.write(res)
+    res.end()
+  } catch (error) {
+    console.error('生成工资代发文件失败:', error)
+    res.status(500).json({ code: 500, message: error.message || '生成工资代发文件失败' })
+  }
+})
+
 // 个税导入：读取外部 Excel（步骤3按身份证号+姓名匹配回填个税）
 router.post('/tax-import/read', uploadTaxFile.single('file'), async (req, res) => {
   try {

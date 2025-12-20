@@ -883,7 +883,23 @@
         </el-table>
       </div>
       <template #footer>
-        <el-button @click="viewSummaryVisible = false">关闭</el-button>
+        <div class="salary-add-footer">
+          <el-button
+            type="primary"
+            :loading="viewPayrollExporting === 1"
+            @click="handleViewPayrollExport(1)"
+          >
+            第一次代发
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="viewPayrollExporting === 2"
+            @click="handleViewPayrollExport(2)"
+          >
+            第二次代发
+          </el-button>
+          <el-button @click="viewSummaryVisible = false">关闭</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -897,6 +913,7 @@ import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import {
   completeSalaryApi,
   deleteSalaryApi,
+  exportSalaryPayrollApi,
   exportSalaryTaxImportTemplateApi,
   getSalaryDraftApi,
   getSalaryListApi,
@@ -2462,6 +2479,38 @@ const handleSummaryView = async (row: SalarySummaryRow) => {
   } finally {
     loading.value = false
   }
+}
+
+const viewPayrollExporting = ref<0 | 1 | 2>(0)
+const handleViewPayrollExport = (batch: 1 | 2) => {
+  void (async () => {
+    if (!viewSummaryRow.value) return
+    if (viewPayrollExporting.value) return
+
+    viewPayrollExporting.value = batch
+    try {
+      const resp: any = await exportSalaryPayrollApi({ id: viewSummaryRow.value.id, batch })
+      const blob = ((resp as any)?.data ?? resp) as Blob
+
+      const month = String(viewSummaryRow.value.month || '').trim()
+      const fileName = `${batch === 2 ? '第二次代发' : '第一次代发'}${month || viewSummaryRow.value.id}.xlsx`
+
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      ElMessage.success('代发文件已生成')
+    } catch (error: any) {
+      console.error('导出代发文件失败:', error)
+      ElMessage.error(error?.message || '导出代发文件失败')
+    } finally {
+      viewPayrollExporting.value = 0
+    }
+  })()
 }
 
 const handleSummaryEdit = async (row: SalarySummaryRow) => {

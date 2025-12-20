@@ -162,6 +162,16 @@ export const exportSalaryTaxImportTemplateApi = (data: {
   })
 }
 
+export const exportSalaryPayrollApi = (data: { id: number; batch: 1 | 2 }) => {
+  return request({
+    url: '/api/salary/payroll/export',
+    method: 'post',
+    data,
+    responseType: 'blob',
+    timeout: 180000
+  })
+}
+
 export const readSalaryIncomeTaxApi = (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
