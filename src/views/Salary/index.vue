@@ -1632,20 +1632,6 @@ const handleTaxImport = () => {
         `第二批工资_个税导入_${rangeForm.month || '模板'}.xlsx`
       )
 
-      // 步骤2：导出成功后自动保存，作为“下一步”的前置条件
-      if (!currentDraftId.value) throw new Error('草稿ID不存在')
-      const rows = addRows.value.map((r) => {
-        const total = computeRowTotal(r)
-        const split = computePaySplit(total)
-        return {
-          ...r,
-          total,
-          firstPay: r.firstPay ?? split.first,
-          secondPay: r.secondPay ?? split.second
-        }
-      })
-      addRows.value = rows
-      await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
       addStepSaved[1] = true
       taxTemplateExported.value = true
       ElMessage.success('个税申报文件已生成')
@@ -2309,11 +2295,8 @@ const saveRange = async () => {
       return
     }
 
-    const step1Resp: any = await saveSalaryDraftStep1Api({ month: rangeForm.month })
-    const step1Payload = step1Resp?.data ?? step1Resp ?? {}
-    const draftId = Number(step1Payload?.id)
-    if (!draftId) throw new Error('创建工资草稿失败')
-    currentDraftId.value = draftId
+    // 新增工资：仅在步骤3“保存”时写入数据库（这里不创建草稿）
+    currentDraftId.value = null
     editingSummaryId.value = null
     taxTemplateExported.value = false
     await syncPaySplitLimitFromParams()
@@ -2356,37 +2339,6 @@ const saveRange = async () => {
 }
 
 const saveAddStep = async () => {
-  if (addStep.value === 1) {
-    if (!taxTemplateExported.value && !addStepSaved[1]) {
-      ElMessage.warning('请先点击“个税申报文件”生成文件，再保存步骤2')
-      return
-    }
-    addSaving.value = true
-    try {
-      if (!currentDraftId.value) throw new Error('草稿ID不存在')
-      const rows = addRows.value.map((r) => {
-        const total = computeRowTotal(r)
-        const split = computePaySplit(total)
-        return {
-          ...r,
-          total,
-          firstPay: r.firstPay ?? split.first,
-          secondPay: r.secondPay ?? split.second
-        }
-      })
-      addRows.value = rows
-      await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
-      addStepSaved[1] = true
-      ElMessage.success('步骤2已保存')
-    } catch (error: any) {
-      console.error('保存步骤2失败:', error)
-      ElMessage.error(error?.message || '保存步骤2失败')
-    } finally {
-      addSaving.value = false
-    }
-    return
-  }
-
   if (addStep.value === 2) {
     if (!isTaxReady.value) {
       ElMessage.warning('请先读取个税并确保所有人员已填充个税')
@@ -2394,7 +2346,17 @@ const saveAddStep = async () => {
     }
     addSaving.value = true
     try {
-      if (!currentDraftId.value) throw new Error('草稿ID不存在')
+      if (!currentDraftId.value) {
+        const employeeIds = addRows.value.map((r) => r.employeeId)
+        const step1Resp: any = await saveSalaryDraftStep1Api({
+          month: rangeForm.month,
+          employeeIds
+        })
+        const step1Payload = step1Resp?.data ?? step1Resp ?? {}
+        const draftId = Number(step1Payload?.id)
+        if (!draftId) throw new Error('创建工资草稿失败')
+        currentDraftId.value = draftId
+      }
       const rows = addRows.value.map((r) => {
         const total = computeRowTotal(r)
         const split = computePaySplit(total)
