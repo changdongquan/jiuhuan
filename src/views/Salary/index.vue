@@ -760,7 +760,7 @@
             读取个税
           </el-button>
           <el-button
-            v-if="addStep !== 0"
+            v-if="addStep !== 0 && addStep !== 1"
             type="primary"
             :loading="addSaving"
             :disabled="isAddStepSaveDisabled"
@@ -1632,6 +1632,21 @@ const handleTaxImport = () => {
         `第二批工资_个税导入_${rangeForm.month || '模板'}.xlsx`
       )
 
+      // 步骤2：导出成功后自动保存，作为“下一步”的前置条件
+      if (!currentDraftId.value) throw new Error('草稿ID不存在')
+      const rows = addRows.value.map((r) => {
+        const total = computeRowTotal(r)
+        const split = computePaySplit(total)
+        return {
+          ...r,
+          total,
+          firstPay: r.firstPay ?? split.first,
+          secondPay: r.secondPay ?? split.second
+        }
+      })
+      addRows.value = rows
+      await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
+      addStepSaved[1] = true
       taxTemplateExported.value = true
       ElMessage.success('个税申报文件已生成')
     } catch (error) {
@@ -2422,6 +2437,10 @@ const goNextStep = () => {
     return
   }
 
+  if (addStep.value === 1 && !addStepSaved[1]) {
+    ElMessage.warning('请先点击“个税申报文件”生成文件')
+    return
+  }
   if (!addStepSaved[addStep.value]) {
     ElMessage.warning('请先保存当前步骤')
     return
