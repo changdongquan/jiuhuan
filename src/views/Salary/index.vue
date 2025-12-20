@@ -515,28 +515,14 @@
               </div>
               <div
                 class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{
-                  'salary-add-header__meta-row--sub-hidden': !(addStep === 1 || addStep === 2)
-                }"
+                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 2 }"
               >
-                <span v-if="addStep === 1"
-                  >第一批工资合计：{{ formatMoneyWithThousands(addRowsFirstPayTotal) }}</span
-                >
-                <span v-else
-                  >第一次应发合计：{{ formatMoneyWithThousands(addRowsFirstActualPayTotal) }}</span
-                >
-              </div>
-              <div
-                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{
-                  'salary-add-header__meta-row--sub-hidden': !(addStep === 1 || addStep === 2)
-                }"
-              >
-                <span v-if="addStep === 1"
-                  >第二批工资合计：{{ formatMoneyWithThousands(addRowsSecondPayTotal) }}</span
-                >
-                <span v-else
-                  >第二次应发合计：{{ formatMoneyWithThousands(addRowsSecondActualPayTotal) }}</span
+                <span
+                  >实发合计：{{
+                    formatMoneyWithThousands(
+                      addRowsFirstActualPayTotal + addRowsSecondActualPayTotal
+                    )
+                  }}</span
                 >
               </div>
             </div>
@@ -1523,20 +1509,6 @@ const computeSecondActualPay = (row: SalaryDraftRow) => {
 
 const addRowsTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
-})
-
-const addRowsFirstPayTotal = computed(() => {
-  return addRows.value.reduce((acc, row) => {
-    const split = getRowPaySplit(row)
-    return acc + (split.first || 0)
-  }, 0)
-})
-
-const addRowsSecondPayTotal = computed(() => {
-  return addRows.value.reduce((acc, row) => {
-    const split = getRowPaySplit(row)
-    return acc + (split.second || 0)
-  }, 0)
 })
 
 const addRowsFirstActualPayTotal = computed(() => {
@@ -2769,7 +2741,7 @@ onMounted(() => {
 
 .salary-add-steps {
   padding: 0 4px;
-  margin-top: -92px;
+  margin-top: -60px;
 }
 
 .salary-add-footer {
