@@ -156,7 +156,8 @@ export const exportSalaryTaxImportTemplateApi = (data: {
     url: '/api/salary/tax-import/export',
     method: 'post',
     data,
-    responseType: 'blob'
+    responseType: 'blob',
+    timeout: 180000
   })
 }
 

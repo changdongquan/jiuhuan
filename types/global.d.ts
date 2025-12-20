@@ -44,6 +44,7 @@ declare global {
     method?: AxiosMethod
     headers?: RawAxiosRequestHeaders
     responseType?: AxiosResponseType
+    timeout?: number
     withCredentials?: boolean // 支持携带凭据（用于 Kerberos SSO）
   }
 

@@ -3,7 +3,7 @@ import { CONTENT_TYPE } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 
 const request = (option: AxiosConfig) => {
-  const { url, method, params, data, headers, responseType, withCredentials } = option
+  const { url, method, params, data, headers, responseType, withCredentials, timeout } = option
 
   const userStore = useUserStoreWithOut()
   const isFormData =
@@ -29,6 +29,7 @@ const request = (option: AxiosConfig) => {
     params,
     data: data,
     responseType: responseType,
+    timeout,
     withCredentials: withCredentials, // 支持携带凭据（用于 Kerberos SSO）
     headers: mergedHeaders
   })

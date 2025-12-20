@@ -2,6 +2,7 @@ const express = require('express')
 const sql = require('mssql')
 const ExcelJS = require('exceljs')
 const path = require('path')
+const fs = require('fs')
 const multer = require('multer')
 const XLSX = require('xlsx')
 const router = express.Router()
@@ -20,6 +21,14 @@ const TAX_IMPORT_TEMPLATE_PATH = path.join(
   'salary',
   '个税导入模板01.xlsx'
 )
+const TAX_IMPORT_TEMPLATE_BUFFER = (() => {
+  try {
+    return fs.readFileSync(TAX_IMPORT_TEMPLATE_PATH)
+  } catch (error) {
+    console.error('读取个税导入模板失败:', error)
+    return null
+  }
+})()
 
 const uploadTaxFile = multer({
   storage: multer.memoryStorage(),
@@ -950,9 +959,12 @@ router.post('/tax-import/export', async (req, res) => {
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ code: 400, message: 'rows 必须是数组且不能为空' })
     }
+    if (!TAX_IMPORT_TEMPLATE_BUFFER) {
+      return res.status(500).json({ code: 500, message: '个税导入模板缺失或不可读取' })
+    }
 
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.readFile(TAX_IMPORT_TEMPLATE_PATH)
+    await workbook.xlsx.load(TAX_IMPORT_TEMPLATE_BUFFER)
     const worksheet = workbook.worksheets[0]
     if (!worksheet) throw new Error('模板工作表不存在')
 
@@ -971,27 +983,18 @@ router.post('/tax-import/export', async (req, res) => {
       worksheet.getCell(`C${rowIndex}`).value = '居民身份证'
       worksheet.getCell(`D${rowIndex}`).value = idCard
 
-      const incomeCell = worksheet.getCell(`E${rowIndex}`)
-      incomeCell.value = firstPay
-      incomeCell.numFmt = '0.00'
+      worksheet.getCell(`E${rowIndex}`).value = firstPay
 
-      const pensionCell = worksheet.getCell(`G${rowIndex}`)
-      pensionCell.value = pensionInsuranceFee
-      pensionCell.numFmt = '0.00'
+      worksheet.getCell(`G${rowIndex}`).value = pensionInsuranceFee
 
-      const medicalCell = worksheet.getCell(`H${rowIndex}`)
-      medicalCell.value = medicalInsuranceFee
-      medicalCell.numFmt = '0.00'
+      worksheet.getCell(`H${rowIndex}`).value = medicalInsuranceFee
 
-      const unemploymentCell = worksheet.getCell(`I${rowIndex}`)
-      unemploymentCell.value = unemploymentInsuranceFee
-      unemploymentCell.numFmt = '0.00'
+      worksheet.getCell(`I${rowIndex}`).value = unemploymentInsuranceFee
 
       rowIndex += 1
     }
 
     const fileName = `个税导入_${String(month || '').trim() || '模板'}.xlsx`
-    const buffer = await workbook.xlsx.writeBuffer()
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -1000,7 +1003,8 @@ router.post('/tax-import/export', async (req, res) => {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
     )
-    res.send(Buffer.from(buffer))
+    await workbook.xlsx.write(res)
+    res.end()
   } catch (error) {
     console.error('生成个税导入模板失败:', error)
     res.status(500).json({ code: 500, message: error.message || '生成个税导入模板失败' })

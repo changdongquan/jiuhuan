@@ -42,7 +42,7 @@ axiosInstance.interceptors.response.use(
     // 这里不能做任何处理，否则后面的 interceptors 拿不到完整的上下文了
     return res
   },
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     const url = error.config?.url || ''
 
     // 对 Windows 域自动登录接口的 401 做静默处理（不弹错误），交由上层逻辑处理
@@ -50,8 +50,33 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    const resolveErrorMessage = async () => {
+      const data: any = error.response?.data
+      if (!data) return error.message
+
+      // 当 responseType = 'blob' 且服务端返回 JSON 错误时，data 会是 Blob，需要读取后再解析 message
+      const isBlob =
+        typeof Blob !== 'undefined' && typeof data === 'object' && typeof data.size === 'number'
+      if (isBlob && typeof (data as Blob).text === 'function') {
+        try {
+          const text = await (data as Blob).text()
+          if (!text) return error.message
+          try {
+            const parsed = JSON.parse(text)
+            return parsed?.message || error.message
+          } catch {
+            return text
+          }
+        } catch {
+          return error.message
+        }
+      }
+
+      return data?.message || error.message
+    }
+
     // 显示后端返回的具体错误消息，而不是通用的 HTTP 错误
-    const errorMessage = (error.response?.data as any)?.message || error.message
+    const errorMessage = await resolveErrorMessage()
     ElMessage.error(errorMessage)
     return Promise.reject(error)
   }
