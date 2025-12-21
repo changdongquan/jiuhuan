@@ -1066,11 +1066,15 @@ router.post('/payroll/export', async (req, res) => {
     const detailRows = await query(
       `
       SELECT
+        COALESCE(e.银行账号, N'') as bankAccount,
         d.身份证号 as idCard,
         d.姓名 as employeeName,
         d.第一次应发 as firstPayable,
         d.第二次应发 as secondPayable
       FROM ${TABLE_DETAIL} d
+      LEFT JOIN 员工信息 e
+        ON e.ID = d.员工ID
+        OR (d.员工ID IS NULL AND e.身份证号码 = d.身份证号)
       WHERE d.汇总ID = @id
       ORDER BY d.工号
     `,
@@ -1107,12 +1111,12 @@ router.post('/payroll/export', async (req, res) => {
     const round2 = (num) => Math.round(Number(num) * 100) / 100
     let rowIndex = 2
     for (const item of detailRows) {
-      const idCard = String(item?.idCard ?? '').trim()
+      const bankAccount = String(item?.bankAccount ?? '').trim()
       const employeeName = String(item?.employeeName ?? '').trim()
       const payable = batchNo === 2 ? item?.secondPayable : item?.firstPayable
       const amount = round2(toNumberOrNull(payable) ?? 0)
 
-      worksheet.getCell(`A${rowIndex}`).value = idCard
+      worksheet.getCell(`A${rowIndex}`).value = bankAccount
       worksheet.getCell(`B${rowIndex}`).value = employeeName
       worksheet.getCell(`C${rowIndex}`).value = amount
       worksheet.getCell(`D${rowIndex}`).value = 'B'
