@@ -931,23 +931,38 @@
       :close-on-click-modal="false"
     >
       <div v-if="viewSummaryRow" class="space-y-3">
-        <div v-if="isMobile" class="salary-view-mobile-list">
+        <div v-if="isMobile" class="salary-view-mobile-list salary-detail-view">
           <div class="view-dialog-mobile-detail-card view-dialog-mobile-detail-card--summary">
             <div class="view-dialog-mobile-detail-header">
               <div class="view-dialog-mobile-detail-title">合计</div>
             </div>
             <div class="view-dialog-mobile-detail-body">
               <div
-                v-for="(pair, pairIndex) in chunkDetailPairs(
-                  getSalaryViewMobileSummaryRows(viewSummaryRow.rows || [])
-                )"
-                :key="`summary-${pairIndex}`"
-                class="view-dialog-mobile-detail-grid-row"
+                v-for="group in makeSalaryViewDetailSummaryGroups(viewSummaryRow.rows || [])"
+                :key="`summary-${group.title}`"
+                class="detail-section"
               >
-                <span class="label">{{ pair.label1 }}</span>
-                <span class="value">{{ pair.value1 }}</span>
-                <span class="label">{{ pair.label2 }}</span>
-                <span class="value">{{ pair.value2 }}</span>
+                <div class="detail-section-header">{{ group.title }}</div>
+                <div class="detail-grid">
+                  <div v-for="item in group.items" :key="item.label" class="detail-cell">
+                    <span class="detail-label">{{ item.label }}</span>
+                    <span class="detail-value">{{ item.value }}</span>
+                  </div>
+                </div>
+                <div
+                  v-if="group.rowItems?.length"
+                  class="detail-grid"
+                  :class="{
+                    'detail-grid--two': group.rowItems.length === 2,
+                    'detail-grid--three': group.rowItems.length === 3,
+                    'detail-grid--four': group.rowItems.length === 4
+                  }"
+                >
+                  <div v-for="item in group.rowItems" :key="item.label" class="detail-cell">
+                    <span class="detail-label">{{ item.label }}</span>
+                    <span class="detail-value">{{ item.value }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -965,14 +980,31 @@
             </div>
             <div class="view-dialog-mobile-detail-body">
               <div
-                v-for="(pair, pairIndex) in chunkDetailPairs(makeSalaryViewDetailItemsByRow(row))"
-                :key="`${row.employeeId}-${pairIndex}`"
-                class="view-dialog-mobile-detail-grid-row"
+                v-for="group in makeSalaryViewDetailGroupsByRow(row)"
+                :key="`${row.employeeId}-${group.title}`"
+                class="detail-section"
               >
-                <span class="label">{{ pair.label1 }}</span>
-                <span class="value">{{ pair.value1 }}</span>
-                <span class="label">{{ pair.label2 }}</span>
-                <span class="value">{{ pair.value2 }}</span>
+                <div class="detail-section-header">{{ group.title }}</div>
+                <div class="detail-grid">
+                  <div v-for="item in group.items" :key="item.label" class="detail-cell">
+                    <span class="detail-label">{{ item.label }}</span>
+                    <span class="detail-value">{{ item.value }}</span>
+                  </div>
+                </div>
+                <div
+                  v-if="group.rowItems?.length"
+                  class="detail-grid"
+                  :class="{
+                    'detail-grid--two': group.rowItems.length === 2,
+                    'detail-grid--three': group.rowItems.length === 3,
+                    'detail-grid--four': group.rowItems.length === 4
+                  }"
+                >
+                  <div v-for="item in group.rowItems" :key="item.label" class="detail-cell">
+                    <span class="detail-label">{{ item.label }}</span>
+                    <span class="detail-value">{{ item.value }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1145,7 +1177,7 @@
       :close-on-click-modal="false"
       @closed="handleViewDetailClosed"
     >
-      <div v-if="viewDetailRow" class="salary-view-detail">
+      <div v-if="viewDetailRow" class="salary-view-detail salary-detail-view">
         <div
           v-for="group in makeSalaryViewDetailGroupsByRow(viewDetailRow)"
           :key="group.title"
@@ -1618,7 +1650,6 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
 }
 
 type SalaryViewDetailItem = { label: string; value: string }
-type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
 type SalaryViewDetailGroup = {
   title: string
   items: SalaryViewDetailItem[]
@@ -1704,6 +1735,82 @@ const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailG
   ].filter((g) => g.items.length > 0 || (g.rowItems && g.rowItems.length > 0))
 }
 
+const makeSalaryViewDetailSummaryGroups = (rows: SalaryDraftRow[]): SalaryViewDetailGroup[] => {
+  const list = Array.isArray(rows) ? rows : []
+  const money = (val: number) => formatMoneyWithThousands(val)
+  const sum = (getVal: (r: SalaryDraftRow) => number | null) => sumBy(list, getVal)
+
+  const splitFirst = sum((r) => getRowPaySplit(r).first ?? 0)
+  const splitSecond = sum((r) => getRowPaySplit(r).second ?? 0)
+  const firstActual = sum((r) => computeFirstActualPay(r))
+  const secondActual = sum((r) => computeSecondActualPay(r))
+  const twoActual = Math.round((firstActual + secondActual) * 100) / 100
+
+  const items: SalaryViewDetailItem[] = [
+    { label: '基本工资', value: money(sum((r) => toNumberOrNull(r.baseSalary))) },
+    { label: '加班费', value: money(sum((r) => toNumberOrNull(r.overtimePay))) },
+    { label: '两倍加班费', value: money(sum((r) => toNumberOrNull(r.doubleOvertimePay))) },
+    { label: '三倍加班费', value: money(sum((r) => toNumberOrNull(r.tripleOvertimePay))) },
+    { label: '夜班补助', value: money(sum((r) => toNumberOrNull(r.nightShiftSubsidy))) },
+    { label: '误餐补助', value: money(sum((r) => toNumberOrNull(r.mealSubsidy))) },
+    { label: '全勤', value: money(sum((r) => toNumberOrNull(r.fullAttendanceBonus))) },
+    { label: '工龄工资', value: money(sum((r) => toNumberOrNull(r.seniorityPay))) },
+    { label: '迟到扣款', value: money(sum((r) => toNumberOrNull(r.lateDeduction))) },
+    {
+      label: '新进及事假',
+      value: money(sum((r) => toNumberOrNull(r.newOrPersonalLeaveDeduction)))
+    },
+    { label: '病假', value: money(sum((r) => toNumberOrNull(r.sickLeaveDeduction))) },
+    { label: '旷工扣款', value: money(sum((r) => toNumberOrNull(r.absenceDeduction))) },
+    { label: '卫生费', value: money(sum((r) => toNumberOrNull(r.hygieneFee))) },
+    { label: '水费', value: money(sum((r) => toNumberOrNull(r.waterFee))) },
+    { label: '电费', value: money(sum((r) => toNumberOrNull(r.electricityFee))) },
+    { label: '本期工资', value: money(sum((r) => computeRowTotal(r))) },
+    { label: '第一批工资', value: money(splitFirst) },
+    { label: '基本养老保险费', value: money(sum((r) => toNumberOrNull(r.pensionInsuranceFee))) },
+    { label: '基本医疗保险费', value: money(sum((r) => toNumberOrNull(r.medicalInsuranceFee))) },
+    { label: '失业保险费', value: money(sum((r) => toNumberOrNull(r.unemploymentInsuranceFee))) },
+    { label: '第一次应发', value: money(firstActual) },
+    { label: '第二批工资', value: money(splitSecond) },
+    { label: '个税', value: money(sum((r) => toNumberOrNull(r.incomeTax))) },
+    { label: '第二次应发', value: money(secondActual) },
+    { label: '两次应发小计', value: money(twoActual) }
+  ].map((item) => ({
+    label: item.label,
+    value: item.value === '' ? '-' : item.value
+  }))
+
+  const pick = (labels: string[]) => items.filter((item) => labels.includes(item.label))
+
+  return [
+    {
+      title: '收入',
+      items: pick([
+        '基本工资',
+        '加班费',
+        '两倍加班费',
+        '三倍加班费',
+        '夜班补助',
+        '误餐补助',
+        '全勤',
+        '工龄工资',
+        '本期工资'
+      ])
+    },
+    {
+      title: '扣款',
+      items: pick(['迟到扣款', '新进及事假', '病假', '旷工扣款', '卫生费', '水费', '电费'])
+    },
+    { title: '税费', items: pick(['基本养老保险费', '基本医疗保险费', '失业保险费', '个税']) },
+    {
+      title: '发放',
+      items: [],
+      rowItems: pick(['第一批工资', '第一次应发', '第二批工资', '第二次应发'])
+    },
+    { title: '两次应发小计', items: pick(['两次应发小计']) }
+  ].filter((g) => g.items.length > 0 || (g.rowItems && g.rowItems.length > 0))
+}
+
 const handleViewDetailDblClick = (row: SalaryDraftRow) => {
   viewDetailRow.value = row
   viewDetailVisible.value = true
@@ -1711,82 +1818,6 @@ const handleViewDetailDblClick = (row: SalaryDraftRow) => {
 
 const handleViewDetailClosed = () => {
   viewDetailRow.value = null
-}
-
-const chunkDetailPairs = (items: SalaryViewDetailItem[]): SalaryViewDetailPairRow[] => {
-  const rows: SalaryViewDetailPairRow[] = []
-  const list = Array.isArray(items) ? items : []
-  for (let i = 0; i < list.length; i += 2) {
-    const left = list[i]
-    const right = list[i + 1]
-    rows.push({
-      label1: left?.label ?? '',
-      value1: left?.value ?? '-',
-      label2: right?.label ?? '',
-      value2: right?.value ?? ''
-    })
-  }
-  return rows
-}
-
-const getSalaryViewMobileSummaryRows = (rows: SalaryDraftRow[]) => {
-  const sum = (getVal: (r: SalaryDraftRow) => number | null) => sumBy(rows, getVal)
-  const money = (val: number) => formatMoneyWithThousands(val)
-
-  const totals = {
-    baseSalary: sum((r) => toNumberOrNull(r.baseSalary)),
-    overtimePay: sum((r) => toNumberOrNull(r.overtimePay)),
-    doubleOvertimePay: sum((r) => toNumberOrNull(r.doubleOvertimePay)),
-    tripleOvertimePay: sum((r) => toNumberOrNull(r.tripleOvertimePay)),
-    nightShiftSubsidy: sum((r) => toNumberOrNull(r.nightShiftSubsidy)),
-    mealSubsidy: sum((r) => toNumberOrNull(r.mealSubsidy)),
-    fullAttendanceBonus: sum((r) => toNumberOrNull(r.fullAttendanceBonus)),
-    seniorityPay: sum((r) => toNumberOrNull(r.seniorityPay)),
-    lateDeduction: sum((r) => toNumberOrNull(r.lateDeduction)),
-    newOrPersonalLeaveDeduction: sum((r) => toNumberOrNull(r.newOrPersonalLeaveDeduction)),
-    sickLeaveDeduction: sum((r) => toNumberOrNull(r.sickLeaveDeduction)),
-    absenceDeduction: sum((r) => toNumberOrNull(r.absenceDeduction)),
-    hygieneFee: sum((r) => toNumberOrNull(r.hygieneFee)),
-    waterFee: sum((r) => toNumberOrNull(r.waterFee)),
-    electricityFee: sum((r) => toNumberOrNull(r.electricityFee)),
-    total: sum((r) => computeRowTotal(r) ?? 0),
-    firstPay: sum((r) => getRowPaySplit(r).first ?? 0),
-    pensionInsuranceFee: sum((r) => toNumberOrNull(r.pensionInsuranceFee)),
-    medicalInsuranceFee: sum((r) => toNumberOrNull(r.medicalInsuranceFee)),
-    unemploymentInsuranceFee: sum((r) => toNumberOrNull(r.unemploymentInsuranceFee)),
-    firstActual: sum((r) => computeFirstActualPay(r)),
-    secondPay: sum((r) => getRowPaySplit(r).second ?? 0),
-    incomeTax: sum((r) => toNumberOrNull(r.incomeTax)),
-    secondActual: sum((r) => computeSecondActualPay(r))
-  }
-
-  return [
-    { label: '基本工资', value: money(totals.baseSalary) },
-    { label: '加班费', value: money(totals.overtimePay) },
-    { label: '两倍加班费', value: money(totals.doubleOvertimePay) },
-    { label: '三倍加班费', value: money(totals.tripleOvertimePay) },
-    { label: '夜班补助', value: money(totals.nightShiftSubsidy) },
-    { label: '误餐补助', value: money(totals.mealSubsidy) },
-    { label: '全勤', value: money(totals.fullAttendanceBonus) },
-    { label: '工龄工资', value: money(totals.seniorityPay) },
-    { label: '迟到扣款', value: money(totals.lateDeduction) },
-    { label: '新进及事假', value: money(totals.newOrPersonalLeaveDeduction) },
-    { label: '病假', value: money(totals.sickLeaveDeduction) },
-    { label: '旷工扣款', value: money(totals.absenceDeduction) },
-    { label: '卫生费', value: money(totals.hygieneFee) },
-    { label: '水费', value: money(totals.waterFee) },
-    { label: '电费', value: money(totals.electricityFee) },
-    { label: '本期工资', value: money(totals.total) },
-    { label: '第一批工资', value: money(totals.firstPay) },
-    { label: '基本养老保险费', value: money(totals.pensionInsuranceFee) },
-    { label: '基本医疗保险费', value: money(totals.medicalInsuranceFee) },
-    { label: '失业保险费', value: money(totals.unemploymentInsuranceFee) },
-    { label: '第一次应发', value: money(totals.firstActual) },
-    { label: '第二批工资', value: money(totals.secondPay) },
-    { label: '个税', value: money(totals.incomeTax) },
-    { label: '第二次应发', value: money(totals.secondActual) },
-    { label: '两次应发小计', value: money(totals.firstActual + totals.secondActual) }
-  ]
 }
 
 const isTaxReady = computed(() => {
@@ -3502,7 +3533,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail .detail-grid {
+.salary-detail-view .detail-grid {
   display: grid;
   background: transparent;
   border: none;
@@ -3512,22 +3543,22 @@ onMounted(() => {
   gap: 0;
 }
 
-.salary-view-detail .detail-grid--three {
+.salary-detail-view .detail-grid--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail .detail-grid--two {
+.salary-detail-view .detail-grid--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail .detail-grid--four {
+.salary-detail-view .detail-grid--four {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail .detail-cell {
+.salary-detail-view .detail-cell {
   display: flex;
   min-height: 28px;
   padding: 4px 6px;
@@ -3536,7 +3567,7 @@ onMounted(() => {
   align-items: center;
 }
 
-.salary-view-detail .detail-label {
+.salary-detail-view .detail-label {
   flex: 0 0 96px;
   padding-right: 6px;
   font-size: 12px;
@@ -3545,13 +3576,13 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.salary-view-detail .detail-label::after {
+.salary-detail-view .detail-label::after {
   margin-left: 2px;
   color: #c0c4cc;
   content: ':';
 }
 
-.salary-view-detail .detail-value {
+.salary-detail-view .detail-value {
   flex: 1;
   font-size: 12px;
   color: #303133;
@@ -3560,23 +3591,17 @@ onMounted(() => {
 }
 
 @media (width <= 768px) {
-  .salary-view-detail .detail-grid {
+  .salary-detail-view .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .salary-view-detail .detail-grid--three {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
+  .salary-detail-view .detail-grid--two,
+  .salary-detail-view .detail-grid--three,
+  .salary-detail-view .detail-grid--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .salary-view-detail .detail-grid--two {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-
-  .salary-view-detail .detail-grid--four {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-
-  .salary-view-detail .detail-label {
+  .salary-detail-view .detail-label {
     flex-basis: 110px;
   }
 }
