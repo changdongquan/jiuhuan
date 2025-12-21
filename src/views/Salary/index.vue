@@ -46,12 +46,14 @@
     </el-form>
 
     <template v-if="tableData.length">
-      <div class="salary-table-wrapper">
+      <div class="salary-table-wrapper" :class="{ 'salary-table-wrapper--mobile': isMobile }">
         <el-table
           :data="tableData"
           border
           v-loading="loading"
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+          row-key="id"
+          class="salary-table"
         >
           <el-table-column type="index" label="序号" width="60" align="center" />
           <el-table-column prop="month" label="月份" width="110" />
@@ -556,7 +558,7 @@
                 width="55"
                 show-overflow-tooltip
               />
-              <el-table-column label="基本工资" width="100" align="right">
+              <el-table-column label="基本工资" width="108" align="right">
                 <template #default="{ row }">
                   {{ formatMoneyWithThousands(row.baseSalary) }}
                 </template>
@@ -608,7 +610,7 @@
                   formatMoneyWithThousands(row.newOrPersonalLeaveDeduction)
                 }}</template>
               </el-table-column>
-              <el-table-column label="病假" width="80" align="right">
+              <el-table-column prop="sickLeaveDeduction" label="病假" width="65" align="right">
                 <template #default="{ row }">{{
                   formatMoneyWithThousands(row.sickLeaveDeduction)
                 }}</template>
@@ -631,7 +633,7 @@
                   formatMoneyWithThousands(row.electricityFee)
                 }}</template>
               </el-table-column>
-              <el-table-column label="本期工资" width="100" align="right">
+              <el-table-column label="本期工资" width="105" align="right">
                 <template #default="{ row }">{{
                   formatMoneyWithThousands(computeRowTotal(row))
                 }}</template>
@@ -2642,6 +2644,15 @@ onMounted(() => {
   padding: 4px;
   background: var(--el-bg-color);
   border-radius: 8px;
+}
+
+.salary-table-wrapper--mobile {
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.salary-table-wrapper--mobile .salary-table {
+  min-width: 1400px;
 }
 
 .salary-add-body {
