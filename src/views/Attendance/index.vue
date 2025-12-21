@@ -161,7 +161,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '100%' : '1300px'"
+      :width="isMobile ? '100%' : '1420px'"
       :fullscreen="isMobile"
       class="att-dialog"
       :close-on-click-modal="false"
@@ -194,49 +194,56 @@
           :summary-method="getAttendanceSummary"
           @sort-change="handleAttendanceSortChange"
         >
-          <el-table-column type="index" label="序号" width="70" fixed="left" align="center" />
-          <el-table-column prop="employeeName" width="85" fixed="left" sortable="custom">
+          <el-table-column type="index" label="序号" width="68" fixed="left" align="center" />
+          <el-table-column
+            prop="employeeName"
+            width="100"
+            fixed="left"
+            sortable="custom"
+            label-class-name="att-col-name-header"
+          >
             <template #header>
-              <div class="att-name-header">
-                <span>姓名</span>
-                <el-tooltip content="展开/折叠员工信息列" placement="top">
-                  <span
-                    class="att-column-toggle-icon"
-                    @click.stop="showEmployeeExtraColumns = !showEmployeeExtraColumns"
-                  >
-                    <Icon
-                      :size="16"
-                      :icon="
-                        showEmployeeExtraColumns
-                          ? 'vi-ant-design:menu-fold-outlined'
-                          : 'vi-ant-design:menu-unfold-outlined'
-                      "
-                    />
-                  </span>
-                </el-tooltip>
-              </div>
+              <span class="att-name-label">姓名</span>
+              <el-tooltip content="展开/折叠员工信息列" placement="top">
+                <span
+                  class="att-column-toggle-icon att-name-toggle"
+                  @click.stop="showEmployeeExtraColumns = !showEmployeeExtraColumns"
+                >
+                  <Icon
+                    :size="16"
+                    :icon="
+                      showEmployeeExtraColumns
+                        ? 'vi-ant-design:menu-fold-outlined'
+                        : 'vi-ant-design:menu-unfold-outlined'
+                    "
+                  />
+                </span>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column
             v-if="showEmployeeExtraColumns"
             prop="employeeNumber"
             label="员工工号"
-            width="85"
+            width="95"
             fixed="left"
+            sortable="custom"
           />
           <el-table-column
             v-if="showEmployeeExtraColumns"
             prop="department"
             label="所属部门"
-            width="85"
+            width="110"
             fixed="left"
+            sortable="custom"
           />
           <el-table-column
             v-if="showEmployeeExtraColumns"
             prop="level"
             label="职级"
-            width="85"
+            width="80"
             fixed="left"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="row.level === 0">-</span>
@@ -247,8 +254,9 @@
             v-if="showEmployeeExtraColumns"
             prop="gender"
             label="性别"
-            width="85"
+            width="75"
             fixed="left"
+            sortable="custom"
           />
           <el-table-column
             v-if="showEmployeeExtraColumns"
@@ -256,6 +264,7 @@
             label="入职时间"
             width="110"
             fixed="left"
+            sortable="custom"
           >
             <template #default="{ row }">
               {{ formatDate(row.entryDate) }}
@@ -269,6 +278,7 @@
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(1)(row.overtimeHours ?? '-') }}</span>
@@ -292,10 +302,11 @@
           <el-table-column
             prop="doubleOvertimeHours"
             label="两倍加班"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{
@@ -321,10 +332,11 @@
           <el-table-column
             prop="tripleOvertimeHours"
             label="三倍加班"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{
@@ -350,10 +362,11 @@
           <el-table-column
             prop="nightShiftCount"
             label="夜班天数"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(0)(row.nightShiftCount ?? '-') }}</span>
@@ -376,10 +389,11 @@
           <el-table-column
             prop="mealAllowanceCount"
             label="误餐次数"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{
@@ -402,11 +416,13 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="fullAttendanceBonus"
             label="全勤"
-            width="62"
+            width="70"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ isFullAttendance(row) ? '是' : '否' }}</span>
@@ -424,10 +440,11 @@
           <el-table-column
             prop="lateCount"
             label="迟到次数"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(0)(row.lateCount ?? '-') }}</span>
@@ -449,10 +466,11 @@
           <el-table-column
             prop="newOrPersonalLeaveHours"
             label="新进及事假时"
-            width="85"
+            width="115"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{
@@ -476,10 +494,11 @@
           <el-table-column
             prop="sickLeaveHours"
             label="病假小时"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(1)(row.sickLeaveHours ?? '-') }}</span>
@@ -501,10 +520,11 @@
           <el-table-column
             prop="absenceHours"
             label="旷工小时"
-            width="85"
+            width="95"
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(1)(row.absenceHours ?? '-') }}</span>
@@ -530,6 +550,7 @@
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(2)(row.hygieneFee ?? '-') }}</span>
@@ -555,6 +576,7 @@
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(2)(row.waterFee ?? '-') }}</span>
@@ -580,6 +602,7 @@
             align="center"
             class-name="att-col-input"
             label-class-name="att-col-input"
+            sortable="custom"
           >
             <template #default="{ row }">
               <span v-if="isViewMode">{{ formatNumberInput(2)(row.electricityFee ?? '-') }}</span>
@@ -662,15 +685,51 @@ const handleAttendanceSortChange = (payload: {
   const prop = payload?.prop || null
   const order = payload?.order || null
 
+  const dir = order === 'descending' ? -1 : 1
+
+  const toText = (val: unknown) => {
+    if (val === null || val === undefined) return ''
+    return String(val).trim()
+  }
+
+  const compareNullableNumber = (a: unknown, b: unknown) => {
+    const na = toNumberOrNull(a)
+    const nb = toNumberOrNull(b)
+    if (na === null && nb === null) return 0
+    if (na === null) return 1
+    if (nb === null) return -1
+    return (na - nb) * dir
+  }
+
+  const compareNullableText = (a: unknown, b: unknown) => {
+    const as = toText(a)
+    const bs = toText(b)
+    if (!as && !bs) return 0
+    if (!as) return 1
+    if (!bs) return -1
+    return as.localeCompare(bs, 'zh-CN', { numeric: true, sensitivity: 'base' }) * dir
+  }
+
+  const compareNullableDate = (a: unknown, b: unknown) => {
+    const at = toText(a)
+    const bt = toText(b)
+    if (!at && !bt) return 0
+    if (!at) return 1
+    if (!bt) return -1
+    const ad = new Date(at).getTime()
+    const bd = new Date(bt).getTime()
+    const aValid = !Number.isNaN(ad)
+    const bValid = !Number.isNaN(bd)
+    if (aValid && bValid) return (ad - bd) * dir
+    if (aValid && !bValid) return -1
+    if (!aValid && bValid) return 1
+    return at.localeCompare(bt, 'zh-CN', { numeric: true, sensitivity: 'base' }) * dir
+  }
+
   const sortByEmployeeNumberAsc = () => {
-    attendanceRows.value = [...attendanceRows.value].sort((a, b) => {
-      const an = String(a.employeeNumber ?? '').trim()
-      const bn = String(b.employeeNumber ?? '').trim()
-      const ai = Number(an)
-      const bi = Number(bn)
-      if (!Number.isNaN(ai) && !Number.isNaN(bi)) return ai - bi
-      return an.localeCompare(bn, 'zh-CN', { numeric: true, sensitivity: 'base' })
-    })
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) =>
+      compareEmployeeNumberAsc(a.employeeNumber, b.employeeNumber)
+    )
   }
 
   if (!prop || !order) {
@@ -678,13 +737,48 @@ const handleAttendanceSortChange = (payload: {
     return
   }
 
-  if (prop === 'employeeName') {
-    const dir = order === 'descending' ? -1 : 1
-    attendanceRows.value = [...attendanceRows.value].sort((a, b) => {
-      const av = String(a.employeeName ?? '').trim()
-      const bv = String(b.employeeName ?? '').trim()
-      return av.localeCompare(bv, 'zh-CN', { numeric: true, sensitivity: 'base' }) * dir
-    })
+  if (prop === 'employeeNumber') {
+    attendanceRows.value = [...attendanceRows.value].sort(
+      (a, b) => compareEmployeeNumberAsc(a.employeeNumber, b.employeeNumber) * dir
+    )
+    return
+  }
+
+  if (prop === 'employeeName' || prop === 'department' || prop === 'gender') {
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) =>
+      compareNullableText((a as any)[prop], (b as any)[prop])
+    )
+    return
+  }
+
+  if (prop === 'entryDate') {
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) =>
+      compareNullableDate((a as any)[prop], (b as any)[prop])
+    )
+    return
+  }
+
+  const numericProps = new Set([
+    'level',
+    'overtimeHours',
+    'doubleOvertimeHours',
+    'tripleOvertimeHours',
+    'nightShiftCount',
+    'mealAllowanceCount',
+    'fullAttendanceBonus',
+    'lateCount',
+    'newOrPersonalLeaveHours',
+    'sickLeaveHours',
+    'absenceHours',
+    'hygieneFee',
+    'waterFee',
+    'electricityFee'
+  ])
+
+  if (numericProps.has(prop)) {
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) =>
+      compareNullableNumber((a as any)[prop], (b as any)[prop])
+    )
     return
   }
 
@@ -1272,6 +1366,11 @@ onMounted(() => {
 
 :deep(.att-edit-grid .el-table__header-wrapper th.el-table__cell .cell) {
   font-size: 14px;
+  white-space: nowrap;
+}
+
+:deep(.att-edit-grid .el-table__body-wrapper td.el-table__cell .cell) {
+  white-space: nowrap;
 }
 
 :deep(.att-edit-grid .el-table__header-wrapper) {
@@ -1326,13 +1425,6 @@ onMounted(() => {
   padding: 0 !important;
 }
 
-.att-name-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .att-column-toggle-icon {
   display: inline-flex;
   width: 18px;
@@ -1345,5 +1437,24 @@ onMounted(() => {
 
 .att-column-toggle-icon:hover {
   color: var(--el-color-primary);
+}
+
+:deep(.att-edit-grid th.att-col-name-header .cell) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.att-edit-grid th.att-col-name-header .cell .att-name-label) {
+  order: 1;
+}
+
+:deep(.att-edit-grid th.att-col-name-header .cell .caret-wrapper) {
+  order: 2;
+}
+
+:deep(.att-edit-grid th.att-col-name-header .cell .att-name-toggle) {
+  order: 3;
+  margin-left: auto;
 }
 </style>

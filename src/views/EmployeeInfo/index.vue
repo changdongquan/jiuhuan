@@ -114,7 +114,14 @@
         class="ei-table"
         :default-sort="{ prop: 'employeeNumber', order: 'ascending' }"
       >
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column
+          type="index"
+          label="序号"
+          width="70"
+          align="center"
+          fixed="left"
+          :index="getEmployeeRowIndex"
+        />
         <el-table-column prop="employeeName" label="姓名" width="100" sortable />
         <el-table-column prop="employeeNumber" label="工号" width="80" sortable />
         <el-table-column prop="gender" label="性别" width="80" sortable />
@@ -496,6 +503,8 @@ const pagination = reactive({ page: 1, size: 20 })
 const tableData = ref<EmployeeInfo[]>([])
 const total = ref(0)
 const loading = ref(false)
+
+const getEmployeeRowIndex = (index: number) => (pagination.page - 1) * pagination.size + index + 1
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
