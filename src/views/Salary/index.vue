@@ -1152,16 +1152,17 @@
           class="salary-view-detail-section"
         >
           <div class="salary-view-detail-section__title">{{ group.title }}</div>
-          <div class="salary-view-detail-grid">
-            <div v-for="item in group.items" :key="item.label" class="salary-view-detail-item">
-              <span class="label">{{ item.label }}</span>
-              <span class="value">{{ item.value }}</span>
-            </div>
-          </div>
-          <div v-if="group.rowItems?.length" class="salary-view-detail-row3">
-            <div v-for="item in group.rowItems" :key="item.label" class="salary-view-detail-item">
-              <span class="label">{{ item.label }}</span>
-              <span class="value">{{ item.value }}</span>
+          <div class="salary-view-detail-table">
+            <div
+              v-for="(pair, pairIndex) in chunkDetailPairs(group.items)"
+              :key="`${group.title}-${pairIndex}`"
+              class="salary-view-detail-table-row"
+              :class="{ 'salary-view-detail-table-row--first': pairIndex === 0 }"
+            >
+              <div class="cell cell--label">{{ pair.label1 }}</div>
+              <div class="cell cell--value">{{ pair.value1 }}</div>
+              <div class="cell cell--label">{{ pair.label2 }}</div>
+              <div class="cell cell--value">{{ pair.value2 }}</div>
             </div>
           </div>
         </div>
@@ -1611,11 +1612,7 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
 
 type SalaryViewDetailItem = { label: string; value: string }
 type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
-type SalaryViewDetailGroup = {
-  title: string
-  items: SalaryViewDetailItem[]
-  rowItems?: SalaryViewDetailItem[]
-}
+type SalaryViewDetailGroup = { title: string; items: SalaryViewDetailItem[] }
 
 const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailItem[] => {
   const money = (val: unknown) => formatMoneyWithThousands(val as any)
@@ -1660,7 +1657,6 @@ const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailIt
 const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailGroup[] => {
   const list = makeSalaryViewDetailItemsByRow(row)
   const pick = (labels: string[]) => list.filter((item) => labels.includes(item.label))
-  const secondPayRowLabels = ['第二批工资', '个税', '第二次应发']
 
   return [
     {
@@ -1689,9 +1685,11 @@ const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailG
         '基本医疗保险费',
         '失业保险费',
         '第一次应发',
+        '第二批工资',
+        '个税',
+        '第二次应发',
         '两次应发小计'
-      ]),
-      rowItems: pick(secondPayRowLabels)
+      ])
     }
   ].filter((g) => g.items.length > 0)
 }
@@ -3490,48 +3488,59 @@ onMounted(() => {
   color: #333;
 }
 
-.salary-view-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px 18px;
-}
-
-.salary-view-detail-row3 {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 18px;
-  margin-top: 10px;
-}
-
-.salary-view-detail-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--el-bg-color-overlay);
+.salary-view-detail-table {
+  overflow: hidden;
   border: 1px solid var(--el-border-color);
   border-radius: 10px;
 }
 
-.salary-view-detail-item .label {
-  color: #888;
-  white-space: nowrap;
+.salary-view-detail-table-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 120px minmax(0, 1fr);
 }
 
-.salary-view-detail-item .value {
+.salary-view-detail-table-row:not(.salary-view-detail-table-row--first) .cell {
+  border-top: 1px solid var(--el-border-color);
+}
+
+.salary-view-detail-table-row .cell {
+  padding: 10px 12px;
+  border-right: 1px solid var(--el-border-color);
+}
+
+.salary-view-detail-table-row .cell:nth-child(2),
+.salary-view-detail-table-row .cell:nth-child(4) {
+  border-right: none;
+}
+
+.salary-view-detail-table-row .cell--label {
+  color: #666;
+  white-space: nowrap;
+  background: #f5f7fa;
+}
+
+.salary-view-detail-table-row .cell--value {
   color: #333;
   text-align: right;
   white-space: nowrap;
 }
 
 @media (width <= 768px) {
-  .salary-view-detail-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .salary-view-detail-table-row {
+    grid-template-columns: 120px minmax(0, 1fr);
   }
 
-  .salary-view-detail-row3 {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
+  .salary-view-detail-table-row .cell:nth-child(2) {
+    border-right: none;
+  }
+
+  .salary-view-detail-table-row .cell:nth-child(3) {
+    border-top: 1px solid var(--el-border-color);
+  }
+
+  .salary-view-detail-table-row .cell:nth-child(4) {
+    border-top: 1px solid var(--el-border-color);
+    border-right: none;
   }
 }
 
