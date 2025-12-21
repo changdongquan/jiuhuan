@@ -1146,14 +1146,17 @@
       @closed="handleViewDetailClosed"
     >
       <div v-if="viewDetailRow" class="salary-view-detail">
-        <div class="salary-view-detail-grid">
-          <div
-            v-for="item in makeSalaryViewDetailItemsByRow(viewDetailRow)"
-            :key="item.label"
-            class="salary-view-detail-item"
-          >
-            <span class="label">{{ item.label }}</span>
-            <span class="value">{{ item.value }}</span>
+        <div
+          v-for="group in makeSalaryViewDetailGroupsByRow(viewDetailRow)"
+          :key="group.title"
+          class="salary-view-detail-section"
+        >
+          <div class="salary-view-detail-section__title">{{ group.title }}</div>
+          <div class="salary-view-detail-grid">
+            <div v-for="item in group.items" :key="item.label" class="salary-view-detail-item">
+              <span class="label">{{ item.label }}</span>
+              <span class="value">{{ item.value }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1602,6 +1605,7 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
 
 type SalaryViewDetailItem = { label: string; value: string }
 type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
+type SalaryViewDetailGroup = { title: string; items: SalaryViewDetailItem[] }
 
 const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailItem[] => {
   const money = (val: unknown) => formatMoneyWithThousands(val as any)
@@ -1641,6 +1645,46 @@ const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailIt
     label: item.label,
     value: item.value === '' ? '-' : item.value
   }))
+}
+
+const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailGroup[] => {
+  const list = makeSalaryViewDetailItemsByRow(row)
+  const pick = (labels: string[]) => list.filter((item) => labels.includes(item.label))
+
+  return [
+    {
+      title: '收入',
+      items: pick([
+        '基本工资',
+        '加班费',
+        '两倍加班费',
+        '三倍加班费',
+        '夜班补助',
+        '误餐补助',
+        '全勤',
+        '工龄工资',
+        '本期工资'
+      ])
+    },
+    {
+      title: '扣款',
+      items: pick(['迟到扣款', '新进及事假', '病假', '旷工扣款', '卫生费', '水费', '电费'])
+    },
+    {
+      title: '发放与税费',
+      items: pick([
+        '第一批工资',
+        '基本养老保险费',
+        '基本医疗保险费',
+        '失业保险费',
+        '第一次应发',
+        '第二批工资',
+        '个税',
+        '第二次应发',
+        '两次应发小计'
+      ])
+    }
+  ].filter((g) => g.items.length > 0)
 }
 
 const handleViewDetailDblClick = (row: SalaryDraftRow) => {
@@ -3418,6 +3462,23 @@ onMounted(() => {
 
 .salary-view-detail {
   padding: 6px 0;
+}
+
+.salary-view-detail-section {
+  padding: 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 12px;
+}
+
+.salary-view-detail-section + .salary-view-detail-section {
+  margin-top: 12px;
+}
+
+.salary-view-detail-section__title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #333;
 }
 
 .salary-view-detail-grid {
