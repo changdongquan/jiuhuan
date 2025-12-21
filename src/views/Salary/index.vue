@@ -1158,6 +1158,12 @@
               <span class="value">{{ item.value }}</span>
             </div>
           </div>
+          <div v-if="group.rowItems?.length" class="salary-view-detail-row3">
+            <div v-for="item in group.rowItems" :key="item.label" class="salary-view-detail-item">
+              <span class="label">{{ item.label }}</span>
+              <span class="value">{{ item.value }}</span>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -1605,7 +1611,11 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
 
 type SalaryViewDetailItem = { label: string; value: string }
 type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
-type SalaryViewDetailGroup = { title: string; items: SalaryViewDetailItem[] }
+type SalaryViewDetailGroup = {
+  title: string
+  items: SalaryViewDetailItem[]
+  rowItems?: SalaryViewDetailItem[]
+}
 
 const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailItem[] => {
   const money = (val: unknown) => formatMoneyWithThousands(val as any)
@@ -1650,6 +1660,7 @@ const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailIt
 const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailGroup[] => {
   const list = makeSalaryViewDetailItemsByRow(row)
   const pick = (labels: string[]) => list.filter((item) => labels.includes(item.label))
+  const secondPayRowLabels = ['第二批工资', '个税', '第二次应发']
 
   return [
     {
@@ -1678,11 +1689,9 @@ const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailG
         '基本医疗保险费',
         '失业保险费',
         '第一次应发',
-        '第二批工资',
-        '个税',
-        '第二次应发',
         '两次应发小计'
-      ])
+      ]),
+      rowItems: pick(secondPayRowLabels)
     }
   ].filter((g) => g.items.length > 0)
 }
@@ -3487,6 +3496,13 @@ onMounted(() => {
   gap: 10px 18px;
 }
 
+.salary-view-detail-row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-top: 10px;
+}
+
 .salary-view-detail-item {
   display: flex;
   align-items: center;
@@ -3512,6 +3528,10 @@ onMounted(() => {
 @media (width <= 768px) {
   .salary-view-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .salary-view-detail-row3 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }
 
