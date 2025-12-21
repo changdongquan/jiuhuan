@@ -190,9 +190,12 @@
           height="720"
           class="att-edit-grid"
           :row-class-name="() => 'att-row'"
+          show-summary
+          :summary-method="getAttendanceSummary"
+          @sort-change="handleAttendanceSortChange"
         >
           <el-table-column type="index" label="序号" width="70" fixed="left" align="center" />
-          <el-table-column prop="employeeName" width="85" fixed="left">
+          <el-table-column prop="employeeName" width="85" fixed="left" sortable="custom">
             <template #header>
               <div class="att-name-header">
                 <span>姓名</span>
@@ -234,7 +237,12 @@
             label="职级"
             width="85"
             fixed="left"
-          />
+          >
+            <template #default="{ row }">
+              <span v-if="row.level === 0">-</span>
+              <span v-else>{{ row.level ?? '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column
             v-if="showEmployeeExtraColumns"
             prop="gender"
@@ -255,6 +263,7 @@
           </el-table-column>
 
           <el-table-column
+            prop="overtimeHours"
             label="加班"
             width="85"
             align="center"
@@ -281,6 +290,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="doubleOvertimeHours"
             label="两倍加班"
             width="85"
             align="center"
@@ -309,6 +319,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="tripleOvertimeHours"
             label="三倍加班"
             width="85"
             align="center"
@@ -337,6 +348,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="nightShiftCount"
             label="夜班天数"
             width="85"
             align="center"
@@ -362,6 +374,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="mealAllowanceCount"
             label="误餐次数"
             width="85"
             align="center"
@@ -409,6 +422,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="lateCount"
             label="迟到次数"
             width="85"
             align="center"
@@ -433,6 +447,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="newOrPersonalLeaveHours"
             label="新进及事假时"
             width="85"
             align="center"
@@ -459,6 +474,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="sickLeaveHours"
             label="病假小时"
             width="85"
             align="center"
@@ -483,6 +499,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="absenceHours"
             label="旷工小时"
             width="85"
             align="center"
@@ -507,6 +524,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="hygieneFee"
             label="卫生费"
             width="85"
             align="center"
@@ -531,6 +549,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="waterFee"
             label="水费"
             width="85"
             align="center"
@@ -555,6 +574,7 @@
             </template>
           </el-table-column>
           <el-table-column
+            prop="electricityFee"
             label="电费"
             width="85"
             align="center"
@@ -634,6 +654,92 @@ const paginationLayout = computed(() =>
   isMobile.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
 )
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
+
+const handleAttendanceSortChange = (payload: {
+  prop?: string
+  order?: 'ascending' | 'descending' | null
+}) => {
+  const prop = payload?.prop || null
+  const order = payload?.order || null
+
+  const sortByEmployeeNumberAsc = () => {
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) => {
+      const an = String(a.employeeNumber ?? '').trim()
+      const bn = String(b.employeeNumber ?? '').trim()
+      const ai = Number(an)
+      const bi = Number(bn)
+      if (!Number.isNaN(ai) && !Number.isNaN(bi)) return ai - bi
+      return an.localeCompare(bn, 'zh-CN', { numeric: true, sensitivity: 'base' })
+    })
+  }
+
+  if (!prop || !order) {
+    sortByEmployeeNumberAsc()
+    return
+  }
+
+  if (prop === 'employeeName') {
+    const dir = order === 'descending' ? -1 : 1
+    attendanceRows.value = [...attendanceRows.value].sort((a, b) => {
+      const av = String(a.employeeName ?? '').trim()
+      const bv = String(b.employeeName ?? '').trim()
+      return av.localeCompare(bv, 'zh-CN', { numeric: true, sensitivity: 'base' }) * dir
+    })
+    return
+  }
+
+  sortByEmployeeNumberAsc()
+}
+
+const getAttendanceSummary = (payload: { columns: any[]; data: AttendanceRecord[] }) => {
+  const { columns, data } = payload
+  const sums: string[] = []
+  if (!data?.length) return sums
+
+  const precisionByProp: Record<string, number> = {
+    overtimeHours: 1,
+    doubleOvertimeHours: 1,
+    tripleOvertimeHours: 1,
+    newOrPersonalLeaveHours: 1,
+    sickLeaveHours: 1,
+    absenceHours: 1,
+    lateCount: 0,
+    nightShiftCount: 0,
+    mealAllowanceCount: 0,
+    hygieneFee: 2,
+    waterFee: 2,
+    electricityFee: 2
+  }
+
+  const toFixedSafe = (val: number, precision: number) => {
+    const rounded = Math.round(val * Math.pow(10, precision)) / Math.pow(10, precision)
+    return precision === 0 ? String(rounded) : rounded.toFixed(precision)
+  }
+
+  columns.forEach((column, index) => {
+    if (index === 0) {
+      sums[index] = '合计'
+      return
+    }
+    const prop = String(column.property || '').trim()
+    if (!prop) {
+      sums[index] = ''
+      return
+    }
+    const precision = precisionByProp[prop]
+    if (precision === undefined) {
+      sums[index] = ''
+      return
+    }
+    const total = data.reduce((acc, row) => {
+      const num = toNumberOrNull((row as any)[prop])
+      return acc + (num ?? 0)
+    }, 0)
+    sums[index] = toFixedSafe(total, precision)
+  })
+
+  return sums
+}
 
 const toNumberOrNull = (val: unknown) => {
   if (val === null || val === undefined || val === '') return null
