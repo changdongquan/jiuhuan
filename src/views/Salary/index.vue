@@ -189,11 +189,6 @@
               formatMoneyWithThousands(row.twoPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column
-            min-width="1"
-            class-name="salary-op-spacer"
-            label-class-name="salary-op-spacer"
-          />
           <el-table-column label="操作" width="205" min-width="205" fixed="right" align="center">
             <template #default="{ row }">
               <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
@@ -3185,19 +3180,6 @@ onMounted(() => {
 
 :deep(.salary-table-wrapper .el-table__header-wrapper th.el-table__cell .cell) {
   white-space: nowrap;
-}
-
-:deep(th.salary-op-spacer.el-table__cell),
-:deep(td.salary-op-spacer.el-table__cell) {
-  padding: 0 !important;
-  background: transparent !important;
-  border-right: none !important;
-  border-left: none !important;
-}
-
-:deep(th.salary-op-spacer.el-table__cell .cell),
-:deep(td.salary-op-spacer.el-table__cell .cell) {
-  padding: 0 !important;
 }
 
 :deep(.salary-view-table .el-table__header-wrapper th.el-table__cell .cell) {
