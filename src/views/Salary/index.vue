@@ -1,5 +1,5 @@
 <template>
-  <div class="salary-page p-4 space-y-4">
+  <div class="salary-page px-4 pt-0 pb-2 space-y-3">
     <div v-if="isMobile" class="mobile-top-bar">
       <div class="mobile-top-bar__left">
         <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
@@ -49,13 +49,6 @@
           <el-button type="primary" @click="handleQuery">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
           <el-button type="success" @click="handleAdd">新增</el-button>
-        </div>
-        <div v-if="!isMobile" class="view-mode-switch">
-          <span class="view-mode-switch__label">视图</span>
-          <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="table">表格</el-radio-button>
-            <el-radio-button label="timeline">时间轴</el-radio-button>
-          </el-radio-group>
         </div>
       </el-form-item>
     </el-form>
@@ -201,7 +194,7 @@
             class-name="salary-op-spacer"
             label-class-name="salary-op-spacer"
           />
-          <el-table-column label="操作" width="205" fixed="right" align="center">
+          <el-table-column label="操作" width="205" min-width="205" fixed="right" align="center">
             <template #default="{ row }">
               <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
                 >编辑</el-button
@@ -1144,6 +1137,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
+import { useRoute, useRouter } from 'vue-router'
 import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import {
   completeSalaryApi,
@@ -1267,7 +1261,18 @@ const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const showMobileFilters = ref(false)
 type SalaryViewMode = 'table' | 'timeline'
-const viewMode = ref<SalaryViewMode>('table')
+const route = useRoute()
+const router = useRouter()
+const viewMode = computed<SalaryViewMode>({
+  get() {
+    const v = route.query.view
+    return v === 'timeline' || v === 'table' ? (v as SalaryViewMode) : 'table'
+  },
+  set(val) {
+    const query = { ...route.query, view: val }
+    router.replace({ path: route.path, query })
+  }
+})
 type SalaryMobileViewMode = 'card' | 'table'
 const mobileViewMode = ref<SalaryMobileViewMode>('card')
 
@@ -3054,19 +3059,6 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.view-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 12px;
-  white-space: nowrap;
-}
-
-.view-mode-switch__label {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
 }
 
 .salary-table-wrapper {

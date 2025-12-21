@@ -54,9 +54,11 @@ export default defineComponent({
 
     const isMobile = computed(() => appStore.getMobile)
     const isSalesOrdersPage = computed(() => route.name === 'SalesOrdersIndex')
+    const isSalaryPage = computed(() => route.name === 'Salary')
     const salesSummary = computed(() => appStore.getSalesOrdersSummary)
 
     type SalesOrdersViewMode = 'table' | 'timeline'
+    type SalaryViewMode = 'table' | 'timeline'
 
     const salesOrdersViewMode = computed<SalesOrdersViewMode>({
       get() {
@@ -66,6 +68,19 @@ export default defineComponent({
       },
       set(val) {
         if (route.name !== 'SalesOrdersIndex') return
+        const query = { ...route.query, view: val }
+        router.replace({ path: route.path, query })
+      }
+    })
+
+    const salaryViewMode = computed<SalaryViewMode>({
+      get() {
+        const v = route.query.view
+        if (v === 'table' || v === 'timeline') return v as SalaryViewMode
+        return 'table'
+      },
+      set(val) {
+        if (route.name !== 'Salary') return
         const query = { ...route.query, view: val }
         router.replace({ path: route.path, query })
       }
@@ -128,6 +143,21 @@ export default defineComponent({
                 onUpdate:modelValue={(val) =>
                   (salesOrdersViewMode.value = val as SalesOrdersViewMode)
                 }
+              >
+                <ElRadioButton value="table">表格</ElRadioButton>
+                <ElRadioButton value="timeline">时间轴</ElRadioButton>
+              </ElRadioGroup>
+            </div>
+          ) : null}
+          {isSalaryPage.value && !isMobile.value ? (
+            <div class="flex items-center mr-3">
+              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
+                视图
+              </span>
+              <ElRadioGroup
+                size="small"
+                modelValue={salaryViewMode.value}
+                onUpdate:modelValue={(val) => (salaryViewMode.value = val as SalaryViewMode)}
               >
                 <ElRadioButton value="table">表格</ElRadioButton>
                 <ElRadioButton value="timeline">时间轴</ElRadioButton>
