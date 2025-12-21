@@ -753,7 +753,7 @@
       <template #footer>
         <div class="salary-add-footer">
           <el-button @click="addDialogVisible = false">取消</el-button>
-          <el-button v-if="addStep === 1" :loading="taxImporting" @click="handleTaxImport">
+          <el-button v-if="addStep === 2" :loading="taxImporting" @click="handleTaxImport">
             个税申报文件
           </el-button>
           <el-button v-if="addStep === 2" :loading="taxLoading" @click="handleLoadTax">
@@ -772,7 +772,7 @@
           <el-button
             v-if="addStep < 2"
             type="success"
-            :disabled="addStep !== 0 && !addStepSaved[addStep]"
+            :disabled="addStep === 2 ? !addStepSaved[2] : false"
             @click="goNextStep"
           >
             下一步
@@ -1578,7 +1578,7 @@ const handleCurrentChange = (page: number) => {
 
 const handleTaxImport = () => {
   void (async () => {
-    if (addStep.value !== 1) return
+    if (addStep.value !== 2) return
     if (!addRows.value.length) {
       ElMessage.warning('暂无数据可导出')
       return
@@ -2416,8 +2416,8 @@ const goNextStep = () => {
     return
   }
 
-  if (addStep.value === 1 && !addStepSaved[1]) {
-    ElMessage.warning('请先点击“个税申报文件”生成文件')
+  if (addStep.value === 1) {
+    addStep.value = 2
     return
   }
   if (!addStepSaved[addStep.value]) {
