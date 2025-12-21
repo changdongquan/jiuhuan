@@ -986,6 +986,7 @@
           class="salary-view-table"
           show-summary
           :summary-method="getViewSummaryTableSummary"
+          @row-dblclick="handleViewDetailDblClick"
         >
           <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
           <el-table-column
@@ -1132,6 +1133,33 @@
             第二次代发
           </el-button>
           <el-button @click="viewSummaryVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="viewDetailVisible"
+      :title="`工资明细 - ${viewSummaryRow?.month || ''} - ${viewDetailRow?.employeeName || ''}（工号：${viewDetailRow?.employeeNumber || ''}）`"
+      :width="isMobile ? '100%' : '900px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+      @closed="handleViewDetailClosed"
+    >
+      <div v-if="viewDetailRow" class="salary-view-detail">
+        <div class="salary-view-detail-grid">
+          <div
+            v-for="item in makeSalaryViewDetailItemsByRow(viewDetailRow)"
+            :key="item.label"
+            class="salary-view-detail-item"
+          >
+            <span class="label">{{ item.label }}</span>
+            <span class="value">{{ item.value }}</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="salary-add-footer">
+          <el-button @click="viewDetailVisible = false">关闭</el-button>
         </div>
       </template>
     </el-dialog>
@@ -1300,6 +1328,8 @@ const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
 
 const viewSummaryVisible = ref(false)
 const viewSummaryRow = ref<SalarySummaryRow | null>(null)
+const viewDetailVisible = ref(false)
+const viewDetailRow = ref<SalaryDraftRow | null>(null)
 const editingSummaryId = ref<number | null>(null)
 const currentDraftId = ref<number | null>(null)
 
@@ -1611,6 +1641,15 @@ const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailIt
     label: item.label,
     value: item.value === '' ? '-' : item.value
   }))
+}
+
+const handleViewDetailDblClick = (row: SalaryDraftRow) => {
+  viewDetailRow.value = row
+  viewDetailVisible.value = true
+}
+
+const handleViewDetailClosed = () => {
+  viewDetailRow.value = null
 }
 
 const chunkDetailPairs = (items: SalaryViewDetailItem[]): SalaryViewDetailPairRow[] => {
@@ -3375,6 +3414,44 @@ onMounted(() => {
 .salary-view-header__meta-text {
   font-size: 13px;
   color: var(--el-text-color-regular);
+}
+
+.salary-view-detail {
+  padding: 6px 0;
+}
+
+.salary-view-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.salary-view-detail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+}
+
+.salary-view-detail-item .label {
+  color: #888;
+  white-space: nowrap;
+}
+
+.salary-view-detail-item .value {
+  color: #333;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (width <= 768px) {
+  .salary-view-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .salary-add-steps {
