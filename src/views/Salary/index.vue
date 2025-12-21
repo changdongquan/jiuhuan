@@ -99,7 +99,7 @@
           <el-table-column type="index" label="序号" width="55" align="center" />
           <el-table-column prop="month" label="月份" width="85" />
           <el-table-column prop="employeeCount" label="人数" width="55" align="right" />
-          <el-table-column prop="overtimePayTotal" label="加班费合计" width="90" align="right">
+          <el-table-column prop="overtimePayTotal" label="加班费合计" min-width="90" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.overtimePayTotal)
             }}</template>
@@ -107,7 +107,7 @@
           <el-table-column
             prop="doubleOvertimePayTotal"
             label="两倍加班费合计"
-            width="110"
+            min-width="110"
             align="right"
           >
             <template #default="{ row }">{{
@@ -117,7 +117,7 @@
           <el-table-column
             prop="tripleOvertimePayTotal"
             label="三倍加班费合计"
-            width="110"
+            min-width="110"
             align="right"
           >
             <template #default="{ row }">{{
@@ -127,7 +127,7 @@
           <el-table-column
             prop="pensionInsuranceFeeTotal"
             label="基本养老保险费合计"
-            width="140"
+            min-width="140"
             align="right"
           >
             <template #default="{ row }">{{
@@ -137,7 +137,7 @@
           <el-table-column
             prop="medicalInsuranceFeeTotal"
             label="基本医疗保险费合计"
-            width="140"
+            min-width="140"
             align="right"
           >
             <template #default="{ row }">{{
@@ -147,19 +147,24 @@
           <el-table-column
             prop="unemploymentInsuranceFeeTotal"
             label="失业保险费合计"
-            width="110"
+            min-width="110"
             align="right"
           >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.unemploymentInsuranceFeeTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="incomeTaxTotal" label="个税合计" width="80" align="right">
+          <el-table-column prop="incomeTaxTotal" label="个税合计" min-width="80" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.incomeTaxTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="currentSalaryTotal" label="本期工资合计" width="110" align="right">
+          <el-table-column
+            prop="currentSalaryTotal"
+            label="本期工资合计"
+            min-width="110"
+            align="right"
+          >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.currentSalaryTotal)
             }}</template>
@@ -167,7 +172,7 @@
           <el-table-column
             prop="firstPayableTotal"
             label="第一次应发合计"
-            width="120"
+            min-width="120"
             align="right"
           >
             <template #default="{ row }">{{
@@ -177,19 +182,24 @@
           <el-table-column
             prop="secondPayableTotal"
             label="第二次应发合计"
-            width="120"
+            min-width="120"
             align="right"
           >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.secondPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="twoPayableTotal" label="两次应发小计" width="105" align="right">
+          <el-table-column
+            prop="twoPayableTotal"
+            label="两次应发小计"
+            min-width="105"
+            align="right"
+          >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.twoPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="205" min-width="205" fixed="right" align="center">
+          <el-table-column label="操作" width="205" fixed="right" align="center">
             <template #default="{ row }">
               <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
                 >编辑</el-button
