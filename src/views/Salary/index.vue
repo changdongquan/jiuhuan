@@ -544,7 +544,7 @@
               border
               height="560"
               :fit="false"
-              style="width: 1560px"
+              style="width: 1590px"
               show-summary
               :summary-method="getStep1Summary"
             >
@@ -648,7 +648,7 @@
             border
             height="560"
             :fit="false"
-            style="width: 1560px"
+            style="width: 1590px"
             show-summary
             :summary-method="getStep2Summary"
           >
@@ -717,7 +717,7 @@
             border
             height="560"
             :fit="false"
-            style="width: 1560px"
+            style="width: 1590px"
             show-summary
             :summary-method="getStep3Summary"
           >
@@ -2794,6 +2794,11 @@ onMounted(() => {
 
 :deep(.salary-add-dialog .el-dialog__headerbtn) {
   top: 12px;
+}
+
+:deep(.salary-add-dialog .el-dialog__body) {
+  padding-right: 0 !important;
+  padding-left: 0 !important;
 }
 
 .pagination-footer {
