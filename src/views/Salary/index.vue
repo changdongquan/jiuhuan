@@ -1,9 +1,17 @@
 <template>
   <div class="salary-page p-4 space-y-4">
     <div v-if="isMobile" class="mobile-top-bar">
-      <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
-        {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
-      </el-button>
+      <div class="mobile-top-bar__left">
+        <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+          {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+        </el-button>
+      </div>
+      <div class="mobile-top-bar__right">
+        <el-radio-group v-model="mobileViewMode" size="small">
+          <el-radio-button label="card">卡片</el-radio-button>
+          <el-radio-button label="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
     </div>
 
     <el-form
@@ -42,11 +50,51 @@
           <el-button @click="handleReset">重置</el-button>
           <el-button type="success" @click="handleAdd">新增</el-button>
         </div>
+        <div v-if="!isMobile" class="view-mode-switch">
+          <span class="view-mode-switch__label">视图</span>
+          <el-radio-group v-model="viewMode" size="small">
+            <el-radio-button label="table">表格</el-radio-button>
+            <el-radio-button label="timeline">时间轴</el-radio-button>
+          </el-radio-group>
+        </div>
       </el-form-item>
     </el-form>
 
     <template v-if="tableData.length">
-      <div class="salary-table-wrapper">
+      <div v-if="isMobile && mobileViewMode === 'card'" class="salary-cards">
+        <el-card v-for="item in tableData" :key="item.id" class="salary-card" shadow="hover">
+          <div class="salary-card__header">
+            <div class="salary-card__title">{{ item.month || '-' }}</div>
+            <div class="salary-card__meta">人数：{{ formatCount(item.employeeCount) }}</div>
+          </div>
+          <div class="salary-card__body">
+            <div class="salary-card__row">
+              <span>本期工资合计</span>
+              <strong>{{ formatMoneyWithThousands(item.currentSalaryTotal) }}</strong>
+            </div>
+            <div class="salary-card__row">
+              <span>两次应发小计</span>
+              <strong>{{ formatMoneyWithThousands(item.twoPayableTotal) }}</strong>
+            </div>
+            <div class="salary-card__row">
+              <span>加班费合计</span>
+              <span>{{ formatMoneyWithThousands(item.overtimePayTotal) }}</span>
+            </div>
+          </div>
+          <div class="salary-card__actions">
+            <el-button type="primary" size="small" @click="handleSummaryEdit(item)">编辑</el-button>
+            <el-button type="success" size="small" @click="handleSummaryView(item)">查看</el-button>
+            <el-button type="danger" size="small" @click="handleSummaryDelete(item)"
+              >删除</el-button
+            >
+          </div>
+        </el-card>
+      </div>
+
+      <div
+        v-else-if="isMobile ? mobileViewMode === 'table' : viewMode === 'table'"
+        class="salary-table-wrapper"
+      >
         <el-table
           :data="tableData"
           border
@@ -167,6 +215,44 @@
             </template>
           </el-table-column>
         </el-table>
+      </div>
+
+      <div v-else class="salary-timeline-wrapper">
+        <el-timeline>
+          <el-timeline-item
+            v-for="item in timelineList"
+            :key="item.id"
+            :timestamp="item.month"
+            placement="top"
+          >
+            <div class="salary-timeline-card">
+              <div class="salary-timeline-header">
+                <div class="salary-timeline-title">
+                  <span class="salary-timeline-month">{{ item.month }}</span>
+                  <span class="salary-timeline-count"
+                    >人数：{{ formatCount(item.employeeCount) }}</span
+                  >
+                </div>
+                <div class="salary-timeline-actions">
+                  <el-button type="primary" size="small" @click="handleSummaryEdit(item)"
+                    >编辑</el-button
+                  >
+                  <el-button type="success" size="small" @click="handleSummaryView(item)"
+                    >查看</el-button
+                  >
+                  <el-button type="danger" size="small" @click="handleSummaryDelete(item)"
+                    >删除</el-button
+                  >
+                </div>
+              </div>
+              <div class="salary-timeline-meta">
+                <span>本期工资合计：{{ formatMoneyWithThousands(item.currentSalaryTotal) }}</span>
+                <span>两次应发小计：{{ formatMoneyWithThousands(item.twoPayableTotal) }}</span>
+                <span>加班费合计：{{ formatMoneyWithThousands(item.overtimePayTotal) }}</span>
+              </div>
+            </div>
+          </el-timeline-item>
+        </el-timeline>
       </div>
 
       <div class="pagination-footer" :class="{ 'pagination-footer--mobile': isMobile }">
@@ -847,7 +933,54 @@
       :close-on-click-modal="false"
     >
       <div v-if="viewSummaryRow" class="space-y-3">
+        <div v-if="isMobile" class="salary-view-mobile-list">
+          <div class="view-dialog-mobile-detail-card view-dialog-mobile-detail-card--summary">
+            <div class="view-dialog-mobile-detail-header">
+              <div class="view-dialog-mobile-detail-title">合计</div>
+            </div>
+            <div class="view-dialog-mobile-detail-body">
+              <div
+                v-for="(pair, pairIndex) in chunkDetailPairs(
+                  getSalaryViewMobileSummaryRows(viewSummaryRow.rows || [])
+                )"
+                :key="`summary-${pairIndex}`"
+                class="view-dialog-mobile-detail-grid-row"
+              >
+                <span class="label">{{ pair.label1 }}</span>
+                <span class="value">{{ pair.value1 }}</span>
+                <span class="label">{{ pair.label2 }}</span>
+                <span class="value">{{ pair.value2 }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-for="(row, index) in viewSummaryRow.rows || []"
+            :key="`${row.employeeId}-${index}`"
+            class="view-dialog-mobile-detail-card"
+          >
+            <div class="view-dialog-mobile-detail-header">
+              <div class="view-dialog-mobile-detail-title">
+                {{ row.employeeName || '-' }}（工号：{{ row.employeeNumber || '-' }}）
+              </div>
+              <div class="view-dialog-mobile-detail-qty">序号 {{ index + 1 }}</div>
+            </div>
+            <div class="view-dialog-mobile-detail-body">
+              <div
+                v-for="(pair, pairIndex) in chunkDetailPairs(makeSalaryViewDetailItemsByRow(row))"
+                :key="`${row.employeeId}-${pairIndex}`"
+                class="view-dialog-mobile-detail-grid-row"
+              >
+                <span class="label">{{ pair.label1 }}</span>
+                <span class="value">{{ pair.value1 }}</span>
+                <span class="label">{{ pair.label2 }}</span>
+                <span class="value">{{ pair.value2 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <el-table
+          v-else
           :data="viewSummaryRow.rows"
           border
           height="520"
@@ -1133,6 +1266,10 @@ type SalaryDraftRow = {
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
 const showMobileFilters = ref(false)
+type SalaryViewMode = 'table' | 'timeline'
+const viewMode = ref<SalaryViewMode>('table')
+type SalaryMobileViewMode = 'card' | 'table'
+const mobileViewMode = ref<SalaryMobileViewMode>('card')
 
 const queryForm = reactive({
   month: '',
@@ -1141,6 +1278,9 @@ const queryForm = reactive({
 
 const loading = ref(false)
 const tableData = ref<SalarySummaryRow[]>([])
+const timelineList = computed(() =>
+  [...tableData.value].sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')))
+)
 const pagination = reactive({ page: 1, size: 10, total: 0 })
 
 const paginationLayout = computed(() =>
@@ -1418,6 +1558,125 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
   })
 
   return sums
+}
+
+type SalaryViewDetailItem = { label: string; value: string }
+type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
+
+const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailItem[] => {
+  const money = (val: unknown) => formatMoneyWithThousands(val as any)
+
+  const total = computeRowTotal(row)
+  const split = getRowPaySplit(row)
+  const firstActual = computeFirstActualPay(row)
+  const secondActual = computeSecondActualPay(row)
+
+  return [
+    { label: '基本工资', value: money(row.baseSalary) },
+    { label: '加班费', value: money(row.overtimePay) },
+    { label: '两倍加班费', value: money(row.doubleOvertimePay) },
+    { label: '三倍加班费', value: money(row.tripleOvertimePay) },
+    { label: '夜班补助', value: money(row.nightShiftSubsidy) },
+    { label: '误餐补助', value: money(row.mealSubsidy) },
+    { label: '全勤', value: money(row.fullAttendanceBonus) },
+    { label: '工龄工资', value: money(row.seniorityPay) },
+    { label: '迟到扣款', value: money(row.lateDeduction) },
+    { label: '新进及事假', value: money(row.newOrPersonalLeaveDeduction) },
+    { label: '病假', value: money(row.sickLeaveDeduction) },
+    { label: '旷工扣款', value: money(row.absenceDeduction) },
+    { label: '卫生费', value: money(row.hygieneFee) },
+    { label: '水费', value: money(row.waterFee) },
+    { label: '电费', value: money(row.electricityFee) },
+    { label: '本期工资', value: money(total) },
+    { label: '第一批工资', value: money(split.first) },
+    { label: '基本养老保险费', value: money(row.pensionInsuranceFee) },
+    { label: '基本医疗保险费', value: money(row.medicalInsuranceFee) },
+    { label: '失业保险费', value: money(row.unemploymentInsuranceFee) },
+    { label: '第一次应发', value: money(firstActual) },
+    { label: '第二批工资', value: money(split.second) },
+    { label: '个税', value: money(row.incomeTax) },
+    { label: '第二次应发', value: money(secondActual) },
+    { label: '两次应发小计', value: money(firstActual + secondActual) }
+  ].map((item) => ({
+    label: item.label,
+    value: item.value === '' ? '-' : item.value
+  }))
+}
+
+const chunkDetailPairs = (items: SalaryViewDetailItem[]): SalaryViewDetailPairRow[] => {
+  const rows: SalaryViewDetailPairRow[] = []
+  const list = Array.isArray(items) ? items : []
+  for (let i = 0; i < list.length; i += 2) {
+    const left = list[i]
+    const right = list[i + 1]
+    rows.push({
+      label1: left?.label ?? '',
+      value1: left?.value ?? '-',
+      label2: right?.label ?? '',
+      value2: right?.value ?? ''
+    })
+  }
+  return rows
+}
+
+const getSalaryViewMobileSummaryRows = (rows: SalaryDraftRow[]) => {
+  const sum = (getVal: (r: SalaryDraftRow) => number | null) => sumBy(rows, getVal)
+  const money = (val: number) => formatMoneyWithThousands(val)
+
+  const totals = {
+    baseSalary: sum((r) => toNumberOrNull(r.baseSalary)),
+    overtimePay: sum((r) => toNumberOrNull(r.overtimePay)),
+    doubleOvertimePay: sum((r) => toNumberOrNull(r.doubleOvertimePay)),
+    tripleOvertimePay: sum((r) => toNumberOrNull(r.tripleOvertimePay)),
+    nightShiftSubsidy: sum((r) => toNumberOrNull(r.nightShiftSubsidy)),
+    mealSubsidy: sum((r) => toNumberOrNull(r.mealSubsidy)),
+    fullAttendanceBonus: sum((r) => toNumberOrNull(r.fullAttendanceBonus)),
+    seniorityPay: sum((r) => toNumberOrNull(r.seniorityPay)),
+    lateDeduction: sum((r) => toNumberOrNull(r.lateDeduction)),
+    newOrPersonalLeaveDeduction: sum((r) => toNumberOrNull(r.newOrPersonalLeaveDeduction)),
+    sickLeaveDeduction: sum((r) => toNumberOrNull(r.sickLeaveDeduction)),
+    absenceDeduction: sum((r) => toNumberOrNull(r.absenceDeduction)),
+    hygieneFee: sum((r) => toNumberOrNull(r.hygieneFee)),
+    waterFee: sum((r) => toNumberOrNull(r.waterFee)),
+    electricityFee: sum((r) => toNumberOrNull(r.electricityFee)),
+    total: sum((r) => computeRowTotal(r) ?? 0),
+    firstPay: sum((r) => getRowPaySplit(r).first ?? 0),
+    pensionInsuranceFee: sum((r) => toNumberOrNull(r.pensionInsuranceFee)),
+    medicalInsuranceFee: sum((r) => toNumberOrNull(r.medicalInsuranceFee)),
+    unemploymentInsuranceFee: sum((r) => toNumberOrNull(r.unemploymentInsuranceFee)),
+    firstActual: sum((r) => computeFirstActualPay(r)),
+    secondPay: sum((r) => getRowPaySplit(r).second ?? 0),
+    incomeTax: sum((r) => toNumberOrNull(r.incomeTax)),
+    secondActual: sum((r) => computeSecondActualPay(r))
+  }
+
+  return [
+    { label: '基本工资', value: money(totals.baseSalary) },
+    { label: '加班费', value: money(totals.overtimePay) },
+    { label: '两倍加班费', value: money(totals.doubleOvertimePay) },
+    { label: '三倍加班费', value: money(totals.tripleOvertimePay) },
+    { label: '夜班补助', value: money(totals.nightShiftSubsidy) },
+    { label: '误餐补助', value: money(totals.mealSubsidy) },
+    { label: '全勤', value: money(totals.fullAttendanceBonus) },
+    { label: '工龄工资', value: money(totals.seniorityPay) },
+    { label: '迟到扣款', value: money(totals.lateDeduction) },
+    { label: '新进及事假', value: money(totals.newOrPersonalLeaveDeduction) },
+    { label: '病假', value: money(totals.sickLeaveDeduction) },
+    { label: '旷工扣款', value: money(totals.absenceDeduction) },
+    { label: '卫生费', value: money(totals.hygieneFee) },
+    { label: '水费', value: money(totals.waterFee) },
+    { label: '电费', value: money(totals.electricityFee) },
+    { label: '本期工资', value: money(totals.total) },
+    { label: '第一批工资', value: money(totals.firstPay) },
+    { label: '基本养老保险费', value: money(totals.pensionInsuranceFee) },
+    { label: '基本医疗保险费', value: money(totals.medicalInsuranceFee) },
+    { label: '失业保险费', value: money(totals.unemploymentInsuranceFee) },
+    { label: '第一次应发', value: money(totals.firstActual) },
+    { label: '第二批工资', value: money(totals.secondPay) },
+    { label: '个税', value: money(totals.incomeTax) },
+    { label: '第二次应发', value: money(totals.secondActual) },
+    { label: '两次应发小计', value: money(totals.firstActual + totals.secondActual) }
+  ]
 }
 
 const isTaxReady = computed(() => {
@@ -2778,6 +3037,14 @@ onMounted(() => {
   padding: 4px 0;
 }
 
+.mobile-top-bar__left {
+  flex: 1;
+}
+
+.mobile-top-bar__right {
+  flex-shrink: 0;
+}
+
 .query-form__actions {
   display: flex;
   margin-left: auto;
@@ -2789,10 +3056,139 @@ onMounted(() => {
   gap: 8px;
 }
 
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+
+.view-mode-switch__label {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
 .salary-table-wrapper {
   padding: 4px;
   background: var(--el-bg-color);
   border-radius: 8px;
+}
+
+.salary-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.salary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.salary-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.salary-card__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.salary-card__meta {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.salary-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.salary-card__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.salary-card__row strong {
+  color: var(--el-color-primary);
+}
+
+.salary-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.salary-view-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.view-dialog-mobile-detail-card {
+  padding: 8px 10px;
+  background-color: #f6f7fb;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+}
+
+.view-dialog-mobile-detail-card--summary {
+  background-color: #fff;
+}
+
+.view-dialog-mobile-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  gap: 10px;
+}
+
+.view-dialog-mobile-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.view-dialog-mobile-detail-qty {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.view-dialog-mobile-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.view-dialog-mobile-detail-grid-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 76px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.view-dialog-mobile-detail-grid-row .label {
+  color: #888;
+  white-space: nowrap;
+}
+
+.view-dialog-mobile-detail-grid-row .value {
+  color: #333;
+  text-align: right;
+  white-space: nowrap;
 }
 
 :deep(.salary-table-wrapper .el-table__header-wrapper th.el-table__cell .cell) {
@@ -2810,6 +3206,62 @@ onMounted(() => {
 :deep(th.salary-op-spacer.el-table__cell .cell),
 :deep(td.salary-op-spacer.el-table__cell .cell) {
   padding: 0 !important;
+}
+
+:deep(.salary-view-table .el-table__header-wrapper th.el-table__cell .cell) {
+  white-space: nowrap;
+}
+
+.salary-timeline-wrapper {
+  padding: 8px 0;
+}
+
+.salary-timeline-card {
+  padding: 12px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.salary-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.salary-timeline-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.salary-timeline-month {
+  font-size: 16px;
+  color: var(--el-text-color-primary);
+}
+
+.salary-timeline-count {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.salary-timeline-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.salary-timeline-meta {
+  display: flex;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 :deep(.salary-table-wrapper .el-table__fixed-right .cell) {
