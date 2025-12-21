@@ -1149,20 +1149,27 @@
         <div
           v-for="group in makeSalaryViewDetailGroupsByRow(viewDetailRow)"
           :key="group.title"
-          class="salary-view-detail-section"
+          class="detail-section"
         >
-          <div class="salary-view-detail-section__title">{{ group.title }}</div>
-          <div class="salary-view-detail-table">
-            <div
-              v-for="(pair, pairIndex) in chunkDetailPairs(group.items)"
-              :key="`${group.title}-${pairIndex}`"
-              class="salary-view-detail-table-row"
-              :class="{ 'salary-view-detail-table-row--first': pairIndex === 0 }"
-            >
-              <div class="cell cell--label">{{ pair.label1 }}</div>
-              <div class="cell cell--value">{{ pair.value1 }}</div>
-              <div class="cell cell--label">{{ pair.label2 }}</div>
-              <div class="cell cell--value">{{ pair.value2 }}</div>
+          <div class="detail-section-header">{{ group.title }}</div>
+          <div class="detail-grid">
+            <div v-for="item in group.items" :key="item.label" class="detail-cell">
+              <span class="detail-label">{{ item.label }}</span>
+              <span class="detail-value">{{ item.value }}</span>
+            </div>
+          </div>
+          <div
+            v-if="group.rowItems?.length"
+            class="detail-grid"
+            :class="{
+              'detail-grid--two': group.rowItems.length === 2,
+              'detail-grid--three': group.rowItems.length === 3,
+              'detail-grid--four': group.rowItems.length === 4
+            }"
+          >
+            <div v-for="item in group.rowItems" :key="item.label" class="detail-cell">
+              <span class="detail-label">{{ item.label }}</span>
+              <span class="detail-value">{{ item.value }}</span>
             </div>
           </div>
         </div>
@@ -1612,7 +1619,11 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
 
 type SalaryViewDetailItem = { label: string; value: string }
 type SalaryViewDetailPairRow = { label1: string; value1: string; label2: string; value2: string }
-type SalaryViewDetailGroup = { title: string; items: SalaryViewDetailItem[] }
+type SalaryViewDetailGroup = {
+  title: string
+  items: SalaryViewDetailItem[]
+  rowItems?: SalaryViewDetailItem[]
+}
 
 const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailItem[] => {
   const money = (val: unknown) => formatMoneyWithThousands(val as any)
@@ -1678,20 +1689,19 @@ const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailG
       items: pick(['迟到扣款', '新进及事假', '病假', '旷工扣款', '卫生费', '水费', '电费'])
     },
     {
-      title: '发放与税费',
-      items: pick([
-        '第一批工资',
-        '基本养老保险费',
-        '基本医疗保险费',
-        '失业保险费',
-        '第一次应发',
-        '第二批工资',
-        '个税',
-        '第二次应发',
-        '两次应发小计'
-      ])
+      title: '税费',
+      items: pick(['基本养老保险费', '基本医疗保险费', '失业保险费', '个税'])
+    },
+    {
+      title: '发放',
+      items: [],
+      rowItems: pick(['第一批工资', '第一次应发', '第二批工资', '第二次应发'])
+    },
+    {
+      title: '两次应发小计',
+      items: pick(['两次应发小计'])
     }
-  ].filter((g) => g.items.length > 0)
+  ].filter((g) => g.items.length > 0 || (g.rowItems && g.rowItems.length > 0))
 }
 
 const handleViewDetailDblClick = (row: SalaryDraftRow) => {
@@ -3468,79 +3478,106 @@ onMounted(() => {
 }
 
 .salary-view-detail {
-  padding: 6px 0;
+  padding: 2px 0;
 }
 
-.salary-view-detail-section {
-  padding: 12px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  border-radius: 12px;
-}
-
-.salary-view-detail-section + .salary-view-detail-section {
-  margin-top: 12px;
-}
-
-.salary-view-detail-section__title {
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #333;
-}
-
-.salary-view-detail-table {
+.detail-section {
   overflow: hidden;
-  border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
 }
 
-.salary-view-detail-table-row {
+.detail-section + .detail-section {
+  margin-top: 8px;
+}
+
+.detail-section-header {
+  padding: 6px 10px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #409eff;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.salary-view-detail .detail-grid {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 120px minmax(0, 1fr);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
 }
 
-.salary-view-detail-table-row:not(.salary-view-detail-table-row--first) .cell {
-  border-top: 1px solid var(--el-border-color);
+.salary-view-detail .detail-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail-table-row .cell {
-  padding: 10px 12px;
-  border-right: 1px solid var(--el-border-color);
+.salary-view-detail .detail-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail-table-row .cell:nth-child(2),
-.salary-view-detail-table-row .cell:nth-child(4) {
-  border-right: none;
+.salary-view-detail .detail-grid--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.salary-view-detail-table-row .cell--label {
-  color: #666;
+.salary-view-detail .detail-cell {
+  display: flex;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-right: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f0f2f5;
+  align-items: center;
+}
+
+.salary-view-detail .detail-label {
+  flex: 0 0 96px;
+  padding-right: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
   white-space: nowrap;
-  background: #f5f7fa;
 }
 
-.salary-view-detail-table-row .cell--value {
-  color: #333;
+.salary-view-detail .detail-label::after {
+  margin-left: 2px;
+  color: #c0c4cc;
+  content: ':';
+}
+
+.salary-view-detail .detail-value {
+  flex: 1;
+  font-size: 12px;
+  color: #303133;
   text-align: right;
   white-space: nowrap;
 }
 
 @media (width <= 768px) {
-  .salary-view-detail-table-row {
-    grid-template-columns: 120px minmax(0, 1fr);
+  .salary-view-detail .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .salary-view-detail-table-row .cell:nth-child(2) {
-    border-right: none;
+  .salary-view-detail .detail-grid--three {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 
-  .salary-view-detail-table-row .cell:nth-child(3) {
-    border-top: 1px solid var(--el-border-color);
+  .salary-view-detail .detail-grid--two {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 
-  .salary-view-detail-table-row .cell:nth-child(4) {
-    border-top: 1px solid var(--el-border-color);
-    border-right: none;
+  .salary-view-detail .detail-grid--four {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .salary-view-detail .detail-label {
+    flex-basis: 110px;
   }
 }
 
