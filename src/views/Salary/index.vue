@@ -46,19 +46,19 @@
     </el-form>
 
     <template v-if="tableData.length">
-      <div class="salary-table-wrapper" :class="{ 'salary-table-wrapper--mobile': isMobile }">
+      <div class="salary-table-wrapper">
         <el-table
           :data="tableData"
           border
           v-loading="loading"
           :height="isMobile ? undefined : 'calc(100vh - 320px)'"
           row-key="id"
-          class="salary-table"
+          style="width: 100%"
         >
-          <el-table-column type="index" label="序号" width="60" align="center" />
-          <el-table-column prop="month" label="月份" width="110" />
-          <el-table-column prop="employeeCount" label="人数" width="90" align="right" />
-          <el-table-column prop="overtimePayTotal" label="加班费合计" width="120" align="right">
+          <el-table-column type="index" label="序号" width="55" align="center" />
+          <el-table-column prop="month" label="月份" width="85" />
+          <el-table-column prop="employeeCount" label="人数" width="55" align="right" />
+          <el-table-column prop="overtimePayTotal" label="加班费合计" width="90" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.overtimePayTotal)
             }}</template>
@@ -66,7 +66,7 @@
           <el-table-column
             prop="doubleOvertimePayTotal"
             label="两倍加班费合计"
-            width="140"
+            width="110"
             align="right"
           >
             <template #default="{ row }">{{
@@ -76,14 +76,49 @@
           <el-table-column
             prop="tripleOvertimePayTotal"
             label="三倍加班费合计"
-            width="140"
+            width="110"
             align="right"
           >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.tripleOvertimePayTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="currentSalaryTotal" label="本期工资合计" width="130" align="right">
+          <el-table-column
+            prop="pensionInsuranceFeeTotal"
+            label="基本养老保险费合计"
+            width="140"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.pensionInsuranceFeeTotal)
+            }}</template>
+          </el-table-column>
+          <el-table-column
+            prop="medicalInsuranceFeeTotal"
+            label="基本医疗保险费合计"
+            width="140"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.medicalInsuranceFeeTotal)
+            }}</template>
+          </el-table-column>
+          <el-table-column
+            prop="unemploymentInsuranceFeeTotal"
+            label="失业保险费合计"
+            width="110"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.unemploymentInsuranceFeeTotal)
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="incomeTaxTotal" label="个税合计" width="80" align="right">
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.incomeTaxTotal)
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="currentSalaryTotal" label="本期工资合计" width="110" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.currentSalaryTotal)
             }}</template>
@@ -91,7 +126,7 @@
           <el-table-column
             prop="firstPayableTotal"
             label="第一次应发合计"
-            width="130"
+            width="120"
             align="right"
           >
             <template #default="{ row }">{{
@@ -101,18 +136,23 @@
           <el-table-column
             prop="secondPayableTotal"
             label="第二次应发合计"
-            width="130"
+            width="120"
             align="right"
           >
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.secondPayableTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="twoPayableTotal" label="两次应发合计" width="130" align="right">
+          <el-table-column prop="twoPayableTotal" label="两次应发合计" width="105" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.twoPayableTotal)
             }}</template>
           </el-table-column>
+          <el-table-column
+            min-width="1"
+            class-name="salary-op-spacer"
+            label-class-name="salary-op-spacer"
+          />
           <el-table-column label="操作" width="205" fixed="right" align="center">
             <template #default="{ row }">
               <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
@@ -985,6 +1025,10 @@ type SalarySummaryRow = {
   overtimePayTotal: number | null
   doubleOvertimePayTotal: number | null
   tripleOvertimePayTotal: number | null
+  pensionInsuranceFeeTotal?: number | null
+  medicalInsuranceFeeTotal?: number | null
+  unemploymentInsuranceFeeTotal?: number | null
+  incomeTaxTotal?: number | null
   currentSalaryTotal: number | null
   firstPayableTotal: number | null
   secondPayableTotal: number | null
@@ -2646,13 +2690,25 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-.salary-table-wrapper--mobile {
-  padding-bottom: 8px;
-  overflow-x: auto;
+:deep(.salary-table-wrapper .el-table__header-wrapper th.el-table__cell .cell) {
+  white-space: nowrap;
 }
 
-.salary-table-wrapper--mobile .salary-table {
-  min-width: 1400px;
+:deep(th.salary-op-spacer.el-table__cell),
+:deep(td.salary-op-spacer.el-table__cell) {
+  padding: 0 !important;
+  background: transparent !important;
+  border-right: none !important;
+  border-left: none !important;
+}
+
+:deep(th.salary-op-spacer.el-table__cell .cell),
+:deep(td.salary-op-spacer.el-table__cell .cell) {
+  padding: 0 !important;
+}
+
+:deep(.salary-table-wrapper .el-table__fixed-right .cell) {
+  white-space: nowrap;
 }
 
 .salary-add-body {

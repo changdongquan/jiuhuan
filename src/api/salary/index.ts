@@ -9,6 +9,10 @@ export interface SalarySummaryRow {
   overtimePayTotal: number | null
   doubleOvertimePayTotal: number | null
   tripleOvertimePayTotal: number | null
+  pensionInsuranceFeeTotal?: number | null
+  medicalInsuranceFeeTotal?: number | null
+  unemploymentInsuranceFeeTotal?: number | null
+  incomeTaxTotal?: number | null
   currentSalaryTotal: number | null
   firstPayableTotal: number | null
   secondPayableTotal: number | null

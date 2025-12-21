@@ -272,6 +272,10 @@ router.get('/list', async (req, res) => {
         h.加班费合计 as overtimePayTotal,
         h.两倍加班费合计 as doubleOvertimePayTotal,
         h.三倍加班费合计 as tripleOvertimePayTotal,
+        t.基本养老保险费合计 as pensionInsuranceFeeTotal,
+        t.基本医疗保险费合计 as medicalInsuranceFeeTotal,
+        t.失业保险费合计 as unemploymentInsuranceFeeTotal,
+        t.个税合计 as incomeTaxTotal,
         h.本期工资合计 as currentSalaryTotal,
         h.第一次应发合计 as firstPayableTotal,
         h.第二次应发合计 as secondPayableTotal,
@@ -279,6 +283,15 @@ router.get('/list', async (req, res) => {
         h.创建时间 as createdAt,
         h.更新时间 as updatedAt
       FROM ${TABLE_SUMMARY} h
+      OUTER APPLY (
+        SELECT
+          SUM(ISNULL(d.基本养老保险费, 0)) as 基本养老保险费合计,
+          SUM(ISNULL(d.基本医疗保险费, 0)) as 基本医疗保险费合计,
+          SUM(ISNULL(d.失业保险费, 0)) as 失业保险费合计,
+          SUM(ISNULL(d.个税, 0)) as 个税合计
+        FROM ${TABLE_DETAIL} d
+        WHERE d.汇总ID = h.ID
+      ) t
       ${whereClause}
       ORDER BY h.月份 DESC
       OFFSET ${offset} ROWS FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
