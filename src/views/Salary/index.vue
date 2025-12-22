@@ -3170,6 +3170,8 @@ const handleViewPayrollExport = (batch: 1 | 2) => {
 const handleSummaryEdit = async (row: SalarySummaryRow) => {
   try {
     addSaving.value = true
+    // 兼容：草稿明细不存“社保基数”，编辑时需要从参数表回填用于拆分校验与计算
+    await refreshSalaryBaseParams()
     const resp: any = await getSalaryDraftApi(row.id)
     const payload = resp?.data ?? resp
     const step = Number(payload?.step ?? 1)
@@ -3178,7 +3180,18 @@ const handleSummaryEdit = async (row: SalarySummaryRow) => {
     currentDraftId.value = row.id
     rangeForm.month = String(payload?.month || row.month || '')
     addRows.value = sortDraftRowsByEmployeeNumberAsc(
-      (Array.isArray(payload?.rows) ? payload.rows : []).map(normalizeDraftRow)
+      (Array.isArray(payload?.rows) ? payload.rows : []).map((r) => {
+        const normalized = normalizeDraftRow(r as SalaryDraftRow)
+        if (
+          (normalized.socialInsuranceBase === null ||
+            normalized.socialInsuranceBase === undefined) &&
+          normalized.employeeId
+        ) {
+          const fallback = socialInsuranceBaseByEmployeeId.value.get(Number(normalized.employeeId))
+          if (fallback !== undefined) normalized.socialInsuranceBase = fallback
+        }
+        return normalized
+      })
     )
     taxTemplateExported.value = step >= 2
     // 编辑/查看弹窗的显示顺序与新建一致：始终从步骤1开始展示
