@@ -199,8 +199,8 @@
               <el-button
                 type="primary"
                 size="small"
-                :loading="unlockingAttendanceId === row.id"
-                :disabled="Boolean(unlockingAttendanceId)"
+                :loading="unlockingSalaryId === row.id"
+                :disabled="Boolean(unlockingSalaryId)"
                 @click="handleSummaryEdit(row)"
               >
                 编辑
@@ -236,8 +236,8 @@
                   <el-button
                     type="primary"
                     size="small"
-                    :loading="unlockingAttendanceId === item.id"
-                    :disabled="Boolean(unlockingAttendanceId)"
+                    :loading="unlockingSalaryId === item.id"
+                    :disabled="Boolean(unlockingSalaryId)"
                     @click="handleSummaryEdit(item)"
                   >
                     编辑
@@ -639,7 +639,7 @@
 
       <template #footer>
         <el-button @click="cancelRange">取消</el-button>
-        <el-button type="primary" :loading="rangeSaving" @click="saveRange">确定</el-button>
+        <el-button type="primary" :loading="rangeConfirming" @click="confirmRange">确定</el-button>
       </template>
     </el-dialog>
 
@@ -1448,7 +1448,7 @@ const viewSummaryRow = ref<SalarySummaryRow | null>(null)
 const viewDetailVisible = ref(false)
 const viewDetailRow = ref<SalaryDraftRow | null>(null)
 const isViewSalaryInvalid = computed(() => viewSummaryRow.value?.status === '需重新生成')
-const unlockingAttendanceId = ref<number | null>(null)
+const unlockingSalaryId = ref<number | null>(null)
 const editingSummaryId = ref<number | null>(null)
 const currentDraftId = ref<number | null>(null)
 
@@ -1484,7 +1484,7 @@ const resetParamsDialog = () => {
 }
 
 const rangeDialogVisible = ref(false)
-const rangeSaving = ref(false)
+const rangeConfirming = ref(false)
 const rangeForm = reactive({
   month: ''
 })
@@ -2906,7 +2906,7 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
 }
 
 const resetRangeDialog = () => {
-  rangeSaving.value = false
+  rangeConfirming.value = false
   const { prev } = getAllowedRangeMonths()
   const preset = queryForm.month || ''
   rangeForm.month = preset && isAllowedRangeMonthString(preset) ? preset : formatMonth(prev)
@@ -2917,7 +2917,7 @@ const cancelRange = () => {
   rangeDialogVisible.value = false
 }
 
-const saveRange = async () => {
+const confirmRange = async () => {
   if (!rangeForm.month) {
     ElMessage.warning('请选择月份')
     return
@@ -2971,7 +2971,7 @@ const saveRange = async () => {
     return
   }
 
-  rangeSaving.value = true
+  rangeConfirming.value = true
   try {
     const employeeIds = getStep1EmployeeIds()
     if (!employeeIds.length) {
@@ -3017,7 +3017,7 @@ const saveRange = async () => {
     console.error('新建工资失败:', error)
     ElMessage.error(error?.message || '新建工资失败')
   } finally {
-    rangeSaving.value = false
+    rangeConfirming.value = false
   }
 }
 
@@ -3208,9 +3208,9 @@ const handleViewPayrollExport = (batch: 1 | 2) => {
   })()
 }
 
-const unlockAttendanceBeforeEdit = async (row: SalarySummaryRow) => {
+const unlockAttendanceForEdit = async (row: SalarySummaryRow) => {
   if (!row?.id) return false
-  if (unlockingAttendanceId.value) return false
+  if (unlockingSalaryId.value) return false
   if (String(row?.status || '') === '需重新生成') return true
 
   try {
@@ -3225,7 +3225,7 @@ const unlockAttendanceBeforeEdit = async (row: SalarySummaryRow) => {
       }
     })
 
-    unlockingAttendanceId.value = row.id
+    unlockingSalaryId.value = row.id
     await unlockSalaryAttendanceApi(row.id, String(value || '').trim())
     ElMessage.success('已解锁，该月工资已标记为需重新生成')
     row.status = '需重新生成'
@@ -3240,13 +3240,13 @@ const unlockAttendanceBeforeEdit = async (row: SalarySummaryRow) => {
     ElMessage.error(error?.message || '解锁失败')
     return false
   } finally {
-    unlockingAttendanceId.value = null
+    unlockingSalaryId.value = null
   }
 }
 
 const handleSummaryEdit = async (row: SalarySummaryRow) => {
   try {
-    const ok = await unlockAttendanceBeforeEdit(row)
+    const ok = await unlockAttendanceForEdit(row)
     if (!ok) return
 
     addSaving.value = true
