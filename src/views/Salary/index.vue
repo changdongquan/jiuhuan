@@ -1064,7 +1064,7 @@
             show-overflow-tooltip
             fixed="left"
           />
-          <el-table-column label="基本工资" width="80" align="right">
+          <el-table-column label="基本工资" width="80" align="right" fixed="left">
             <template #default="{ row }">{{ formatMoneyWithThousands(row.baseSalary) }}</template>
           </el-table-column>
           <el-table-column label="加班费" width="75" align="right">
