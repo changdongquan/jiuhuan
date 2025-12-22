@@ -1955,18 +1955,18 @@ const parseYmdToLocalDate = (val: string) => {
   return new Date(y, m - 1, d)
 }
 
-const getMonthEndDate = (month: string) => {
+const getMonthStartDate = (month: string) => {
   const match = /^(\d{4})-(\d{2})$/.exec(String(month || '').trim())
   if (!match) return null
   const y = Number(match[1])
   const m = Number(match[2])
   if (Number.isNaN(y) || Number.isNaN(m)) return null
-  return new Date(y, m, 0)
+  return new Date(y, m - 1, 1)
 }
 
 const computeSeniorityYearsByMonth = (entryDate: string, month: string) => {
   const entry = parseYmdToLocalDate(entryDate)
-  const asOf = getMonthEndDate(month)
+  const asOf = getMonthStartDate(month)
   if (!entry || !asOf) return 0
   if (asOf < entry) return 0
 
@@ -2890,9 +2890,9 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
 
 const resetRangeDialog = () => {
   rangeSaving.value = false
-  const { current } = getAllowedRangeMonths()
+  const { prev } = getAllowedRangeMonths()
   const preset = queryForm.month || ''
-  rangeForm.month = preset && isAllowedRangeMonthString(preset) ? preset : formatMonth(current)
+  rangeForm.month = preset && isAllowedRangeMonthString(preset) ? preset : formatMonth(prev)
 }
 
 const cancelRange = () => {

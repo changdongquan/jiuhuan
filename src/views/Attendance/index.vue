@@ -1037,8 +1037,9 @@ const loadList = async () => {
 }
 
 const handleCreate = () => {
-  const month = queryForm.month || formatMonth(new Date())
-  createForm.month = isAllowedCreateMonthString(month) ? month : formatMonth(new Date())
+  const { prev } = getAllowedCreateMonths()
+  const preset = queryForm.month || ''
+  createForm.month = preset && isAllowedCreateMonthString(preset) ? preset : formatMonth(prev)
   createDialogVisible.value = true
 }
 
