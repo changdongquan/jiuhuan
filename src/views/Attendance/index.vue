@@ -1053,6 +1053,13 @@ const handleEdit = async (row: AttendanceSummary) => {
     await handleView(row)
     return
   }
+  if (row?.isLocked) {
+    const salaryId = (row as any)?.lockedSalaryId
+    ElMessage.warning(
+      `该月份考勤已由工资锁定${salaryId ? `（工资ID：${salaryId}）` : ''}，请先在工资页解锁后再编辑`
+    )
+    return
+  }
   isViewMode.value = false
   dialogTitle.value = '考勤数据'
   currentId.value = row.id

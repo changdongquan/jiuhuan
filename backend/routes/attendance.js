@@ -5,6 +5,7 @@ const { query, getPool } = require('../database')
 
 const TABLE_SUMMARY = '考勤汇总'
 const TABLE_DETAIL = '考勤明细'
+const TABLE_LOCK = '工资_考勤锁定'
 
 const toNumber = (val) => {
   if (val === null || val === undefined || val === '') return 0
@@ -63,6 +64,30 @@ const isEditableMonthString = (month) => {
   return isSameMonth(selected, current) || isSameMonth(selected, prev)
 }
 
+const assertAttendanceNotLocked = async ({ month }) => {
+  if (!month) return
+  // 锁表不存在时视为未锁定（兼容旧库）
+  const exists = await query(`SELECT OBJECT_ID(N'${TABLE_LOCK}', N'U') as oid`)
+  const oid = exists?.[0]?.oid
+  if (!oid) return
+
+  const locked = await query(
+    `
+    SELECT TOP 1 工资汇总ID as salaryId
+    FROM ${TABLE_LOCK}
+    WHERE 月份 = @month AND 是否锁定 = 1
+  `,
+    { month }
+  )
+  if (locked.length) {
+    const salaryId = locked[0]?.salaryId
+    const suffix = salaryId ? `（工资ID：${salaryId}）` : ''
+    const err = new Error(`该月份考勤已由工资锁定${suffix}，请先在工资页解锁后再编辑`)
+    err.statusCode = 423
+    throw err
+  }
+}
+
 // 获取考勤列表
 router.get('/list', async (req, res) => {
   try {
@@ -85,29 +110,64 @@ router.get('/list', async (req, res) => {
     const total = countResult[0]?.total || 0
 
     const offset = (parseInt(page) - 1) * parseInt(pageSize)
+    const lockExists = await query(`SELECT OBJECT_ID(N'${TABLE_LOCK}', N'U') as oid`)
+    const hasLockTable = Boolean(lockExists?.[0]?.oid)
+
     const list = await query(
-      `
-      SELECT 
-        h.ID as id,
-        h.月份 as month,
-        h.人数 as employeeCount,
-        h.加班小计_普通 as overtimeNormalTotal,
-        h.加班小计_两倍 as overtimeDoubleTotal,
-        h.加班小计_三倍 as overtimeTripleTotal,
-        h.加班小计合计 as overtimeSubtotalTotal,
-        h.全勤人数 as fullAttendanceCount,
-        ISNULL((
-          SELECT SUM(ISNULL(d.迟到次数, 0)) 
-          FROM ${TABLE_DETAIL} d 
-          WHERE d.汇总ID = h.ID
-        ), 0) as lateCountTotal,
-        h.创建时间 as createdAt,
-        h.更新时间 as updatedAt
-      FROM ${TABLE_SUMMARY} h
-      ${whereClause}
-      ORDER BY h.月份 DESC
-      OFFSET ${offset} ROWS FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
-    `,
+      hasLockTable
+        ? `
+          SELECT 
+            h.ID as id,
+            h.月份 as month,
+            h.人数 as employeeCount,
+            h.加班小计_普通 as overtimeNormalTotal,
+            h.加班小计_两倍 as overtimeDoubleTotal,
+            h.加班小计_三倍 as overtimeTripleTotal,
+            h.加班小计合计 as overtimeSubtotalTotal,
+            h.全勤人数 as fullAttendanceCount,
+            ISNULL((
+              SELECT SUM(ISNULL(d.迟到次数, 0)) 
+              FROM ${TABLE_DETAIL} d 
+              WHERE d.汇总ID = h.ID
+            ), 0) as lateCountTotal,
+            CASE WHEN l.salaryId IS NULL THEN 0 ELSE 1 END as isLocked,
+            l.salaryId as lockedSalaryId,
+            h.创建时间 as createdAt,
+            h.更新时间 as updatedAt
+          FROM ${TABLE_SUMMARY} h
+          OUTER APPLY (
+            SELECT TOP 1 工资汇总ID as salaryId
+            FROM ${TABLE_LOCK}
+            WHERE 月份 = h.月份 AND 是否锁定 = 1
+          ) l
+          ${whereClause}
+          ORDER BY h.月份 DESC
+          OFFSET ${offset} ROWS FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
+        `
+        : `
+          SELECT 
+            h.ID as id,
+            h.月份 as month,
+            h.人数 as employeeCount,
+            h.加班小计_普通 as overtimeNormalTotal,
+            h.加班小计_两倍 as overtimeDoubleTotal,
+            h.加班小计_三倍 as overtimeTripleTotal,
+            h.加班小计合计 as overtimeSubtotalTotal,
+            h.全勤人数 as fullAttendanceCount,
+            ISNULL((
+              SELECT SUM(ISNULL(d.迟到次数, 0)) 
+              FROM ${TABLE_DETAIL} d 
+              WHERE d.汇总ID = h.ID
+            ), 0) as lateCountTotal,
+            CAST(0 as bit) as isLocked,
+            CAST(NULL as int) as lockedSalaryId,
+            h.创建时间 as createdAt,
+            h.更新时间 as updatedAt
+          FROM ${TABLE_SUMMARY} h
+          ${whereClause}
+          ORDER BY h.月份 DESC
+          OFFSET ${offset} ROWS FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
+        `,
       params
     )
 
@@ -134,22 +194,50 @@ router.get('/:id', async (req, res) => {
       return res.status(400).json({ code: 400, message: 'ID 无效' })
     }
 
+    const lockExists = await query(`SELECT OBJECT_ID(N'${TABLE_LOCK}', N'U') as oid`)
+    const hasLockTable = Boolean(lockExists?.[0]?.oid)
+
     const summary = await query(
-      `
-      SELECT 
-        ID as id,
-        月份 as month,
-        人数 as employeeCount,
-        加班小计_普通 as overtimeNormalTotal,
-        加班小计_两倍 as overtimeDoubleTotal,
-        加班小计_三倍 as overtimeTripleTotal,
-        加班小计合计 as overtimeSubtotalTotal,
-        全勤人数 as fullAttendanceCount,
-        创建时间 as createdAt,
-        更新时间 as updatedAt
-      FROM ${TABLE_SUMMARY}
-      WHERE ID = @id
-    `,
+      hasLockTable
+        ? `
+          SELECT 
+            h.ID as id,
+            h.月份 as month,
+            h.人数 as employeeCount,
+            h.加班小计_普通 as overtimeNormalTotal,
+            h.加班小计_两倍 as overtimeDoubleTotal,
+            h.加班小计_三倍 as overtimeTripleTotal,
+            h.加班小计合计 as overtimeSubtotalTotal,
+            h.全勤人数 as fullAttendanceCount,
+            CASE WHEN l.salaryId IS NULL THEN 0 ELSE 1 END as isLocked,
+            l.salaryId as lockedSalaryId,
+            h.创建时间 as createdAt,
+            h.更新时间 as updatedAt
+          FROM ${TABLE_SUMMARY} h
+          OUTER APPLY (
+            SELECT TOP 1 工资汇总ID as salaryId
+            FROM ${TABLE_LOCK}
+            WHERE 月份 = h.月份 AND 是否锁定 = 1
+          ) l
+          WHERE h.ID = @id
+        `
+        : `
+          SELECT 
+            ID as id,
+            月份 as month,
+            人数 as employeeCount,
+            加班小计_普通 as overtimeNormalTotal,
+            加班小计_两倍 as overtimeDoubleTotal,
+            加班小计_三倍 as overtimeTripleTotal,
+            加班小计合计 as overtimeSubtotalTotal,
+            全勤人数 as fullAttendanceCount,
+            CAST(0 as bit) as isLocked,
+            CAST(NULL as int) as lockedSalaryId,
+            创建时间 as createdAt,
+            更新时间 as updatedAt
+          FROM ${TABLE_SUMMARY}
+          WHERE ID = @id
+        `,
       { id }
     )
 
@@ -354,6 +442,7 @@ router.post('/', async (req, res) => {
     if (!isEditableMonthString(month)) {
       return res.status(403).json({ code: 403, message: '只能新增当月和上一个月的考勤记录' })
     }
+    await assertAttendanceNotLocked({ month })
     const existed = await query(`SELECT 1 FROM ${TABLE_SUMMARY} WHERE 月份 = @month`, { month })
     if (existed.length) {
       return res.status(400).json({ code: 400, message: '该月份考勤已存在' })
@@ -363,6 +452,9 @@ router.post('/', async (req, res) => {
     res.json({ code: 0, message: '创建成功', id })
   } catch (error) {
     console.error('创建考勤失败:', error)
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ code: error.statusCode, message: error.message })
+    }
     res.status(500).json({ code: 500, message: error.message || '创建考勤失败' })
   }
 })
@@ -376,6 +468,7 @@ router.put('/', async (req, res) => {
     if (!isEditableMonthString(month)) {
       return res.status(403).json({ code: 403, message: '只能编辑当月和上一个月的考勤记录' })
     }
+    await assertAttendanceNotLocked({ month })
 
     const existed = await query(`SELECT 1 FROM ${TABLE_SUMMARY} WHERE ID = @id`, { id })
     if (!existed.length) {
@@ -394,6 +487,9 @@ router.put('/', async (req, res) => {
     res.json({ code: 0, message: '更新成功' })
   } catch (error) {
     console.error('更新考勤失败:', error)
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ code: error.statusCode, message: error.message })
+    }
     res.status(500).json({ code: 500, message: error.message || '更新考勤失败' })
   }
 })

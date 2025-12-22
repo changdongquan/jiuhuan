@@ -3,6 +3,7 @@ const config = require('./config')
 
 const TABLE_SUMMARY = '考勤汇总'
 const TABLE_DETAIL = '考勤明细'
+const TABLE_LOCK = '工资_考勤锁定'
 
 async function ensureTables() {
   let pool = null
@@ -91,6 +92,32 @@ async function ensureTables() {
       `)
     } else {
       console.log(`表已存在，跳过创建：${TABLE_DETAIL}`)
+    }
+
+    const lockExists = await pool
+      .request()
+      .input('table', sql.NVarChar, TABLE_LOCK)
+      .query(`SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @table`)
+
+    if (lockExists.recordset.length === 0) {
+      console.log(`创建表：${TABLE_LOCK}`)
+      await pool.request().query(`
+        CREATE TABLE ${TABLE_LOCK} (
+          ID INT IDENTITY(1,1) PRIMARY KEY,
+          月份 NVARCHAR(7) NOT NULL UNIQUE,
+          工资汇总ID INT NOT NULL,
+          是否锁定 BIT NOT NULL DEFAULT 1,
+          锁定时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+          解锁时间 DATETIME2 NULL,
+          解锁原因 NVARCHAR(200) NULL
+        )
+      `)
+      console.log('创建索引：idx_工资_考勤锁定_月份')
+      await pool.request().query(`
+        CREATE INDEX idx_工资_考勤锁定_月份 ON ${TABLE_LOCK}(月份)
+      `)
+    } else {
+      console.log(`表已存在，跳过创建：${TABLE_LOCK}`)
     }
 
     console.log('\n✅ 表结构检查完成')

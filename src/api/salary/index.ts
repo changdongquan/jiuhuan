@@ -177,6 +177,14 @@ export const exportSalaryPayrollApi = (data: { id: number; batch: 1 | 2 }) => {
   })
 }
 
+export const unlockSalaryAttendanceApi = (id: number, reason: string) => {
+  return request({
+    url: `/api/salary/${id}/unlock-attendance`,
+    method: 'post',
+    data: { reason }
+  })
+}
+
 export const readSalaryIncomeTaxApi = (file: File) => {
   const formData = new FormData()
   formData.append('file', file)

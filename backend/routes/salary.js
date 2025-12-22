@@ -13,6 +13,8 @@ const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
 const TABLE_PENALTY = '工资_罚扣'
+const TABLE_ATTENDANCE_SUMMARY = '考勤汇总'
+const TABLE_ATTENDANCE_LOCK = '工资_考勤锁定'
 const TAX_IMPORT_SHEET_NAME = '正常工资薪金收入'
 const TAX_IMPORT_HEADERS = [
   '工号',
@@ -113,6 +115,53 @@ const parseDateOrNull = (val) => {
   if (!val) return null
   const d = new Date(val)
   return Number.isNaN(d.getTime()) ? null : d
+}
+
+const ensureAttendanceLockTable = async (transaction) => {
+  const req = new sql.Request(transaction)
+  await req.query(`
+    IF OBJECT_ID(N'${TABLE_ATTENDANCE_LOCK}', N'U') IS NULL
+    BEGIN
+      CREATE TABLE ${TABLE_ATTENDANCE_LOCK} (
+        ID INT IDENTITY(1,1) PRIMARY KEY,
+        月份 NVARCHAR(7) NOT NULL UNIQUE,
+        工资汇总ID INT NOT NULL,
+        是否锁定 BIT NOT NULL DEFAULT 1,
+        锁定时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        解锁时间 DATETIME2 NULL,
+        解锁原因 NVARCHAR(200) NULL
+      );
+      CREATE INDEX idx_工资_考勤锁定_月份 ON ${TABLE_ATTENDANCE_LOCK}(月份);
+    END
+  `)
+}
+
+const isSalaryIdExists = async (transaction, id) => {
+  const req = new sql.Request(transaction)
+  req.input('id', sql.Int, id)
+  const rows = await req.query(`
+    SELECT TOP 1 ID
+    FROM ${TABLE_SUMMARY}
+    WHERE ID = @id
+  `)
+  return rows.recordset.length > 0
+}
+
+const assertSalaryNotInvalid = async (summaryId) => {
+  const rows = await query(
+    `
+    SELECT TOP 1 状态 as status
+    FROM ${TABLE_SUMMARY}
+    WHERE ID = @id
+  `,
+    { id: summaryId }
+  )
+  if (!rows.length) throw new Error('工资汇总不存在')
+  if (rows[0]?.status === '需重新生成') {
+    const err = new Error('该月份工资已失效（需重新生成），请重新生成后再导出/代发')
+    err.statusCode = 409
+    throw err
+  }
 }
 
 const upsertDraftStep1 = async ({ month, employeeIds }) => {
@@ -645,21 +694,203 @@ router.put('/draft/:id/step2', async (req, res) => {
 
 // 草稿：step3 保存（确认页保存）
 router.put('/draft/:id/step3', async (req, res) => {
+  let transaction = null
   try {
     const id = parseInt(req.params.id)
     if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
-    await query(
-      `
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    await ensureAttendanceLockTable(transaction)
+
+    const existedReq = new sql.Request(transaction)
+    existedReq.input('id', sql.Int, id)
+    const existed = await existedReq.query(`
+      SELECT TOP 1 月份 as month, 状态 as status
+      FROM ${TABLE_SUMMARY}
+      WHERE ID = @id
+    `)
+    if (!existed.recordset.length) {
+      await transaction.rollback()
+      return res.status(404).json({ code: 404, message: '工资汇总不存在' })
+    }
+    if (existed.recordset[0]?.status === '已完成') {
+      await transaction.rollback()
+      return res.status(400).json({ code: 400, message: '该月份工资已完成，不能保存' })
+    }
+
+    const month = String(existed.recordset[0]?.month || '').trim()
+    if (!isValidMonth(month)) {
+      await transaction.rollback()
+      return res.status(400).json({ code: 400, message: '工资月份无效，无法锁定考勤' })
+    }
+
+    // 必须存在考勤汇总，才能锁定
+    const attReq = new sql.Request(transaction)
+    attReq.input('month', sql.NVarChar, month)
+    const att = await attReq.query(`
+      SELECT TOP 1 ID
+      FROM ${TABLE_ATTENDANCE_SUMMARY}
+      WHERE 月份 = @month
+    `)
+    if (!att.recordset.length) {
+      await transaction.rollback()
+      return res.status(400).json({ code: 400, message: '该月份考勤不存在，无法锁定' })
+    }
+
+    // 如果该月考勤已被其它工资锁定，拒绝
+    const lockCheckReq = new sql.Request(transaction)
+    lockCheckReq.input('month', sql.NVarChar, month)
+    lockCheckReq.input('salaryId', sql.Int, id)
+    const lockCheck = await lockCheckReq.query(`
+      SELECT TOP 1 工资汇总ID as salaryId
+      FROM ${TABLE_ATTENDANCE_LOCK}
+      WHERE 月份 = @month AND 是否锁定 = 1 AND 工资汇总ID <> @salaryId
+    `)
+    if (lockCheck.recordset.length) {
+      const otherSalaryId = lockCheck.recordset[0]?.salaryId
+      // 若锁定来源工资已被删除，则视为陈旧锁，允许覆盖
+      const otherExists = await isSalaryIdExists(transaction, Number(otherSalaryId))
+      if (otherExists) {
+        await transaction.rollback()
+        return res
+          .status(409)
+          .json({ code: 409, message: `该月份考勤已被工资锁定（工资ID：${otherSalaryId}）` })
+      }
+    }
+
+    // 保存 step3
+    const updateReq = new sql.Request(transaction)
+    updateReq.input('id', sql.Int, id)
+    await updateReq.query(`
       UPDATE ${TABLE_SUMMARY}
       SET 步骤 = 3, 状态 = N'步骤3已保存', 更新时间 = SYSDATETIME()
-      WHERE ID = @id AND 状态 <> N'已完成'
-    `,
-      { id }
-    )
+      WHERE ID = @id
+    `)
+
+    // 锁定考勤（月）
+    const lockReq = new sql.Request(transaction)
+    lockReq.input('month', sql.NVarChar, month)
+    lockReq.input('salaryId', sql.Int, id)
+    await lockReq.query(`
+      MERGE ${TABLE_ATTENDANCE_LOCK} AS t
+      USING (SELECT @month AS 月份) AS s
+      ON (t.月份 = s.月份)
+      WHEN MATCHED THEN
+        UPDATE SET
+          工资汇总ID = @salaryId,
+          是否锁定 = 1,
+          锁定时间 = SYSDATETIME(),
+          解锁时间 = NULL,
+          解锁原因 = NULL
+      WHEN NOT MATCHED THEN
+        INSERT (月份, 工资汇总ID, 是否锁定, 锁定时间)
+        VALUES (@month, @salaryId, 1, SYSDATETIME());
+    `)
+
+    // 若之前解锁导致工资处于“需重新生成”，此处重新保存后恢复为有效状态（状态已覆盖为步骤3已保存）
+    await transaction.commit()
     res.json({ code: 0, message: '保存成功' })
   } catch (error) {
+    if (transaction) await transaction.rollback()
     console.error('保存工资草稿(step3)失败:', error)
-    res.status(500).json({ code: 500, message: '保存失败' })
+    res
+      .status(error?.statusCode || 500)
+      .json({ code: error?.statusCode || 500, message: error.message || '保存失败' })
+  }
+})
+
+// 解锁考勤（并把工资标记为需重新生成/已失效）
+router.post('/:id/unlock-attendance', async (req, res) => {
+  let transaction = null
+  try {
+    const id = parseInt(req.params.id)
+    if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
+    const reason = String(req.body?.reason || '').trim()
+    if (!reason) return res.status(400).json({ code: 400, message: '请填写解锁原因' })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    await ensureAttendanceLockTable(transaction)
+
+    const existedReq = new sql.Request(transaction)
+    existedReq.input('id', sql.Int, id)
+    const existed = await existedReq.query(`
+      SELECT TOP 1 月份 as month
+      FROM ${TABLE_SUMMARY}
+      WHERE ID = @id
+    `)
+    if (!existed.recordset.length) {
+      await transaction.rollback()
+      return res.status(404).json({ code: 404, message: '工资汇总不存在' })
+    }
+    const month = String(existed.recordset[0]?.month || '').trim()
+    if (!isValidMonth(month)) {
+      await transaction.rollback()
+      return res.status(400).json({ code: 400, message: '工资月份无效，无法解锁考勤' })
+    }
+
+    const lockReq = new sql.Request(transaction)
+    lockReq.input('month', sql.NVarChar, month)
+    lockReq.input('salaryId', sql.Int, id)
+    lockReq.input('reason', sql.NVarChar, reason)
+    const lockUpdate = await lockReq.query(`
+      UPDATE ${TABLE_ATTENDANCE_LOCK}
+      SET 是否锁定 = 0, 解锁时间 = SYSDATETIME(), 解锁原因 = @reason
+      WHERE 月份 = @month AND 是否锁定 = 1 AND 工资汇总ID = @salaryId
+    `)
+    if (lockUpdate.rowsAffected?.[0] === 0) {
+      const lockedByOther = await lockReq.query(`
+        SELECT TOP 1 工资汇总ID as salaryId
+        FROM ${TABLE_ATTENDANCE_LOCK}
+        WHERE 月份 = @month AND 是否锁定 = 1
+      `)
+      if (lockedByOther.recordset.length) {
+        const otherId = lockedByOther.recordset[0]?.salaryId
+        const otherExists = await isSalaryIdExists(transaction, Number(otherId))
+        if (otherExists) {
+          await transaction.rollback()
+          return res
+            .status(409)
+            .json({ code: 409, message: `该月份考勤被其它工资锁定（工资ID：${otherId}）` })
+        }
+
+        // 锁定来源工资已删除：清理陈旧锁并解锁
+        await lockReq.query(`
+          UPDATE ${TABLE_ATTENDANCE_LOCK}
+          SET 是否锁定 = 0, 解锁时间 = SYSDATETIME(), 解锁原因 = @reason
+          WHERE 月份 = @month AND 是否锁定 = 1
+        `)
+      }
+    }
+
+    const updateSalaryReq = new sql.Request(transaction)
+    updateSalaryReq.input('id', sql.Int, id)
+    updateSalaryReq.input('reason', sql.NVarChar, reason)
+    await updateSalaryReq.query(`
+      UPDATE ${TABLE_SUMMARY}
+      SET 状态 = N'需重新生成',
+          步骤 = 1,
+          备注 = CASE
+            WHEN 备注 IS NULL OR LTRIM(RTRIM(备注)) = N'' THEN CONCAT(N'解锁考勤：', @reason)
+            ELSE CONCAT(备注, N'；解锁考勤：', @reason)
+          END,
+          更新时间 = SYSDATETIME()
+      WHERE ID = @id
+    `)
+
+    await transaction.commit()
+    res.json({ code: 0, message: '解锁成功' })
+  } catch (error) {
+    if (transaction) await transaction.rollback()
+    console.error('解锁考勤失败:', error)
+    res
+      .status(error?.statusCode || 500)
+      .json({ code: error?.statusCode || 500, message: error.message || '解锁失败' })
   }
 })
 
@@ -690,14 +921,50 @@ router.put('/complete/:id', async (req, res) => {
 
 // 删除（删除汇总，级联删除明细）
 router.delete('/:id', async (req, res) => {
+  let transaction = null
   try {
     const id = parseInt(req.params.id)
     if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
-    await query(`DELETE FROM ${TABLE_SUMMARY} WHERE ID = @id`, { id })
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    // 如果锁表不存在，忽略（兼容旧库）
+    await ensureAttendanceLockTable(transaction)
+
+    const existedReq = new sql.Request(transaction)
+    existedReq.input('id', sql.Int, id)
+    const existed = await existedReq.query(`
+      SELECT TOP 1 月份 as month
+      FROM ${TABLE_SUMMARY}
+      WHERE ID = @id
+    `)
+    const month = String(existed.recordset?.[0]?.month || '').trim()
+
+    const delReq = new sql.Request(transaction)
+    delReq.input('id', sql.Int, id)
+    await delReq.query(`DELETE FROM ${TABLE_SUMMARY} WHERE ID = @id`)
+
+    // 删除工资时：若该月考勤锁定来源就是本工资，则自动解锁，避免留下陈旧锁
+    if (isValidMonth(month)) {
+      const lockReq = new sql.Request(transaction)
+      lockReq.input('month', sql.NVarChar, month)
+      lockReq.input('salaryId', sql.Int, id)
+      lockReq.input('reason', sql.NVarChar, '工资删除自动解锁')
+      await lockReq.query(`
+        UPDATE ${TABLE_ATTENDANCE_LOCK}
+        SET 是否锁定 = 0, 解锁时间 = SYSDATETIME(), 解锁原因 = @reason
+        WHERE 月份 = @month AND 是否锁定 = 1 AND 工资汇总ID = @salaryId
+      `)
+    }
+
+    await transaction.commit()
     res.json({ code: 0, message: '删除成功' })
   } catch (error) {
+    if (transaction) await transaction.rollback()
     console.error('删除工资失败:', error)
-    res.status(500).json({ code: 500, message: '删除失败' })
+    res.status(500).json({ code: 500, message: error.message || '删除失败' })
   }
 })
 
@@ -1062,6 +1329,8 @@ router.post('/payroll/export', async (req, res) => {
       return res.status(400).json({ code: 400, message: 'batch 必须是 1 或 2' })
     }
 
+    await assertSalaryNotInvalid(summaryId)
+
     const summary = await query(
       `
       SELECT TOP 1 月份 as month
@@ -1156,7 +1425,9 @@ router.post('/payroll/export', async (req, res) => {
     res.end()
   } catch (error) {
     console.error('生成工资代发文件失败:', error)
-    res.status(500).json({ code: 500, message: error.message || '生成工资代发文件失败' })
+    res
+      .status(error?.statusCode || 500)
+      .json({ code: error?.statusCode || 500, message: error.message || '生成工资代发文件失败' })
   }
 })
 

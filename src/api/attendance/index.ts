@@ -37,6 +37,8 @@ export interface AttendanceSummary {
   id: number
   month: string // YYYY-MM
   employeeCount: number
+  isLocked?: boolean | number
+  lockedSalaryId?: number | null
   overtimeNormalTotal?: number
   overtimeDoubleTotal?: number
   overtimeTripleTotal?: number

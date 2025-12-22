@@ -196,9 +196,15 @@
           </el-table-column>
           <el-table-column label="操作" width="205" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button type="primary" size="small" @click="handleSummaryEdit(row)"
-                >编辑</el-button
+              <el-button
+                type="primary"
+                size="small"
+                :loading="unlockingAttendanceId === row.id"
+                :disabled="Boolean(unlockingAttendanceId)"
+                @click="handleSummaryEdit(row)"
               >
+                编辑
+              </el-button>
               <el-button type="success" size="small" @click="handleSummaryView(row)"
                 >查看</el-button
               >
@@ -227,9 +233,15 @@
                   >
                 </div>
                 <div class="salary-timeline-actions">
-                  <el-button type="primary" size="small" @click="handleSummaryEdit(item)"
-                    >编辑</el-button
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :loading="unlockingAttendanceId === item.id"
+                    :disabled="Boolean(unlockingAttendanceId)"
+                    @click="handleSummaryEdit(item)"
                   >
+                    编辑
+                  </el-button>
                   <el-button type="success" size="small" @click="handleSummaryView(item)"
                     >查看</el-button
                   >
@@ -627,7 +639,7 @@
 
       <template #footer>
         <el-button @click="cancelRange">取消</el-button>
-        <el-button type="primary" :loading="rangeSaving" @click="saveRange">保存</el-button>
+        <el-button type="primary" :loading="rangeSaving" @click="saveRange">确定</el-button>
       </template>
     </el-dialog>
 
@@ -957,7 +969,7 @@
           <el-button
             v-else
             type="success"
-            :disabled="!addStepSaved[2]"
+            :disabled="!currentDraftId || addCompleting"
             :loading="addCompleting"
             @click="completeAdd"
           >
@@ -1204,6 +1216,7 @@
           <el-button
             type="primary"
             :loading="viewPayrollExporting === 1"
+            :disabled="isViewSalaryInvalid"
             @click="handleViewPayrollExport(1)"
           >
             第一次代发
@@ -1211,6 +1224,7 @@
           <el-button
             type="primary"
             :loading="viewPayrollExporting === 2"
+            :disabled="isViewSalaryInvalid"
             @click="handleViewPayrollExport(2)"
           >
             第二次代发
@@ -1282,7 +1296,8 @@ import {
   readSalaryIncomeTaxApi,
   saveSalaryDraftStep1Api,
   saveSalaryDraftStep2Api,
-  saveSalaryDraftStep3Api
+  saveSalaryDraftStep3Api,
+  unlockSalaryAttendanceApi
 } from '@/api/salary'
 import {
   getAttendanceDetailApi,
@@ -1432,6 +1447,8 @@ const viewSummaryVisible = ref(false)
 const viewSummaryRow = ref<SalarySummaryRow | null>(null)
 const viewDetailVisible = ref(false)
 const viewDetailRow = ref<SalaryDraftRow | null>(null)
+const isViewSalaryInvalid = computed(() => viewSummaryRow.value?.status === '需重新生成')
+const unlockingAttendanceId = ref<number | null>(null)
 const editingSummaryId = ref<number | null>(null)
 const currentDraftId = ref<number | null>(null)
 
@@ -3037,7 +3054,15 @@ const saveAddStep = async () => {
       addRows.value = rows
       await saveSalaryDraftStep2Api(currentDraftId.value, { rows })
       await saveSalaryDraftStep3Api(currentDraftId.value)
-      addStepSaved[2] = true
+      // 以服务端 step 为准，避免本地状态不同步导致“完成”按钮不可用
+      try {
+        const checkResp: any = await getSalaryDraftApi(currentDraftId.value)
+        const checkPayload = checkResp?.data ?? checkResp ?? {}
+        const step = Number(checkPayload?.step ?? 3)
+        addStepSaved[2] = step >= 3
+      } catch {
+        addStepSaved[2] = true
+      }
       ElMessage.success('步骤3已保存')
     } catch (error: any) {
       console.error('保存步骤3失败:', error)
@@ -3096,14 +3121,26 @@ const goPrevStep = () => {
 }
 
 const completeAdd = async () => {
-  if (!addStepSaved[2]) {
-    ElMessage.warning('请先保存步骤3')
-    return
-  }
-
   addCompleting.value = true
   try {
     if (!currentDraftId.value) throw new Error('草稿ID不存在')
+
+    if (!addStepSaved[2]) {
+      try {
+        const checkResp: any = await getSalaryDraftApi(currentDraftId.value)
+        const checkPayload = checkResp?.data ?? checkResp ?? {}
+        const step = Number(checkPayload?.step ?? 0)
+        addStepSaved[2] = step >= 3
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!addStepSaved[2]) {
+      ElMessage.warning('请先保存步骤3')
+      return
+    }
+
     await completeSalaryApi(currentDraftId.value)
     ElMessage.success('已完成')
     addDialogVisible.value = false
@@ -3139,6 +3176,10 @@ const viewPayrollExporting = ref<0 | 1 | 2>(0)
 const handleViewPayrollExport = (batch: 1 | 2) => {
   void (async () => {
     if (!viewSummaryRow.value) return
+    if (isViewSalaryInvalid.value) {
+      ElMessage.warning('该月份工资已失效（需重新生成），请重新生成后再代发')
+      return
+    }
     if (viewPayrollExporting.value) return
 
     viewPayrollExporting.value = batch
@@ -3167,8 +3208,47 @@ const handleViewPayrollExport = (batch: 1 | 2) => {
   })()
 }
 
+const unlockAttendanceBeforeEdit = async (row: SalarySummaryRow) => {
+  if (!row?.id) return false
+  if (unlockingAttendanceId.value) return false
+  if (String(row?.status || '') === '需重新生成') return true
+
+  try {
+    const { value } = await ElMessageBox.prompt('请输入解锁原因', '解锁', {
+      confirmButtonText: '确定解锁',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '例如：考勤数据需更正',
+      inputValidator: (val) => {
+        if (!String(val || '').trim()) return '解锁原因不能为空'
+        return true
+      }
+    })
+
+    unlockingAttendanceId.value = row.id
+    await unlockSalaryAttendanceApi(row.id, String(value || '').trim())
+    ElMessage.success('已解锁，该月工资已标记为需重新生成')
+    row.status = '需重新生成'
+    if (viewSummaryRow.value?.id === row.id) {
+      viewSummaryRow.value = { ...viewSummaryRow.value, status: '需重新生成' }
+    }
+    await loadList()
+    return true
+  } catch (error: any) {
+    if (error === 'cancel' || error?.message === 'cancel') return false
+    console.error('解锁失败:', error)
+    ElMessage.error(error?.message || '解锁失败')
+    return false
+  } finally {
+    unlockingAttendanceId.value = null
+  }
+}
+
 const handleSummaryEdit = async (row: SalarySummaryRow) => {
   try {
+    const ok = await unlockAttendanceBeforeEdit(row)
+    if (!ok) return
+
     addSaving.value = true
     // 兼容：草稿明细不存“社保基数”，编辑时需要从参数表回填用于拆分校验与计算
     await refreshSalaryBaseParams()
