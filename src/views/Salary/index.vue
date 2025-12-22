@@ -66,8 +66,8 @@
               <strong>{{ formatMoneyWithThousands(item.currentSalaryTotal) }}</strong>
             </div>
             <div class="salary-card__row">
-              <span>两次应发小计</span>
-              <strong>{{ formatMoneyWithThousands(item.twoPayableTotal) }}</strong>
+              <span>两次实发小计</span>
+              <strong>{{ formatMoneyWithThousands(item.twoActualTotal) }}</strong>
             </div>
             <div class="salary-card__row">
               <span>加班费合计</span>
@@ -170,33 +170,28 @@
             }}</template>
           </el-table-column>
           <el-table-column
-            prop="firstPayableTotal"
-            label="第一次应发合计"
+            prop="firstActualTotal"
+            label="第一批实发合计"
             min-width="120"
             align="right"
           >
             <template #default="{ row }">{{
-              formatMoneyWithThousands(row.firstPayableTotal)
+              formatMoneyWithThousands(row.firstActualTotal)
             }}</template>
           </el-table-column>
           <el-table-column
-            prop="secondPayableTotal"
-            label="第二次应发合计"
+            prop="secondActualTotal"
+            label="第二批实发合计"
             min-width="120"
             align="right"
           >
             <template #default="{ row }">{{
-              formatMoneyWithThousands(row.secondPayableTotal)
+              formatMoneyWithThousands(row.secondActualTotal)
             }}</template>
           </el-table-column>
-          <el-table-column
-            prop="twoPayableTotal"
-            label="两次应发小计"
-            min-width="105"
-            align="right"
-          >
+          <el-table-column prop="twoActualTotal" label="两次实发小计" min-width="105" align="right">
             <template #default="{ row }">{{
-              formatMoneyWithThousands(row.twoPayableTotal)
+              formatMoneyWithThousands(row.twoActualTotal)
             }}</template>
           </el-table-column>
           <el-table-column label="操作" width="205" fixed="right" align="center">
@@ -245,7 +240,7 @@
               </div>
               <div class="salary-timeline-meta">
                 <span>本期工资合计：{{ formatMoneyWithThousands(item.currentSalaryTotal) }}</span>
-                <span>两次应发小计：{{ formatMoneyWithThousands(item.twoPayableTotal) }}</span>
+                <span>两次实发小计：{{ formatMoneyWithThousands(item.twoActualTotal) }}</span>
                 <span>加班费合计：{{ formatMoneyWithThousands(item.overtimePayTotal) }}</span>
               </div>
             </div>
@@ -692,7 +687,7 @@
                 show-overflow-tooltip
                 fixed="left"
               />
-              <el-table-column label="基本工资" width="108" align="right">
+              <el-table-column label="基本工资" width="108" align="right" fixed="left">
                 <template #default="{ row }">
                   {{ formatMoneyWithThousands(row.baseSalary) }}
                 </template>
@@ -788,10 +783,22 @@
             show-summary
             :summary-method="getStep2Summary"
           >
-            <el-table-column type="index" label="序号" width="55" align="center" />
-            <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
-            <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
-            <el-table-column prop="total" label="本期工资" width="100" align="right">
+            <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+            <el-table-column
+              prop="employeeName"
+              label="姓名"
+              width="85"
+              show-overflow-tooltip
+              fixed="left"
+            />
+            <el-table-column
+              prop="employeeNumber"
+              label="工号"
+              width="55"
+              show-overflow-tooltip
+              fixed="left"
+            />
+            <el-table-column prop="total" label="本期工资" width="100" align="right" fixed="left">
               <template #default="{ row }">{{
                 formatMoneyWithThousands(computeRowTotal(row))
               }}</template>
@@ -832,7 +839,7 @@
                 formatMoneyWithThousands(row.unemploymentInsuranceFee)
               }}</template>
             </el-table-column>
-            <el-table-column label="第一次应发" width="110" align="right">
+            <el-table-column label="第一批实发" width="110" align="right">
               <template #default="{ row }">{{
                 formatMoneyWithThousands(computeFirstActualPay(row))
               }}</template>
@@ -857,10 +864,22 @@
             show-summary
             :summary-method="getStep3Summary"
           >
-            <el-table-column type="index" label="序号" width="55" align="center" />
-            <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
-            <el-table-column prop="employeeNumber" label="工号" width="55" show-overflow-tooltip />
-            <el-table-column prop="total" label="本期工资" width="100" align="right">
+            <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+            <el-table-column
+              prop="employeeName"
+              label="姓名"
+              width="85"
+              show-overflow-tooltip
+              fixed="left"
+            />
+            <el-table-column
+              prop="employeeNumber"
+              label="工号"
+              width="55"
+              show-overflow-tooltip
+              fixed="left"
+            />
+            <el-table-column prop="total" label="本期工资" width="100" align="right" fixed="left">
               <template #default="{ row }">{{
                 formatMoneyWithThousands(computeRowTotal(row))
               }}</template>
@@ -875,7 +894,7 @@
                 formatMoneyWithThousandsDashZero(row.incomeTax)
               }}</template>
             </el-table-column>
-            <el-table-column label="第二次应发" width="110" align="right">
+            <el-table-column label="第二批实发" width="110" align="right">
               <template #default="{ row }">
                 <span v-if="row.incomeTax === null || row.incomeTax === undefined">-</span>
                 <span v-else>{{ formatMoneyWithThousands(computeSecondActualPay(row)) }}</span>
@@ -936,7 +955,7 @@
     <el-dialog
       v-model="viewSummaryVisible"
       :title="`工资汇总 - ${viewSummaryRow?.month || ''}（人数：${formatCount(viewSummaryRow?.employeeCount)}）`"
-      :width="isMobile ? '100%' : '1600px'"
+      :width="isMobile ? '100%' : 'min(1600px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
     >
@@ -1133,7 +1152,7 @@
               formatMoneyWithThousands(row.unemploymentInsuranceFee)
             }}</template>
           </el-table-column>
-          <el-table-column label="第一次应发" width="80" align="right">
+          <el-table-column label="第一批实发" width="80" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(computeFirstActualPay(row))
             }}</template>
@@ -1146,12 +1165,12 @@
           <el-table-column label="个税" width="65" align="right">
             <template #default="{ row }">{{ formatMoneyWithThousands(row.incomeTax) }}</template>
           </el-table-column>
-          <el-table-column label="第二次应发" width="80" align="right">
+          <el-table-column label="第二批实发" width="80" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(computeSecondActualPay(row))
             }}</template>
           </el-table-column>
-          <el-table-column label="两次应发小计" width="95" align="right">
+          <el-table-column label="两次实发小计" width="95" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(computeFirstActualPay(row) + computeSecondActualPay(row))
             }}</template>
@@ -1182,7 +1201,7 @@
     <el-dialog
       v-model="viewDetailVisible"
       :title="`工资明细 - ${viewSummaryRow?.month || ''} - ${viewDetailRow?.employeeName || ''}（工号：${viewDetailRow?.employeeNumber || ''}）`"
-      :width="isMobile ? '100%' : '900px'"
+      :width="isMobile ? '100%' : 'min(900px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       @closed="handleViewDetailClosed"
@@ -1309,9 +1328,9 @@ type SalarySummaryRow = {
   unemploymentInsuranceFeeTotal?: number | null
   incomeTaxTotal?: number | null
   currentSalaryTotal: number | null
-  firstPayableTotal: number | null
-  secondPayableTotal: number | null
-  twoPayableTotal: number | null
+  firstActualTotal: number | null
+  secondActualTotal: number | null
+  twoActualTotal: number | null
   createdAt?: string
   updatedAt?: string
   rows?: SalaryDraftRow[]
@@ -1494,6 +1513,21 @@ const toNumberOrNull = (val: unknown) => {
   return Number.isNaN(num) ? null : num
 }
 
+const normalizeIncomeTax = (val: unknown) => {
+  const num = toNumberOrNull(val)
+  if (num === null) return null
+  if (num === 0) return 0
+  const rounded = Math.round(num * 100) / 100
+  return rounded === 0 ? 0 : -Math.abs(rounded)
+}
+
+const normalizeDraftRow = (row: SalaryDraftRow): SalaryDraftRow => {
+  return {
+    ...row,
+    incomeTax: normalizeIncomeTax(row.incomeTax)
+  }
+}
+
 const sortDraftRowsByEmployeeNumberAsc = (rows: SalaryDraftRow[]) => {
   const getKey = (row: SalaryDraftRow) => String(row.employeeNumber ?? '').trim()
   const toIntOrNull = (text: string) => {
@@ -1573,7 +1607,7 @@ const getStep2Summary = ({ columns, data }: ElTableSummaryParam<SalaryDraftRow>)
     基本养老保险费: sumBy(data, (r) => toNumberOrNull(r.pensionInsuranceFee)),
     基本医疗保险费: sumBy(data, (r) => toNumberOrNull(r.medicalInsuranceFee)),
     失业保险费: sumBy(data, (r) => toNumberOrNull(r.unemploymentInsuranceFee)),
-    第一次应发: sumBy(data, (r) => computeFirstActualPay(r)),
+    第一批实发: sumBy(data, (r) => computeFirstActualPay(r)),
     第二批工资: sumBy(data, (r) => getRowPaySplit(r).second ?? 0)
   }
 
@@ -1597,7 +1631,7 @@ const getStep3Summary = ({ columns, data }: ElTableSummaryParam<SalaryDraftRow>)
     本期工资: sumBy(data, (r) => computeRowTotal(r) ?? 0),
     第二批工资: sumBy(data, (r) => getRowPaySplit(r).second ?? 0),
     个税: sumBy(data, (r) => toNumberOrNull(r.incomeTax)),
-    第二次应发: sumBy(data, (r) =>
+    第二批实发: sumBy(data, (r) =>
       r.incomeTax === null || r.incomeTax === undefined ? 0 : computeSecondActualPay(r)
     )
   }
@@ -1639,11 +1673,11 @@ const getViewSummaryTableSummary = ({ columns, data }: ElTableSummaryParam<Salar
     基本养老保险费: sumBy(data, (r) => toNumberOrNull(r.pensionInsuranceFee)),
     基本医疗保险费: sumBy(data, (r) => toNumberOrNull(r.medicalInsuranceFee)),
     失业保险费: sumBy(data, (r) => toNumberOrNull(r.unemploymentInsuranceFee)),
-    第一次应发: sumBy(data, (r) => computeFirstActualPay(r)),
+    第一批实发: sumBy(data, (r) => computeFirstActualPay(r)),
     第二批工资: sumBy(data, (r) => getRowPaySplit(r).second ?? 0),
     个税: sumBy(data, (r) => toNumberOrNull(r.incomeTax)),
-    第二次应发: sumBy(data, (r) => computeSecondActualPay(r)),
-    两次应发小计: sumBy(data, (r) => computeFirstActualPay(r) + computeSecondActualPay(r))
+    第二批实发: sumBy(data, (r) => computeSecondActualPay(r)),
+    两次实发小计: sumBy(data, (r) => computeFirstActualPay(r) + computeSecondActualPay(r))
   }
 
   columns.forEach((col, index) => {
@@ -1695,11 +1729,11 @@ const makeSalaryViewDetailItemsByRow = (row: SalaryDraftRow): SalaryViewDetailIt
     { label: '基本养老保险费', value: money(row.pensionInsuranceFee) },
     { label: '基本医疗保险费', value: money(row.medicalInsuranceFee) },
     { label: '失业保险费', value: money(row.unemploymentInsuranceFee) },
-    { label: '第一次应发', value: money(firstActual) },
+    { label: '第一批实发', value: money(firstActual) },
     { label: '第二批工资', value: money(split.second) },
     { label: '个税', value: money(row.incomeTax) },
-    { label: '第二次应发', value: money(secondActual) },
-    { label: '两次应发小计', value: money(firstActual + secondActual) }
+    { label: '第二批实发', value: money(secondActual) },
+    { label: '两次实发小计', value: money(firstActual + secondActual) }
   ].map((item) => ({
     label: item.label,
     value: item.value === '' ? '-' : item.value
@@ -1736,11 +1770,11 @@ const makeSalaryViewDetailGroupsByRow = (row: SalaryDraftRow): SalaryViewDetailG
     {
       title: '发放',
       items: [],
-      rowItems: pick(['第一批工资', '第一次应发', '第二批工资', '第二次应发'])
+      rowItems: pick(['第一批工资', '第一批实发', '第二批工资', '第二批实发'])
     },
     {
-      title: '两次应发小计',
-      items: pick(['两次应发小计'])
+      title: '两次实发小计',
+      items: pick(['两次实发小计'])
     }
   ].filter((g) => g.items.length > 0 || (g.rowItems && g.rowItems.length > 0))
 }
@@ -1780,11 +1814,11 @@ const makeSalaryViewDetailSummaryGroups = (rows: SalaryDraftRow[]): SalaryViewDe
     { label: '基本养老保险费', value: money(sum((r) => toNumberOrNull(r.pensionInsuranceFee))) },
     { label: '基本医疗保险费', value: money(sum((r) => toNumberOrNull(r.medicalInsuranceFee))) },
     { label: '失业保险费', value: money(sum((r) => toNumberOrNull(r.unemploymentInsuranceFee))) },
-    { label: '第一次应发', value: money(firstActual) },
+    { label: '第一批实发', value: money(firstActual) },
     { label: '第二批工资', value: money(splitSecond) },
     { label: '个税', value: money(sum((r) => toNumberOrNull(r.incomeTax))) },
-    { label: '第二次应发', value: money(secondActual) },
-    { label: '两次应发小计', value: money(twoActual) }
+    { label: '第二批实发', value: money(secondActual) },
+    { label: '两次实发小计', value: money(twoActual) }
   ].map((item) => ({
     label: item.label,
     value: item.value === '' ? '-' : item.value
@@ -1815,9 +1849,9 @@ const makeSalaryViewDetailSummaryGroups = (rows: SalaryDraftRow[]): SalaryViewDe
     {
       title: '发放',
       items: [],
-      rowItems: pick(['第一批工资', '第一次应发', '第二批工资', '第二次应发'])
+      rowItems: pick(['第一批工资', '第一批实发', '第二批工资', '第二批实发'])
     },
-    { title: '两次应发小计', items: pick(['两次应发小计']) }
+    { title: '两次实发小计', items: pick(['两次实发小计']) }
   ].filter((g) => g.items.length > 0 || (g.rowItems && g.rowItems.length > 0))
 }
 
@@ -2080,8 +2114,8 @@ const computeFirstActualPay = (row: SalaryDraftRow) => {
 const computeSecondActualPay = (row: SalaryDraftRow) => {
   const split = getRowPaySplit(row)
   const second = toNumberOrNull(split.second) ?? 0
-  const incomeTax = toNumberOrNull(row.incomeTax) ?? 0
-  const actual = second - incomeTax
+  const incomeTax = normalizeIncomeTax(row.incomeTax) ?? 0
+  const actual = second + incomeTax
   return Math.max(0, Math.round(actual * 100) / 100)
 }
 
@@ -2292,7 +2326,7 @@ const handleTaxFileChange = (event: Event) => {
           continue
         }
 
-        row.incomeTax = item.incomeTax ?? null
+        row.incomeTax = normalizeIncomeTax(item.incomeTax)
         matched += 1
       }
 
@@ -3042,7 +3076,10 @@ const handleSummaryView = async (row: SalarySummaryRow) => {
     const resp: any = await getSalaryDraftApi(row.id)
     const payload = resp?.data ?? resp
     const rows = Array.isArray(payload?.rows) ? payload.rows : []
-    viewSummaryRow.value = { ...payload, rows: sortDraftRowsByEmployeeNumberAsc(rows) }
+    viewSummaryRow.value = {
+      ...payload,
+      rows: sortDraftRowsByEmployeeNumberAsc(rows.map(normalizeDraftRow))
+    }
     viewSummaryVisible.value = true
   } catch (error) {
     console.error('加载工资汇总失败:', error)
@@ -3096,7 +3133,7 @@ const handleSummaryEdit = async (row: SalarySummaryRow) => {
     currentDraftId.value = row.id
     rangeForm.month = String(payload?.month || row.month || '')
     addRows.value = sortDraftRowsByEmployeeNumberAsc(
-      Array.isArray(payload?.rows) ? payload.rows : []
+      (Array.isArray(payload?.rows) ? payload.rows : []).map(normalizeDraftRow)
     )
     taxTemplateExported.value = step >= 2
     // 编辑/查看弹窗的显示顺序与新建一致：始终从步骤1开始展示

@@ -545,7 +545,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '100%' : '1500px'"
+      :width="isMobile ? '100%' : 'min(1500px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="so-dialog"
@@ -912,7 +912,7 @@
       v-if="!isMobile"
       v-model="attachmentDialogVisible"
       :title="attachmentDialogTitle"
-      width="680px"
+      width="min(680px, calc(100vw - 48px))"
       :close-on-click-modal="false"
     >
       <div v-if="attachmentOrderNo && attachmentDetailId" class="attachment-dialog-body">
@@ -971,7 +971,7 @@
     <el-dialog
       v-model="newProductDialogVisible"
       title="选择新品货物"
-      :width="isMobile ? '100%' : '1200px'"
+      :width="isMobile ? '100%' : 'min(1200px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="so-dialog"
@@ -1052,7 +1052,7 @@
     <el-dialog
       v-model="viewDialogVisible"
       :title="''"
-      :width="isMobile ? '100%' : '1540px'"
+      :width="isMobile ? '100%' : 'min(1540px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="so-dialog so-dialog-view"

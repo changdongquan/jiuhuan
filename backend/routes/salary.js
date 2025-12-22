@@ -92,9 +92,9 @@ const computeSummaryTotals = (rows) => {
     list.reduce((acc, r) => acc + safeMoney(r.tripleOvertimePay), 0)
   )
   const currentSalaryTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.currentSalary), 0))
-  const firstPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.firstPayable), 0))
-  const secondPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.secondPayable), 0))
-  const twoPayableTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.twoPayableTotal), 0))
+  const firstActualTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.firstActual), 0))
+  const secondActualTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.secondActual), 0))
+  const twoActualTotal = round2(list.reduce((acc, r) => acc + safeMoney(r.twoActualTotal), 0))
 
   return {
     employeeCount,
@@ -102,9 +102,9 @@ const computeSummaryTotals = (rows) => {
     doubleOvertimePayTotal,
     tripleOvertimePayTotal,
     currentSalaryTotal,
-    firstPayableTotal,
-    secondPayableTotal,
-    twoPayableTotal
+    firstActualTotal,
+    secondActualTotal,
+    twoActualTotal
   }
 }
 
@@ -277,9 +277,9 @@ router.get('/list', async (req, res) => {
         t.失业保险费合计 as unemploymentInsuranceFeeTotal,
         t.个税合计 as incomeTaxTotal,
         h.本期工资合计 as currentSalaryTotal,
-        h.第一次应发合计 as firstPayableTotal,
-        h.第二次应发合计 as secondPayableTotal,
-        h.两次应发合计 as twoPayableTotal,
+        h.第一批实发合计 as firstActualTotal,
+        h.第二批实发合计 as secondActualTotal,
+        h.两次实发合计 as twoActualTotal,
         h.创建时间 as createdAt,
         h.更新时间 as updatedAt
       FROM ${TABLE_SUMMARY} h
@@ -370,9 +370,9 @@ router.get('/draft/:id', async (req, res) => {
         两倍加班费合计 as doubleOvertimePayTotal,
         三倍加班费合计 as tripleOvertimePayTotal,
         本期工资合计 as currentSalaryTotal,
-        第一次应发合计 as firstPayableTotal,
-        第二次应发合计 as secondPayableTotal,
-        两次应发合计 as twoPayableTotal,
+        第一批实发合计 as firstActualTotal,
+        第二批实发合计 as secondActualTotal,
+        两次实发合计 as twoActualTotal,
         创建时间 as createdAt,
         更新时间 as updatedAt
       FROM ${TABLE_SUMMARY}
@@ -473,20 +473,20 @@ router.put('/draft/:id/step2', async (req, res) => {
       const medicalInsuranceFee = toNegativeMoney(r.medicalInsuranceFee)
       const unemploymentInsuranceFee = toNegativeMoney(r.unemploymentInsuranceFee)
 
-      const firstPayable = toMoney(
+      const firstActual = toMoney(
         (toNumberOrNull(firstPay) ?? 0) +
           (toNumberOrNull(pensionInsuranceFee) ?? 0) +
           (toNumberOrNull(medicalInsuranceFee) ?? 0) +
           (toNumberOrNull(unemploymentInsuranceFee) ?? 0)
       )
 
-      const incomeTax = toMoney(r.incomeTax)
-      const secondPayable = toMoney(
-        (toNumberOrNull(secondPay) ?? 0) - (toNumberOrNull(incomeTax) ?? 0)
+      const incomeTax = toNegativeMoney(r.incomeTax)
+      const secondActual = toMoney(
+        (toNumberOrNull(secondPay) ?? 0) + (toNumberOrNull(incomeTax) ?? 0)
       )
 
-      const twoPayableTotal = toMoney(
-        (toNumberOrNull(firstPayable) ?? 0) + (toNumberOrNull(secondPayable) ?? 0)
+      const twoActualTotal = toMoney(
+        (toNumberOrNull(firstActual) ?? 0) + (toNumberOrNull(secondActual) ?? 0)
       )
 
       return {
@@ -511,10 +511,10 @@ router.put('/draft/:id/step2', async (req, res) => {
         unemploymentInsuranceFee,
         firstPay,
         secondPay,
-        firstPayable,
+        firstActual,
         incomeTax,
-        secondPayable,
-        twoPayableTotal,
+        secondActual,
+        twoActualTotal,
         currentSalary: toMoney(r.total),
         bonus: toMoney(r.bonus),
         deduction: toMoney(r.deduction),
@@ -559,10 +559,10 @@ router.put('/draft/:id/step2', async (req, res) => {
 
       insReq.input('firstPay', sql.Decimal(12, 2), row.firstPay)
       insReq.input('secondPay', sql.Decimal(12, 2), row.secondPay)
-      insReq.input('firstPayable', sql.Decimal(12, 2), row.firstPayable)
+      insReq.input('firstActual', sql.Decimal(12, 2), row.firstActual)
       insReq.input('incomeTax', sql.Decimal(12, 2), row.incomeTax)
-      insReq.input('secondPayable', sql.Decimal(12, 2), row.secondPayable)
-      insReq.input('twoPayableTotal', sql.Decimal(12, 2), row.twoPayableTotal)
+      insReq.input('secondActual', sql.Decimal(12, 2), row.secondActual)
+      insReq.input('twoActualTotal', sql.Decimal(12, 2), row.twoActualTotal)
       insReq.input('currentSalary', sql.Decimal(12, 2), row.currentSalary)
 
       insReq.input('bonus', sql.Decimal(12, 2), row.bonus)
@@ -576,7 +576,7 @@ router.put('/draft/:id/step2', async (req, res) => {
           基本工资, 加班费, 两倍加班费, 三倍加班费, 夜班补助, 误餐补助, 全勤, 工龄工资,
           迟到扣款, 新进及事假, 病假, 旷工扣款, 卫生费, 水费, 电费,
           基本养老保险费, 基本医疗保险费, 失业保险费,
-          第一批工资, 第二批工资, 第一次应发, 个税, 第二次应发, 两次应发合计, 本期工资,
+          第一批工资, 第二批工资, 第一批实发, 个税, 第二批实发, 两次实发合计, 本期工资,
           绩效奖金, 扣款, 合计, 备注,
           创建时间, 更新时间
         )
@@ -585,7 +585,7 @@ router.put('/draft/:id/step2', async (req, res) => {
           @baseSalary, @overtimePay, @doubleOvertimePay, @tripleOvertimePay, @nightShiftSubsidy, @mealSubsidy, @fullAttendanceBonus, @seniorityPay,
           @lateDeduction, @newOrPersonalLeaveDeduction, @sickLeaveDeduction, @absenceDeduction, @hygieneFee, @waterFee, @electricityFee,
           @pensionInsuranceFee, @medicalInsuranceFee, @unemploymentInsuranceFee,
-          @firstPay, @secondPay, @firstPayable, @incomeTax, @secondPayable, @twoPayableTotal, @currentSalary,
+          @firstPay, @secondPay, @firstActual, @incomeTax, @secondActual, @twoActualTotal, @currentSalary,
           @bonus, @deduction, @total, @remark,
           SYSDATETIME(), SYSDATETIME()
         )
@@ -608,9 +608,9 @@ router.put('/draft/:id/step2', async (req, res) => {
       totals.tripleOvertimePayTotal
     )
     updateSummaryReq.input('currentSalaryTotal', sql.Decimal(12, 2), totals.currentSalaryTotal)
-    updateSummaryReq.input('firstPayableTotal', sql.Decimal(12, 2), totals.firstPayableTotal)
-    updateSummaryReq.input('secondPayableTotal', sql.Decimal(12, 2), totals.secondPayableTotal)
-    updateSummaryReq.input('twoPayableTotal', sql.Decimal(12, 2), totals.twoPayableTotal)
+    updateSummaryReq.input('firstActualTotal', sql.Decimal(12, 2), totals.firstActualTotal)
+    updateSummaryReq.input('secondActualTotal', sql.Decimal(12, 2), totals.secondActualTotal)
+    updateSummaryReq.input('twoActualTotal', sql.Decimal(12, 2), totals.twoActualTotal)
     await updateSummaryReq.query(`
       UPDATE ${TABLE_SUMMARY}
       SET
@@ -619,9 +619,9 @@ router.put('/draft/:id/step2', async (req, res) => {
         两倍加班费合计 = @doubleOvertimePayTotal,
         三倍加班费合计 = @tripleOvertimePayTotal,
         本期工资合计 = @currentSalaryTotal,
-        第一次应发合计 = @firstPayableTotal,
-        第二次应发合计 = @secondPayableTotal,
-        两次应发合计 = @twoPayableTotal,
+        第一批实发合计 = @firstActualTotal,
+        第二批实发合计 = @secondActualTotal,
+        两次实发合计 = @twoActualTotal,
         更新时间 = SYSDATETIME()
       WHERE ID = @id
     `)
@@ -1068,8 +1068,8 @@ router.post('/payroll/export', async (req, res) => {
     const totals = await query(
       `
       SELECT TOP 1
-        第一次应发合计 as firstPayableTotal,
-        第二次应发合计 as secondPayableTotal
+        第一批实发合计 as firstActualTotal,
+        第二批实发合计 as secondActualTotal
       FROM ${TABLE_SUMMARY}
       WHERE ID = @id
     `,
@@ -1082,8 +1082,8 @@ router.post('/payroll/export', async (req, res) => {
         COALESCE(e.银行账号, N'') as bankAccount,
         d.身份证号 as idCard,
         d.姓名 as employeeName,
-        d.第一次应发 as firstPayable,
-        d.第二次应发 as secondPayable
+        d.第一批实发 as firstActual,
+        d.第二批实发 as secondActual
       FROM ${TABLE_DETAIL} d
       LEFT JOIN 员工信息 e
         ON e.ID = d.员工ID
@@ -1099,12 +1099,11 @@ router.post('/payroll/export', async (req, res) => {
     }
 
     const month = String(summary[0]?.month || '').trim()
-    const firstPayableTotal = totals?.[0]?.firstPayableTotal
-    const secondPayableTotal = totals?.[0]?.secondPayableTotal
+    const firstActualTotal = totals?.[0]?.firstActualTotal
+    const secondActualTotal = totals?.[0]?.secondActualTotal
 
     const workbook = new ExcelJS.Workbook()
-    const amountLabel = batchNo === 2 ? '第二次应发合计' : '第一次应发合计'
-    const totalAmount = batchNo === 2 ? secondPayableTotal : firstPayableTotal
+    const totalAmount = batchNo === 2 ? secondActualTotal : firstActualTotal
 
     const totalText = (() => {
       const num = toNumberOrNull(totalAmount)
@@ -1126,8 +1125,8 @@ router.post('/payroll/export', async (req, res) => {
     for (const item of detailRows) {
       const bankAccount = String(item?.bankAccount ?? '').trim()
       const employeeName = String(item?.employeeName ?? '').trim()
-      const payable = batchNo === 2 ? item?.secondPayable : item?.firstPayable
-      const amount = round2(toNumberOrNull(payable) ?? 0)
+      const actual = batchNo === 2 ? item?.secondActual : item?.firstActual
+      const amount = round2(toNumberOrNull(actual) ?? 0)
 
       worksheet.getCell(`A${rowIndex}`).value = bankAccount
       worksheet.getCell(`B${rowIndex}`).value = employeeName

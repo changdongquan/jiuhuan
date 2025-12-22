@@ -14,9 +14,9 @@ export interface SalarySummaryRow {
   unemploymentInsuranceFeeTotal?: number | null
   incomeTaxTotal?: number | null
   currentSalaryTotal: number | null
-  firstPayableTotal: number | null
-  secondPayableTotal: number | null
-  twoPayableTotal: number | null
+  firstActualTotal: number | null
+  secondActualTotal: number | null
+  twoActualTotal: number | null
   createdAt?: string
   updatedAt?: string
 }
@@ -77,9 +77,9 @@ export interface SalaryDraft {
   doubleOvertimePayTotal?: number | null
   tripleOvertimePayTotal?: number | null
   currentSalaryTotal?: number | null
-  firstPayableTotal?: number | null
-  secondPayableTotal?: number | null
-  twoPayableTotal?: number | null
+  firstActualTotal?: number | null
+  secondActualTotal?: number | null
+  twoActualTotal?: number | null
   createdAt?: string
   updatedAt?: string
   rows: SalaryDraftRow[]

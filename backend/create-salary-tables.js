@@ -34,6 +34,16 @@ async function ensureSalaryTables() {
       `)
     }
 
+    const renameColumn = async (tableName, oldName, newName) => {
+      await pool.request().query(`
+        IF COL_LENGTH(N'${tableName}', N'${oldName}') IS NOT NULL
+           AND COL_LENGTH(N'${tableName}', N'${newName}') IS NULL
+        BEGIN
+          EXEC sp_rename N'${tableName}.${oldName}', N'${newName}', 'COLUMN';
+        END
+      `)
+    }
+
     const ensureIndex = async (tableName, indexName, indexSql) => {
       await pool.request().query(`
         IF NOT EXISTS (
@@ -59,9 +69,9 @@ async function ensureSalaryTables() {
         两倍加班费合计 DECIMAL(12,2) NULL,
         三倍加班费合计 DECIMAL(12,2) NULL,
         本期工资合计 DECIMAL(12,2) NULL,
-        第一次应发合计 DECIMAL(12,2) NULL,
-        第二次应发合计 DECIMAL(12,2) NULL,
-        两次应发合计 DECIMAL(12,2) NULL,
+        第一批实发合计 DECIMAL(12,2) NULL,
+        第二批实发合计 DECIMAL(12,2) NULL,
+        两次实发合计 DECIMAL(12,2) NULL,
         备注 NVARCHAR(500) NULL,
         创建时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
         更新时间 DATETIME2 NOT NULL DEFAULT SYSDATETIME()
@@ -75,9 +85,14 @@ async function ensureSalaryTables() {
     await ensureColumn(TABLE_SUMMARY, '两倍加班费合计', '两倍加班费合计 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SUMMARY, '三倍加班费合计', '三倍加班费合计 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SUMMARY, '本期工资合计', '本期工资合计 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_SUMMARY, '第一次应发合计', '第一次应发合计 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_SUMMARY, '第二次应发合计', '第二次应发合计 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_SUMMARY, '两次应发合计', '两次应发合计 DECIMAL(12,2) NULL')
+    await renameColumn(TABLE_SUMMARY, '第一次应发合计', '第一次实发合计')
+    await renameColumn(TABLE_SUMMARY, '第二次应发合计', '第二次实发合计')
+    await renameColumn(TABLE_SUMMARY, '两次应发合计', '两次实发合计')
+    await renameColumn(TABLE_SUMMARY, '第一次实发合计', '第一批实发合计')
+    await renameColumn(TABLE_SUMMARY, '第二次实发合计', '第二批实发合计')
+    await ensureColumn(TABLE_SUMMARY, '第一批实发合计', '第一批实发合计 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_SUMMARY, '第二批实发合计', '第二批实发合计 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_SUMMARY, '两次实发合计', '两次实发合计 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SUMMARY, '备注', '备注 NVARCHAR(500) NULL')
 
     await ensureTable(
@@ -116,10 +131,10 @@ async function ensureSalaryTables() {
 
         第一批工资 DECIMAL(12,2) NULL,
         第二批工资 DECIMAL(12,2) NULL,
-        第一次应发 DECIMAL(12,2) NULL,
+        第一批实发 DECIMAL(12,2) NULL,
         个税 DECIMAL(12,2) NULL,
-        第二次应发 DECIMAL(12,2) NULL,
-        两次应发合计 DECIMAL(12,2) NULL,
+        第二批实发 DECIMAL(12,2) NULL,
+        两次实发合计 DECIMAL(12,2) NULL,
         本期工资 DECIMAL(12,2) NULL,
 
         绩效奖金 DECIMAL(12,2) NULL,
@@ -157,10 +172,15 @@ async function ensureSalaryTables() {
     await ensureColumn(TABLE_DETAIL, '失业保险费', '失业保险费 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_DETAIL, '第一批工资', '第一批工资 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_DETAIL, '第二批工资', '第二批工资 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_DETAIL, '第一次应发', '第一次应发 DECIMAL(12,2) NULL')
+    await renameColumn(TABLE_DETAIL, '第一次应发', '第一次实发')
     await ensureColumn(TABLE_DETAIL, '个税', '个税 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_DETAIL, '第二次应发', '第二次应发 DECIMAL(12,2) NULL')
-    await ensureColumn(TABLE_DETAIL, '两次应发合计', '两次应发合计 DECIMAL(12,2) NULL')
+    await renameColumn(TABLE_DETAIL, '第二次应发', '第二次实发')
+    await renameColumn(TABLE_DETAIL, '两次应发合计', '两次实发合计')
+    await renameColumn(TABLE_DETAIL, '第一次实发', '第一批实发')
+    await renameColumn(TABLE_DETAIL, '第二次实发', '第二批实发')
+    await ensureColumn(TABLE_DETAIL, '第一批实发', '第一批实发 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_DETAIL, '第二批实发', '第二批实发 DECIMAL(12,2) NULL')
+    await ensureColumn(TABLE_DETAIL, '两次实发合计', '两次实发合计 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_DETAIL, '本期工资', '本期工资 DECIMAL(12,2) NULL')
 
     await ensureIndex(
