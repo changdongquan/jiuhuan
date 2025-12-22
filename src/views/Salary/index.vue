@@ -154,7 +154,7 @@
               formatMoneyWithThousands(row.unemploymentInsuranceFeeTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="incomeTaxTotal" label="个税合计" min-width="80" align="right">
+          <el-table-column prop="incomeTaxTotal" label="个税合计" min-width="90" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.incomeTaxTotal)
             }}</template>
