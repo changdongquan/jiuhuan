@@ -568,7 +568,7 @@
                 :style="{ width: dialogControlWidth }"
               />
             </el-form-item>
-            <el-form-item label="订单日期">
+            <el-form-item label="订单日期" prop="orderDate">
               <el-date-picker
                 v-model="dialogForm.orderDate"
                 type="date"
@@ -1333,7 +1333,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { FormInstance } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import {
   ElButton,
   ElCard,
@@ -1594,7 +1594,9 @@ const dialogForm = reactive<any>({
   contractNo: '',
   details: []
 })
-const dialogRules = {}
+const dialogRules: FormRules = {
+  orderDate: [{ required: true, message: '请选择订单日期', trigger: 'change' }]
+}
 
 // 记录展开的订单编号集合，用于高亮展开行
 const expandedOrderNos = ref<Set<string>>(new Set())
@@ -2435,6 +2437,9 @@ const removeDetailRow = (index: number) => {
 
 const submitDialogForm = async () => {
   try {
+    const valid = await dialogFormRef.value?.validate().catch(() => false)
+    if (!valid) return
+
     if (!dialogForm.orderNo) {
       ElMessage.error('订单编号不能为空')
       return
