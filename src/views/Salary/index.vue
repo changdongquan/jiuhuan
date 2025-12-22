@@ -639,17 +639,20 @@
               <div class="salary-add-header__meta-row salary-add-header__meta-row--sub">
                 <span>本期工资合计：{{ formatMoneyWithThousands(addRowsTotal) }}</span>
               </div>
-              <div
-                class="salary-add-header__meta-row salary-add-header__meta-row--sub"
-                :class="{ 'salary-add-header__meta-row--sub-hidden': addStep !== 2 }"
-              >
-                <span
+              <div class="salary-add-header__meta-row salary-add-header__meta-row--sub">
+                <span v-if="addStep === 1"
+                  >本期社保扣缴合计：{{
+                    formatMoneyWithThousands(addRowsSocialInsuranceTotal)
+                  }}</span
+                >
+                <span v-else-if="addStep === 2"
                   >实发合计：{{
                     formatMoneyWithThousands(
                       addRowsFirstActualPayTotal + addRowsSecondActualPayTotal
                     )
                   }}</span
                 >
+                <span v-else class="salary-add-header__placeholder">-</span>
               </div>
             </div>
           </div>
@@ -674,13 +677,20 @@
               show-summary
               :summary-method="getStep1Summary"
             >
-              <el-table-column type="index" label="序号" width="55" align="center" />
-              <el-table-column prop="employeeName" label="姓名" width="85" show-overflow-tooltip />
+              <el-table-column type="index" label="序号" width="55" align="center" fixed="left" />
+              <el-table-column
+                prop="employeeName"
+                label="姓名"
+                width="85"
+                show-overflow-tooltip
+                fixed="left"
+              />
               <el-table-column
                 prop="employeeNumber"
                 label="工号"
                 width="55"
                 show-overflow-tooltip
+                fixed="left"
               />
               <el-table-column label="基本工资" width="108" align="right">
                 <template #default="{ row }">
@@ -2079,6 +2089,16 @@ const addRowsTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + (computeRowTotal(row) || 0), 0)
 })
 
+const addRowsSocialInsuranceTotal = computed(() => {
+  const total = addRows.value.reduce((acc, row) => {
+    const pension = toNumberOrNull(row.pensionInsuranceFee) ?? 0
+    const medical = toNumberOrNull(row.medicalInsuranceFee) ?? 0
+    const unemployment = toNumberOrNull(row.unemploymentInsuranceFee) ?? 0
+    return acc + pension + medical + unemployment
+  }, 0)
+  return Math.round(total * 100) / 100
+})
+
 const addRowsFirstActualPayTotal = computed(() => {
   return addRows.value.reduce((acc, row) => acc + computeFirstActualPay(row), 0)
 })
@@ -3468,6 +3488,10 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.salary-add-header__placeholder {
+  visibility: hidden;
+}
+
 .salary-add-header__meta-row--sub-hidden {
   visibility: hidden;
 }
@@ -3608,7 +3632,7 @@ onMounted(() => {
 
 .salary-add-steps {
   padding: 0 4px;
-  margin-top: -60px;
+  margin-top: -70px;
 }
 
 .salary-add-footer {
