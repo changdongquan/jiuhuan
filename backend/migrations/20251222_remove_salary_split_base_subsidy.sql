@@ -1,0 +1,16 @@
+-- Remove 拆分基数 from 工资_补助
+-- SQL Server / MSSQL
+
+BEGIN TRY
+  BEGIN TRAN;
+
+  DELETE FROM 工资_补助
+  WHERE 补助名称 = N'拆分基数';
+
+  COMMIT TRAN;
+END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+  THROW;
+END CATCH
+

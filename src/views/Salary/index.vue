@@ -283,11 +283,11 @@
           <div class="params-tab-body" v-loading="salaryBaseLoading">
             <el-table v-if="salaryBaseRows.length" :data="salaryBaseRows" border height="560">
               <el-table-column type="index" label="序号" width="70" align="center" />
-              <el-table-column prop="employeeName" label="姓名" width="120" show-overflow-tooltip />
+              <el-table-column prop="employeeName" label="姓名" width="100" show-overflow-tooltip />
               <el-table-column
                 prop="employeeNumber"
                 label="员工工号"
-                width="100"
+                width="85"
                 show-overflow-tooltip
               />
               <el-table-column
@@ -305,6 +305,27 @@
                 <template #default="{ row }">
                   <el-input-number
                     v-model="row.salaryBase"
+                    @change="touchAdjustDate(row)"
+                    :min="0"
+                    :max="999999"
+                    :precision="0"
+                    :controls="false"
+                    :value-on-clear="null"
+                    placeholder="-"
+                    size="small"
+                    class="sb-number"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="社保基数"
+                width="140"
+                align="center"
+                class-name="sb-col-input"
+              >
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.socialInsuranceBase"
                     @change="touchAdjustDate(row)"
                     :min="0"
                     :max="999999"
@@ -812,6 +833,7 @@
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.firstPay"
+                  :disabled="row.level === 0 || String(row.employeeNumber ?? '').trim() === '1'"
                   :min="0"
                   :max="computeRowTotal(row) ?? 999999"
                   :precision="2"
@@ -1288,6 +1310,7 @@ type SalaryBaseRow = {
   employeeNumber: string
   department: string
   salaryBase: number | null
+  socialInsuranceBase: number | null
   pensionInsuranceFee: number | null
   medicalInsuranceFee: number | null
   unemploymentInsuranceFee: number | null
@@ -1344,6 +1367,7 @@ type SalaryDraftRow = {
   entryDate: string
   level: number | null
   baseSalary: number | null
+  socialInsuranceBase: number | null
   pensionInsuranceFee: number | null
   medicalInsuranceFee: number | null
   unemploymentInsuranceFee: number | null
@@ -2030,11 +2054,9 @@ const computeRowTotal = (
   return Math.round(total * 100) / 100
 }
 
-const DEFAULT_PAY_SPLIT_LIMIT = 4300
-const paySplitLimit = ref<number>(DEFAULT_PAY_SPLIT_LIMIT)
-
-const computePaySplit = (total: number | null, limit = paySplitLimit.value) => {
+const computePaySplit = (total: number | null, limit: number | null) => {
   if (total === null || total === undefined) return { first: null as number | null, second: null }
+  if (limit === null || limit === undefined) return { first: null as number | null, second: null }
 
   const totalCents = Math.round(Number(total) * 100)
   const limitCents = Math.round(Number(limit) * 100)
@@ -2064,9 +2086,32 @@ const roundMoney2 = (val: unknown) => {
   return Math.round(num * 100) / 100
 }
 
+const computePaySplitForRow = (row: SalaryDraftRow, total: number | null) => {
+  const limit = toNumberOrNull(row.socialInsuranceBase)
+  if (total === null || total === undefined) return { first: null as number | null, second: null }
+  if (limit === null || limit === undefined) return { first: null as number | null, second: null }
+
+  const isSpecialSplit = row.level === 0 || String(row.employeeNumber ?? '').trim() === '1'
+
+  // 职级为 0 / 工号为 1：不参与拆分规则，第一批工资直接使用社保基数（并在总额范围内截断）
+  if (isSpecialSplit) {
+    const totalCents = Math.round(Number(total) * 100)
+    const limitCents = Math.round(Number(limit) * 100)
+    if (Number.isNaN(totalCents) || Number.isNaN(limitCents)) {
+      return { first: null as number | null, second: null }
+    }
+
+    const firstCents = Math.min(Math.max(limitCents, 0), totalCents)
+    const secondCents = Math.max(totalCents - firstCents, 0)
+    return { first: firstCents / 100, second: secondCents / 100 }
+  }
+
+  return computePaySplit(total, limit)
+}
+
 const getRowPaySplit = (row: Pick<SalaryDraftRow, 'firstPay' | 'secondPay'> & SalaryDraftRow) => {
   const total = computeRowTotal(row)
-  const fallback = computePaySplit(total)
+  const fallback = computePaySplitForRow(row as SalaryDraftRow, total)
   if (total === null) return { first: fallback.first, second: fallback.second }
 
   const first = row.firstPay ?? fallback.first
@@ -2382,6 +2427,7 @@ const ensureSalaryBaseLoaded = async () => {
         employeeNumber: String(emp.employeeNumber ?? ''),
         department: emp.department || '',
         salaryBase: param?.salaryBase ?? null,
+        socialInsuranceBase: param?.socialInsuranceBase ?? null,
         pensionInsuranceFee: param?.pensionInsuranceFee ?? null,
         medicalInsuranceFee: param?.medicalInsuranceFee ?? null,
         unemploymentInsuranceFee: param?.unemploymentInsuranceFee ?? null,
@@ -2435,7 +2481,7 @@ const ensureSubsidyLoaded = () => {
     try {
       const resp: any = await getSubsidyParamsApi()
       const list: SubsidyParamRow[] = resp?.data || resp || []
-      const required = ['夜班补助', '误餐补助', '全勤补助', '工龄补助', '拆分基数']
+      const required = ['夜班补助', '误餐补助', '全勤补助', '工龄补助']
       const map = new Map<string, SubsidyParamRow>()
       for (const item of list) map.set(String(item?.name || '').trim(), item)
 
@@ -2545,6 +2591,7 @@ const handleParamsSave = () => {
         const rows: SalaryBaseParamRow[] = salaryBaseRows.value.map((r) => ({
           employeeId: r.employeeId,
           salaryBase: r.salaryBase ?? null,
+          socialInsuranceBase: r.socialInsuranceBase ?? null,
           pensionInsuranceFee: r.pensionInsuranceFee ?? null,
           medicalInsuranceFee: r.medicalInsuranceFee ?? null,
           unemploymentInsuranceFee: r.unemploymentInsuranceFee ?? null,
@@ -2659,6 +2706,7 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
           entryDate: String(emp.entryDate || ''),
           level: null,
           baseSalary: salaryBaseByEmployeeId.value.get(emp.id) ?? null,
+          socialInsuranceBase: socialInsuranceBaseByEmployeeId.value.get(emp.id) ?? null,
           pensionInsuranceFee:
             toNegativeMoneyOrNull(
               insuranceFeesByEmployeeId.value.get(emp.id)?.pensionInsuranceFee
@@ -2696,6 +2744,7 @@ const buildDraftRowsFromEmployees = (employeeIds: number[]): SalaryDraftRow[] =>
 }
 
 const salaryBaseByEmployeeId = ref(new Map<number, number | null>())
+const socialInsuranceBaseByEmployeeId = ref(new Map<number, number | null>())
 const insuranceFeesByEmployeeId = ref(
   new Map<
     number,
@@ -2711,6 +2760,7 @@ const refreshSalaryBaseParams = async () => {
   const paramsResp: any = await getSalaryBaseParamsApi()
   const paramsList: SalaryBaseParamRow[] = paramsResp?.data || paramsResp || []
   const map = new Map<number, number | null>()
+  const socialMap = new Map<number, number | null>()
   const feeMap = new Map<
     number,
     {
@@ -2721,6 +2771,7 @@ const refreshSalaryBaseParams = async () => {
   >()
   for (const item of paramsList) {
     map.set(item.employeeId, item.salaryBase ?? null)
+    socialMap.set(item.employeeId, item.socialInsuranceBase ?? null)
     feeMap.set(item.employeeId, {
       pensionInsuranceFee: item.pensionInsuranceFee ?? null,
       medicalInsuranceFee: item.medicalInsuranceFee ?? null,
@@ -2728,6 +2779,7 @@ const refreshSalaryBaseParams = async () => {
     })
   }
   salaryBaseByEmployeeId.value = map
+  socialInsuranceBaseByEmployeeId.value = socialMap
   insuranceFeesByEmployeeId.value = feeMap
 }
 
@@ -2779,7 +2831,6 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     mealSubsidyAmount,
     fullAttendanceSubsidyAmount,
     senioritySubsidyAmount,
-    splitBaseAmount,
     latePenaltyAmount
   ] = await Promise.all([
     loadAttendanceRecordsByMonth(month),
@@ -2788,14 +2839,8 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     loadSubsidyAmountByName('误餐补助'),
     loadSubsidyAmountByName('全勤补助'),
     loadSubsidyAmountByName('工龄补助'),
-    loadSubsidyAmountByName('拆分基数'),
     loadPenaltyAmountByName('迟到扣款')
   ])
-
-  paySplitLimit.value =
-    typeof splitBaseAmount === 'number' && !Number.isNaN(splitBaseAmount) && splitBaseAmount > 0
-      ? splitBaseAmount
-      : DEFAULT_PAY_SPLIT_LIMIT
 
   const attByEmployeeId = new Map<number, AttendanceRecord>()
   for (const rec of attendanceRecords) attByEmployeeId.set(rec.employeeId, rec)
@@ -2921,7 +2966,6 @@ const saveRange = async () => {
     currentDraftId.value = null
     editingSummaryId.value = null
     taxTemplateExported.value = false
-    await syncPaySplitLimitFromParams()
 
     await refreshSalaryBaseParams()
     const baseRows = buildDraftRowsFromEmployees(employeeIds)
@@ -2981,12 +3025,13 @@ const saveAddStep = async () => {
       }
       const rows = addRows.value.map((r) => {
         const total = computeRowTotal(r)
-        const split = computePaySplit(total)
+        const split = computePaySplitForRow(r, total)
+        const isSpecialSplit = r.level === 0 || String(r.employeeNumber ?? '').trim() === '1'
         return {
           ...r,
           total,
-          firstPay: r.firstPay ?? split.first,
-          secondPay: r.secondPay ?? split.second
+          firstPay: isSpecialSplit ? split.first : (r.firstPay ?? split.first),
+          secondPay: isSpecialSplit ? split.second : (r.secondPay ?? split.second)
         }
       })
       addRows.value = rows
@@ -3005,14 +3050,28 @@ const saveAddStep = async () => {
 
 const goNextStep = () => {
   if (addStep.value === 0) {
+    const missing = addRows.value.filter(
+      (r) => toNumberOrNull(r.socialInsuranceBase) === null || r.socialInsuranceBase === undefined
+    )
+    if (missing.length) {
+      ElMessage.warning(
+        `请先在“参数-工资基数”页签填写社保基数：${missing
+          .slice(0, 8)
+          .map((r) => r.employeeName)
+          .join('、')}${missing.length > 8 ? '…' : ''}`
+      )
+      return
+    }
+
     const rows = addRows.value.map((r) => {
       const total = computeRowTotal(r)
-      const split = computePaySplit(total)
+      const split = computePaySplitForRow(r, total)
+      const isSpecialSplit = r.level === 0 || String(r.employeeNumber ?? '').trim() === '1'
       return {
         ...r,
         total,
-        firstPay: r.firstPay ?? split.first,
-        secondPay: r.secondPay ?? split.second
+        firstPay: isSpecialSplit ? split.first : (r.firstPay ?? split.first),
+        secondPay: isSpecialSplit ? split.second : (r.secondPay ?? split.second)
       }
     })
     addRows.value = rows
@@ -3054,19 +3113,6 @@ const completeAdd = async () => {
     ElMessage.error(error?.message || '完成失败')
   } finally {
     addCompleting.value = false
-  }
-}
-
-const syncPaySplitLimitFromParams = async () => {
-  try {
-    const splitBaseAmount = await loadSubsidyAmountByName('拆分基数')
-    paySplitLimit.value =
-      typeof splitBaseAmount === 'number' && !Number.isNaN(splitBaseAmount) && splitBaseAmount > 0
-        ? splitBaseAmount
-        : DEFAULT_PAY_SPLIT_LIMIT
-  } catch (error) {
-    console.error('加载拆分基数失败:', error)
-    paySplitLimit.value = DEFAULT_PAY_SPLIT_LIMIT
   }
 }
 
@@ -3122,7 +3168,6 @@ const handleViewPayrollExport = (batch: 1 | 2) => {
 }
 
 const handleSummaryEdit = async (row: SalarySummaryRow) => {
-  await syncPaySplitLimitFromParams()
   try {
     addSaving.value = true
     const resp: any = await getSalaryDraftApi(row.id)

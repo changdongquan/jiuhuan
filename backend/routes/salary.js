@@ -711,6 +711,7 @@ router.get('/params/salary-base', async (req, res) => {
       SELECT
         员工ID as employeeId,
         工资基数 as salaryBase,
+        社保基数 as socialInsuranceBase,
         基本养老保险费 as pensionInsuranceFee,
         基本医疗保险费 as medicalInsuranceFee,
         失业保险费 as unemploymentInsuranceFee,
@@ -743,6 +744,7 @@ router.put('/params/salary-base', async (req, res) => {
       const upsertReq = new sql.Request(transaction)
       upsertReq.input('employeeId', sql.Int, employeeId)
       upsertReq.input('salaryBase', sql.Decimal(12, 2), toMoney(row.salaryBase))
+      upsertReq.input('socialInsuranceBase', sql.Decimal(12, 2), toMoney(row.socialInsuranceBase))
       upsertReq.input('pensionInsuranceFee', sql.Decimal(12, 2), toMoney(row.pensionInsuranceFee))
       upsertReq.input('medicalInsuranceFee', sql.Decimal(12, 2), toMoney(row.medicalInsuranceFee))
       upsertReq.input(
@@ -758,6 +760,7 @@ router.put('/params/salary-base', async (req, res) => {
         WHEN MATCHED THEN
           UPDATE SET
             工资基数 = @salaryBase,
+            社保基数 = @socialInsuranceBase,
             基本养老保险费 = @pensionInsuranceFee,
             基本医疗保险费 = @medicalInsuranceFee,
             失业保险费 = @unemploymentInsuranceFee,
@@ -767,6 +770,7 @@ router.put('/params/salary-base', async (req, res) => {
           INSERT (
             员工ID,
             工资基数,
+            社保基数,
             基本养老保险费,
             基本医疗保险费,
             失业保险费,
@@ -777,6 +781,7 @@ router.put('/params/salary-base', async (req, res) => {
           VALUES (
             @employeeId,
             @salaryBase,
+            @socialInsuranceBase,
             @pensionInsuranceFee,
             @medicalInsuranceFee,
             @unemploymentInsuranceFee,
@@ -868,6 +873,7 @@ router.get('/params/subsidy', async (req, res) => {
         调整日期 as adjustDate,
         更新时间 as updatedAt
       FROM ${TABLE_SUBSIDY}
+      WHERE 补助名称 <> N'拆分基数'
       ORDER BY 补助名称
     `)
     res.json({ code: 0, data: rows })
@@ -890,6 +896,7 @@ router.put('/params/subsidy', async (req, res) => {
     for (const row of rows) {
       const name = String(row.name || '').trim()
       if (!name) continue
+      if (name === '拆分基数') continue
 
       const upsertReq = new sql.Request(transaction)
       upsertReq.input('name', sql.NVarChar, name)

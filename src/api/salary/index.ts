@@ -37,6 +37,7 @@ export interface SalaryDraftRow {
   level?: number | null
 
   baseSalary: number | null
+  socialInsuranceBase?: number | null
   overtimePay?: number | null
   doubleOvertimePay?: number | null
   tripleOvertimePay?: number | null

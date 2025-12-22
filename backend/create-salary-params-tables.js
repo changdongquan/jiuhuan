@@ -33,6 +33,7 @@ async function ensureSalaryParamsTables() {
         ID INT IDENTITY(1,1) PRIMARY KEY,
         员工ID INT NOT NULL UNIQUE,
         工资基数 DECIMAL(12,2) NULL,
+        社保基数 DECIMAL(12,2) NULL,
         基本养老保险费 DECIMAL(12,2) NULL,
         基本医疗保险费 DECIMAL(12,2) NULL,
         失业保险费 DECIMAL(12,2) NULL,
@@ -52,6 +53,7 @@ async function ensureSalaryParamsTables() {
         END
       `)
     }
+    await ensureColumn(TABLE_SALARY_BASE, '社保基数', '社保基数 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SALARY_BASE, '基本养老保险费', '基本养老保险费 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SALARY_BASE, '基本医疗保险费', '基本医疗保险费 DECIMAL(12,2) NULL')
     await ensureColumn(TABLE_SALARY_BASE, '失业保险费', '失业保险费 DECIMAL(12,2) NULL')
@@ -107,8 +109,7 @@ async function ensureSalaryParamsTables() {
       { name: '夜班补助', amount: null },
       { name: '误餐补助', amount: null },
       { name: '全勤补助', amount: null },
-      { name: '工龄补助', amount: null },
-      { name: '拆分基数', amount: 4300 }
+      { name: '工龄补助', amount: null }
     ]
     for (const item of defaults) {
       const name = item.name
@@ -127,6 +128,9 @@ async function ensureSalaryParamsTables() {
         )
       console.log(`已初始化补助项：${name}`)
     }
+
+    // 清理历史补助项：拆分基数（已废弃）
+    await pool.request().query(`DELETE FROM ${TABLE_SUBSIDY} WHERE 补助名称 = N'拆分基数'`)
 
     // 初始化默认罚扣项（按次），若不存在则插入
     const penaltyDefaults = [{ name: '迟到扣款', amount: null }]

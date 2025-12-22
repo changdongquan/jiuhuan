@@ -1,0 +1,18 @@
+-- Add 社保基数 to 工资_工资基数
+-- SQL Server / MSSQL
+
+BEGIN TRY
+  BEGIN TRAN;
+
+  IF COL_LENGTH(N'工资_工资基数', N'社保基数') IS NULL
+  BEGIN
+    ALTER TABLE 工资_工资基数 ADD 社保基数 DECIMAL(12, 2) NULL;
+  END
+
+  COMMIT TRAN;
+END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+  THROW;
+END CATCH
+
