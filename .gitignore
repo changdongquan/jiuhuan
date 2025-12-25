@@ -20,3 +20,4 @@ stats.html
 
 # user data files (should not be in version control)
 backend/local-users.json
+backend/uploads/

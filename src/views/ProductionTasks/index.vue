@@ -583,6 +583,182 @@
                   </el-row>
                 </div>
               </el-tab-pane>
+
+              <el-tab-pane label="附件" name="attachments">
+                <div class="pt-attachments" v-loading="attachmentLoading">
+                  <el-row class="pt-attachments-row" :gutter="isMobile ? 8 : 16">
+                    <el-col :xs="24" :lg="12" class="pt-attachment-col">
+                      <el-card shadow="never" class="pt-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>照片</span>
+                            <div style="display: flex; gap: 8px">
+                              <el-upload
+                                :action="getAttachmentAction('photo')"
+                                :data="getAttachmentUploadData('photo', 'appearance')"
+                                :show-file-list="false"
+                                accept="image/*"
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small">上传模具外观</el-button>
+                              </el-upload>
+                              <el-upload
+                                :action="getAttachmentAction('photo')"
+                                :data="getAttachmentUploadData('photo', 'nameplate')"
+                                :show-file-list="false"
+                                accept="image/*"
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small">上传模具铭牌</el-button>
+                              </el-upload>
+                            </div>
+                          </div>
+                        </template>
+
+                        <div style=" margin: 4px 0 8px;font-weight: 600">模具外观</div>
+                        <el-table
+                          :data="photoAppearanceAttachments"
+                          border
+                          size="small"
+                          style="width: 100%; margin-bottom: 12px"
+                        >
+                          <el-table-column type="index" label="序号" width="50" />
+                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="95" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                v-if="!isViewMode"
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+
+                        <div style=" margin: 4px 0 8px;font-weight: 600">模具铭牌</div>
+                        <el-table
+                          :data="photoNameplateAttachments"
+                          border
+                          size="small"
+                          style="width: 100%"
+                        >
+                          <el-table-column type="index" label="序号" width="50" />
+                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="95" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                v-if="!isViewMode"
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :lg="12" class="pt-attachment-col">
+                      <el-card shadow="never" class="pt-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>模具检验表</span>
+                            <el-upload
+                              :action="getAttachmentAction('inspection')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传检验表</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+
+                        <el-table
+                          :data="inspectionAttachments"
+                          border
+                          size="small"
+                          style="width: 100%"
+                        >
+                          <el-table-column type="index" label="序号" width="50" />
+                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="95" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                v-if="!isViewMode"
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
             </el-tabs>
           </div>
         </el-form>
@@ -601,12 +777,17 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
+import { ElMessage, ElMessageBox, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
 import {
   getProductionTaskListApi,
   getProductionTaskDetailApi,
   updateProductionTaskApi,
   getProductionTaskStatisticsApi,
+  getProductionTaskAttachmentsApi,
+  deleteProductionTaskAttachmentApi,
+  downloadProductionTaskAttachmentApi,
+  type ProductionTaskAttachment,
+  type ProductionTaskAttachmentType,
   type ProductionTaskInfo
 } from '@/api/production-task'
 import { useAppStore } from '@/store/modules/app'
@@ -670,7 +851,108 @@ const dialogFormRef = ref<FormInstance>()
 const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
 const currentProjectCode = ref('')
 const isViewMode = ref(false)
-const dialogActiveTab = ref<'production' | 'hours'>('production')
+const dialogActiveTab = ref<'production' | 'hours' | 'attachments'>('production')
+
+const attachmentLoading = ref(false)
+const photoAttachments = ref<ProductionTaskAttachment[]>([])
+const inspectionAttachments = ref<ProductionTaskAttachment[]>([])
+
+const photoAppearanceAttachments = computed(() =>
+  photoAttachments.value.filter((a) => a.tag === 'appearance')
+)
+const photoNameplateAttachments = computed(() =>
+  photoAttachments.value.filter((a) => a.tag === 'nameplate')
+)
+
+const getAttachmentAction = (type: ProductionTaskAttachmentType) => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  return `/api/production-task/${encodeURIComponent(projectCode)}/attachments/${type}`
+}
+
+const getAttachmentUploadData = (type: ProductionTaskAttachmentType, tag?: string) => {
+  if (type !== 'photo') return undefined
+  return { tag }
+}
+
+const loadAttachments = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) return
+  attachmentLoading.value = true
+  try {
+    const [photoResp, inspectionResp]: any[] = await Promise.all([
+      getProductionTaskAttachmentsApi(projectCode, 'photo'),
+      getProductionTaskAttachmentsApi(projectCode, 'inspection')
+    ])
+    photoAttachments.value = photoResp?.data || []
+    inspectionAttachments.value = inspectionResp?.data || []
+  } catch (error) {
+    console.error('加载生产任务附件失败:', error)
+    ElMessage.error('加载附件失败')
+    photoAttachments.value = []
+    inspectionAttachments.value = []
+  } finally {
+    attachmentLoading.value = false
+  }
+}
+
+const handleAttachmentUploadSuccess = async () => {
+  await loadAttachments()
+  ElMessage.success('上传成功')
+}
+
+const handleAttachmentUploadError = (err: any, uploadFile?: any) => {
+  const respMessage = uploadFile?.response?.message
+  const message = respMessage || err?.message || '上传失败'
+  console.error('上传失败:', err, uploadFile)
+  ElMessage.error(message)
+}
+
+const downloadAttachment = async (row: ProductionTaskAttachment) => {
+  try {
+    const resp: any = await downloadProductionTaskAttachmentApi(row.id)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.originalName || `附件_${row.id}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    console.error('下载附件失败:', error)
+    ElMessage.error(error?.message || '下载失败')
+  }
+}
+
+const deleteAttachment = async (row: ProductionTaskAttachment) => {
+  try {
+    await ElMessageBox.confirm(`确定删除附件：${row.originalName}？`, '提示', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      closeOnClickModal: false
+    })
+  } catch {
+    return
+  }
+
+  try {
+    await deleteProductionTaskAttachmentApi(row.id)
+    ElMessage.success('删除成功')
+    await loadAttachments()
+  } catch (error: any) {
+    console.error('删除附件失败:', error)
+    ElMessage.error(error?.message || '删除失败')
+  }
+}
+
+const formatFileSize = (size?: number | null): string => {
+  if (!size || size <= 0) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
 
 watch(isMobile, (mobile) => {
   viewMode.value = mobile ? 'card' : 'table'
@@ -968,6 +1250,15 @@ const handleEditFromView = () => {
   dialogActiveTab.value = 'production'
 }
 
+watch(
+  () => dialogActiveTab.value,
+  (tab) => {
+    if (tab === 'attachments') {
+      void loadAttachments()
+    }
+  }
+)
+
 const handleView = async (row: Partial<ProductionTaskInfo>) => {
   try {
     dialogTitle.value = '查看生产任务'
@@ -1027,6 +1318,8 @@ const handleDialogClosed = () => {
   })
   currentProjectCode.value = ''
   dialogFormRef.value?.clearValidate()
+  photoAttachments.value = []
+  inspectionAttachments.value = []
 }
 
 onMounted(() => {
@@ -1156,6 +1449,26 @@ onMounted(() => {
   .query-form__actions {
     margin-top: 8px;
   }
+}
+
+.pt-attachments-row {
+  align-items: stretch;
+}
+
+.pt-attachment-col {
+  display: flex;
+}
+
+.pt-attachment-card {
+  width: 100%;
+  height: 100%;
+}
+
+/* PC 端弹窗：固定 body 高度，避免切换页签导致弹窗高度变化 */
+:deep(.pt-detail-dialog .el-dialog__body) {
+  height: 560px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
 }
 
 .pt-page {

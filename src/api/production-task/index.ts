@@ -31,6 +31,22 @@ export interface ProductionTaskInfo {
   计划首样日期?: string // 从项目管理表获取
 }
 
+export type ProductionTaskAttachmentType = 'photo' | 'inspection'
+
+export interface ProductionTaskAttachment {
+  id: number
+  projectCode: string
+  type: ProductionTaskAttachmentType
+  tag?: 'appearance' | 'nameplate' | null
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+}
+
 // 生产任务查询参数
 export interface ProductionTaskQueryParams {
   keyword?: string // 项目编号/负责人
@@ -68,4 +84,38 @@ export const deleteProductionTaskApi = (projectCode: string) => {
 // 获取生产任务统计数据
 export const getProductionTaskStatisticsApi = () => {
   return request.get({ url: '/api/production-task/statistics' })
+}
+
+// 获取生产任务附件列表
+export const getProductionTaskAttachmentsApi = (
+  projectCode: string,
+  type?: ProductionTaskAttachmentType
+) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProductionTaskAttachment[]
+  }>({
+    url: `/api/production-task/${encodeURIComponent(projectCode)}/attachments`,
+    params: type ? { type } : undefined
+  })
+}
+
+// 下载生产任务附件：返回文件流，由调用方处理
+export const downloadProductionTaskAttachmentApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/production-task/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+// 删除生产任务附件
+export const deleteProductionTaskAttachmentApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/production-task/attachments/${attachmentId}`
+  })
 }
