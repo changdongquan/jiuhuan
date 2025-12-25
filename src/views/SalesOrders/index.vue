@@ -920,7 +920,7 @@
     <el-dialog
       v-model="splitDialogVisible"
       title="拆分订单"
-      :width="isMobile ? '100%' : 'min(980px, calc(100vw - 48px))'"
+      :width="isMobile ? '100%' : 'min(1500px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
     >
@@ -944,8 +944,26 @@
             min-width="160"
             show-overflow-tooltip
           />
+          <el-table-column
+            prop="productDrawingNo"
+            label="产品图号"
+            min-width="140"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="customerPartNo"
+            label="客户模号"
+            min-width="140"
+            show-overflow-tooltip
+          />
           <el-table-column prop="quantity" label="数量" width="90" align="right">
             <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="unitPrice" label="单价(元)" width="110" align="right">
+            <template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template>
+          </el-table-column>
+          <el-table-column prop="totalAmount" label="金额(元)" width="120" align="right">
+            <template #default="{ row }">{{ formatAmount(row.totalAmount) }}</template>
           </el-table-column>
           <el-table-column label="附件" width="90" align="center">
             <template #default="{ row }">{{ getDetailAttachmentCount(row.id) }}</template>
