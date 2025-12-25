@@ -2000,15 +2000,26 @@ const handleAttachmentPdfPreview = async (attachment: SalesOrderAttachment) => {
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
 
-    // 调用 PDF 预览组件
-    createPdfViewer({
-      url,
-      fileName: attachment.originalName || 'PDF 文件'
-    })
-
-    // 注意：blob URL 会在页面卸载或手动调用 revokeObjectURL 时释放
-    // 由于 PDF 预览组件会创建新的组件实例，我们可以在组件关闭时清理
-    // 但为了简化，这里让浏览器自动管理，或者可以在 PdfViewer 组件中处理清理
+    // 移动端浏览器不支持在 iframe 中显示 PDF blob URL，使用 window.open 直接打开
+    if (isMobile.value) {
+      const newWindow = window.open(url, '_blank')
+      if (!newWindow) {
+        ElMessage.warning('请允许弹出窗口以预览 PDF')
+        window.URL.revokeObjectURL(url)
+      } else {
+        // 延迟清理 URL，确保新窗口已加载
+        setTimeout(() => {
+          // 不立即清理，让浏览器管理，新窗口关闭后会自动清理
+          // window.URL.revokeObjectURL(url)
+        }, 1000)
+      }
+    } else {
+      // PC 端使用 iframe 预览组件
+      createPdfViewer({
+        url,
+        fileName: attachment.originalName || 'PDF 文件'
+      })
+    }
   } catch (error) {
     console.error('预览 PDF 失败:', error)
     ElMessage.error('预览 PDF 失败')
