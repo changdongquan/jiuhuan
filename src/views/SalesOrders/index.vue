@@ -858,6 +858,24 @@
                           <span class="size">{{ formatFileSize(file.fileSize) }}</span>
                           <span class="ops">
                             <el-button
+                              v-if="isImageFile(file)"
+                              type="primary"
+                              link
+                              size="small"
+                              @click="handleAttachmentPreview(file)"
+                            >
+                              预览
+                            </el-button>
+                            <el-button
+                              v-if="isPdfFile(file)"
+                              type="primary"
+                              link
+                              size="small"
+                              @click="handleAttachmentPdfPreview(file)"
+                            >
+                              预览
+                            </el-button>
+                            <el-button
                               type="primary"
                               link
                               size="small"
@@ -1035,8 +1053,26 @@
             width="100"
             :formatter="(row: any) => formatFileSize(row.fileSize)"
           />
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="240">
             <template #default="{ row }">
+              <el-button
+                v-if="isImageFile(row)"
+                type="primary"
+                link
+                size="small"
+                @click="handleAttachmentPreview(row)"
+              >
+                预览
+              </el-button>
+              <el-button
+                v-if="isPdfFile(row)"
+                type="primary"
+                link
+                size="small"
+                @click="handleAttachmentPdfPreview(row)"
+              >
+                预览
+              </el-button>
               <el-button type="primary" link size="small" @click="handleAttachmentDownload(row)">
                 下载
               </el-button>
@@ -1396,7 +1432,13 @@
                           :key="file.id"
                           type="primary"
                           :underline="false"
-                          @click="handleAttachmentDownload(file)"
+                          @click="
+                            isImageFile(file)
+                              ? handleAttachmentPreview(file)
+                              : isPdfFile(file)
+                                ? handleAttachmentPdfPreview(file)
+                                : handleAttachmentDownload(file)
+                          "
                         >
                           {{ file.originalName }}
                         </el-link>
@@ -1470,6 +1512,8 @@ import {
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
+import { createImageViewer } from '@/components/ImageViewer'
+import { createPdfViewer } from '@/components/PdfViewer'
 
 interface OrderQuery {
   searchText: string
@@ -1820,6 +1864,154 @@ const handleEditAttachmentRemove = async (detail: any, file: SalesOrderAttachmen
   } catch (error) {
     console.error('删除附件失败:', error)
     ElMessage.error('删除附件失败')
+  }
+}
+
+// 判断附件是否为图片
+const isImageFile = (attachment: SalesOrderAttachment): boolean => {
+  // 优先使用 contentType 判断
+  if (attachment.contentType?.startsWith('image/')) {
+    return true
+  }
+  // 通过文件扩展名判断
+  const fileName = attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico']
+  return imageExts.includes(ext)
+}
+
+// 判断附件是否为 PDF
+const isPdfFile = (attachment: SalesOrderAttachment): boolean => {
+  // 优先使用 contentType 判断
+  if (attachment.contentType === 'application/pdf') {
+    return true
+  }
+  // 通过文件扩展名判断
+  const fileName = attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'pdf'
+}
+
+// 预览图片附件
+const handleAttachmentPreview = async (attachment: SalesOrderAttachment) => {
+  if (!isImageFile(attachment)) {
+    ElMessage.warning('该文件不是图片格式')
+    return
+  }
+
+  try {
+    // 获取当前附件所在的所有图片附件列表
+    // 优先使用 PC 端附件弹窗的列表
+    let allAttachments: SalesOrderAttachment[] = []
+
+    // 检查当前附件是否在 PC 端附件弹窗的列表中
+    const isInAttachmentList = attachmentList.value.some((item) => item.id === attachment.id)
+    if (isInAttachmentList && attachmentList.value.length > 0) {
+      // 使用 PC 端附件弹窗的列表
+      allAttachments = attachmentList.value
+    } else {
+      // 从 viewDetailAttachments 中查找包含当前附件的列表
+      for (const attachments of Object.values(viewDetailAttachments.value)) {
+        if (attachments.some((item) => item.id === attachment.id)) {
+          allAttachments = attachments
+          break
+        }
+      }
+    }
+
+    // 如果没有找到，只预览当前图片
+    if (allAttachments.length === 0) {
+      allAttachments = [attachment]
+    }
+
+    // 过滤出所有图片附件
+    const imageAttachments = allAttachments.filter(isImageFile)
+    if (imageAttachments.length === 0) {
+      ElMessage.warning('没有可预览的图片')
+      return
+    }
+
+    // 找到当前附件的索引
+    const currentIndex = imageAttachments.findIndex((item) => item.id === attachment.id)
+
+    // 获取所有图片的 blob URL
+    const urlList: string[] = []
+    const blobUrls: string[] = []
+
+    try {
+      // 并发获取所有图片的 blob
+      const blobPromises = imageAttachments.map(async (item) => {
+        try {
+          const resp = await downloadSalesOrderAttachmentApi(item.id)
+          const blob = (resp as any)?.data ?? resp
+          const url = window.URL.createObjectURL(blob as Blob)
+          blobUrls.push(url)
+          return url
+        } catch (error) {
+          console.error(`加载图片 ${item.originalName} 失败:`, error)
+          return null
+        }
+      })
+
+      const urls = await Promise.all(blobPromises)
+      urlList.push(...urls.filter((url): url is string => url !== null))
+
+      if (urlList.length === 0) {
+        ElMessage.error('加载图片失败')
+        return
+      }
+
+      // 调用图片预览组件
+      // 设置更高的 z-index (3000) 确保显示在 dialog (2000) 之上
+      // teleported 设置为 true，确保组件挂载到 body 上，避免被 dialog 的 stacking context 影响
+      createImageViewer({
+        urlList,
+        initialIndex: currentIndex >= 0 ? currentIndex : 0,
+        infinite: true,
+        hideOnClickModal: true,
+        zIndex: 3000,
+        teleported: true
+      })
+
+      // 注意：blob URL 会在页面卸载或手动调用 revokeObjectURL 时释放
+      // 由于 createImageViewer 会创建新的组件实例，我们无法直接控制清理时机
+      // 可以考虑在组件卸载时清理，或者让浏览器自动管理
+    } catch (error) {
+      // 清理已创建的 blob URL
+      blobUrls.forEach((url) => window.URL.revokeObjectURL(url))
+      throw error
+    }
+  } catch (error) {
+    console.error('预览图片失败:', error)
+    ElMessage.error('预览图片失败')
+  }
+}
+
+// 预览 PDF 附件
+const handleAttachmentPdfPreview = async (attachment: SalesOrderAttachment) => {
+  if (!isPdfFile(attachment)) {
+    ElMessage.warning('该文件不是 PDF 格式')
+    return
+  }
+
+  try {
+    // 获取 PDF 文件的 blob
+    const resp = await downloadSalesOrderAttachmentApi(attachment.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+
+    // 调用 PDF 预览组件
+    createPdfViewer({
+      url,
+      fileName: attachment.originalName || 'PDF 文件'
+    })
+
+    // 注意：blob URL 会在页面卸载或手动调用 revokeObjectURL 时释放
+    // 由于 PDF 预览组件会创建新的组件实例，我们可以在组件关闭时清理
+    // 但为了简化，这里让浏览器自动管理，或者可以在 PdfViewer 组件中处理清理
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    ElMessage.error('预览 PDF 失败')
   }
 }
 
