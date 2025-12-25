@@ -900,9 +900,79 @@
         </div>
       </el-form>
       <template #footer>
+        <el-button
+          v-if="!isCreateMode && dialogForm.details.length > 1"
+          type="warning"
+          plain
+          :disabled="dialogSubmitting"
+          @click="openSplitDialog"
+        >
+          拆分订单
+        </el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
           保存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 拆分订单弹窗（PC/手机端共用） -->
+    <el-dialog
+      v-model="splitDialogVisible"
+      title="拆分订单"
+      :width="isMobile ? '100%' : 'min(980px, calc(100vw - 48px))'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+    >
+      <div class="so-split-dialog">
+        <div class="so-split-dialog__toolbar">
+          <div class="so-split-dialog__meta">
+            <div>原订单：{{ dialogForm.orderNo || '-' }}</div>
+            <div>订单日期：{{ formatDate(dialogForm.orderDate) || '-' }}</div>
+          </div>
+          <el-button type="primary" plain size="small" @click="addSplitGroup">
+            新增一份订单
+          </el-button>
+        </div>
+
+        <el-table :data="dialogForm.details" border height="520" style="width: 100%">
+          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column prop="itemCode" label="项目编号" min-width="140" show-overflow-tooltip />
+          <el-table-column
+            prop="productName"
+            label="产品名称"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="quantity" label="数量" width="90" align="right">
+            <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column label="附件" width="90" align="center">
+            <template #default="{ row }">{{ getDetailAttachmentCount(row.id) }}</template>
+          </el-table-column>
+          <el-table-column label="拆分到" min-width="180">
+            <template #default="{ row }">
+              <el-select
+                v-model="splitTargetByDetailId[row.id]"
+                placeholder="请选择"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="opt in splitTargetOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <el-button @click="splitDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="splitSubmitting" @click="confirmSplit">
+          确认拆分
         </el-button>
       </template>
     </el-dialog>
@@ -1363,6 +1433,7 @@ import {
   updateSalesOrderApi,
   createSalesOrderApi,
   generateOrderNoApi,
+  splitSalesOrderApi,
   deleteSalesOrderApi,
   getSalesOrdersStatisticsApi,
   getSalesOrderDetailAttachmentsApi,
@@ -1597,6 +1668,19 @@ const dialogForm = reactive<any>({
 const dialogRules: FormRules = {
   orderDate: [{ required: true, message: '请选择订单日期', trigger: 'change' }]
 }
+
+const splitDialogVisible = ref(false)
+const splitSubmitting = ref(false)
+const splitTargetByDetailId = ref<Record<string, string>>({})
+const splitNewGroupCount = ref(1)
+
+const splitTargetOptions = computed(() => {
+  const opts: Array<{ label: string; value: string }> = [{ label: '保留在原订单', value: 'origin' }]
+  for (let i = 1; i <= splitNewGroupCount.value; i += 1) {
+    opts.push({ label: `新订单${i}`, value: `new-${i}` })
+  }
+  return opts
+})
 
 // 记录展开的订单编号集合，用于高亮展开行
 const expandedOrderNos = ref<Set<string>>(new Set())
@@ -2555,6 +2639,105 @@ const submitDialogForm = async () => {
   }
 }
 
+const openSplitDialog = () => {
+  if (isCreateMode.value) return
+  if (!dialogForm.orderNo) return
+  if (!Array.isArray(dialogForm.details) || dialogForm.details.length <= 1) return
+
+  splitNewGroupCount.value = 1
+  const map: Record<string, string> = {}
+  for (const d of dialogForm.details) {
+    map[String(d.id)] = 'origin'
+  }
+  splitTargetByDetailId.value = map
+  splitDialogVisible.value = true
+}
+
+const addSplitGroup = () => {
+  splitNewGroupCount.value += 1
+}
+
+const confirmSplit = async () => {
+  try {
+    if (!dialogForm.orderNo) {
+      ElMessage.error('订单编号不能为空')
+      return
+    }
+    const details = Array.isArray(dialogForm.details) ? dialogForm.details : []
+    if (details.length <= 1) {
+      ElMessage.warning('该订单只有一条明细，无需拆分')
+      return
+    }
+
+    const targetMap = splitTargetByDetailId.value || {}
+    const grouped = new Map<string, number[]>()
+    for (const detail of details) {
+      const idNum = Number(detail.id)
+      if (!Number.isFinite(idNum) || idNum <= 0) continue
+      const target = targetMap[String(detail.id)] || 'origin'
+      if (!grouped.has(target)) grouped.set(target, [])
+      grouped.get(target)!.push(idNum)
+    }
+
+    const movedIds = new Set<number>()
+    for (const [key, ids] of grouped.entries()) {
+      if (key === 'origin') continue
+      for (const id of ids) movedIds.add(id)
+    }
+
+    if (movedIds.size <= 0) {
+      ElMessage.warning('请至少选择一条明细拆分到新订单')
+      return
+    }
+    if (details.length - movedIds.size < 1) {
+      ElMessage.warning('原订单至少保留 1 条明细')
+      return
+    }
+
+    const groups = Array.from(grouped.entries()).map(([key, ids]) => ({
+      key: key as any,
+      detailIds: ids
+    }))
+
+    splitSubmitting.value = true
+    const payload: any = await splitSalesOrderApi(String(dialogForm.orderNo), { groups })
+    const ok = payload?.success ?? payload?.code === 0
+    if (!ok) {
+      throw new Error(payload?.message || '拆分失败')
+    }
+
+    const created = payload?.data?.created || payload?.created || []
+    const orderNos: string[] = Array.isArray(created) ? created.map((c: any) => c.orderNo) : []
+
+    splitDialogVisible.value = false
+
+    // 更新当前编辑订单明细：移除被拆走的行，并清理附件映射
+    dialogForm.details = details.filter((d: any) => !movedIds.has(Number(d.id)))
+    const summary = { ...viewAttachmentSummary.value }
+    const attachmentMap = { ...viewDetailAttachments.value }
+    for (const id of movedIds) {
+      delete summary[id]
+      delete attachmentMap[id]
+    }
+    viewAttachmentSummary.value = summary
+    viewDetailAttachments.value = attachmentMap
+    await loadAttachmentSummaryForOrder(String(dialogForm.orderNo))
+
+    await Promise.all([loadData(), loadStatistics()])
+
+    const text = orderNos.length ? `已生成订单编号：${orderNos.join('、')}` : '拆分成功'
+    await ElMessageBox.alert(text, '拆分成功', {
+      confirmButtonText: '知道了',
+      closeOnClickModal: false
+    })
+  } catch (error: any) {
+    console.error('拆分订单失败:', error)
+    ElMessage.error(error?.message || '拆分订单失败')
+  } finally {
+    splitSubmitting.value = false
+  }
+}
+
 const handleDialogClosed = () => {
   dialogForm.orderNo = ''
   dialogForm.orderDate = ''
@@ -2565,6 +2748,10 @@ const handleDialogClosed = () => {
   dialogForm.details = []
   isCreateMode.value = false
   currentOrderNo.value = null
+  splitDialogVisible.value = false
+  splitSubmitting.value = false
+  splitTargetByDetailId.value = {}
+  splitNewGroupCount.value = 1
 }
 
 // 打开新品选择对话框

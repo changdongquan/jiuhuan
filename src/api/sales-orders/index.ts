@@ -269,3 +269,33 @@ export const downloadSalesOrderAttachmentApi = (attachmentId: number) => {
     responseType: 'blob'
   })
 }
+
+export type SplitSalesOrderGroup = {
+  key: 'origin' | `new-${number}`
+  detailIds: number[]
+}
+
+export type SplitSalesOrderPayload = {
+  groups: SplitSalesOrderGroup[]
+}
+
+export type SplitSalesOrderResponse = {
+  code: number
+  success: boolean
+  message?: string
+  data?: {
+    sourceOrderNo: string
+    created: Array<{
+      groupKey: string
+      orderNo: string
+      movedDetailIds: number[]
+    }>
+  }
+}
+
+export const splitSalesOrderApi = (orderNo: string, data: SplitSalesOrderPayload) => {
+  return request.post<SplitSalesOrderResponse>({
+    url: `/api/sales-orders/${encodeURIComponent(orderNo)}/split`,
+    data
+  })
+}

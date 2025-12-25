@@ -5,6 +5,7 @@ const multer = require('multer')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
 const router = express.Router()
+const fsp = fs.promises
 
 // 销售订单附件存储配置
 // 生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
@@ -30,6 +31,61 @@ const ensureDirSync = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true })
   }
+}
+
+const moveFileWithFallback = async (fromPath, toPath) => {
+  try {
+    await fsp.rename(fromPath, toPath)
+  } catch (err) {
+    if (err && err.code === 'EXDEV') {
+      await fsp.copyFile(fromPath, toPath)
+      await fsp.unlink(fromPath)
+      return
+    }
+    throw err
+  }
+}
+
+const toYYYYMMDD = (val) => {
+  if (!val) return null
+  if (typeof val === 'string') {
+    const text = val.trim()
+    const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(text)
+    if (match) {
+      return `${match[1]}${String(match[2]).padStart(2, '0')}${String(match[3]).padStart(2, '0')}`
+    }
+  }
+  const d = val instanceof Date ? val : new Date(val)
+  if (Number.isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}${m}${day}`
+}
+
+const computeAttachmentNewRelativeDir = ({ oldRelativeDir, newOrderNo, detailId }) => {
+  const rel = String(oldRelativeDir || '').trim()
+  if (!rel) {
+    const now = new Date()
+    const year = String(now.getFullYear())
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, String(detailId))
+  }
+
+  const parts = rel.split('/')
+  const subIdx = parts.indexOf(SALES_SUBDIR)
+  if (subIdx !== -1 && parts.length >= subIdx + 5) {
+    const year = parts[subIdx + 1]
+    const month = parts[subIdx + 2]
+    const finalDetailId = parts[subIdx + 4] || String(detailId)
+    return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, finalDetailId)
+  }
+
+  // fallback：尽量保持目录结构，但仍切到新订单号目录
+  const now = new Date()
+  const year = String(now.getFullYear())
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, String(detailId))
 }
 
 // 使用 multer 将销售订单附件直接写入 NAS
@@ -1021,6 +1077,206 @@ router.delete('/delete/:orderNo', async (req, res) => {
       success: false,
       message: '删除销售订单失败',
       error: error.message
+    })
+  }
+})
+
+// 拆分销售订单：将同一订单号下的部分明细移动到新订单号（新订单号按系统流水号生成）
+router.post('/:orderNo/split', async (req, res) => {
+  let transaction = null
+  const movedFiles = []
+  try {
+    const sourceOrderNo = String(req.params.orderNo || '').trim()
+    if (!sourceOrderNo) {
+      return res.status(400).json({ code: 400, success: false, message: '订单编号不能为空' })
+    }
+
+    const groups = req.body?.groups
+    if (!Array.isArray(groups) || groups.length === 0) {
+      return res.status(400).json({ code: 400, success: false, message: '拆分分组不能为空' })
+    }
+
+    // 先加载该订单所有明细（用于校验 & 获取订单日期）
+    const sourceRows = await query(
+      `
+      SELECT
+        订单ID as id,
+        订单编号 as orderNo,
+        订单日期 as orderDate
+      FROM 销售订单
+      WHERE 订单编号 = @orderNo
+      ORDER BY 订单ID
+    `,
+      { orderNo: sourceOrderNo }
+    )
+    if (!sourceRows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '订单不存在' })
+    }
+
+    const allDetailIds = new Set(
+      sourceRows.map((r) => Number(r.id)).filter((n) => Number.isInteger(n) && n > 0)
+    )
+    const orderDateYYYYMMDD = toYYYYMMDD(sourceRows[0].orderDate) || toYYYYMMDD(new Date())
+
+    const movedDetailIds = new Set()
+    const newGroups = []
+    for (const g of groups) {
+      const key = String(g?.key || '').trim()
+      const detailIds = Array.isArray(g?.detailIds) ? g.detailIds : []
+      const normalizedIds = detailIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+        .filter((id) => allDetailIds.has(id))
+
+      if (key && key !== 'origin' && normalizedIds.length) {
+        newGroups.push({ key, detailIds: normalizedIds })
+        for (const id of normalizedIds) movedDetailIds.add(id)
+      }
+    }
+
+    if (!newGroups.length || !movedDetailIds.size) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '请至少选择一条明细拆分到新订单'
+      })
+    }
+    if (allDetailIds.size - movedDetailIds.size < 1) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '原订单至少保留 1 条明细'
+      })
+    }
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+
+    // 同“生成订单号”规则：XS-YYYYMMDD-XXX（日期使用原订单日期）
+    const orderPrefix = 'XS'
+    const likePattern = `${orderPrefix}-${orderDateYYYYMMDD}-%`
+    const serialReq = new sql.Request(transaction)
+    serialReq.input('likePattern', sql.NVarChar, likePattern)
+
+    // 只取符合 XS-YYYYMMDD-XXX 格式的最大流水号，避免字符串排序导致取错
+    const serialResult = await serialReq.query(`
+      SELECT
+        COALESCE(MAX(TRY_CAST(RIGHT(订单编号, 3) AS INT)), 0) as maxSerial
+      FROM 销售订单 WITH (UPDLOCK, HOLDLOCK)
+      WHERE 订单编号 LIKE @likePattern
+        AND 订单编号 LIKE N'XS-________-___'
+    `)
+    let lastSerial = Number(serialResult.recordset?.[0]?.maxSerial ?? 0)
+    if (!Number.isFinite(lastSerial) || lastSerial < 0) lastSerial = 0
+
+    const created = newGroups.map((g, idx) => {
+      const serial = String(lastSerial + 1 + idx).padStart(3, '0')
+      let newOrderNo = `${orderPrefix}-${orderDateYYYYMMDD}-${serial}`
+      if (newOrderNo === sourceOrderNo) {
+        // 极端情况：源订单刚好是当日最小流水号且没有其它记录，避免生成同号
+        const nextSerial = String(lastSerial + 2 + idx).padStart(3, '0')
+        newOrderNo = `${orderPrefix}-${orderDateYYYYMMDD}-${nextSerial}`
+      }
+      return { groupKey: g.key, orderNo: newOrderNo, movedDetailIds: g.detailIds }
+    })
+
+    // 先搬迁附件文件并同步更新附件表，再更新销售订单明细订单号
+    for (const group of created) {
+      const detailIds = group.movedDetailIds
+      if (!detailIds.length) continue
+
+      const attachmentReq = new sql.Request(transaction)
+      attachmentReq.input('orderNo', sql.NVarChar, sourceOrderNo)
+      const placeholders = detailIds.map((_, idx) => `@d${idx}`).join(',')
+      detailIds.forEach((id, idx) => attachmentReq.input(`d${idx}`, sql.Int, id))
+      const attachmentsResult = await attachmentReq.query(
+        `
+        SELECT
+          附件ID as id,
+          订单ID as orderId,
+          存储文件名 as storedFileName,
+          相对路径 as relativePath
+        FROM 销售订单附件
+        WHERE 订单编号 = @orderNo
+          AND 订单ID IN (${placeholders})
+      `
+      )
+      const attachments = attachmentsResult.recordset || []
+
+      for (const att of attachments) {
+        const oldRelativeDir = String(att.relativePath || '').trim()
+        const storedFileName = String(att.storedFileName || '').trim()
+        const orderId = Number(att.orderId)
+        const newRelativeDir = computeAttachmentNewRelativeDir({
+          oldRelativeDir,
+          newOrderNo: group.orderNo,
+          detailId: orderId
+        })
+
+        const fromFile = path.join(FILE_ROOT, oldRelativeDir, storedFileName)
+        const toDir = path.join(FILE_ROOT, newRelativeDir)
+        const toFile = path.join(toDir, storedFileName)
+
+        ensureDirSync(toDir)
+        if (!fs.existsSync(fromFile)) {
+          throw new Error(`附件文件不存在：${fromFile}`)
+        }
+
+        await moveFileWithFallback(fromFile, toFile)
+        movedFiles.push({ fromFile, toFile })
+
+        const upReq = new sql.Request(transaction)
+        upReq.input('attachmentId', sql.Int, Number(att.id))
+        upReq.input('newOrderNo', sql.NVarChar, group.orderNo)
+        upReq.input('newRelativePath', sql.NVarChar, newRelativeDir)
+        await upReq.query(`
+          UPDATE 销售订单附件
+          SET 订单编号 = @newOrderNo, 相对路径 = @newRelativePath
+          WHERE 附件ID = @attachmentId
+        `)
+      }
+
+      const updateReq = new sql.Request(transaction)
+      updateReq.input('newOrderNo', sql.NVarChar, group.orderNo)
+      updateReq.input('oldOrderNo', sql.NVarChar, sourceOrderNo)
+      const placeholders2 = detailIds.map((_, idx) => `@id${idx}`).join(',')
+      detailIds.forEach((id, idx) => updateReq.input(`id${idx}`, sql.Int, id))
+      await updateReq.query(`
+        UPDATE 销售订单
+        SET 订单编号 = @newOrderNo
+        WHERE 订单编号 = @oldOrderNo
+          AND 订单ID IN (${placeholders2})
+      `)
+    }
+
+    await transaction.commit()
+    res.json({ code: 0, success: true, message: '拆分成功', data: { sourceOrderNo, created } })
+  } catch (error) {
+    if (transaction) {
+      try {
+        await transaction.rollback()
+      } catch {}
+    }
+
+    // 尽力回滚文件移动
+    for (let i = movedFiles.length - 1; i >= 0; i -= 1) {
+      const item = movedFiles[i]
+      try {
+        if (item?.toFile && fs.existsSync(item.toFile)) {
+          ensureDirSync(path.dirname(item.fromFile))
+          await moveFileWithFallback(item.toFile, item.fromFile)
+        }
+      } catch (rollbackErr) {
+        console.error('回滚附件文件失败:', rollbackErr)
+      }
+    }
+
+    console.error('拆分销售订单失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: error?.message || '拆分销售订单失败'
     })
   }
 })
