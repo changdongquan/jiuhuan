@@ -7,9 +7,9 @@ const fsp = fs.promises
 const multer = require('multer')
 
 // 生产任务附件存储配置
-// 生产环境建议通过环境变量显式设置 PRODUCTION_TASK_FILES_ROOT=/mnt/jiuhuan-files
+// 使用与销售订单相同的路径配置，生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
 // 本地开发环境则默认使用 backend/uploads 目录
-const FILE_ROOT = process.env.PRODUCTION_TASK_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
 const TASK_SUBDIR = process.env.PRODUCTION_TASK_FILES_SUBDIR || 'production-tasks'
 const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.PRODUCTION_TASK_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),

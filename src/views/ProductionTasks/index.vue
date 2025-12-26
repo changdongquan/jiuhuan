@@ -510,11 +510,7 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane name="hours">
-                <template #label>
-                  工时记录
-                  <span v-if="hoursTabCompleted" class="pt-tab-complete-dot"></span>
-                </template>
+              <el-tab-pane label="工时记录" name="hours">
                 <div class="pt-edit-section">
                   <div class="pt-edit-section-title">工时记录</div>
                   <el-row :gutter="isMobile ? 8 : 20">
@@ -934,21 +930,6 @@ const productionTabCompleted = computed(() => {
     '生产状态',
     '投产数量',
     '已完成数量'
-  ]
-  return fields.every((key) => isFieldFilled(dialogForm[key]))
-})
-
-// 工时记录页签是否完成录入
-const hoursTabCompleted = computed(() => {
-  const fields: (keyof ProductionTaskInfo)[] = [
-    '加工中心工时',
-    '电极加工工时',
-    '线切割工时',
-    '放电工时',
-    '机加工时',
-    '抛光工时',
-    '装配工时',
-    '试模工时'
   ]
   return fields.every((key) => isFieldFilled(dialogForm[key]))
 })
