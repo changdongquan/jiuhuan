@@ -27,6 +27,15 @@ const normalizeAttachmentFileName = (name) => {
   }
 }
 
+// 安全化项目编号，用于路径：将非法路径字符替换为下划线
+// 非法字符：/ \ ? % * : | " < >
+const safeProjectCodeForPath = (projectCode) => {
+  if (!projectCode) return 'UNKNOWN'
+  return String(projectCode)
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+}
+
 const ensureDirSync = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true })
@@ -63,29 +72,20 @@ const toYYYYMMDD = (val) => {
   return `${y}${m}${day}`
 }
 
+// 注意：新的路径结构为 {项目编号}/销售订单/，不包含订单编号和明细ID
+// 因此拆分订单时，路径不需要改变，只需要更新数据库中的订单编号字段
+// 此函数保留用于向后兼容，但实际上在新路径结构下不需要使用
 const computeAttachmentNewRelativeDir = ({ oldRelativeDir, newOrderNo, detailId }) => {
+  // 新路径格式：{项目编号}/销售订单/
+  // 如果路径已经是新格式（以 /销售订单 结尾），直接返回原路径
   const rel = String(oldRelativeDir || '').trim()
-  if (!rel) {
-    const now = new Date()
-    const year = String(now.getFullYear())
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, String(detailId))
+  if ((rel && rel.endsWith('/销售订单')) || rel.endsWith('销售订单')) {
+    return rel
   }
 
-  const parts = rel.split('/')
-  const subIdx = parts.indexOf(SALES_SUBDIR)
-  if (subIdx !== -1 && parts.length >= subIdx + 5) {
-    const year = parts[subIdx + 1]
-    const month = parts[subIdx + 2]
-    const finalDetailId = parts[subIdx + 4] || String(detailId)
-    return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, finalDetailId)
-  }
-
-  // fallback：尽量保持目录结构，但仍切到新订单号目录
-  const now = new Date()
-  const year = String(now.getFullYear())
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  return path.posix.join(SALES_SUBDIR, year, month, newOrderNo, String(detailId))
+  // 旧格式兼容：如果是旧格式，保持原路径不变（只更新订单编号，不移动文件）
+  // 这样可以避免对旧数据的文件操作
+  return rel
 }
 
 // 使用 multer 将销售订单附件直接写入 NAS
@@ -103,23 +103,20 @@ const attachmentStorage = multer.diskStorage({
         return cb(new Error('明细ID不合法'))
       }
 
-      const now = new Date()
-      const year = String(now.getFullYear())
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-
-      const relativeDir = path.posix.join(
+      // 注意：destination 在路由处理前执行，此时无法查询数据库获取项目编号
+      // 所以先使用临时目录，在路由处理中查询到项目编号后再移动文件到正确位置
+      const tempDir = path.posix.join(
         SALES_SUBDIR,
-        year,
-        month,
-        orderNo,
-        String(numericDetailId)
+        '_temp',
+        String(Date.now()),
+        String(Math.random().toString(36).slice(2, 8))
       )
-      const fullDir = path.join(FILE_ROOT, relativeDir)
-
+      const fullDir = path.join(FILE_ROOT, tempDir)
       ensureDirSync(fullDir)
 
-      // 在请求对象上记录相对路径，后续插入数据库时使用
-      req._attachmentRelativeDir = relativeDir
+      // 记录临时目录，用于后续移动文件
+      req._tempAttachmentDir = tempDir
+      req._tempAttachmentFullDir = fullDir
 
       cb(null, fullDir)
     } catch (err) {
@@ -1204,35 +1201,16 @@ router.post('/:orderNo/split', async (req, res) => {
       )
       const attachments = attachmentsResult.recordset || []
 
+      // 新路径结构：{项目编号}/销售订单/，不包含订单编号和明细ID
+      // 因此拆分订单时，路径不需要改变，只需要更新数据库中的订单编号字段
+      // 不需要移动文件，提高了性能并简化了逻辑
       for (const att of attachments) {
-        const oldRelativeDir = String(att.relativePath || '').trim()
-        const storedFileName = String(att.storedFileName || '').trim()
-        const orderId = Number(att.orderId)
-        const newRelativeDir = computeAttachmentNewRelativeDir({
-          oldRelativeDir,
-          newOrderNo: group.orderNo,
-          detailId: orderId
-        })
-
-        const fromFile = path.join(FILE_ROOT, oldRelativeDir, storedFileName)
-        const toDir = path.join(FILE_ROOT, newRelativeDir)
-        const toFile = path.join(toDir, storedFileName)
-
-        ensureDirSync(toDir)
-        if (!fs.existsSync(fromFile)) {
-          throw new Error(`附件文件不存在：${fromFile}`)
-        }
-
-        await moveFileWithFallback(fromFile, toFile)
-        movedFiles.push({ fromFile, toFile })
-
         const upReq = new sql.Request(transaction)
         upReq.input('attachmentId', sql.Int, Number(att.id))
         upReq.input('newOrderNo', sql.NVarChar, group.orderNo)
-        upReq.input('newRelativePath', sql.NVarChar, newRelativeDir)
         await upReq.query(`
           UPDATE 销售订单附件
-          SET 订单编号 = @newOrderNo, 相对路径 = @newRelativePath
+          SET 订单编号 = @newOrderNo
           WHERE 附件ID = @attachmentId
         `)
       }
@@ -1259,18 +1237,8 @@ router.post('/:orderNo/split', async (req, res) => {
       } catch {}
     }
 
-    // 尽力回滚文件移动
-    for (let i = movedFiles.length - 1; i >= 0; i -= 1) {
-      const item = movedFiles[i]
-      try {
-        if (item?.toFile && fs.existsSync(item.toFile)) {
-          ensureDirSync(path.dirname(item.fromFile))
-          await moveFileWithFallback(item.toFile, item.fromFile)
-        }
-      } catch (rollbackErr) {
-        console.error('回滚附件文件失败:', rollbackErr)
-      }
-    }
+    // 注意：新路径结构下，拆分订单不需要移动文件，所以也不需要回滚文件移动
+    // 此代码块保留用于向后兼容，但在新路径结构下 movedFiles 始终为空数组
 
     console.error('拆分销售订单失败:', error)
     res.status(500).json({
@@ -1341,9 +1309,58 @@ router.post(
       }
 
       const itemCode = dbDetail.itemCode || null
+
+      // 如果项目编号为空，使用默认值
+      if (!itemCode) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '订单明细缺少项目编号，无法保存附件'
+        })
+      }
+
+      // 计算最终存储路径：{项目编号}/销售订单/
+      const safeProjectCode = safeProjectCodeForPath(itemCode)
+      const finalRelativeDir = path.posix.join(safeProjectCode, '销售订单')
+      const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+      ensureDirSync(finalFullDir)
+
+      // 将文件从临时目录移动到最终目录
       const originalName = normalizeAttachmentFileName(file.originalname)
       const storedFileName = req._attachmentStoredFileName || file.filename
-      const relativePath = req._attachmentRelativeDir || path.posix.join(SALES_SUBDIR, orderNo)
+      const tempFile = path.join(req._tempAttachmentFullDir || FILE_ROOT, storedFileName)
+      const finalFile = path.join(finalFullDir, storedFileName)
+
+      if (fs.existsSync(tempFile)) {
+        await moveFileWithFallback(tempFile, finalFile)
+        // 清理临时目录（如果为空）
+        try {
+          const tempDir = req._tempAttachmentFullDir
+          if (tempDir && fs.existsSync(tempDir)) {
+            const files = fs.readdirSync(tempDir)
+            if (files.length === 0) {
+              fs.rmdirSync(tempDir, { recursive: true })
+              // 尝试清理父目录
+              const parentDir = path.dirname(tempDir)
+              if (fs.existsSync(parentDir)) {
+                try {
+                  const parentFiles = fs.readdirSync(parentDir)
+                  if (parentFiles.length === 0) {
+                    fs.rmdirSync(parentDir, { recursive: true })
+                  }
+                } catch (e) {
+                  // 忽略清理父目录的错误
+                }
+              }
+            }
+          }
+        } catch (cleanupErr) {
+          // 忽略清理临时目录的错误，不影响主流程
+          console.warn('清理临时目录失败:', cleanupErr)
+        }
+      }
+
+      const relativePath = finalRelativeDir
       const fileSize = file.size
       const contentType = file.mimetype || null
       const uploadedBy = (req.body && (req.body.uploadedBy || req.body.uploader)) || null

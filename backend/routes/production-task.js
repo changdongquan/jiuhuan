@@ -3,6 +3,7 @@ const { query } = require('../database')
 const router = express.Router()
 const path = require('path')
 const fs = require('fs')
+const fsp = fs.promises
 const multer = require('multer')
 
 // 生产任务附件存储配置
@@ -24,31 +25,58 @@ const normalizeAttachmentFileName = (name) => {
   }
 }
 
+// 安全化项目编号，用于路径：将非法路径字符替换为下划线
+// 非法字符：/ \ ? % * : | " < >
+const safeProjectCodeForPath = (projectCode) => {
+  if (!projectCode) return 'UNKNOWN'
+  return String(projectCode)
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+}
+
+// 安全化文件名（将非法字符替换为下划线）
+const safeFileName = (fileName) => {
+  if (!fileName) return fileName
+  return String(fileName).replace(/[/\\?%*:|"<>]/g, '_')
+}
+
 const ensureDirSync = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true })
   }
 }
 
+const moveFileWithFallback = async (fromPath, toPath) => {
+  try {
+    await fsp.rename(fromPath, toPath)
+  } catch (err) {
+    if (err && err.code === 'EXDEV') {
+      await fsp.copyFile(fromPath, toPath)
+      await fsp.unlink(fromPath)
+      return
+    }
+    throw err
+  }
+}
+
 const attachmentStorage = multer.diskStorage({
   destination(req, file, cb) {
     try {
-      const { projectCode, type } = req.params
-      if (!projectCode || !type) return cb(new Error('缺少项目编号或附件类型'))
-
-      const safeProjectCode = String(projectCode).trim()
-      const safeType = String(type).trim()
-      if (!safeProjectCode) return cb(new Error('项目编号不能为空'))
-      if (!['photo', 'inspection'].includes(safeType)) return cb(new Error('附件类型不合法'))
-
-      const now = new Date()
-      const year = String(now.getFullYear())
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-
-      const relativeDir = path.posix.join(TASK_SUBDIR, year, month, safeProjectCode, safeType)
-      const fullDir = path.join(FILE_ROOT, relativeDir)
+      // 注意：destination 在路由处理前执行，此时无法查询数据库获取客户模号
+      // 所以先使用临时目录，在路由处理中查询到客户模号后再移动文件到正确位置
+      const tempDir = path.posix.join(
+        TASK_SUBDIR,
+        '_temp',
+        String(Date.now()),
+        String(Math.random().toString(36).slice(2, 8))
+      )
+      const fullDir = path.join(FILE_ROOT, tempDir)
       ensureDirSync(fullDir)
-      req._attachmentRelativeDir = relativeDir
+
+      // 记录临时目录，用于后续移动文件
+      req._tempAttachmentDir = tempDir
+      req._tempAttachmentFullDir = fullDir
+
       cb(null, fullDir)
     } catch (err) {
       cb(err)
@@ -56,6 +84,7 @@ const attachmentStorage = multer.diskStorage({
   },
   filename(req, file, cb) {
     try {
+      // 临时文件名（后续会重命名为基于客户模号的名称）
       const timestamp = Date.now()
       const randomPart = Math.random().toString(36).slice(2, 8)
       const decodedName = normalizeAttachmentFileName(file.originalname)
@@ -98,6 +127,39 @@ const assertProjectExists = async (projectCode) => {
     }
   )
   return !!rows.length
+}
+
+// 根据项目编号查询客户模号
+const getCustomerModelNo = async (projectCode) => {
+  const rows = await query(
+    `SELECT TOP 1 客户模号 as customerModelNo FROM 项目管理 WHERE 项目编号 = @projectCode`,
+    { projectCode }
+  )
+  return rows.length > 0 ? rows[0].customerModelNo || null : null
+}
+
+// 生成新的文件名（基于客户模号和附件类型）
+const generateAttachmentFileName = (customerModelNo, type, tag, originalFileName) => {
+  // 获取文件扩展名
+  const ext = originalFileName.split('.').pop()?.toLowerCase() || ''
+
+  // 客户模号处理：如果为空，使用默认值
+  const safeCustomerModelNo = customerModelNo || 'UNKNOWN'
+
+  // 根据类型和标签生成文件名前缀
+  let namePrefix = ''
+  if (type === 'photo') {
+    if (tag === 'appearance') {
+      namePrefix = `${safeCustomerModelNo}_模具外观`
+    } else if (tag === 'nameplate') {
+      namePrefix = `${safeCustomerModelNo}_模具铭牌`
+    }
+  } else if (type === 'inspection') {
+    namePrefix = `${safeCustomerModelNo}_塑胶模具检验记录单`
+  }
+
+  // 如果扩展名存在，组合文件名；否则只返回前缀
+  return ext ? `${namePrefix}.${ext}` : namePrefix
 }
 
 const getFileFullPath = (relativePath, storedFileName) => {
@@ -453,15 +515,27 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
       return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
     }
 
+    // 查询客户模号
+    const customerModelNo = await getCustomerModelNo(projectCode)
+
+    // 安全化项目编号（用于路径）
+    const safeProjectCode = safeProjectCodeForPath(projectCode)
+
+    // 确定子目录名
+    const typeDirName = type === 'photo' ? '模具图片' : '塑胶模具检验记录单'
+
+    // 计算最终存储路径：{项目编号}/生产任务/{子目录名}/
+    const finalRelativeDir = path.posix.join(safeProjectCode, '生产任务', typeDirName)
+    const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+    ensureDirSync(finalFullDir)
+
+    // 生成新的文件名
     const originalName = normalizeAttachmentFileName(file.originalname)
-    const storedFileName = req._attachmentStoredFileName || file.filename
-    const relativePath =
-      req._attachmentRelativeDir || path.posix.join(TASK_SUBDIR, projectCode, type)
-    const fileSize = file.size
-    const contentType = file.mimetype || null
-    const uploadedBy = (req.body && (req.body.uploadedBy || req.body.uploader)) || null
+    const newFileName = generateAttachmentFileName(customerModelNo, type, tag, originalName)
+    const safeNewFileName = safeFileName(newFileName) // 安全化文件名
 
     // 照片：同一项目+标签只保留一张（上传即替换）
+    // 注意：需要在移动新文件之前先删除旧文件，避免新文件名和旧文件名相同时导致问题
     if (type === 'photo') {
       const existedRows = await query(
         `
@@ -479,15 +553,90 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
       )
       if (existedRows.length) {
         const prev = existedRows[0]
-        await query(`DELETE FROM 生产任务附件 WHERE 附件ID = @id`, { id: Number(prev.id) })
+        // 先删除旧文件
         try {
           const prevPath = getFileFullPath(prev.relativePath, prev.storedFileName)
           if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath)
         } catch (fileErr) {
-          console.warn('替换照片附件时删除旧文件失败（已删除数据库记录）:', fileErr)
+          console.warn('替换照片附件时删除旧文件失败:', fileErr)
         }
+        // 再删除数据库记录
+        await query(`DELETE FROM 生产任务附件 WHERE 附件ID = @id`, { id: Number(prev.id) })
       }
     }
+
+    // 照片：同一项目+标签只保留一张（上传即替换）
+    // 注意：需要在移动新文件之前先删除旧文件，避免新文件名和旧文件名相同时导致问题
+    if (type === 'photo') {
+      const existedRows = await query(
+        `
+        SELECT TOP 1
+          附件ID as id,
+          存储文件名 as storedFileName,
+          相对路径 as relativePath
+        FROM 生产任务附件
+        WHERE 项目编号 = @projectCode
+          AND 附件类型 = @type
+          AND 附件标签 = @tag
+        ORDER BY 上传时间 DESC, 附件ID DESC
+      `,
+        { projectCode, type, tag }
+      )
+      if (existedRows.length) {
+        const prev = existedRows[0]
+        // 先删除旧文件
+        try {
+          const prevPath = getFileFullPath(prev.relativePath, prev.storedFileName)
+          if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath)
+        } catch (fileErr) {
+          console.warn('替换照片附件时删除旧文件失败:', fileErr)
+        }
+        // 再删除数据库记录
+        await query(`DELETE FROM 生产任务附件 WHERE 附件ID = @id`, { id: Number(prev.id) })
+      }
+    }
+
+    // 将文件从临时目录移动到最终目录（使用新文件名）
+    const tempFile = path.join(
+      req._tempAttachmentFullDir || FILE_ROOT,
+      req._attachmentStoredFileName || file.filename
+    )
+    const finalFile = path.join(finalFullDir, safeNewFileName)
+
+    if (fs.existsSync(tempFile)) {
+      await moveFileWithFallback(tempFile, finalFile)
+      // 清理临时目录（如果为空）
+      try {
+        const tempDir = req._tempAttachmentFullDir
+        if (tempDir && fs.existsSync(tempDir)) {
+          const files = fs.readdirSync(tempDir)
+          if (files.length === 0) {
+            fs.rmdirSync(tempDir, { recursive: true })
+            // 尝试清理父目录
+            const parentDir = path.dirname(tempDir)
+            if (fs.existsSync(parentDir)) {
+              try {
+                const parentFiles = fs.readdirSync(parentDir)
+                if (parentFiles.length === 0) {
+                  fs.rmdirSync(parentDir, { recursive: true })
+                }
+              } catch (e) {
+                // 忽略清理父目录的错误
+              }
+            }
+          }
+        }
+      } catch (cleanupErr) {
+        // 忽略清理临时目录的错误，不影响主流程
+        console.warn('清理临时目录失败:', cleanupErr)
+      }
+    }
+
+    const storedFileName = safeNewFileName // 使用新生成的文件名
+    const relativePath = finalRelativeDir // 新的相对路径
+    const fileSize = file.size
+    const contentType = file.mimetype || null
+    const uploadedBy = (req.body && (req.body.uploadedBy || req.body.uploader)) || null
 
     const inserted = await query(
       `

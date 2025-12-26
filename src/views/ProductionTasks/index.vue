@@ -342,7 +342,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '100%' : '1200px'"
+      :width="isMobile ? '100%' : '1220px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="pt-detail-dialog"
@@ -419,7 +419,11 @@
         >
           <div class="pt-edit-tabs-wrapper">
             <el-tabs v-model="dialogActiveTab" class="pt-edit-tabs" tab-position="top">
-              <el-tab-pane label="投产信息" name="production">
+              <el-tab-pane name="production">
+                <template #label>
+                  投产信息
+                  <span v-if="productionTabCompleted" class="pt-tab-complete-dot"></span>
+                </template>
                 <div class="pt-edit-section">
                   <div class="pt-edit-section-title">投产信息</div>
                   <el-row :gutter="isMobile ? 8 : 20">
@@ -506,7 +510,11 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="工时记录" name="hours">
+              <el-tab-pane name="hours">
+                <template #label>
+                  工时记录
+                  <span v-if="hoursTabCompleted" class="pt-tab-complete-dot"></span>
+                </template>
                 <div class="pt-edit-section">
                   <div class="pt-edit-section-title">工时记录</div>
                   <el-row :gutter="isMobile ? 8 : 20">
@@ -617,15 +625,15 @@
                           </div>
                         </template>
 
-                        <div style=" margin: 4px 0 8px;font-weight: 600">模具外观</div>
+                        <div style="margin: 4px 0 8px; font-weight: 600">模具外观</div>
                         <el-table
                           :data="photoAppearanceAttachments"
                           border
                           size="small"
-                          style="width: 100%; margin-bottom: 12px"
+                          style="width: calc(100% - 2px); margin-bottom: 12px"
                         >
-                          <el-table-column type="index" label="序号" width="50" />
-                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -634,8 +642,26 @@
                           <el-table-column label="上传时间" width="90">
                             <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
                           </el-table-column>
-                          <el-table-column label="操作" width="95" align="center">
+                          <el-table-column label="操作" width="135" align="center">
                             <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
                               <el-button
                                 type="primary"
                                 link
@@ -657,15 +683,15 @@
                           </el-table-column>
                         </el-table>
 
-                        <div style=" margin: 4px 0 8px;font-weight: 600">模具铭牌</div>
+                        <div style="margin: 4px 0 8px; font-weight: 600">模具铭牌</div>
                         <el-table
                           :data="photoNameplateAttachments"
                           border
                           size="small"
-                          style="width: 100%"
+                          style="width: calc(100% - 2px)"
                         >
-                          <el-table-column type="index" label="序号" width="50" />
-                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -674,8 +700,26 @@
                           <el-table-column label="上传时间" width="90">
                             <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
                           </el-table-column>
-                          <el-table-column label="操作" width="95" align="center">
+                          <el-table-column label="操作" width="135" align="center">
                             <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
                               <el-button
                                 type="primary"
                                 link
@@ -703,7 +747,7 @@
                       <el-card shadow="never" class="pt-attachment-card">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>模具检验表</span>
+                            <span>文件</span>
                             <el-upload
                               :action="getAttachmentAction('inspection')"
                               :show-file-list="false"
@@ -711,19 +755,20 @@
                               :on-success="handleAttachmentUploadSuccess"
                               :on-error="handleAttachmentUploadError"
                             >
-                              <el-button type="primary" size="small">上传检验表</el-button>
+                              <el-button type="primary" size="small">上传模具检验记录单</el-button>
                             </el-upload>
                           </div>
                         </template>
 
+                        <div style="margin: 4px 0 8px; font-weight: 600">塑胶模具检验记录单</div>
                         <el-table
                           :data="inspectionAttachments"
                           border
                           size="small"
-                          style="width: 100%"
+                          style="width: calc(100% - 2px)"
                         >
-                          <el-table-column type="index" label="序号" width="50" />
-                          <el-table-column prop="originalName" label="文件名" min-width="180" />
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -732,8 +777,26 @@
                           <el-table-column label="上传时间" width="90">
                             <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
                           </el-table-column>
-                          <el-table-column label="操作" width="95" align="center">
+                          <el-table-column label="操作" width="135" align="center">
                             <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
                               <el-button
                                 type="primary"
                                 link
@@ -791,6 +854,8 @@ import {
   type ProductionTaskInfo
 } from '@/api/production-task'
 import { useAppStore } from '@/store/modules/app'
+import { createImageViewer } from '@/components/ImageViewer'
+import { createPdfViewer } from '@/components/PdfViewer'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
@@ -853,6 +918,41 @@ const currentProjectCode = ref('')
 const isViewMode = ref(false)
 const dialogActiveTab = ref<'production' | 'hours' | 'attachments'>('production')
 
+// 判断字段是否已填写
+const isFieldFilled = (value: unknown) => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return value >= 0
+  return true
+}
+
+// 投产信息页签是否完成录入
+const productionTabCompleted = computed(() => {
+  const fields: (keyof ProductionTaskInfo)[] = [
+    '开始日期',
+    '结束日期',
+    '生产状态',
+    '投产数量',
+    '已完成数量'
+  ]
+  return fields.every((key) => isFieldFilled(dialogForm[key]))
+})
+
+// 工时记录页签是否完成录入
+const hoursTabCompleted = computed(() => {
+  const fields: (keyof ProductionTaskInfo)[] = [
+    '加工中心工时',
+    '电极加工工时',
+    '线切割工时',
+    '放电工时',
+    '机加工时',
+    '抛光工时',
+    '装配工时',
+    '试模工时'
+  ]
+  return fields.every((key) => isFieldFilled(dialogForm[key]))
+})
+
 const attachmentLoading = ref(false)
 const photoAttachments = ref<ProductionTaskAttachment[]>([])
 const inspectionAttachments = ref<ProductionTaskAttachment[]>([])
@@ -907,6 +1007,144 @@ const handleAttachmentUploadError = (err: any, uploadFile?: any) => {
   ElMessage.error(message)
 }
 
+// 判断附件是否为图片
+const isImageFile = (attachment: ProductionTaskAttachment): boolean => {
+  // 优先使用 contentType 判断
+  if (attachment.contentType?.startsWith('image/')) {
+    return true
+  }
+  // 通过文件扩展名判断（使用存储文件名）
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico']
+  return imageExts.includes(ext)
+}
+
+// 判断附件是否为 PDF
+const isPdfFile = (attachment: ProductionTaskAttachment): boolean => {
+  // 优先使用 contentType 判断
+  if (attachment.contentType === 'application/pdf') {
+    return true
+  }
+  // 通过文件扩展名判断（使用存储文件名）
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'pdf'
+}
+
+// 预览图片附件
+const handleAttachmentPreview = async (attachment: ProductionTaskAttachment) => {
+  if (!isImageFile(attachment)) {
+    ElMessage.warning('该文件不是图片格式')
+    return
+  }
+
+  try {
+    // 根据附件类型获取所有图片附件列表
+    let allAttachments: ProductionTaskAttachment[] = []
+    if (attachment.type === 'photo') {
+      // 照片类型的附件，获取同一类型的所有附件
+      allAttachments = photoAttachments.value
+    } else if (attachment.type === 'inspection') {
+      // 检验表类型的附件
+      allAttachments = inspectionAttachments.value
+    }
+
+    // 过滤出所有图片附件
+    const imageAttachments = allAttachments.filter(isImageFile)
+    if (imageAttachments.length === 0) {
+      ElMessage.warning('没有可预览的图片')
+      return
+    }
+
+    // 找到当前附件的索引
+    const currentIndex = imageAttachments.findIndex((item) => item.id === attachment.id)
+
+    // 获取所有图片的 blob URL
+    const urlList: string[] = []
+    const blobUrls: string[] = []
+
+    try {
+      // 并发获取所有图片的 blob
+      const blobPromises = imageAttachments.map(async (item) => {
+        try {
+          const resp = await downloadProductionTaskAttachmentApi(item.id)
+          const blob = (resp as any)?.data ?? resp
+          const url = window.URL.createObjectURL(blob as Blob)
+          blobUrls.push(url)
+          return url
+        } catch (error) {
+          console.error(`加载图片 ${item.storedFileName || item.originalName} 失败:`, error)
+          return null
+        }
+      })
+
+      const urls = await Promise.all(blobPromises)
+      urlList.push(...urls.filter((url): url is string => url !== null))
+
+      if (urlList.length === 0) {
+        ElMessage.warning('加载图片失败')
+        return
+      }
+
+      // 打开图片预览
+      createImageViewer({
+        urlList,
+        initialIndex: currentIndex >= 0 ? currentIndex : 0,
+        infinite: true,
+        hideOnClickModal: true,
+        zIndex: 3000,
+        teleported: true
+      })
+    } catch (error) {
+      // 清理已创建的 blob URL
+      blobUrls.forEach((url) => window.URL.revokeObjectURL(url))
+      throw error
+    }
+  } catch (error) {
+    console.error('预览图片失败:', error)
+    ElMessage.error('预览图片失败')
+  }
+}
+
+// 预览 PDF 附件
+const handleAttachmentPdfPreview = async (attachment: ProductionTaskAttachment) => {
+  if (!isPdfFile(attachment)) {
+    ElMessage.warning('该文件不是 PDF 格式')
+    return
+  }
+
+  try {
+    // 获取 PDF 文件的 blob
+    const resp = await downloadProductionTaskAttachmentApi(attachment.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+
+    // 移动端浏览器不支持在 iframe 中显示 PDF blob URL，使用 window.open 直接打开
+    if (isMobile.value) {
+      const newWindow = window.open(url, '_blank')
+      if (!newWindow) {
+        ElMessage.warning('请允许弹出窗口以预览 PDF')
+        window.URL.revokeObjectURL(url)
+      } else {
+        // 延迟清理 URL，确保新窗口已加载
+        setTimeout(() => {
+          // 不立即清理，让浏览器管理，新窗口关闭后会自动清理
+        }, 1000)
+      }
+    } else {
+      // PC 端使用 iframe 预览组件
+      createPdfViewer({
+        url,
+        fileName: attachment.storedFileName || attachment.originalName || 'PDF 文件'
+      })
+    }
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    ElMessage.error('预览 PDF 失败')
+  }
+}
+
 const downloadAttachment = async (row: ProductionTaskAttachment) => {
   try {
     const resp: any = await downloadProductionTaskAttachmentApi(row.id)
@@ -914,7 +1152,7 @@ const downloadAttachment = async (row: ProductionTaskAttachment) => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = row.originalName || `附件_${row.id}`
+    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -927,12 +1165,16 @@ const downloadAttachment = async (row: ProductionTaskAttachment) => {
 
 const deleteAttachment = async (row: ProductionTaskAttachment) => {
   try {
-    await ElMessageBox.confirm(`确定删除附件：${row.originalName}？`, '提示', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-      closeOnClickModal: false
-    })
+    await ElMessageBox.confirm(
+      `确定删除附件：${row.storedFileName || row.originalName}？`,
+      '提示',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        closeOnClickModal: false
+      }
+    )
   } catch {
     return
   }
@@ -1466,7 +1708,7 @@ onMounted(() => {
 
 /* PC 端弹窗：固定 body 高度，避免切换页签导致弹窗高度变化 */
 :deep(.pt-detail-dialog .el-dialog__body) {
-  height: 560px;
+  height: 580px;
   max-height: calc(100vh - 180px);
   overflow-y: auto;
 }
@@ -1610,10 +1852,18 @@ onMounted(() => {
 
 :deep(.pt-edit-tabs .el-tabs__content) {
   min-height: 0;
-  padding-right: 6px;
   overflow: auto;
   order: 1;
   flex: 1;
+}
+
+.pt-tab-complete-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  background-color: var(--el-color-success);
+  border-radius: 50%;
 }
 
 .pt-edit-section {
