@@ -24,6 +24,16 @@ const normalizeAttachmentFileName = (name) => {
   }
 }
 
+// 根据项目编号获取分类名称
+const getCategoryFromProjectCode = (projectCode) => {
+  if (!projectCode) return '其他'
+  const code = String(projectCode).trim().toUpperCase()
+  if (code.startsWith('JH01')) return '塑胶模具'
+  if (code.startsWith('JH03')) return '零件加工'
+  if (code.startsWith('JH05')) return '修改模具'
+  return '其他'
+}
+
 // 安全化项目编号，用于路径
 const safeProjectCodeForPath = (projectCode) => {
   if (!projectCode) return 'UNKNOWN'
@@ -704,6 +714,7 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
     const customerModelNo = await getCustomerModelNo(projectCode)
 
     // 安全化项目编号（用于路径）
+    const category = getCategoryFromProjectCode(projectCode)
     const safeProjectCode = safeProjectCodeForPath(projectCode)
 
     // 附件类型中文名称映射
@@ -715,8 +726,8 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
     }
     const typeDirName = typeDirMap[type]
 
-    // 计算最终存储路径：{项目编号}/项目管理/{附件类型}/
-    const finalRelativeDir = path.posix.join(safeProjectCode, '项目管理', typeDirName)
+    // 计算最终存储路径：{分类}/{项目编号}/项目管理/{附件类型}/
+    const finalRelativeDir = path.posix.join(category, safeProjectCode, '项目管理', typeDirName)
     const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
     ensureDirSync(finalFullDir)
 

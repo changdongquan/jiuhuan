@@ -752,7 +752,7 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="附件" name="attachments">
+              <el-tab-pane label="附件 1" name="attachments">
                 <div class="pm-attachments" v-loading="attachmentLoading">
                   <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
                     <el-col :xs="24" :sm="12" class="pm-attachment-col">
@@ -1062,6 +1062,183 @@
                   </el-row>
                 </div>
               </el-tab-pane>
+
+              <el-tab-pane label="附件 2" name="attachments2">
+                <!-- 生产任务附件 -->
+                <div
+                  class="pm-production-task-attachments"
+                  v-loading="productionTaskAttachmentLoading"
+                >
+                  <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>照片</span>
+                          </div>
+                        </template>
+
+                        <div style="margin: 4px 0 8px; font-weight: 600">模具外观</div>
+                        <el-table
+                          :data="productionTaskPhotoAppearanceAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px); margin-bottom: 12px"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isProductionTaskImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isProductionTaskPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadProductionTaskAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+
+                        <div style="margin: 4px 0 8px; font-weight: 600">模具铭牌</div>
+                        <el-table
+                          :data="productionTaskPhotoNameplateAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isProductionTaskImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isProductionTaskPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadProductionTaskAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>文件</span>
+                          </div>
+                        </template>
+
+                        <div style="margin: 4px 0 8px; font-weight: 600">塑胶模具检验记录单</div>
+                        <el-table
+                          :data="productionTaskInspectionAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isProductionTaskImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isProductionTaskPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadProductionTaskAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
             </el-tabs>
           </div>
         </el-form>
@@ -1095,6 +1272,11 @@ import {
   type ProjectAttachmentType
 } from '@/api/project'
 import { getProductionTaskDetailApi } from '@/api/production-task'
+import {
+  getProductionTaskAttachmentsApi,
+  downloadProductionTaskAttachmentApi,
+  type ProductionTaskAttachment
+} from '@/api/production-task'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
@@ -1161,7 +1343,7 @@ const viewData = ref<Partial<ProjectInfo>>({})
 
 const editDialogVisible = ref(false)
 const editTitle = ref('编辑项目')
-const editActiveTab = ref<'basic' | 'part' | 'mould' | 'attachments'>('basic')
+const editActiveTab = ref<'basic' | 'part' | 'mould' | 'attachments' | 'attachments2'>('basic')
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
@@ -1570,6 +1752,7 @@ const handleEdit = (row: Partial<ProjectInfo>) => {
   // 加载附件列表
   if (row.项目编号) {
     loadAttachments()
+    loadProductionTaskAttachments()
   }
 }
 
@@ -1588,6 +1771,18 @@ const tripartiteAgreementAttachments = computed(() =>
 )
 const trialFormAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'trial-form')
+)
+
+// 生产任务附件相关状态
+const productionTaskAttachmentLoading = ref(false)
+const productionTaskPhotoAttachments = ref<ProductionTaskAttachment[]>([])
+const productionTaskInspectionAttachments = ref<ProductionTaskAttachment[]>([])
+
+const productionTaskPhotoAppearanceAttachments = computed(() =>
+  productionTaskPhotoAttachments.value.filter((a) => a.tag === 'appearance')
+)
+const productionTaskPhotoNameplateAttachments = computed(() =>
+  productionTaskPhotoAttachments.value.filter((a) => a.tag === 'nameplate')
 )
 
 // 加载附件列表
@@ -1618,6 +1813,32 @@ const loadAttachments = async () => {
     allAttachments.value = []
   } finally {
     attachmentLoading.value = false
+  }
+}
+
+// 加载生产任务附件列表
+const loadProductionTaskAttachments = async () => {
+  const projectCode = editForm.项目编号 || currentProjectCode.value
+  if (!projectCode) {
+    productionTaskPhotoAttachments.value = []
+    productionTaskInspectionAttachments.value = []
+    return
+  }
+
+  productionTaskAttachmentLoading.value = true
+  try {
+    const [photoResp, inspectionResp]: any[] = await Promise.all([
+      getProductionTaskAttachmentsApi(projectCode, 'photo'),
+      getProductionTaskAttachmentsApi(projectCode, 'inspection')
+    ])
+    productionTaskPhotoAttachments.value = photoResp?.data || []
+    productionTaskInspectionAttachments.value = inspectionResp?.data || []
+  } catch (error) {
+    console.error('加载生产任务附件失败:', error)
+    productionTaskPhotoAttachments.value = []
+    productionTaskInspectionAttachments.value = []
+  } finally {
+    productionTaskAttachmentLoading.value = false
   }
 }
 
@@ -1862,6 +2083,143 @@ const formatFileSize = (size?: number | null): string => {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+// 判断生产任务附件是否为图片
+const isProductionTaskImageFile = (attachment: ProductionTaskAttachment): boolean => {
+  if (attachment.contentType?.startsWith('image/')) {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico']
+  return imageExts.includes(ext)
+}
+
+// 判断生产任务附件是否为 PDF
+const isProductionTaskPdfFile = (attachment: ProductionTaskAttachment): boolean => {
+  if (attachment.contentType === 'application/pdf') {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'pdf'
+}
+
+// 预览生产任务图片附件
+const handleProductionTaskAttachmentPreview = async (attachment: ProductionTaskAttachment) => {
+  if (!isProductionTaskImageFile(attachment)) {
+    ElMessage.warning('该文件不是图片格式')
+    return
+  }
+
+  try {
+    // 获取同类型的所有图片附件
+    let allAttachments: ProductionTaskAttachment[] = []
+    if (attachment.type === 'photo') {
+      allAttachments = productionTaskPhotoAttachments.value
+    } else if (attachment.type === 'inspection') {
+      allAttachments = productionTaskInspectionAttachments.value
+    }
+
+    const imageAttachments = allAttachments.filter(isProductionTaskImageFile)
+    if (imageAttachments.length === 0) {
+      ElMessage.warning('没有可预览的图片')
+      return
+    }
+
+    const currentIndex = imageAttachments.findIndex((item) => item.id === attachment.id)
+
+    const urlList: string[] = []
+    const blobUrls: string[] = []
+
+    try {
+      const blobPromises = imageAttachments.map(async (item) => {
+        try {
+          const resp = await downloadProductionTaskAttachmentApi(item.id)
+          const blob = (resp as any)?.data ?? resp
+          const url = window.URL.createObjectURL(blob as Blob)
+          blobUrls.push(url)
+          return url
+        } catch (error) {
+          console.error(`加载图片 ${item.storedFileName || item.originalName} 失败:`, error)
+          return null
+        }
+      })
+
+      const urls = await Promise.all(blobPromises)
+      urlList.push(...urls.filter((url): url is string => url !== null))
+
+      if (urlList.length === 0) {
+        ElMessage.warning('加载图片失败')
+        return
+      }
+
+      createImageViewer({
+        urlList,
+        initialIndex: currentIndex >= 0 ? currentIndex : 0,
+        infinite: true,
+        hideOnClickModal: true,
+        zIndex: 3000,
+        teleported: true
+      })
+    } catch (error) {
+      blobUrls.forEach((url) => window.URL.revokeObjectURL(url))
+      throw error
+    }
+  } catch (error) {
+    console.error('预览图片失败:', error)
+    ElMessage.error('预览图片失败')
+  }
+}
+
+// 预览生产任务 PDF 附件
+const handleProductionTaskAttachmentPdfPreview = async (attachment: ProductionTaskAttachment) => {
+  if (!isProductionTaskPdfFile(attachment)) {
+    ElMessage.warning('该文件不是 PDF 格式')
+    return
+  }
+
+  try {
+    const resp = await downloadProductionTaskAttachmentApi(attachment.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+
+    if (isMobile.value) {
+      const newWindow = window.open(url, '_blank')
+      if (!newWindow) {
+        ElMessage.warning('请允许弹出窗口以预览 PDF')
+        window.URL.revokeObjectURL(url)
+      }
+    } else {
+      createPdfViewer({
+        url,
+        fileName: attachment.storedFileName || attachment.originalName || 'PDF 文件'
+      })
+    }
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    ElMessage.error('预览 PDF 失败')
+  }
+}
+
+// 下载生产任务附件
+const downloadProductionTaskAttachment = async (row: ProductionTaskAttachment) => {
+  try {
+    const resp: any = await downloadProductionTaskAttachmentApi(row.id)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    console.error('下载附件失败:', error)
+    ElMessage.error(error?.message || '下载失败')
+  }
 }
 
 // 监听项目编号变化

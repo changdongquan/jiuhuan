@@ -27,6 +27,16 @@ const normalizeAttachmentFileName = (name) => {
   }
 }
 
+// 根据项目编号获取分类名称
+const getCategoryFromProjectCode = (projectCode) => {
+  if (!projectCode) return '其他'
+  const code = String(projectCode).trim().toUpperCase()
+  if (code.startsWith('JH01')) return '塑胶模具'
+  if (code.startsWith('JH03')) return '零件加工'
+  if (code.startsWith('JH05')) return '修改模具'
+  return '其他'
+}
+
 // 安全化项目编号，用于路径：将非法路径字符替换为下划线
 // 非法字符：/ \ ? % * : | " < >
 const safeProjectCodeForPath = (projectCode) => {
@@ -1319,9 +1329,10 @@ router.post(
         })
       }
 
-      // 计算最终存储路径：{项目编号}/销售订单/
+      // 计算最终存储路径：{分类}/{项目编号}/销售订单/
+      const category = getCategoryFromProjectCode(itemCode)
       const safeProjectCode = safeProjectCodeForPath(itemCode)
-      const finalRelativeDir = path.posix.join(safeProjectCode, '销售订单')
+      const finalRelativeDir = path.posix.join(category, safeProjectCode, '销售订单')
       const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
       ensureDirSync(finalFullDir)
 
