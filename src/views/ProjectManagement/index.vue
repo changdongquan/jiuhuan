@@ -751,6 +751,317 @@
                   </el-row>
                 </div>
               </el-tab-pane>
+
+              <el-tab-pane label="附件" name="attachments">
+                <div class="pm-attachments" v-loading="attachmentLoading">
+                  <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>移模流程单</span>
+                            <el-upload
+                              :action="getAttachmentAction('relocation-process')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'relocation-process')
+                              "
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传移模流程单</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="relocationProcessAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>试模记录表</span>
+                            <el-upload
+                              :action="getAttachmentAction('trial-record')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'trial-record')
+                              "
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传试模记录表</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="trialRecordAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>三方协议</span>
+                            <el-upload
+                              :action="getAttachmentAction('tripartite-agreement')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'tripartite-agreement')
+                              "
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传三方协议</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="tripartiteAgreementAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>试模单</span>
+                            <el-upload
+                              :action="getAttachmentAction('trial-form')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传试模单</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="trialFormAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
             </el-tabs>
           </div>
         </el-form>
@@ -776,11 +1087,19 @@ import {
   updateProjectApi,
   getProjectGoodsApi,
   getProjectStatisticsApi,
-  type ProjectInfo
+  getProjectAttachmentsApi,
+  downloadProjectAttachmentApi,
+  deleteProjectAttachmentApi,
+  type ProjectInfo,
+  type ProjectAttachment,
+  type ProjectAttachmentType
 } from '@/api/project'
 import { getProductionTaskDetailApi } from '@/api/production-task'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
+import { createImageViewer } from '@/components/ImageViewer'
+import { createPdfViewer } from '@/components/PdfViewer'
+import { ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -842,7 +1161,7 @@ const viewData = ref<Partial<ProjectInfo>>({})
 
 const editDialogVisible = ref(false)
 const editTitle = ref('编辑项目')
-const editActiveTab = ref<'basic' | 'part' | 'mould'>('basic')
+const editActiveTab = ref<'basic' | 'part' | 'mould' | 'attachments'>('basic')
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
@@ -1247,6 +1566,302 @@ const handleEdit = (row: Partial<ProjectInfo>) => {
   }
 
   editDialogVisible.value = true
+
+  // 加载附件列表
+  if (row.项目编号) {
+    loadAttachments()
+  }
+}
+
+// 附件相关状态
+const attachmentLoading = ref(false)
+const allAttachments = ref<ProjectAttachment[]>([])
+
+const relocationProcessAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'relocation-process')
+)
+const trialRecordAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'trial-record')
+)
+const tripartiteAgreementAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'tripartite-agreement')
+)
+const trialFormAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'trial-form')
+)
+
+// 加载附件列表
+const loadAttachments = async () => {
+  const projectCode = editForm.项目编号 || currentProjectCode.value
+  if (!projectCode) {
+    allAttachments.value = []
+    return
+  }
+
+  attachmentLoading.value = true
+  try {
+    const response: any = await getProjectAttachmentsApi(projectCode)
+    // 根据 axios 拦截器的处理，response 已经是后端返回的 { code, success, data: [...] } 对象
+    // 所以应该直接访问 response.data 获取数组（类似生产任务的实现：photoResp?.data）
+    allAttachments.value = response?.data || []
+    console.log(
+      '加载附件列表成功，项目编号:',
+      projectCode,
+      '附件数量:',
+      allAttachments.value.length,
+      '响应:',
+      response
+    )
+  } catch (error: any) {
+    console.error('加载附件列表失败:', error)
+    ElMessage.error(error?.message || '加载附件列表失败')
+    allAttachments.value = []
+  } finally {
+    attachmentLoading.value = false
+  }
+}
+
+// 获取上传API地址
+const getAttachmentAction = (type: ProjectAttachmentType) => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  // 直接返回URL，即使项目编号为空也返回（让后端处理验证）
+  // 这样可以避免在页面初始化时就显示错误提示
+  return `/api/project/${encodeURIComponent(projectCode || '')}/attachments/${type}`
+}
+
+// 上传前确认（用于单文件类型的覆盖确认）
+const beforeAttachmentUpload = async (file: File, type: ProjectAttachmentType) => {
+  // 单文件类型需要确认覆盖
+  const singleFileTypes: ProjectAttachmentType[] = [
+    'relocation-process',
+    'trial-record',
+    'tripartite-agreement'
+  ]
+
+  if (singleFileTypes.includes(type)) {
+    // 检查是否已有文件
+    let existingAttachments: ProjectAttachment[] = []
+    if (type === 'relocation-process') {
+      existingAttachments = relocationProcessAttachments.value
+    } else if (type === 'trial-record') {
+      existingAttachments = trialRecordAttachments.value
+    } else if (type === 'tripartite-agreement') {
+      existingAttachments = tripartiteAgreementAttachments.value
+    }
+
+    if (existingAttachments.length > 0) {
+      const oldFileName =
+        existingAttachments[0].storedFileName || existingAttachments[0].originalName
+      try {
+        await ElMessageBox.confirm(
+          `已存在文件：${oldFileName}。确认上传将覆盖现有文件，是否继续？`,
+          '确认覆盖',
+          {
+            confirmButtonText: '确认覆盖',
+            cancelButtonText: '取消',
+            type: 'warning',
+            closeOnClickModal: false
+          }
+        )
+        return true
+      } catch {
+        return false // 用户取消，阻止上传
+      }
+    }
+  }
+
+  return true // 没有旧文件或不是单文件类型，允许上传
+}
+
+// 上传成功回调
+const handleAttachmentUploadSuccess = (response: any) => {
+  console.log('上传响应:', response)
+  // 处理不同的响应结构：response.code 或 response.data?.code
+  const code = response?.code ?? response?.data?.code
+  const success = response?.success ?? response?.data?.success
+
+  if (code === 0 || success) {
+    ElMessage.success('上传成功')
+    // 延迟一点再加载，确保数据库已更新
+    setTimeout(() => {
+      loadAttachments()
+    }, 200)
+  } else {
+    ElMessage.error(response?.message || response?.data?.message || '上传失败')
+  }
+}
+
+// 上传失败回调
+const handleAttachmentUploadError = (error: any) => {
+  console.error('上传附件失败:', error)
+  ElMessage.error(error?.message || '上传失败')
+}
+
+// 判断附件是否为图片
+const isImageFile = (attachment: ProjectAttachment): boolean => {
+  if (attachment.contentType && attachment.contentType.startsWith('image/')) {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico']
+  return imageExts.includes(ext)
+}
+
+// 判断附件是否为 PDF
+const isPdfFile = (attachment: ProjectAttachment): boolean => {
+  if (attachment.contentType === 'application/pdf') {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'pdf'
+}
+
+// 预览图片附件
+const handleAttachmentPreview = async (attachment: ProjectAttachment) => {
+  if (!isImageFile(attachment)) {
+    ElMessage.warning('该文件不是图片格式')
+    return
+  }
+
+  try {
+    // 获取同类型的所有图片附件
+    const sameTypeAttachments = allAttachments.value.filter(
+      (item) => item.type === attachment.type && isImageFile(item)
+    )
+    if (sameTypeAttachments.length === 0) {
+      ElMessage.warning('没有可预览的图片')
+      return
+    }
+
+    const currentIndex = sameTypeAttachments.findIndex((item) => item.id === attachment.id)
+
+    const urlList: string[] = []
+    const blobUrls: string[] = []
+
+    try {
+      const blobPromises = sameTypeAttachments.map(async (item) => {
+        try {
+          const resp = await downloadProjectAttachmentApi(item.id)
+          const blob = (resp as any)?.data ?? resp
+          const url = window.URL.createObjectURL(blob as Blob)
+          blobUrls.push(url)
+          return url
+        } catch (error) {
+          console.error(`加载图片 ${item.storedFileName || item.originalName} 失败:`, error)
+          return null
+        }
+      })
+
+      const urls = await Promise.all(blobPromises)
+      urlList.push(...urls.filter((url): url is string => url !== null))
+
+      if (urlList.length === 0) {
+        ElMessage.warning('加载图片失败')
+        return
+      }
+
+      createImageViewer({
+        urlList,
+        initialIndex: currentIndex >= 0 ? currentIndex : 0,
+        infinite: true,
+        hideOnClickModal: true,
+        zIndex: 3000,
+        teleported: true
+      })
+    } catch (error) {
+      blobUrls.forEach((url) => window.URL.revokeObjectURL(url))
+      throw error
+    }
+  } catch (error) {
+    console.error('预览图片失败:', error)
+    ElMessage.error('预览图片失败')
+  }
+}
+
+// 预览 PDF 附件
+const handleAttachmentPdfPreview = async (attachment: ProjectAttachment) => {
+  if (!isPdfFile(attachment)) {
+    ElMessage.warning('该文件不是 PDF 格式')
+    return
+  }
+
+  try {
+    const resp = await downloadProjectAttachmentApi(attachment.id)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+
+    if (isMobile.value) {
+      const newWindow = window.open(url, '_blank')
+      if (!newWindow) {
+        ElMessage.warning('请允许弹出窗口以预览 PDF')
+        window.URL.revokeObjectURL(url)
+      }
+    } else {
+      createPdfViewer({
+        url,
+        fileName: attachment.storedFileName || attachment.originalName || 'PDF 文件'
+      })
+    }
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    ElMessage.error('预览 PDF 失败')
+  }
+}
+
+// 下载附件
+const downloadAttachment = async (row: ProjectAttachment) => {
+  try {
+    const resp: any = await downloadProjectAttachmentApi(row.id)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    console.error('下载附件失败:', error)
+    ElMessage.error(error?.message || '下载失败')
+  }
+}
+
+// 删除附件
+const deleteAttachment = async (row: ProjectAttachment) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除附件：${row.storedFileName || row.originalName}？`,
+      '提示',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        closeOnClickModal: false
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    await deleteProjectAttachmentApi(row.id)
+    ElMessage.success('删除成功')
+    await loadAttachments()
+  } catch (error: any) {
+    console.error('删除附件失败:', error)
+    ElMessage.error(error?.message || '删除失败')
+  }
+}
+
+// 格式化文件大小
+const formatFileSize = (size?: number | null): string => {
+  if (!size || size <= 0) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 // 监听项目编号变化
@@ -2281,6 +2896,28 @@ onMounted(() => {
   margin-top: 12px;
   transform: none;
   justify-content: center;
+}
+
+/* 附件页签样式 */
+.pm-attachments {
+  padding: 12px 14px 6px;
+}
+
+.pm-attachments-row {
+  width: 100%;
+}
+
+.pm-attachment-col {
+  margin-bottom: 16px;
+}
+
+.pm-attachment-card {
+  width: 100%;
+  height: 100%;
+}
+
+:deep(.pm-attachment-card .el-card__body) {
+  padding: 12px;
 }
 
 /* 响应式优化 */

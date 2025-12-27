@@ -1,6 +1,220 @@
 const express = require('express')
 const { query } = require('../database')
 const router = express.Router()
+const path = require('path')
+const fs = require('fs')
+const fsp = fs.promises
+const multer = require('multer')
+
+// 项目管理附件存储配置
+// 使用与销售订单相同的路径配置
+const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
+  process.env.PROJECT_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
+  10
+)
+
+// 处理上传文件名中的中文乱码
+const normalizeAttachmentFileName = (name) => {
+  if (!name) return name
+  try {
+    return Buffer.from(name, 'latin1').toString('utf8')
+  } catch {
+    return name
+  }
+}
+
+// 安全化项目编号，用于路径
+const safeProjectCodeForPath = (projectCode) => {
+  if (!projectCode) return 'UNKNOWN'
+  return String(projectCode)
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+}
+
+// 安全化文件名
+const safeFileName = (fileName) => {
+  if (!fileName) return fileName
+  return String(fileName).replace(/[/\\?%*:|"<>]/g, '_')
+}
+
+const ensureDirSync = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+const moveFileWithFallback = async (fromPath, toPath) => {
+  try {
+    await fsp.rename(fromPath, toPath)
+  } catch (err) {
+    if (err && err.code === 'EXDEV') {
+      await fsp.copyFile(fromPath, toPath)
+      await fsp.unlink(fromPath)
+      return
+    }
+    throw err
+  }
+}
+
+const attachmentStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    try {
+      const projectCode = String(req.params.projectCode || '').trim()
+      if (!projectCode) {
+        return cb(new Error('缺少项目编号'))
+      }
+
+      // 使用临时目录，在路由处理中查询后再移动文件到正确位置
+      const tempDir = path.posix.join(
+        'project-management',
+        '_temp',
+        String(Date.now()),
+        String(Math.random().toString(36).slice(2, 8))
+      )
+      const fullDir = path.join(FILE_ROOT, tempDir)
+      ensureDirSync(fullDir)
+
+      req._tempAttachmentDir = tempDir
+      req._tempAttachmentFullDir = fullDir
+
+      cb(null, fullDir)
+    } catch (err) {
+      cb(err)
+    }
+  },
+  filename(req, file, cb) {
+    // 生成临时唯一文件名
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+    const ext = path.extname(file.originalname)
+    const baseName = path.basename(file.originalname, ext)
+    const normalizedBaseName = normalizeAttachmentFileName(baseName)
+    const safeBaseName = safeFileName(normalizedBaseName)
+    req._attachmentStoredFileName = `${safeBaseName}-${uniqueSuffix}${ext}`
+    cb(null, req._attachmentStoredFileName)
+  }
+})
+
+const uploadAttachment = multer({
+  storage: attachmentStorage,
+  limits: {
+    fileSize: MAX_ATTACHMENT_SIZE_BYTES
+  }
+})
+
+const uploadSingleAttachment = (req, res, next) => {
+  uploadAttachment.single('file')(req, res, (err) => {
+    if (!err) return next()
+    const message =
+      err?.code === 'LIMIT_FILE_SIZE'
+        ? `上传失败：单个附件不能超过 ${Math.round(MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024)}MB`
+        : err?.message || '上传失败'
+    res.status(400).json({ code: 400, success: false, message })
+  })
+}
+
+const getFileFullPath = (relativePath, storedFileName) => {
+  return path.join(FILE_ROOT, relativePath, storedFileName)
+}
+
+// 根据项目编号查询客户模号
+const getCustomerModelNo = async (projectCode) => {
+  const rows = await query(
+    `SELECT TOP 1 客户模号 as customerModelNo FROM 项目管理 WHERE 项目编号 = @projectCode`,
+    { projectCode }
+  )
+  return rows.length > 0 ? rows[0].customerModelNo || null : null
+}
+
+// 生成附件文件名
+const generateAttachmentFileName = (projectCode, customerModelNo, type, originalFileName) => {
+  // 获取文件扩展名
+  const ext = originalFileName.split('.').pop()?.toLowerCase() || ''
+  const safeExt = ext ? `.${ext}` : ''
+
+  // 根据类型生成文件名
+  let fileName = ''
+  if (type === 'relocation-process') {
+    // 移模流程单：项目编号_移模流程单.{扩展名}
+    fileName = `${projectCode}_移模流程单${safeExt}`
+  } else if (type === 'trial-record') {
+    // 试模记录表：客户模号_试模记录表.{扩展名}
+    const safeCustomerModelNo = customerModelNo || 'UNKNOWN'
+    fileName = `${safeCustomerModelNo}_试模记录表${safeExt}`
+  } else if (type === 'tripartite-agreement') {
+    // 三方协议：客户模号_三方协议.{扩展名}
+    const safeCustomerModelNo = customerModelNo || 'UNKNOWN'
+    fileName = `${safeCustomerModelNo}_三方协议${safeExt}`
+  } else if (type === 'trial-form') {
+    // 试模单：项目编号_试模单_序号.{扩展名}，序号从01开始
+    // 这个会在上传时动态计算序号
+    fileName = `${projectCode}_试模单_序号${safeExt}`
+  } else {
+    // 默认使用原始文件名
+    fileName = originalFileName
+  }
+
+  return fileName
+}
+
+// 获取试模单的下一个序号（从01开始）
+const getNextTrialFormSequence = async (projectCode) => {
+  // 查询该目录下已有的试模单文件，找出最大序号
+  const existingRows = await query(
+    `
+    SELECT TOP 100
+      存储文件名 as storedFileName
+    FROM 项目管理附件
+    WHERE 项目编号 = @projectCode
+      AND 附件类型 = 'trial-form'
+    ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+    { projectCode }
+  )
+
+  let maxSeq = 0
+  // 匹配模式：项目编号_试模单_序号.扩展名，例如：JH24-01-001_试模单_01.pdf
+  const seqPattern = /_试模单_(\d{2})\./
+
+  for (const row of existingRows) {
+    const fileName = String(row.storedFileName || '')
+    const match = seqPattern.exec(fileName)
+    if (match && match[1]) {
+      const seq = parseInt(match[1], 10)
+      if (!Number.isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq
+      }
+    }
+  }
+
+  // 返回下一个序号（从01开始，所以最大序号+1）
+  const nextSeq = maxSeq + 1
+  return String(nextSeq).padStart(2, '0')
+}
+
+// 确保项目管理附件表存在
+const ensureProjectAttachmentsTable = async () => {
+  await query(`
+    IF OBJECT_ID(N'dbo.项目管理附件', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.项目管理附件 (
+        附件ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        项目编号 NVARCHAR(50) NOT NULL,
+        附件类型 NVARCHAR(50) NOT NULL,
+        原始文件名 NVARCHAR(255) NOT NULL,
+        存储文件名 NVARCHAR(255) NOT NULL,
+        相对路径 NVARCHAR(255) NOT NULL,
+        文件大小 BIGINT NOT NULL,
+        内容类型 NVARCHAR(100) NULL,
+        上传时间 DATETIME2 NOT NULL CONSTRAINT DF_项目管理附件_上传时间 DEFAULT (SYSDATETIME()),
+        上传人 NVARCHAR(100) NULL
+      );
+
+      CREATE INDEX IX_项目管理附件_项目编号 ON dbo.项目管理附件 (项目编号);
+      CREATE INDEX IX_项目管理附件_项目编号_类型 ON dbo.项目管理附件 (项目编号, 附件类型, 上传时间 DESC, 附件ID DESC);
+    END
+  `)
+}
 
 // 获取项目统计信息（需要在其他路由之前定义）
 router.get('/statistics', async (req, res) => {
@@ -446,6 +660,351 @@ router.delete('/delete', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '删除项目信息失败',
+      error: error.message
+    })
+  }
+})
+
+// === 项目管理附件相关接口 ===
+
+// 上传附件
+router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const type = String(req.params.type || '').trim()
+
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    // 附件类型：移模流程单、试模记录表、三方协议、试模单
+    const validTypes = ['relocation-process', 'trial-record', 'tripartite-agreement', 'trial-form']
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ code: 400, success: false, message: '附件类型不合法' })
+    }
+
+    // 检查项目是否存在
+    const projectRows = await query(
+      `SELECT TOP 1 项目编号 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+      {
+        projectCode
+      }
+    )
+    if (!projectRows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '项目不存在' })
+    }
+
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+    }
+
+    // 查询客户模号
+    const customerModelNo = await getCustomerModelNo(projectCode)
+
+    // 安全化项目编号（用于路径）
+    const safeProjectCode = safeProjectCodeForPath(projectCode)
+
+    // 附件类型中文名称映射
+    const typeDirMap = {
+      'relocation-process': '移模流程单',
+      'trial-record': '试模记录表',
+      'tripartite-agreement': '三方协议',
+      'trial-form': '试模单'
+    }
+    const typeDirName = typeDirMap[type]
+
+    // 计算最终存储路径：{项目编号}/项目管理/{附件类型}/
+    const finalRelativeDir = path.posix.join(safeProjectCode, '项目管理', typeDirName)
+    const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+    ensureDirSync(finalFullDir)
+
+    // 生成存储文件名
+    const originalName = normalizeAttachmentFileName(file.originalname)
+    let newFileName = ''
+
+    if (type === 'trial-form') {
+      // 试模单：需要计算序号
+      const sequence = await getNextTrialFormSequence(projectCode)
+      const ext = originalName.split('.').pop()?.toLowerCase() || ''
+      const safeExt = ext ? `.${ext}` : ''
+      newFileName = `${projectCode}_试模单_${sequence}${safeExt}`
+    } else {
+      // 其他类型：使用固定格式
+      newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
+    }
+
+    const safeNewFileName = safeFileName(newFileName)
+
+    // 单文件类型（移模流程单、试模记录表、三方协议）：删除旧文件
+    const singleFileTypes = ['relocation-process', 'trial-record', 'tripartite-agreement']
+    if (singleFileTypes.includes(type)) {
+      const existingRows = await query(
+        `
+        SELECT TOP 1
+          附件ID as id,
+          存储文件名 as storedFileName,
+          相对路径 as relativePath
+        FROM 项目管理附件
+        WHERE 项目编号 = @projectCode
+          AND 附件类型 = @type
+        ORDER BY 上传时间 DESC, 附件ID DESC
+        `,
+        { projectCode, type }
+      )
+
+      if (existingRows.length > 0) {
+        const oldAttachment = existingRows[0]
+        const oldFullPath = getFileFullPath(
+          oldAttachment.relativePath,
+          oldAttachment.storedFileName
+        )
+
+        // 删除旧文件的数据库记录
+        await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, {
+          attachmentId: oldAttachment.id
+        })
+
+        // 删除旧文件的物理文件
+        try {
+          if (fs.existsSync(oldFullPath)) {
+            await fsp.unlink(oldFullPath)
+          }
+        } catch (fileErr) {
+          console.warn('删除旧附件文件失败:', fileErr)
+        }
+      }
+    }
+
+    // 将文件从临时目录移动到最终目录
+    const tempFile = path.join(
+      req._tempAttachmentFullDir || FILE_ROOT,
+      req._attachmentStoredFileName || file.filename
+    )
+    const finalFile = path.join(finalFullDir, safeNewFileName)
+
+    await moveFileWithFallback(tempFile, finalFile)
+
+    // 清理空临时目录
+    try {
+      const tempDir = req._tempAttachmentFullDir
+      if (tempDir && fs.existsSync(tempDir)) {
+        const files = await fsp.readdir(tempDir)
+        if (files.length === 0) {
+          await fsp.rmdir(tempDir)
+          const parentTempDir = path.dirname(tempDir)
+          const parentFiles = await fsp.readdir(parentTempDir).catch(() => [])
+          if (parentFiles.length === 0) {
+            await fsp.rmdir(parentTempDir).catch(() => {})
+          }
+        }
+      }
+    } catch (cleanupErr) {
+      console.warn('清理临时目录失败:', cleanupErr)
+    }
+
+    // 插入数据库记录
+    const inserted = await query(
+      `
+      INSERT INTO 项目管理附件 (
+        项目编号,
+        附件类型,
+        原始文件名,
+        存储文件名,
+        相对路径,
+        文件大小,
+        内容类型,
+        上传人
+      )
+      OUTPUT
+        INSERTED.附件ID as id,
+        INSERTED.上传时间 as uploadedAt
+      VALUES (
+        @projectCode,
+        @type,
+        @originalName,
+        @storedFileName,
+        @relativePath,
+        @fileSize,
+        @contentType,
+        @uploadedBy
+      )
+    `,
+      {
+        projectCode,
+        type,
+        originalName,
+        storedFileName: safeNewFileName,
+        relativePath: finalRelativeDir,
+        fileSize: file.size,
+        contentType: file.mimetype || null,
+        uploadedBy: null
+      }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      message: '上传附件成功',
+      data: {
+        id: inserted?.[0]?.id,
+        projectCode,
+        type,
+        originalName,
+        storedFileName: safeNewFileName,
+        relativePath: finalRelativeDir,
+        fileSize: file.size,
+        contentType: file.mimetype || null,
+        uploadedAt: inserted?.[0]?.uploadedAt
+      }
+    })
+  } catch (error) {
+    console.error('上传项目管理附件失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '上传项目管理附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取附件列表
+router.get('/:projectCode/attachments', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const type = String(req.query.type || '').trim()
+
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const params = { projectCode }
+    const whereType = type ? 'AND 附件类型 = @type' : ''
+    if (type) params.type = type
+
+    const rows = await query(
+      `
+      SELECT
+        附件ID as id,
+        项目编号 as projectCode,
+        附件类型 as type,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy
+      FROM 项目管理附件
+      WHERE 项目编号 = @projectCode
+      ${whereType}
+      ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+      params
+    )
+
+    res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取项目管理附件列表失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取项目管理附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 下载附件
+router.get('/attachments/:attachmentId/download', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    res.download(fullPath, attachment.originalName)
+  } catch (error) {
+    console.error('下载项目管理附件失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载项目管理附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 删除附件
+router.delete('/attachments/:attachmentId', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+
+    await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath)
+      }
+    } catch (fileErr) {
+      console.warn('删除附件文件失败（已删除数据库记录）:', fileErr)
+    }
+
+    res.json({ code: 0, success: true, message: '删除成功' })
+  } catch (error) {
+    console.error('删除项目管理附件失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除项目管理附件失败',
       error: error.message
     })
   }

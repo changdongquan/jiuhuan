@@ -102,3 +102,55 @@ export const getProjectGoodsApi = (projectCode: string) => {
 export const getProjectStatisticsApi = () => {
   return request.get({ url: '/api/project/statistics' })
 }
+
+// 项目管理附件类型
+export type ProjectAttachmentType =
+  | 'relocation-process' // 移模流程单
+  | 'trial-record' // 试模记录表
+  | 'tripartite-agreement' // 三方协议
+  | 'trial-form' // 试模单
+
+// 项目管理附件接口
+export interface ProjectAttachment {
+  id: number
+  projectCode: string
+  type: ProjectAttachmentType
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+}
+
+// 获取项目管理附件列表
+export const getProjectAttachmentsApi = (projectCode: string, type?: ProjectAttachmentType) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectAttachment[]
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/attachments`,
+    params: type ? { type } : undefined
+  })
+}
+
+// 下载项目管理附件：返回文件流，由调用方处理
+export const downloadProjectAttachmentApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+// 删除项目管理附件
+export const deleteProjectAttachmentApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/project/attachments/${attachmentId}`
+  })
+}
