@@ -1630,7 +1630,7 @@ const getAttachmentAction = (type: ProjectAttachmentType) => {
 }
 
 // 上传前确认（用于单文件类型的覆盖确认）
-const beforeAttachmentUpload = async (file: File, type: ProjectAttachmentType) => {
+const beforeAttachmentUpload = async (_file: File, type: ProjectAttachmentType) => {
   // 单文件类型需要确认覆盖
   const singleFileTypes: ProjectAttachmentType[] = [
     'relocation-process',
