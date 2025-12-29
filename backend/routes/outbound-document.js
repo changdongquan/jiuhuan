@@ -1,10 +1,25 @@
 const express = require('express')
 const sql = require('mssql')
 const { getPool, query } = require('../database')
+const path = require('path')
+const fs = require('fs')
+const fsp = fs.promises
+const multer = require('multer')
 
 const router = express.Router()
 
 let tablesReady = false
+let attachmentsTableReady = false
+
+// 出库单附件存储配置（与生产任务/项目管理使用同一根目录）
+// 生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
+// 本地开发环境则默认使用 backend/uploads 目录
+const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const OUTBOUND_SUBDIR = process.env.OUTBOUND_DOCUMENT_FILES_SUBDIR || 'outbound-documents'
+const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
+  process.env.OUTBOUND_DOCUMENT_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
+  10
+)
 
 const ensureTables = async () => {
   if (tablesReady) return
@@ -47,6 +62,141 @@ const ensureTables = async () => {
   tablesReady = true
 }
 
+const ensureAttachmentsTable = async () => {
+  if (attachmentsTableReady) return
+
+  const createSql = `
+    IF OBJECT_ID(N'出库单附件', N'U') IS NULL
+    BEGIN
+      CREATE TABLE 出库单附件 (
+        附件ID INT IDENTITY(1,1) PRIMARY KEY,
+        出库单号 NVARCHAR(50) NOT NULL,
+        项目编号 NVARCHAR(100) NOT NULL,
+        原始文件名 NVARCHAR(260) NOT NULL,
+        存储文件名 NVARCHAR(260) NOT NULL,
+        相对路径 NVARCHAR(400) NOT NULL,
+        文件大小 BIGINT NULL,
+        内容类型 NVARCHAR(100) NULL,
+        上传时间 DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        上传人 NVARCHAR(100) NULL
+      )
+
+      CREATE INDEX IX_出库单附件_出库单号 ON 出库单附件(出库单号)
+      CREATE INDEX IX_出库单附件_项目编号 ON 出库单附件(项目编号)
+    END
+  `
+
+  await query(createSql)
+  attachmentsTableReady = true
+}
+
+// 处理上传文件名中的中文乱码（multipart 默认按 latin1 解码）
+const normalizeAttachmentFileName = (name) => {
+  if (!name) return name
+  try {
+    return Buffer.from(name, 'latin1').toString('utf8')
+  } catch {
+    return name
+  }
+}
+
+// 根据项目编号获取分类名称
+const getCategoryFromProjectCode = (projectCode) => {
+  if (!projectCode) return '其他'
+  const code = String(projectCode).trim().toUpperCase()
+  if (code.startsWith('JH01')) return '塑胶模具'
+  if (code.startsWith('JH03')) return '零件加工'
+  if (code.startsWith('JH05')) return '修改模具'
+  return '其他'
+}
+
+// 安全化项目编号，用于路径
+const safeProjectCodeForPath = (projectCode) => {
+  if (!projectCode) return 'UNKNOWN'
+  return String(projectCode)
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+}
+
+// 安全化文件名
+const safeFileName = (fileName) => {
+  if (!fileName) return fileName
+  return String(fileName).replace(/[/\\?%*:|"<>]/g, '_')
+}
+
+const ensureDirSync = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+const moveFileWithFallback = async (fromPath, toPath) => {
+  try {
+    await fsp.rename(fromPath, toPath)
+  } catch (err) {
+    if (err && err.code === 'EXDEV') {
+      await fsp.copyFile(fromPath, toPath)
+      await fsp.unlink(fromPath)
+      return
+    }
+    throw err
+  }
+}
+
+const getFileFullPath = (relativePath, storedFileName) =>
+  path.join(FILE_ROOT, String(relativePath || ''), String(storedFileName || ''))
+
+const attachmentStorage = multer.diskStorage({
+  destination(req, _file, cb) {
+    try {
+      const tempDir = path.posix.join(
+        OUTBOUND_SUBDIR,
+        '_temp',
+        String(Date.now()),
+        String(Math.random().toString(36).slice(2, 8))
+      )
+      const fullDir = path.join(FILE_ROOT, tempDir)
+      ensureDirSync(fullDir)
+
+      req._tempAttachmentDir = tempDir
+      req._tempAttachmentFullDir = fullDir
+
+      cb(null, fullDir)
+    } catch (err) {
+      cb(err)
+    }
+  },
+  filename(req, file, cb) {
+    try {
+      const timestamp = Date.now()
+      const randomPart = Math.random().toString(36).slice(2, 8)
+      const decodedName = normalizeAttachmentFileName(file.originalname)
+      const safeOriginalName = safeFileName(decodedName)
+      const storedFileName = `${timestamp}-${randomPart}-${safeOriginalName}`
+      req._attachmentStoredFileName = storedFileName
+      cb(null, storedFileName)
+    } catch (err) {
+      cb(err)
+    }
+  }
+})
+
+const uploadAttachment = multer({
+  storage: attachmentStorage,
+  limits: { fileSize: MAX_ATTACHMENT_SIZE_BYTES }
+})
+
+const uploadSingleAttachment = (req, res, next) => {
+  uploadAttachment.single('file')(req, res, (err) => {
+    if (!err) return next()
+    const message =
+      err?.code === 'LIMIT_FILE_SIZE'
+        ? `上传失败：单个附件不能超过 ${Math.round(MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024)}MB`
+        : err?.message || '上传失败'
+    res.status(400).json({ code: 400, success: false, message })
+  })
+}
+
 const bindParams = (request, params) => {
   Object.keys(params).forEach((key) => {
     const value = params[key]
@@ -85,7 +235,7 @@ router.get('/list', async (req, res) => {
     const sizeNum = Math.max(parseInt(pageSize, 10) || 20, 1)
     const offset = (pageNum - 1) * sizeNum
 
-    const params = { offset, size: sizeNum }
+    const params = {}
     const where = []
 
     if (keyword) {
@@ -108,31 +258,94 @@ router.get('/list', async (req, res) => {
     const sortMap = {
       出库单号: '出库单号',
       出库日期: '出库日期',
+      客户名称: '客户名称',
+      出库类型: '出库类型',
+      经办人: '经办人',
       创建时间: '创建时间',
       更新时间: '更新时间'
     }
     const safeSortField = sortMap[String(sortField)] || '创建时间'
     const safeSortOrder = String(sortOrder).toLowerCase() === 'asc' ? 'ASC' : 'DESC'
 
-    const totalSql = `SELECT COUNT(1) as total FROM 出库单明细 ${whereSql}`
-    const listSql = `
+    // 为了仿照“销售订单”的汇总行 + 展开明细效果，这里先查出所有符合条件的明细行，
+    // 再按“出库单号”分组、汇总、分页（分页按出库单号分组后的数量计算）。
+    const allSql = `
       SELECT *
       FROM 出库单明细
       ${whereSql}
-      ORDER BY ${safeSortField} ${safeSortOrder}
-      OFFSET @offset ROWS
-      FETCH NEXT @size ROWS ONLY
     `
+    const allRows = await query(allSql, params)
 
-    const [totalRow] = await query(totalSql, params)
-    const list = await query(listSql, params)
+    const docMap = new Map()
+    for (const row of allRows) {
+      const documentNo = row.出库单号
+      if (!documentNo) continue
+      if (!docMap.has(documentNo)) {
+        docMap.set(documentNo, {
+          出库单号: row.出库单号,
+          出库日期: row.出库日期,
+          客户ID: row.客户ID,
+          客户名称: row.客户名称,
+          出库类型: row.出库类型,
+          仓库: row.仓库,
+          经办人: row.经办人,
+          审核人: row.审核人,
+          审核状态: row.审核状态,
+          备注: row.备注,
+          创建人: row.创建人,
+          更新人: row.更新人,
+          创建时间: row.创建时间,
+          更新时间: row.更新时间,
+          details: [],
+          detailCount: 0,
+          totalQuantity: 0,
+          totalAmount: 0
+        })
+      }
+
+      const doc = docMap.get(documentNo)
+      doc.details.push(row)
+      doc.detailCount += 1
+      doc.totalQuantity += Number(row.出库数量 || 0)
+      doc.totalAmount += Number(row.金额 || 0)
+    }
+
+    const toTime = (v) => {
+      if (!v) return null
+      const d = v instanceof Date ? v : new Date(v)
+      const t = d.getTime()
+      return Number.isNaN(t) ? null : t
+    }
+
+    const compareValues = (a, b) => {
+      if (a === b) return 0
+      if (a === null || a === undefined) return -1
+      if (b === null || b === undefined) return 1
+
+      const ta = toTime(a)
+      const tb = toTime(b)
+      if (ta !== null && tb !== null) return ta - tb
+
+      if (typeof a === 'number' && typeof b === 'number') return a - b
+
+      return String(a).localeCompare(String(b), 'zh-Hans-CN', { numeric: true })
+    }
+
+    let groupedList = Array.from(docMap.values())
+    groupedList.sort((a, b) => {
+      const delta = compareValues(a[safeSortField], b[safeSortField])
+      return safeSortOrder === 'ASC' ? delta : -delta
+    })
+
+    const total = groupedList.length
+    const list = groupedList.slice(offset, offset + sizeNum)
 
     res.json({
       code: 0,
       success: true,
       data: {
         list,
-        total: totalRow?.total || 0,
+        total,
         page: pageNum,
         pageSize: sizeNum
       }
@@ -161,6 +374,252 @@ router.get('/detail', async (req, res) => {
   } catch (error) {
     console.error('获取出库单详情失败:', error)
     res.status(500).json({ code: 500, success: false, message: '获取出库单详情失败' })
+  }
+})
+
+// === 出库单附件相关接口（按 出库单号 + 项目编号 归档） ===
+
+// 上传附件
+router.post(
+  '/:documentNo/items/:itemCode/attachments',
+  uploadSingleAttachment,
+  async (req, res) => {
+    try {
+      await ensureTables()
+      await ensureAttachmentsTable()
+
+      const documentNo = String(req.params.documentNo || '').trim()
+      const itemCode = String(req.params.itemCode || '').trim()
+      if (!documentNo) {
+        return res.status(400).json({ code: 400, success: false, message: 'documentNo 不能为空' })
+      }
+      if (!itemCode) {
+        return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+      }
+
+      const existed = await query(
+        `SELECT TOP 1 1 as ok FROM 出库单明细 WHERE 出库单号 = @documentNo AND 项目编号 = @itemCode`,
+        { documentNo, itemCode }
+      )
+      if (!existed.length) {
+        return res.status(404).json({ code: 404, success: false, message: '未找到对应出库单明细' })
+      }
+
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+      }
+
+      const category = getCategoryFromProjectCode(itemCode)
+      const safeProjectCode = safeProjectCodeForPath(itemCode)
+      const safeDocumentNo = safeFileName(documentNo)
+
+      // 计算最终存储路径：{分类}/{项目编号}/出库单/{出库单号}/
+      const finalRelativeDir = path.posix.join(category, safeProjectCode, '出库单', safeDocumentNo)
+      const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+      ensureDirSync(finalFullDir)
+
+      const originalName = normalizeAttachmentFileName(file.originalname)
+      const finalStoredFileName = safeFileName(req._attachmentStoredFileName || originalName)
+      const fromPath = path.join(req._tempAttachmentFullDir, file.filename)
+      const toPath = path.join(finalFullDir, finalStoredFileName)
+
+      await moveFileWithFallback(fromPath, toPath)
+
+      const inserted = await query(
+        `
+      INSERT INTO 出库单附件 (
+        出库单号, 项目编号, 原始文件名, 存储文件名, 相对路径,
+        文件大小, 内容类型, 上传人
+      )
+      OUTPUT INSERTED.附件ID as id, INSERTED.上传时间 as uploadedAt
+      VALUES (
+        @documentNo, @itemCode, @originalName, @storedFileName, @relativePath,
+        @fileSize, @contentType, @uploadedBy
+      )
+    `,
+        {
+          documentNo,
+          itemCode,
+          originalName,
+          storedFileName: finalStoredFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedBy: null
+        }
+      )
+
+      res.json({
+        code: 0,
+        success: true,
+        message: '上传附件成功',
+        data: {
+          id: inserted?.[0]?.id,
+          documentNo,
+          itemCode,
+          originalName,
+          storedFileName: finalStoredFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedAt: inserted?.[0]?.uploadedAt
+        }
+      })
+    } catch (error) {
+      console.error('上传出库单附件失败:', error)
+      res.status(500).json({ code: 500, success: false, message: '上传出库单附件失败' })
+    }
+  }
+)
+
+// 获取某出库单某项目编号的附件列表
+router.get('/:documentNo/items/:itemCode/attachments', async (req, res) => {
+  try {
+    await ensureAttachmentsTable()
+    const documentNo = String(req.params.documentNo || '').trim()
+    const itemCode = String(req.params.itemCode || '').trim()
+    if (!documentNo) {
+      return res.status(400).json({ code: 400, success: false, message: 'documentNo 不能为空' })
+    }
+    if (!itemCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        附件ID as id,
+        出库单号 as documentNo,
+        项目编号 as itemCode,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy
+      FROM 出库单附件
+      WHERE 出库单号 = @documentNo AND 项目编号 = @itemCode
+      ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+      { documentNo, itemCode }
+    )
+
+    res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取出库单附件列表失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '获取出库单附件列表失败' })
+  }
+})
+
+// 获取某出库单下各项目编号的附件数量汇总（用于表格/查看弹窗展示“查看附件（n）”）
+router.get('/:documentNo/attachments/summary', async (req, res) => {
+  try {
+    await ensureAttachmentsTable()
+    const documentNo = String(req.params.documentNo || '').trim()
+    if (!documentNo) {
+      return res.status(400).json({ code: 400, success: false, message: 'documentNo 不能为空' })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        项目编号 as itemCode,
+        COUNT(1) as attachmentCount
+      FROM 出库单附件
+      WHERE 出库单号 = @documentNo
+      GROUP BY 项目编号
+    `,
+      { documentNo }
+    )
+
+    res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取出库单附件数量汇总失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '获取出库单附件数量汇总失败' })
+  }
+})
+
+// 下载附件
+router.get('/attachments/:attachmentId/download', async (req, res) => {
+  try {
+    await ensureAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 出库单附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    res.download(fullPath, attachment.originalName)
+  } catch (error) {
+    console.error('下载出库单附件失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '下载出库单附件失败' })
+  }
+})
+
+// 删除附件
+router.delete('/attachments/:attachmentId', async (req, res) => {
+  try {
+    await ensureAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 出库单附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+
+    await query(`DELETE FROM 出库单附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath)
+      }
+    } catch (fileErr) {
+      console.warn('删除附件文件失败（已删除数据库记录）:', fileErr)
+    }
+
+    res.json({ code: 0, success: true, message: '删除成功' })
+  } catch (error) {
+    console.error('删除出库单附件失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '删除出库单附件失败' })
   }
 })
 
@@ -257,8 +716,100 @@ router.put('/update', async (req, res) => {
       return
     }
 
-    // 仅更新头字段（同一出库单号下所有行同步）
     const data = req.body || {}
+    const details = Array.isArray(data.details) ? data.details : null
+
+    // 若传入明细：按出库单号整体重写（删除旧明细，插入新明细）
+    if (details && details.length) {
+      const pool = await getPool()
+      const tx = new sql.Transaction(pool)
+      await tx.begin()
+      try {
+        const headerReq = new sql.Request(tx)
+        headerReq.input('documentNo', sql.NVarChar, documentNo)
+        const headerRes = await headerReq.query(
+          `SELECT TOP 1 * FROM 出库单明细 WHERE 出库单号 = @documentNo ORDER BY id ASC`
+        )
+        const header = headerRes.recordset?.[0]
+        if (!header) {
+          await tx.rollback()
+          res.status(404).json({ code: 404, success: false, message: '出库单不存在' })
+          return
+        }
+
+        const headerFields = {
+          出库日期: data.出库日期 ?? header.出库日期 ?? null,
+          客户ID: data.客户ID ?? header.客户ID ?? null,
+          客户名称: data.客户名称 ?? header.客户名称 ?? null,
+          出库类型: data.出库类型 ?? header.出库类型 ?? null,
+          仓库: data.仓库 ?? header.仓库 ?? null,
+          经办人: data.经办人 ?? header.经办人 ?? null,
+          审核人: data.审核人 ?? header.审核人 ?? null,
+          审核状态: data.审核状态 ?? header.审核状态 ?? null,
+          备注: data.备注 ?? header.备注 ?? null,
+          更新人: data.更新人 ?? header.更新人 ?? null,
+          创建人: header.创建人 ?? null,
+          创建时间: header.创建时间 ?? null
+        }
+
+        const delReq = new sql.Request(tx)
+        delReq.input('documentNo', sql.NVarChar, documentNo)
+        await delReq.query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`)
+
+        for (const d of details) {
+          const insReq = new sql.Request(tx)
+          const params = {
+            出库单号: documentNo,
+            出库日期: headerFields.出库日期,
+            客户ID: headerFields.客户ID,
+            客户名称: headerFields.客户名称,
+            项目编号: d?.项目编号 ?? null,
+            产品名称: d?.产品名称 ?? null,
+            产品图号: d?.产品图号 ?? null,
+            客户模号: d?.客户模号 ?? null,
+            出库数量: d?.出库数量 ?? null,
+            单位: d?.单位 ?? null,
+            单价: d?.单价 ?? null,
+            金额: d?.金额 ?? null,
+            出库类型: headerFields.出库类型,
+            仓库: headerFields.仓库,
+            经办人: headerFields.经办人,
+            审核人: headerFields.审核人,
+            审核状态: headerFields.审核状态,
+            备注: d?.备注 ?? headerFields.备注 ?? null,
+            创建人: headerFields.创建人,
+            更新人: headerFields.更新人,
+            创建时间: headerFields.创建时间,
+            更新时间: new Date()
+          }
+          bindParams(insReq, params)
+          await insReq.query(`
+            INSERT INTO 出库单明细 (
+              出库单号, 出库日期, 客户ID, 客户名称,
+              项目编号, 产品名称, 产品图号, 客户模号, 出库数量,
+              单位, 单价, 金额, 出库类型, 仓库,
+              经办人, 审核人, 审核状态, 备注, 创建人, 更新人,
+              创建时间, 更新时间
+            ) VALUES (
+              @出库单号, @出库日期, @客户ID, @客户名称,
+              @项目编号, @产品名称, @产品图号, @客户模号, @出库数量,
+              @单位, @单价, @金额, @出库类型, @仓库,
+              @经办人, @审核人, @审核状态, @备注, @创建人, @更新人,
+              @创建时间, @更新时间
+            )
+          `)
+        }
+
+        await tx.commit()
+        res.json({ code: 0, success: true, message: '更新成功' })
+        return
+      } catch (e) {
+        await tx.rollback()
+        throw e
+      }
+    }
+
+    // 未传明细：仅更新头字段（同一出库单号下所有行同步）
     const params = {
       documentNo,
       出库日期: data.出库日期 ?? null,

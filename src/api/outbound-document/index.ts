@@ -9,6 +9,7 @@ export interface OutboundDocument {
   项目编号?: string
   产品名称?: string
   产品图号?: string
+  客户模号?: string
   出库类型?: string // 销售出库、生产出库、调拨出库等
   仓库?: string
   出库数量?: number
@@ -23,7 +24,28 @@ export interface OutboundDocument {
   更新时间?: string
   创建人?: string
   更新人?: string
+  detailCount?: number
+  totalQuantity?: number
+  totalAmount?: number
   details?: Array<Partial<OutboundDocument> & Record<string, any>>
+}
+
+export interface OutboundDocumentAttachment {
+  id: number
+  documentNo: string
+  itemCode: string
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize?: number
+  contentType?: string
+  uploadedAt?: string
+  uploadedBy?: string | null
+}
+
+export interface OutboundDocumentAttachmentSummary {
+  itemCode: string
+  attachmentCount: number
 }
 
 // 出库单查询参数
@@ -70,4 +92,31 @@ export const deleteOutboundDocumentApi = (documentNo: string) => {
 // 获取出库单统计信息
 export const getOutboundDocumentStatisticsApi = () => {
   return request.get({ url: '/api/outbound-document/statistics' })
+}
+
+// 获取某出库单某项目编号的附件列表
+export const getOutboundDocumentItemAttachmentsApi = (documentNo: string, itemCode: string) => {
+  return request.get({
+    url: `/api/outbound-document/${encodeURIComponent(documentNo)}/items/${encodeURIComponent(itemCode)}/attachments`
+  })
+}
+
+// 获取某出库单下各项目编号的附件数量汇总
+export const getOutboundDocumentAttachmentsSummaryApi = (documentNo: string) => {
+  return request.get({
+    url: `/api/outbound-document/${encodeURIComponent(documentNo)}/attachments/summary`
+  })
+}
+
+// 下载出库单附件
+export const downloadOutboundDocumentAttachmentApi = (attachmentId: number) => {
+  return request.get({
+    url: `/api/outbound-document/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+// 删除出库单附件
+export const deleteOutboundDocumentAttachmentApi = (attachmentId: number) => {
+  return request.delete({ url: `/api/outbound-document/attachments/${attachmentId}` })
 }
