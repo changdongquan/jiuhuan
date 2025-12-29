@@ -260,6 +260,29 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/outbound-document',
+    component: Layout,
+    redirect: '/outbound-document/index',
+    name: 'OutboundDocument',
+    meta: {
+      title: '出库单',
+      icon: 'vi-ep:document-remove'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'OutboundDocumentIndex',
+        component: () => import('@/views/OutboundDocument/index.vue'),
+        meta: {
+          title: '出库单',
+          icon: 'vi-ep:document-remove',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
     path: '/inventory-management',
     component: Layout,
     redirect: '/inventory-management/overview',
