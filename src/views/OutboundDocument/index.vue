@@ -1321,7 +1321,7 @@
             width="100"
             :formatter="(row: any) => formatFileSize(row.fileSize)"
           />
-          <el-table-column label="操作" width="240">
+          <el-table-column label="操作" width="200">
             <template #default="{ row }">
               <el-button
                 v-if="isImageLike(row)"
