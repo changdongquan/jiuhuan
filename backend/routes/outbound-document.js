@@ -218,12 +218,202 @@ const bindParams = (request, params) => {
   })
 }
 
+// 出库数量：业务上要求为正整数（保存即生效）
+const toPositiveIntOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num) || !Number.isInteger(num) || num <= 0) return null
+  return num
+}
+
+const toNonNegativeIntOrZero = (value) => {
+  if (value === null || value === undefined || value === '') return 0
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0) return 0
+  return num
+}
+
+const normalizeDetailsFromBody = (body) => {
+  const list = Array.isArray(body?.details) ? body.details : [body]
+  return list
+    .map((d) => ({
+      项目编号: String(d?.项目编号 || body?.项目编号 || '').trim(),
+      产品名称: d?.产品名称 ?? body?.产品名称 ?? null,
+      产品图号: d?.产品图号 ?? body?.产品图号 ?? null,
+      客户模号: d?.客户模号 ?? body?.客户模号 ?? null,
+      出库数量: d?.出库数量 ?? body?.出库数量 ?? null,
+      备注: d?.备注 ?? body?.备注 ?? null
+    }))
+    .filter((d) => d.项目编号)
+}
+
+const sumDocQuantityByProject = (details) => {
+  const map = new Map()
+  for (const d of details) {
+    const code = String(d.项目编号 || '').trim()
+    if (!code) continue
+    map.set(code, (map.get(code) || 0) + toNonNegativeIntOrZero(d.出库数量))
+  }
+  return map
+}
+
+const getProductionTaskSnapshot = async (tx, projectCode) => {
+  const req = new sql.Request(tx)
+  req.input('projectCode', sql.NVarChar, projectCode)
+  const res = await req.query(`
+    SELECT TOP 1
+      生产状态,
+      已完成数量
+    FROM 生产任务 WITH (UPDLOCK, HOLDLOCK)
+    WHERE 项目编号 = @projectCode
+  `)
+  return res.recordset?.[0] || null
+}
+
+const getShippedQuantity = async (tx, projectCode, excludeDocumentNo) => {
+  const req = new sql.Request(tx)
+  req.input('projectCode', sql.NVarChar, projectCode)
+  if (excludeDocumentNo) req.input('excludeDocumentNo', sql.NVarChar, excludeDocumentNo)
+  const sqlText = excludeDocumentNo
+    ? `
+      SELECT SUM(ISNULL(出库数量, 0)) as shipped
+      FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK)
+      WHERE 项目编号 = @projectCode AND 出库单号 <> @excludeDocumentNo
+    `
+    : `
+      SELECT SUM(ISNULL(出库数量, 0)) as shipped
+      FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK)
+      WHERE 项目编号 = @projectCode
+    `
+  const res = await req.query(sqlText)
+  return res.recordset?.[0]?.shipped ?? 0
+}
+
+const updateProjectMoveState = async (tx, projectCode, nextStatus, moveDate) => {
+  const req = new sql.Request(tx)
+  req.input('projectCode', sql.NVarChar, projectCode)
+  req.input('status', sql.NVarChar, nextStatus)
+  req.input('moveDate', sql.NVarChar, moveDate || null)
+  await req.query(`
+    UPDATE 项目管理
+    SET
+      项目状态 = @status,
+      移模日期 = CASE
+        WHEN @status = N'已经移模' THEN COALESCE(@moveDate, 移模日期)
+        ELSE NULL
+      END
+    WHERE 项目编号 = @projectCode
+  `)
+}
+
+// === 可出货存货选择（按 “生产任务已完成数量 - 已出货数量” 计算剩余） ===
+router.get('/inventory', async (req, res) => {
+  try {
+    await ensureTables()
+
+    const {
+      customerId = '',
+      keyword = '',
+      page = 1,
+      pageSize = 1000,
+      sortOrder = 'desc'
+    } = req.query
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1)
+    const sizeNum = Math.max(parseInt(pageSize, 10) || 1000, 1)
+    const offset = (pageNum - 1) * sizeNum
+
+    const params = {}
+    const where = [`pt.已完成数量 IS NOT NULL`, `pt.已完成数量 > 0`]
+
+    if (customerId) {
+      where.push(`p.客户ID = @customerId`)
+      params.customerId = Number(customerId)
+    }
+
+    if (keyword) {
+      where.push(`(
+        p.项目编号 LIKE @kw
+        OR p.客户模号 LIKE @kw
+        OR c.客户名称 LIKE @kw
+        OR g_pick.产品名称 LIKE @kw
+        OR g_pick.产品图号 LIKE @kw
+      )`)
+      params.kw = `%${keyword}%`
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const orderDir = String(sortOrder).toLowerCase() === 'asc' ? 'ASC' : 'DESC'
+
+    // 说明：
+    // - 货物信息可能同项目编号多条记录，这里用 OUTER APPLY 取一条（优先排除 IsNew=1）
+    // - 已出货数量从 出库单明细 汇总（保存即生效，无审核区分）
+    // - 剩余可出货 > 0 才返回
+    const baseSql = `
+      SELECT
+        p.项目编号,
+        p.客户ID,
+        c.客户名称,
+        p.客户模号,
+        g_pick.产品名称,
+        g_pick.产品图号,
+        pt.已完成数量 as 已完成数量,
+        ISNULL(od_sum.已出货数量, 0) as 已出货数量,
+        (pt.已完成数量 - ISNULL(od_sum.已出货数量, 0)) as 剩余可出货
+      FROM 项目管理 p
+      INNER JOIN 生产任务 pt ON pt.项目编号 = p.项目编号
+      LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+      OUTER APPLY (
+        SELECT TOP 1
+          g.产品名称,
+          g.产品图号
+        FROM 货物信息 g
+        WHERE g.项目编号 = p.项目编号
+        ORDER BY
+          CASE WHEN CAST(ISNULL(g.IsNew, 0) AS INT) = 1 THEN 1 ELSE 0 END ASC,
+          g.货物ID DESC
+      ) g_pick
+      OUTER APPLY (
+        SELECT SUM(ISNULL(出库数量, 0)) as 已出货数量
+        FROM 出库单明细 od
+        WHERE od.项目编号 = p.项目编号
+      ) od_sum
+      ${whereSql}
+        AND (pt.已完成数量 - ISNULL(od_sum.已出货数量, 0)) > 0
+    `
+
+    const countSql = `SELECT COUNT(1) as total FROM (${baseSql}) t`
+    const countRows = await query(countSql, params)
+    const total = Number(countRows?.[0]?.total || 0)
+
+    const dataSql = `
+      ${baseSql}
+      ORDER BY p.项目编号 ${orderDir}
+      OFFSET ${offset} ROWS FETCH NEXT ${sizeNum} ROWS ONLY
+    `
+    const rows = await query(dataSql, params)
+
+    res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: rows || [],
+        total,
+        page: pageNum,
+        pageSize: sizeNum
+      }
+    })
+  } catch (error) {
+    console.error('获取可出货存货列表失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '获取可出货存货列表失败' })
+  }
+})
+
 router.get('/list', async (req, res) => {
   try {
     await ensureTables()
     const {
       keyword = '',
-      status = '',
       outboundType = '',
       sortField = '',
       sortOrder = '',
@@ -243,10 +433,6 @@ router.get('/list', async (req, res) => {
         出库单号 LIKE @kw OR 客户名称 LIKE @kw OR 项目编号 LIKE @kw OR 产品名称 LIKE @kw OR 产品图号 LIKE @kw OR 客户模号 LIKE @kw
       )`)
       params.kw = `%${keyword}%`
-    }
-    if (status) {
-      where.push('审核状态 = @status')
-      params.status = status
     }
     if (outboundType) {
       where.push('出库类型 = @outboundType')
@@ -633,10 +819,23 @@ router.post('/', async (req, res) => {
       return
     }
 
-    const details = Array.isArray(body.details) ? body.details : [body]
+    const outboundDate = String(body.出库日期 || '').trim()
+    if (!outboundDate) {
+      res.status(400).json({ code: 400, success: false, message: '出库日期不能为空' })
+      return
+    }
+
+    const details = normalizeDetailsFromBody(body)
     if (!details.length) {
       res.status(400).json({ code: 400, success: false, message: '明细不能为空' })
       return
+    }
+
+    for (const d of details) {
+      if (!toPositiveIntOrNull(d.出库数量)) {
+        res.status(400).json({ code: 400, success: false, message: '出库数量必须为正整数' })
+        return
+      }
     }
 
     const pool = await getPool()
@@ -655,26 +854,72 @@ router.post('/', async (req, res) => {
         return
       }
 
+      const qtyByProject = sumDocQuantityByProject(details)
+
+      // 校验：不得超出生产任务已完成数量（保存即生效）
+      for (const [projectCode, docQty] of qtyByProject.entries()) {
+        const code = String(projectCode || '').trim()
+        if (!code) continue
+
+        const task = await getProductionTaskSnapshot(tx, code)
+        if (!task) {
+          await tx.rollback()
+          res.status(400).json({ code: 400, success: false, message: `未找到生产任务：${code}` })
+          return
+        }
+        const completedQty = toPositiveIntOrNull(task.已完成数量)
+        if (!completedQty) {
+          await tx.rollback()
+          res.status(400).json({
+            code: 400,
+            success: false,
+            message: `生产任务已完成数量无效（必须为正整数）：${code}`
+          })
+          return
+        }
+
+        const shippedRaw = await getShippedQuantity(tx, code)
+        const shippedOther = typeof shippedRaw === 'number' ? shippedRaw : Number(shippedRaw || 0)
+        if (!Number.isFinite(shippedOther) || !Number.isInteger(shippedOther) || shippedOther < 0) {
+          await tx.rollback()
+          res.status(409).json({
+            code: 409,
+            success: false,
+            message: `历史出货数据存在非整数数量，无法继续出货：${code}`
+          })
+          return
+        }
+        if (shippedOther + docQty > completedQty) {
+          await tx.rollback()
+          res.status(409).json({
+            code: 409,
+            success: false,
+            message: `出货数量超出已完成数量：${code}（已完成 ${completedQty}，已出货 ${shippedOther}，本次 ${docQty}）`
+          })
+          return
+        }
+      }
+
       for (const d of details) {
         const req1 = new sql.Request(tx)
         const params = {
           出库单号: documentNo,
-          出库日期: body.出库日期 || null,
+          出库日期: outboundDate || null,
           客户ID: body.客户ID || null,
           客户名称: body.客户名称 || null,
-          项目编号: d.项目编号 || body.项目编号 || null,
-          产品名称: d.产品名称 || body.产品名称 || null,
-          产品图号: d.产品图号 || body.产品图号 || null,
-          客户模号: d.客户模号 || body.客户模号 || null,
-          出库数量: d.出库数量 ?? body.出库数量 ?? null,
+          项目编号: d.项目编号 || null,
+          产品名称: d.产品名称 ?? null,
+          产品图号: d.产品图号 ?? null,
+          客户模号: d.客户模号 ?? null,
+          出库数量: toPositiveIntOrNull(d.出库数量),
           单位: body.单位 || null,
           单价: body.单价 ?? null,
           金额: body.金额 ?? null,
           出库类型: body.出库类型 || null,
           仓库: body.仓库 || null,
           经办人: body.经办人 || null,
-          审核人: body.审核人 || null,
-          审核状态: body.审核状态 || null,
+          审核人: null,
+          审核状态: null,
           备注: d.备注 || body.备注 || null,
           创建人: body.创建人 || null,
           更新人: body.更新人 || null
@@ -693,6 +938,29 @@ router.post('/', async (req, res) => {
             @经办人, @审核人, @审核状态, @备注, @创建人, @更新人
           )
         `)
+      }
+
+      // 同步项目状态与移模日期：
+      // - 剩余可出货 = 已完成数量 - 已出货数量
+      // - 当剩余变为 0 时：项目状态=已经移模，移模日期=本单出库日期
+      // - 当剩余 > 0 时：项目状态=待移模，移模日期=NULL
+      for (const [projectCode] of qtyByProject.entries()) {
+        const code = String(projectCode || '').trim()
+        if (!code) continue
+        const task = await getProductionTaskSnapshot(tx, code)
+        const completedQty = toPositiveIntOrNull(task?.已完成数量)
+        if (!completedQty) continue
+        const shippedRaw = await getShippedQuantity(tx, code)
+        const shippedAfter = typeof shippedRaw === 'number' ? shippedRaw : Number(shippedRaw || 0)
+        if (!Number.isFinite(shippedAfter) || !Number.isInteger(shippedAfter) || shippedAfter < 0)
+          continue
+        const moved = shippedAfter === completedQty
+        await updateProjectMoveState(
+          tx,
+          code,
+          moved ? '已经移模' : '待移模',
+          moved ? outboundDate : null
+        )
       }
 
       await tx.commit()
@@ -718,13 +986,42 @@ router.put('/update', async (req, res) => {
 
     const data = req.body || {}
     const details = Array.isArray(data.details) ? data.details : null
+    const outboundDate = String(data.出库日期 || '').trim()
 
     // 若传入明细：按出库单号整体重写（删除旧明细，插入新明细）
     if (details && details.length) {
+      if (!outboundDate) {
+        res.status(400).json({ code: 400, success: false, message: '出库日期不能为空' })
+        return
+      }
+
+      const normalizedDetails = normalizeDetailsFromBody(data)
+      if (!normalizedDetails.length) {
+        res.status(400).json({ code: 400, success: false, message: '明细不能为空' })
+        return
+      }
+      for (const d of normalizedDetails) {
+        if (!toPositiveIntOrNull(d.出库数量)) {
+          res.status(400).json({ code: 400, success: false, message: '出库数量必须为正整数' })
+          return
+        }
+      }
+
       const pool = await getPool()
       const tx = new sql.Transaction(pool)
       await tx.begin()
       try {
+        const oldProjectsReq = new sql.Request(tx)
+        oldProjectsReq.input('documentNo', sql.NVarChar, documentNo)
+        const oldProjectsRes = await oldProjectsReq.query(
+          `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo`
+        )
+        const oldProjects = new Set(
+          (oldProjectsRes.recordset || [])
+            .map((r) => String(r.项目编号 || '').trim())
+            .filter((x) => x.length > 0)
+        )
+
         const headerReq = new sql.Request(tx)
         headerReq.input('documentNo', sql.NVarChar, documentNo)
         const headerRes = await headerReq.query(
@@ -738,25 +1035,78 @@ router.put('/update', async (req, res) => {
         }
 
         const headerFields = {
-          出库日期: data.出库日期 ?? header.出库日期 ?? null,
+          出库日期: outboundDate ?? header.出库日期 ?? null,
           客户ID: data.客户ID ?? header.客户ID ?? null,
           客户名称: data.客户名称 ?? header.客户名称 ?? null,
           出库类型: data.出库类型 ?? header.出库类型 ?? null,
           仓库: data.仓库 ?? header.仓库 ?? null,
           经办人: data.经办人 ?? header.经办人 ?? null,
-          审核人: data.审核人 ?? header.审核人 ?? null,
-          审核状态: data.审核状态 ?? header.审核状态 ?? null,
+          审核人: null,
+          审核状态: null,
           备注: data.备注 ?? header.备注 ?? null,
           更新人: data.更新人 ?? header.更新人 ?? null,
           创建人: header.创建人 ?? null,
           创建时间: header.创建时间 ?? null
         }
 
+        const newQtyByProject = sumDocQuantityByProject(normalizedDetails)
+        const affectedProjects = new Set([...oldProjects, ...newQtyByProject.keys()])
+
+        // 校验：不得超出生产任务已完成数量
+        for (const projectCode of affectedProjects) {
+          const code = String(projectCode || '').trim()
+          if (!code) continue
+          const newDocQty = newQtyByProject.get(code) || 0
+          if (!newDocQty) continue
+
+          const task = await getProductionTaskSnapshot(tx, code)
+          if (!task) {
+            await tx.rollback()
+            res.status(400).json({ code: 400, success: false, message: `未找到生产任务：${code}` })
+            return
+          }
+          const completedQty = toPositiveIntOrNull(task.已完成数量)
+          if (!completedQty) {
+            await tx.rollback()
+            res.status(400).json({
+              code: 400,
+              success: false,
+              message: `生产任务已完成数量无效（必须为正整数）：${code}`
+            })
+            return
+          }
+
+          const shippedRaw = await getShippedQuantity(tx, code, documentNo)
+          const shippedOther = typeof shippedRaw === 'number' ? shippedRaw : Number(shippedRaw || 0)
+          if (
+            !Number.isFinite(shippedOther) ||
+            !Number.isInteger(shippedOther) ||
+            shippedOther < 0
+          ) {
+            await tx.rollback()
+            res.status(409).json({
+              code: 409,
+              success: false,
+              message: `历史出货数据存在非整数数量，无法继续出货：${code}`
+            })
+            return
+          }
+          if (shippedOther + newDocQty > completedQty) {
+            await tx.rollback()
+            res.status(409).json({
+              code: 409,
+              success: false,
+              message: `出货数量超出已完成数量：${code}（已完成 ${completedQty}，已出货 ${shippedOther}，本单 ${newDocQty}）`
+            })
+            return
+          }
+        }
+
         const delReq = new sql.Request(tx)
         delReq.input('documentNo', sql.NVarChar, documentNo)
         await delReq.query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`)
 
-        for (const d of details) {
+        for (const d of normalizedDetails) {
           const insReq = new sql.Request(tx)
           const params = {
             出库单号: documentNo,
@@ -767,15 +1117,15 @@ router.put('/update', async (req, res) => {
             产品名称: d?.产品名称 ?? null,
             产品图号: d?.产品图号 ?? null,
             客户模号: d?.客户模号 ?? null,
-            出库数量: d?.出库数量 ?? null,
+            出库数量: toPositiveIntOrNull(d?.出库数量),
             单位: d?.单位 ?? null,
             单价: d?.单价 ?? null,
             金额: d?.金额 ?? null,
             出库类型: headerFields.出库类型,
             仓库: headerFields.仓库,
             经办人: headerFields.经办人,
-            审核人: headerFields.审核人,
-            审核状态: headerFields.审核状态,
+            审核人: null,
+            审核状态: null,
             备注: d?.备注 ?? headerFields.备注 ?? null,
             创建人: headerFields.创建人,
             更新人: headerFields.更新人,
@@ -797,7 +1147,29 @@ router.put('/update', async (req, res) => {
               @经办人, @审核人, @审核状态, @备注, @创建人, @更新人,
               @创建时间, @更新时间
             )
-          `)
+	          `)
+        }
+
+        // 同步项目状态与移模日期（受影响项目：旧明细 + 新明细）
+        for (const projectCode of affectedProjects) {
+          const code = String(projectCode || '').trim()
+          if (!code) continue
+          const task = await getProductionTaskSnapshot(tx, code)
+          const completedQty = toPositiveIntOrNull(task?.已完成数量)
+          if (!completedQty) continue
+          const shippedRaw = await getShippedQuantity(tx, code)
+          const shippedAfter = typeof shippedRaw === 'number' ? shippedRaw : Number(shippedRaw || 0)
+          if (!Number.isFinite(shippedAfter) || !Number.isInteger(shippedAfter) || shippedAfter < 0)
+            continue
+          const moved = shippedAfter === completedQty
+          const newDocQty = newQtyByProject.get(code) || 0
+          const shouldSetMoveDate = moved && newDocQty > 0
+          await updateProjectMoveState(
+            tx,
+            code,
+            moved ? '已经移模' : '待移模',
+            shouldSetMoveDate ? outboundDate : null
+          )
         }
 
         await tx.commit()
@@ -821,8 +1193,6 @@ router.put('/update', async (req, res) => {
       出库类型: data.出库类型 ?? null,
       仓库: data.仓库 ?? null,
       经办人: data.经办人 ?? null,
-      审核人: data.审核人 ?? null,
-      审核状态: data.审核状态 ?? null,
       备注: data.备注 ?? null,
       更新人: data.更新人 ?? null
     }
@@ -837,15 +1207,13 @@ router.put('/update', async (req, res) => {
           单位 = COALESCE(@单位, 单位),
           单价 = COALESCE(@单价, 单价),
           金额 = COALESCE(@金额, 金额),
-          出库类型 = COALESCE(@出库类型, 出库类型),
-          仓库 = COALESCE(@仓库, 仓库),
-          经办人 = COALESCE(@经办人, 经办人),
-          审核人 = COALESCE(@审核人, 审核人),
-          审核状态 = COALESCE(@审核状态, 审核状态),
-          备注 = COALESCE(@备注, 备注),
-          更新人 = COALESCE(@更新人, 更新人),
-          更新时间 = SYSUTCDATETIME()
-        WHERE 出库单号 = @documentNo
+	          出库类型 = COALESCE(@出库类型, 出库类型),
+	          仓库 = COALESCE(@仓库, 仓库),
+	          经办人 = COALESCE(@经办人, 经办人),
+	          备注 = COALESCE(@备注, 备注),
+	          更新人 = COALESCE(@更新人, 更新人),
+	          更新时间 = SYSUTCDATETIME()
+	        WHERE 出库单号 = @documentNo
       `,
       params
     )
@@ -865,8 +1233,47 @@ router.delete('/delete', async (req, res) => {
       res.status(400).json({ code: 400, success: false, message: 'documentNo 不能为空' })
       return
     }
-    await query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`, { documentNo })
-    res.json({ code: 0, success: true, message: '删除成功' })
+
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const oldProjectsReq = new sql.Request(tx)
+      oldProjectsReq.input('documentNo', sql.NVarChar, documentNo)
+      const oldProjectsRes = await oldProjectsReq.query(
+        `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo`
+      )
+      const oldProjects = new Set(
+        (oldProjectsRes.recordset || [])
+          .map((r) => String(r.项目编号 || '').trim())
+          .filter((x) => x.length > 0)
+      )
+
+      const delReq = new sql.Request(tx)
+      delReq.input('documentNo', sql.NVarChar, documentNo)
+      await delReq.query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`)
+
+      // 同步项目状态（删除不会产生“触发清零”的出库日期，因此不写移模日期，只在需要回退时清空）
+      for (const projectCode of oldProjects) {
+        const code = String(projectCode || '').trim()
+        if (!code) continue
+        const task = await getProductionTaskSnapshot(tx, code)
+        const completedQty = toPositiveIntOrNull(task?.已完成数量)
+        if (!completedQty) continue
+        const shippedRaw = await getShippedQuantity(tx, code)
+        const shippedAfter = typeof shippedRaw === 'number' ? shippedRaw : Number(shippedRaw || 0)
+        if (!Number.isFinite(shippedAfter) || !Number.isInteger(shippedAfter) || shippedAfter < 0)
+          continue
+        const moved = shippedAfter === completedQty
+        await updateProjectMoveState(tx, code, moved ? '已经移模' : '待移模', null)
+      }
+
+      await tx.commit()
+      res.json({ code: 0, success: true, message: '删除成功' })
+    } catch (e) {
+      await tx.rollback()
+      throw e
+    }
   } catch (error) {
     console.error('删除出库单失败:', error)
     res.status(500).json({ code: 500, success: false, message: '删除出库单失败' })
@@ -879,9 +1286,9 @@ router.get('/statistics', async (_req, res) => {
     const rows = await query(`
       SELECT
         COUNT(DISTINCT 出库单号) as totalDocuments,
-        SUM(CASE WHEN 审核状态 = N'待审核' THEN 1 ELSE 0 END) as pendingDocuments,
-        SUM(CASE WHEN 审核状态 = N'已审核' THEN 1 ELSE 0 END) as approvedDocuments,
-        SUM(CASE WHEN 审核状态 = N'已驳回' THEN 1 ELSE 0 END) as rejectedDocuments
+        COUNT(1) as totalDetails,
+        SUM(ISNULL(出库数量, 0)) as totalQuantity,
+        SUM(ISNULL(金额, 0)) as totalAmount
       FROM 出库单明细
     `)
     const s = rows[0] || {}

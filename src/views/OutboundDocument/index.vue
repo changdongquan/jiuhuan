@@ -36,21 +36,6 @@
           :style="{ width: isMobile ? '100%' : '280px' }"
         />
       </el-form-item>
-      <el-form-item label="审核状态">
-        <el-select
-          v-model="queryForm.status"
-          placeholder="请选择"
-          clearable
-          :style="{ width: isMobile ? '100%' : '160px' }"
-        >
-          <el-option
-            v-for="item in statusOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-      </el-form-item>
       <el-form-item label="出库类型">
         <el-select
           v-model="queryForm.outboundType"
@@ -83,21 +68,21 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
-          <div class="summary-title">待审核</div>
-          <div class="summary-value">{{ summary.pendingDocuments }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="summary-card summary-card--green">
-          <div class="summary-title">已审核</div>
-          <div class="summary-value">{{ summary.approvedDocuments }}</div>
+          <div class="summary-title">明细总数</div>
+          <div class="summary-value">{{ summary.totalDetails }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--red">
-          <div class="summary-title">已驳回</div>
-          <div class="summary-value">{{ summary.rejectedDocuments }}</div>
+        <el-card shadow="hover" class="summary-card summary-card--orange">
+          <div class="summary-title">出库总数量</div>
+          <div class="summary-value">{{ formatDecimal(summary.totalQuantity) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--purple">
+          <div class="summary-title">出库总金额</div>
+          <div class="summary-value">{{ formatDecimal(summary.totalAmount) }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -418,18 +403,6 @@
             {{ formatDecimal(row.totalQuantity ?? sumDetailQuantity(row.details)) }}
           </template>
         </el-table-column>
-        <el-table-column label="审核状态" width="95" align="center">
-          <template #default="{ row }">
-            <el-tag
-              :type="getStatusTagType(row.审核状态)"
-              size="small"
-              class="pm-status-tag"
-              :class="getStatusTagClass(row.审核状态)"
-            >
-              {{ row.审核状态 || '未知' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column
           prop="经办人"
           label="经办人"
@@ -457,14 +430,6 @@
               <div class="pm-mobile-card__code">出库单号：{{ row.出库单号 || '-' }}</div>
               <div class="pm-mobile-card__name">{{ row.客户名称 || '-' }}</div>
             </div>
-            <el-tag
-              :type="getStatusTagType(row.审核状态)"
-              size="small"
-              class="pm-status-tag pm-status-tag--fixed"
-              :class="getStatusTagClass(row.审核状态)"
-            >
-              {{ row.审核状态 || '未知' }}
-            </el-tag>
           </div>
           <div class="pm-mobile-card__meta">
             <div>
@@ -551,19 +516,6 @@
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">经办人：</span>
               <span class="view-dialog-info-value">{{ viewDocumentData.经办人 || '-' }}</span>
-            </div>
-            <div class="view-dialog-info-item">
-              <span class="view-dialog-info-label">审核状态：</span>
-              <span class="view-dialog-info-value">
-                <el-tag
-                  :type="getStatusTagType(viewDocumentData.审核状态)"
-                  size="small"
-                  class="pm-status-tag"
-                  :class="getStatusTagClass(viewDocumentData.审核状态)"
-                >
-                  {{ viewDocumentData.审核状态 || '未知' }}
-                </el-tag>
-              </span>
             </div>
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">总数量：</span>
@@ -871,7 +823,14 @@
               </el-table-column>
               <el-table-column label="数量" width="140" align="center">
                 <template #default="{ row }">
-                  <el-input-number v-model="row.quantity" :min="0" :step="1" style="width: 100%" />
+                  <el-input-number
+                    v-model="row.quantity"
+                    :min="1"
+                    :step="1"
+                    :precision="0"
+                    step-strictly
+                    style="width: 100%"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="备注" min-width="130">
@@ -921,8 +880,10 @@
                   <div class="dialog-mobile-detail-label">数量</div>
                   <el-input-number
                     v-model="detail.quantity"
-                    :min="0"
+                    :min="1"
                     :step="1"
+                    :precision="0"
+                    step-strictly
                     style="width: 100%"
                   />
                 </div>
@@ -952,7 +913,7 @@
       </template>
     </el-dialog>
 
-    <!-- 从存货中选择（仅展示项目管理中“已经移模”的记录） -->
+    <!-- 从存货中选择（仅展示“剩余可出货 > 0”的记录） -->
     <el-dialog
       v-model="inventoryDialogVisible"
       title="从存货中选择"
@@ -987,7 +948,9 @@
           border-radius: 4px;
         "
       >
-        <span style="font-weight: 500; color: #1890ff">仅显示项目状态为“已经移模”的记录</span>
+        <span style="font-weight: 500; color: #1890ff">
+          仅显示“剩余可出货 &gt; 0”的记录（按生产任务已完成数量扣减累计出货量）
+        </span>
       </div>
       <div class="dialog-table-wrapper">
         <el-table
@@ -1017,6 +980,9 @@
               {{ getInventoryCustomerName(row) }}
             </template>
           </el-table-column>
+          <el-table-column prop="已完成数量" label="已完成" width="90" align="right" />
+          <el-table-column prop="已出货数量" label="已出货" width="90" align="right" />
+          <el-table-column prop="剩余可出货" label="剩余" width="90" align="right" />
         </el-table>
       </div>
 
@@ -1154,7 +1120,14 @@
               </el-table-column>
               <el-table-column label="数量" width="140" align="center">
                 <template #default="{ row }">
-                  <el-input-number v-model="row.quantity" :min="0" :step="1" style="width: 100%" />
+                  <el-input-number
+                    v-model="row.quantity"
+                    :min="1"
+                    :step="1"
+                    :precision="0"
+                    step-strictly
+                    style="width: 100%"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="备注" min-width="130">
@@ -1216,8 +1189,10 @@
                   <div class="dialog-mobile-detail-label">数量</div>
                   <el-input-number
                     v-model="detail.quantity"
-                    :min="0"
+                    :min="1"
                     :step="1"
+                    :precision="0"
+                    step-strictly
                     style="width: 100%"
                   />
                 </div>
@@ -1342,17 +1317,18 @@ import {
   updateOutboundDocumentApi,
   deleteOutboundDocumentApi,
   getOutboundDocumentStatisticsApi,
+  getOutboundInventoryListApi,
   getOutboundDocumentItemAttachmentsApi,
   getOutboundDocumentAttachmentsSummaryApi,
   deleteOutboundDocumentAttachmentApi,
   downloadOutboundDocumentAttachmentApi,
   type OutboundDocument,
   type OutboundDocumentAttachment,
-  type OutboundDocumentAttachmentSummary
+  type OutboundDocumentAttachmentSummary,
+  type OutboundInventoryItem
 } from '@/api/outbound-document'
 import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
-import { getProjectListApi, type ProjectInfo } from '@/api/project'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 
@@ -1366,9 +1342,9 @@ const sortState = reactive({
 })
 const summary = reactive({
   totalDocuments: 0,
-  pendingDocuments: 0,
-  approvedDocuments: 0,
-  rejectedDocuments: 0
+  totalDetails: 0,
+  totalQuantity: 0,
+  totalAmount: 0
 })
 
 const appStore = useAppStore()
@@ -1401,17 +1377,12 @@ const paginationLayout = computed(() =>
 // 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
-const queryForm = reactive({ keyword: '', status: '', outboundType: '' })
+const queryForm = reactive({ keyword: '', outboundType: '' })
 const outboundTypeOptions = [
   { label: '销售出库', value: '销售出库' },
   { label: '生产出库', value: '生产出库' },
   { label: '调拨出库', value: '调拨出库' },
   { label: '其他出库', value: '其他出库' }
-]
-const statusOptions = [
-  { label: '待审核', value: '待审核' },
-  { label: '已审核', value: '已审核' },
-  { label: '已驳回', value: '已驳回' }
 ]
 
 const viewDialogVisible = ref(false)
@@ -1677,9 +1648,9 @@ const removeCreateDetailRow = (index: number) => {
 
 const inventoryDialogVisible = ref(false)
 const inventoryLoading = ref(false)
-const inventoryList = ref<Partial<ProjectInfo>[]>([])
+const inventoryList = ref<Partial<OutboundInventoryItem>[]>([])
 const inventoryTableRef = ref()
-const selectedInventoryRows = ref<Partial<ProjectInfo>[]>([])
+const selectedInventoryRows = ref<Partial<OutboundInventoryItem>[]>([])
 const inventorySelectionKeys = ref<Set<string>>(new Set())
 
 const inventorySelectedCustomerName = computed(() => {
@@ -1689,7 +1660,7 @@ const inventorySelectedCustomerName = computed(() => {
   return customer?.customerName || ''
 })
 
-const getInventoryCustomerName = (row: Partial<ProjectInfo>) => {
+const getInventoryCustomerName = (row: Partial<OutboundInventoryItem>) => {
   const direct = (row as any).客户名称
   if (typeof direct === 'string' && direct.trim()) return direct
   const cid = Number((row as any).客户ID)
@@ -1698,7 +1669,7 @@ const getInventoryCustomerName = (row: Partial<ProjectInfo>) => {
   return customer?.customerName || '-'
 }
 
-const getInventoryCustomerKey = (row: Partial<ProjectInfo>) => {
+const getInventoryCustomerKey = (row: Partial<OutboundInventoryItem>) => {
   const cid = Number((row as any).客户ID)
   if (Number.isFinite(cid) && cid > 0) return `id:${cid}`
   const name = getInventoryCustomerName(row)
@@ -1706,9 +1677,10 @@ const getInventoryCustomerKey = (row: Partial<ProjectInfo>) => {
   return null
 }
 
-const getInventoryRowKey = (row: Partial<ProjectInfo>) => String((row as any).项目编号 || '')
+const getInventoryRowKey = (row: Partial<OutboundInventoryItem>) =>
+  String((row as any).项目编号 || '')
 
-const isInventoryRowSelectable = (row: Partial<ProjectInfo>) => {
+const isInventoryRowSelectable = (row: Partial<OutboundInventoryItem>) => {
   if (!selectedInventoryRows.value.length) return true
   const locked = getInventoryCustomerKey(selectedInventoryRows.value[0])
   if (!locked) return false
@@ -1721,22 +1693,17 @@ const loadInventoryList = async () => {
     selectedInventoryRows.value = []
     inventorySelectionKeys.value = new Set()
 
-    const resp: any = await getProjectListApi({
+    const targetForm: any = inventoryTarget.value === 'create' ? createForm : editForm
+    const resp: any = await getOutboundInventoryListApi({
       page: 1,
       pageSize: 1000,
-      status: '已经移模',
-      sortField: '项目编号',
+      customerId: targetForm.客户ID || undefined,
       sortOrder: 'desc'
     })
     const raw: any = resp
     const payload: any = raw?.data ?? raw
     const list = payload?.data?.list ?? payload?.list ?? payload?.data ?? []
     let rows = Array.isArray(list) ? list : []
-
-    const targetForm: any = inventoryTarget.value === 'create' ? createForm : editForm
-    if (targetForm.客户ID) {
-      rows = rows.filter((r: any) => Number(r?.客户ID) === Number(targetForm.客户ID))
-    }
 
     rows = rows.map((r: any) => ({
       ...r,
@@ -1755,7 +1722,7 @@ const loadInventoryList = async () => {
   }
 }
 
-const handleInventorySelectionChange = (rows: Partial<ProjectInfo>[]) => {
+const handleInventorySelectionChange = (rows: Partial<OutboundInventoryItem>[]) => {
   const nextRows = Array.isArray(rows) ? rows : []
   const table: any = inventoryTableRef.value
 
@@ -1975,7 +1942,8 @@ const handleSubmitCreate = async () => {
       return
     }
     // 仅“数量”为必填
-    if (!d.quantity || d.quantity <= 0) {
+    const qty = Number(d.quantity || 0)
+    if (!Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
       emptyRows.push(idx + 1)
     }
   })
@@ -2036,8 +2004,6 @@ const editForm = reactive<{
   客户ID: number | null
   客户名称: string
   经办人: string
-  审核状态: string
-  审核人: string
   备注: string
   details: CreateDetailRow[]
 }>({
@@ -2048,8 +2014,6 @@ const editForm = reactive<{
   客户ID: null,
   客户名称: '',
   经办人: '',
-  审核状态: '',
-  审核人: '',
   备注: '',
   details: []
 })
@@ -2062,66 +2026,6 @@ const editTotals = computed(() => {
     0
   )
   return { totalQuantity }
-})
-
-const isFieldFilled = (value: unknown) => {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  return true
-}
-
-const basicTabCompleted = computed(() => {
-  // 除了 项目名称、设计师、进度影响原因、备注 以外的“基本信息”字段
-  const fields: (keyof ProjectInfo | 'projectName')[] = [
-    '出库单号',
-    '审核状态',
-    '客户模号',
-    '制件厂家',
-    '中标日期',
-    '产品3D确认',
-    '图纸下发日期',
-    '计划首样日期',
-    '首次送样日期',
-    '封样时间',
-    '移模日期'
-  ]
-  return fields.every((key) => isFieldFilled((editForm as any)[key]))
-})
-
-const partTabCompleted = computed(() => {
-  const fields: (keyof ProjectInfo | 'productName' | 'productDrawing')[] = [
-    'productName',
-    'productDrawing',
-    '产品尺寸',
-    '产品重量',
-    '产品材质',
-    '产品颜色',
-    '收缩率',
-    '料柄重量'
-  ]
-  return fields.every((key) => isFieldFilled((editForm as any)[key]))
-})
-
-const mouldTabCompleted = computed(() => {
-  const fields: (keyof ProjectInfo)[] = [
-    '模具穴数',
-    '模具尺寸',
-    '模具重量',
-    '前模材质',
-    '后模材质',
-    '滑块材质',
-    '流道类型',
-    '流道数量',
-    '浇口类型',
-    '浇口数量',
-    '机台吨位',
-    '锁模力',
-    '定位圈',
-    '容模量',
-    '拉杆间距',
-    '成型周期'
-  ]
-  return fields.every((key) => isFieldFilled((editForm as any)[key]))
 })
 
 // 仓库选项
@@ -2205,7 +2109,6 @@ const loadData = async () => {
       pageSize: pagination.size
     }
     if (queryForm.keyword) params.keyword = queryForm.keyword
-    if (queryForm.status) params.status = queryForm.status
     if (queryForm.outboundType) params.outboundType = queryForm.outboundType
     if (sortState.prop && sortState.order) {
       params.sortField = sortState.prop
@@ -2257,9 +2160,9 @@ const loadStatistics = async () => {
     const response: any = await getOutboundDocumentStatisticsApi()
     if (response?.code === 0 && response?.data) {
       summary.totalDocuments = response.data.totalDocuments || 0
-      summary.pendingDocuments = response.data.pendingDocuments || 0
-      summary.approvedDocuments = response.data.approvedDocuments || 0
-      summary.rejectedDocuments = response.data.rejectedDocuments || 0
+      summary.totalDetails = response.data.totalDetails || 0
+      summary.totalQuantity = Number(response.data.totalQuantity || 0)
+      summary.totalAmount = Number(response.data.totalAmount || 0)
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
@@ -2274,7 +2177,6 @@ const handleSearch = () => {
 
 const handleReset = () => {
   queryForm.keyword = ''
-  queryForm.status = ''
   queryForm.outboundType = ''
   handleSearch()
 }
@@ -2288,45 +2190,6 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (page: number) => {
   pagination.page = page
   loadData()
-}
-
-const getStatusTagType = (status?: string) => {
-  if (!status) return 'info'
-
-  const statusTypeMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
-    待审核: 'warning',
-    已审核: 'success',
-    已驳回: 'danger',
-    T0: 'danger',
-    T1: 'warning',
-    T2: 'warning',
-    设计中: 'warning',
-    加工中: 'primary',
-    表面处理: 'info',
-    封样: 'primary',
-    待移模: 'primary',
-    已经移模: 'success'
-  }
-
-  return statusTypeMap[status] || 'info'
-}
-
-// 给每个审核状态分配唯一颜色（通过 class 覆盖 el-tag 默认配色）
-const statusClassMap: Record<string, string> = {
-  T0: 'pm-status--t0',
-  T1: 'pm-status--t1',
-  T2: 'pm-status--t2',
-  设计中: 'pm-status--designing',
-  加工中: 'pm-status--processing',
-  表面处理: 'pm-status--surface',
-  封样: 'pm-status--sample',
-  待移模: 'pm-status--pending-move',
-  已经移模: 'pm-status--moved'
-}
-
-const getStatusTagClass = (status?: string) => {
-  if (!status) return ''
-  return statusClassMap[status] || ''
 }
 
 const sumDetailQuantity = (details?: any[]) => {
@@ -2541,8 +2404,6 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editForm.客户ID = data.客户ID ? Number(data.客户ID) : null
     editForm.客户名称 = String(data.客户名称 || '')
     editForm.经办人 = String(data.经办人 || userStore.getUserInfo?.username || '')
-    editForm.审核状态 = String(data.审核状态 || '')
-    editForm.审核人 = String(data.审核人 || '')
     editForm.备注 = String(data.备注 || '')
 
     const detailRows = Array.isArray(data.details) ? data.details : []
@@ -2571,8 +2432,6 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editForm.客户ID = null
     editForm.客户名称 = ''
     editForm.经办人 = String(userStore.getUserInfo?.username || '')
-    editForm.审核状态 = ''
-    editForm.审核人 = ''
     editForm.备注 = ''
     editForm.details = [makeCreateDetailRow()]
     editDialogVisible.value = true
@@ -3283,7 +3142,8 @@ const handleSubmitEdit = async () => {
       missingItemRows.push(idx + 1)
       return
     }
-    if (!d.quantity || d.quantity <= 0) {
+    const qty = Number(d.quantity || 0)
+    if (!Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
       emptyRows.push(idx + 1)
     }
   })
@@ -3305,8 +3165,6 @@ const handleSubmitEdit = async () => {
       客户ID: editForm.客户ID || undefined,
       客户名称: editForm.客户名称 || undefined,
       经办人: editForm.经办人 || undefined,
-      审核状态: editForm.审核状态 || undefined,
-      审核人: editForm.审核人 || undefined,
       备注: editForm.备注 || undefined,
       更新人: userStore.getUserInfo?.username || undefined,
       details: details.map((d) => ({
@@ -3340,8 +3198,6 @@ const handleEditDialogClosed = () => {
   editForm.客户ID = null
   editForm.客户名称 = ''
   editForm.经办人 = ''
-  editForm.审核状态 = ''
-  editForm.审核人 = ''
   editForm.备注 = ''
   editForm.details = []
   currentDocumentNo.value = ''
@@ -4421,71 +4277,6 @@ onMounted(() => {
   letter-spacing: 0.5px;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-}
-
-/* 审核状态颜色覆盖（每个状态独立配色） */
-:deep(.el-tag.pm-status--t0) {
-  color: #f5222d !important;
-  background-color: rgb(245 34 45 / 12%) !important;
-  border-color: rgb(245 34 45 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--t1) {
-  color: #fa541c !important;
-  background-color: rgb(250 84 28 / 12%) !important;
-  border-color: rgb(250 84 28 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--t2) {
-  color: #faad14 !important;
-  background-color: rgb(250 173 20 / 12%) !important;
-  border-color: rgb(250 173 20 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--designing) {
-  color: #67c23a !important;
-  background-color: rgb(103 194 58 / 12%) !important;
-  border-color: rgb(103 194 58 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--processing) {
-  color: #e6a23c !important;
-  background-color: rgb(230 162 60 / 12%) !important;
-  border-color: rgb(230 162 60 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--surface) {
-  color: #13c2c2 !important;
-  background-color: rgb(19 194 194 / 12%) !important;
-  border-color: rgb(19 194 194 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--sample) {
-  color: #2f54eb !important;
-  background-color: rgb(47 84 235 / 12%) !important;
-  border-color: rgb(47 84 235 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--pending-move) {
-  color: #eb2f96 !important;
-  background-color: rgb(235 47 150 / 12%) !important;
-  border-color: rgb(235 47 150 / 45%) !important;
-}
-
-:deep(.el-tag.pm-status--moved) {
-  color: #52c41a !important;
-  background-color: rgb(82 196 26 / 12%) !important;
-  border-color: rgb(82 196 26 / 45%) !important;
-}
-
-/* 列表里的审核状态统一宽度 */
-:deep(.el-tag.pm-status-tag--fixed) {
-  display: inline-flex;
-  width: 80px;
-  text-align: center;
-  white-space: nowrap;
-  box-sizing: border-box;
-  justify-content: center;
 }
 
 /* 统计卡片样式 */

@@ -48,10 +48,21 @@ export interface OutboundDocumentAttachmentSummary {
   attachmentCount: number
 }
 
+export interface OutboundInventoryItem {
+  项目编号: string
+  客户ID?: number
+  客户名称?: string
+  客户模号?: string
+  产品名称?: string
+  产品图号?: string
+  已完成数量: number
+  已出货数量: number
+  剩余可出货: number
+}
+
 // 出库单查询参数
 export interface OutboundDocumentQueryParams {
   keyword?: string // 出库单号/客户名称/项目编号
-  status?: string // 审核状态
   outboundType?: string // 出库类型
   startDate?: string // 开始日期
   endDate?: string // 结束日期
@@ -92,6 +103,21 @@ export const deleteOutboundDocumentApi = (documentNo: string) => {
 // 获取出库单统计信息
 export const getOutboundDocumentStatisticsApi = () => {
   return request.get({ url: '/api/outbound-document/statistics' })
+}
+
+export interface OutboundInventoryQueryParams {
+  customerId?: number | string
+  keyword?: string
+  page?: number
+  pageSize?: number
+  sortOrder?: 'asc' | 'desc'
+}
+
+export const getOutboundInventoryListApi = (params?: OutboundInventoryQueryParams) => {
+  return request.get({
+    url: '/api/outbound-document/inventory',
+    params
+  })
 }
 
 // 获取某出库单某项目编号的附件列表
