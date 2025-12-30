@@ -765,7 +765,7 @@
                 v-model="createForm.出库单号"
                 placeholder="自动生成"
                 disabled
-                :style="{ width: dialogControlWidth }"
+                style="width: 180px"
               />
             </el-form-item>
             <el-form-item label="出库日期" prop="出库日期">
@@ -774,33 +774,18 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择出库日期"
-                :style="{ width: dialogControlWidth }"
+                style="width: 180px"
               />
             </el-form-item>
-            <el-form-item label="出库类型">
-              <el-select
-                v-model="createForm.出库类型"
-                placeholder="请选择出库类型"
-                clearable
-                :style="{ width: dialogControlWidth }"
-              >
-                <el-option
-                  v-for="item in outboundTypeOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
           </div>
-          <div class="dialog-form-column dialog-form-column--right">
+          <div class="dialog-form-column dialog-form-column--middle">
             <el-form-item label="客户名称" prop="客户ID">
               <el-select
                 v-model="createForm.客户ID"
                 placeholder="请选择客户"
                 filterable
                 clearable
-                :style="{ width: dialogControlWidth }"
+                style="width: 200px"
                 @change="handleCreateCustomerChange"
               >
                 <el-option
@@ -812,18 +797,31 @@
               </el-select>
             </el-form-item>
             <el-form-item label="经办人">
-              <el-input
-                v-model="createForm.经办人"
-                disabled
-                :style="{ width: dialogControlWidth }"
-              />
+              <el-input v-model="createForm.经办人" disabled style="width: 200px" />
+            </el-form-item>
+          </div>
+          <div class="dialog-form-column dialog-form-column--right">
+            <el-form-item label="出库类型">
+              <el-select
+                v-model="createForm.出库类型"
+                placeholder="请选择出库类型"
+                clearable
+                style="width: 180px"
+              >
+                <el-option
+                  v-for="item in outboundTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
             <el-form-item label="仓库">
               <el-select
                 v-model="createForm.仓库"
                 placeholder="请选择仓库"
                 clearable
-                :style="{ width: dialogControlWidth }"
+                style="width: 180px"
               >
                 <el-option
                   v-for="item in warehouseOptions"
@@ -937,7 +935,6 @@
           </div>
 
           <div class="dialog-product-summary">
-            <el-button type="primary" plain @click="addCreateDetailRow">新增明细行</el-button>
             <div>
               <span class="dialog-product-summary__item"
                 >产品项数：{{ createForm.details.length }}</span
@@ -1058,11 +1055,7 @@
         <div class="dialog-form-columns">
           <div class="dialog-form-column dialog-form-column--left">
             <el-form-item label="出库单号" prop="出库单号">
-              <el-input
-                v-model="editForm.出库单号"
-                disabled
-                :style="{ width: dialogControlWidth }"
-              />
+              <el-input v-model="editForm.出库单号" disabled style="width: 180px" />
             </el-form-item>
             <el-form-item label="出库日期" prop="出库日期">
               <el-date-picker
@@ -1070,34 +1063,18 @@
                 type="date"
                 value-format="YYYY-MM-DD"
                 placeholder="请选择出库日期"
-                :style="{ width: dialogControlWidth }"
+                style="width: 180px"
               />
             </el-form-item>
-            <el-form-item label="出库类型" prop="出库类型">
-              <el-select
-                v-model="editForm.出库类型"
-                placeholder="请选择出库类型"
-                clearable
-                :style="{ width: dialogControlWidth }"
-              >
-                <el-option
-                  v-for="item in outboundTypeOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
           </div>
-
-          <div class="dialog-form-column dialog-form-column--right">
+          <div class="dialog-form-column dialog-form-column--middle">
             <el-form-item label="客户名称" prop="客户ID">
               <el-select
                 v-model="editForm.客户ID"
                 placeholder="请选择客户"
                 filterable
                 clearable
-                :style="{ width: dialogControlWidth }"
+                style="width: 200px"
                 @change="handleCustomerChange"
               >
                 <el-option
@@ -1109,14 +1086,31 @@
               </el-select>
             </el-form-item>
             <el-form-item label="经办人">
-              <el-input v-model="editForm.经办人" disabled :style="{ width: dialogControlWidth }" />
+              <el-input v-model="editForm.经办人" disabled style="width: 200px" />
+            </el-form-item>
+          </div>
+          <div class="dialog-form-column dialog-form-column--right">
+            <el-form-item label="出库类型" prop="出库类型">
+              <el-select
+                v-model="editForm.出库类型"
+                placeholder="请选择出库类型"
+                clearable
+                style="width: 180px"
+              >
+                <el-option
+                  v-for="item in outboundTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
             <el-form-item label="仓库" prop="仓库">
               <el-select
                 v-model="editForm.仓库"
                 placeholder="请选择仓库"
                 clearable
-                :style="{ width: dialogControlWidth }"
+                style="width: 180px"
               >
                 <el-option
                   v-for="item in warehouseOptions"
@@ -1126,34 +1120,8 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="审核状态">
-              <el-select
-                v-model="editForm.审核状态"
-                placeholder="请选择审核状态"
-                clearable
-                :style="{ width: dialogControlWidth }"
-              >
-                <el-option
-                  v-for="item in statusOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="审核人">
-              <el-input
-                v-model="editForm.审核人"
-                placeholder="请输入审核人"
-                :style="{ width: dialogControlWidth }"
-              />
-            </el-form-item>
           </div>
         </div>
-
-        <el-form-item label="备注">
-          <el-input v-model="editForm.备注" type="textarea" :rows="3" placeholder="请输入备注" />
-        </el-form-item>
 
         <div class="dialog-product-section">
           <div style="margin-bottom: 12px">
