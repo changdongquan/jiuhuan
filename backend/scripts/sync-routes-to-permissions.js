@@ -27,6 +27,12 @@ const routesToSync = [
     page_title: '出库单',
     parent_route: 'OutboundDocument'
   },
+  {
+    route_name: 'OutboundDocumentPrint',
+    route_path: '/outbound-document/print/:documentNo',
+    page_title: '出库单打印预览',
+    parent_route: 'OutboundDocument'
+  },
 
   // 项目管理
   {
