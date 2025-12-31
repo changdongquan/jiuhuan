@@ -91,6 +91,19 @@ export const constantRouterMap: AppRouteRecordRaw[] = [
 
 export const asyncRouterMap: AppRouteRecordRaw[] = [
   {
+    path: '/outbound-document/print/:documentNo',
+    component: () => import('@/views/OutboundDocument/PrintPreview.vue'),
+    name: 'OutboundDocumentPrint',
+    meta: {
+      title: '出库单打印预览',
+      hidden: true,
+      noTagsView: true,
+      noCache: true,
+      canTo: true,
+      roles: ['*']
+    }
+  },
+  {
     path: '/sales-orders',
     component: Layout,
     redirect: '/sales-orders/index',

@@ -695,6 +695,13 @@
       </div>
 
       <template #footer>
+        <el-button
+          v-if="viewDocumentData?.出库单号"
+          type="primary"
+          @click="handlePrintPreview(viewDocumentData)"
+        >
+          打印预览
+        </el-button>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -2361,6 +2368,19 @@ const handleView = async (row: Partial<OutboundDocument>) => {
     console.error('获取详情失败:', error)
     ElMessage.error('获取详情失败')
   }
+}
+
+const handlePrintPreview = (row: Partial<OutboundDocument>) => {
+  const documentNo = String((row as any)?.出库单号 || '').trim()
+  if (!documentNo) {
+    ElMessage.error('缺少出库单号')
+    return
+  }
+  void router.push({
+    name: 'OutboundDocumentPrint',
+    params: { documentNo },
+    query: { from: route.fullPath }
+  })
 }
 
 const handleDelete = async (row: Partial<OutboundDocument>) => {
