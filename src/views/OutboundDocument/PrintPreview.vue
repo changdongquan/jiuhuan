@@ -56,57 +56,113 @@
                   <span class="label">经办人：</span>
                   <span class="value">{{ documentData.经办人 || '-' }}</span>
                 </div>
-                <div class="doc-info__item">
-                  <span class="label">备注：</span>
-                  <span class="value">{{ documentData.备注 || '-' }}</span>
-                </div>
               </div>
             </div>
 
             <div class="doc-table">
-              <el-table :data="documentData.details" border style="width: 100%" size="small">
-                <el-table-column prop="项目编号" label="项目编号" min-width="110" />
+              <template v-if="isMeiling">
+                <table class="print-table">
+                  <colgroup>
+                    <col style="width: 50px" />
+                    <col style="width: 120px" />
+                    <col style="width: 135px" />
+                    <col style="width: 120px" />
+                    <col style="width: 110px" />
+                    <col style="width: 60px" />
+                    <col style="width: 100px" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>序号</th>
+                      <th>项目编号</th>
+                      <th>产品名称</th>
+                      <th>产品图号</th>
+                      <th>客户模号</th>
+                      <th class="cell-right">数量</th>
+                      <th>备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(row, index) in documentData.details" :key="row?.id || index">
+                      <tr>
+                        <td class="cell-center">{{ index + 1 }}</td>
+                        <td>{{ row?.项目编号 ?? '-' }}</td>
+                        <td class="cell-ellipsis">{{ row?.产品名称 ?? '-' }}</td>
+                        <td class="cell-ellipsis">{{ row?.产品图号 ?? '-' }}</td>
+                        <td class="cell-ellipsis">{{ row?.客户模号 ?? '-' }}</td>
+                        <td class="cell-right">{{ row?.出库数量 ?? '-' }}</td>
+                        <td class="cell-ellipsis">{{ row?.备注 ?? '-' }}</td>
+                      </tr>
+                      <tr class="print-table__extra-row">
+                        <td colspan="7">
+                          <div class="meiling-extra-grid">
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">模具穴数：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.模具穴数 ?? '-'
+                              }}</span>
+                            </div>
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">产品材质：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.产品材质 ?? '-'
+                              }}</span>
+                            </div>
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">模具尺寸：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.模具尺寸 ?? '-'
+                              }}</span>
+                            </div>
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">模具重量：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.模具重量 ?? '-'
+                              }}</span>
+                            </div>
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">流道类型：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.流道类型 ?? '-'
+                              }}</span>
+                            </div>
+                            <div class="meiling-extra-grid__item">
+                              <span class="meiling-extra-grid__label">流道数量：</span>
+                              <span class="meiling-extra-grid__value">{{
+                                row?.流道数量 ?? '-'
+                              }}</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </template>
+
+              <el-table v-else :data="documentData.details" border style="width: 100%" size="small">
+                <el-table-column type="index" label="序号" width="50" align="center" />
+                <el-table-column prop="项目编号" label="项目编号" width="120" />
                 <el-table-column
                   prop="产品名称"
                   label="产品名称"
-                  min-width="160"
+                  width="135"
                   show-overflow-tooltip
                 />
                 <el-table-column
                   prop="产品图号"
                   label="产品图号"
-                  min-width="120"
+                  width="120"
                   show-overflow-tooltip
                 />
                 <el-table-column
                   prop="客户模号"
                   label="客户模号"
-                  min-width="120"
+                  width="110"
                   show-overflow-tooltip
                 />
-                <el-table-column prop="模具穴数" label="模具穴数" width="80" align="center" />
-                <el-table-column
-                  prop="产品材质"
-                  label="产品材质"
-                  min-width="110"
-                  show-overflow-tooltip
-                />
-                <el-table-column
-                  prop="模具尺寸"
-                  label="模具尺寸"
-                  min-width="110"
-                  show-overflow-tooltip
-                />
-                <el-table-column prop="模具重量" label="模具重量" width="90" align="right" />
-                <el-table-column
-                  prop="流道类型"
-                  label="流道类型"
-                  min-width="100"
-                  show-overflow-tooltip
-                />
-                <el-table-column prop="流道数量" label="流道数量" width="80" align="center" />
-                <el-table-column prop="出库数量" label="出库数量" width="90" align="right" />
-                <el-table-column prop="备注" label="备注" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="出库数量" label="数量" width="60" align="right" />
+                <el-table-column prop="备注" label="备注" width="100" show-overflow-tooltip />
               </el-table>
             </div>
 
@@ -137,9 +193,13 @@ import { getOutboundDocumentDetailApi } from '@/api/outbound-document'
 const router = useRouter()
 const route = useRoute()
 
+const MEILING_CUSTOMER_ID = 51
+
 const zoom = ref<number>(0.75)
 const loading = ref(false)
 const documentData = ref<any>(null)
+
+const isMeiling = computed(() => Number(documentData.value?.客户ID || 0) === MEILING_CUSTOMER_ID)
 
 const totalQuantity = computed(() => {
   const details = Array.isArray(documentData.value?.details) ? documentData.value.details : []
@@ -239,6 +299,71 @@ onMounted(() => {
   padding: 18px 16px 36px;
 }
 
+.print-table {
+  width: 100%;
+  font-size: 12px;
+  color: var(--el-text-color-primary);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.print-table th,
+.print-table td {
+  padding: 6px 8px;
+  vertical-align: top;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.print-table thead th {
+  font-weight: 600;
+  background: #fafafa;
+}
+
+.print-table__extra-row td {
+  background: #fcfcfc;
+}
+
+.cell-center {
+  text-align: center;
+}
+
+.cell-right {
+  text-align: right;
+}
+
+.cell-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meiling-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-regular);
+}
+
+.meiling-extra-grid__item {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.meiling-extra-grid__label {
+  flex: 0 0 auto;
+  color: var(--el-text-color-secondary);
+}
+
+.meiling-extra-grid__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .paper {
   width: 210mm;
   min-height: 297mm;
@@ -288,11 +413,22 @@ onMounted(() => {
   gap: 10px;
 }
 
+.doc-info__item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
 .doc-info__item .label {
   color: #606266;
+  text-align: right;
+  white-space: nowrap;
+  flex: 0 0 72px;
 }
 
 .doc-info__item .value {
+  flex: 1 1 auto;
+  min-width: 0;
   color: #303133;
 }
 
@@ -318,6 +454,7 @@ onMounted(() => {
   display: flex;
   gap: 26px;
   color: #606266;
+  transform: translateX(-100px);
 }
 
 .doc-sign__item {

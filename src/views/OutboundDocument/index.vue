@@ -214,7 +214,7 @@
                 :row-class-name="timelineDetailRowClassName"
               >
                 <el-table-column type="index" label="序号" width="45" align="center" />
-                <el-table-column prop="项目编号" label="项目编号" min-width="135" />
+                <el-table-column prop="项目编号" label="项目编号" min-width="140" />
                 <el-table-column
                   prop="产品名称"
                   label="产品名称"
@@ -224,22 +224,22 @@
                 <el-table-column
                   prop="产品图号"
                   label="产品图号"
-                  min-width="130"
+                  min-width="120"
                   show-overflow-tooltip
                 />
                 <el-table-column
                   prop="客户模号"
                   label="客户模号"
-                  min-width="130"
+                  min-width="120"
                   show-overflow-tooltip
                 />
-                <el-table-column label="数量" width="90" align="right">
+                <el-table-column label="数量" width="140" align="center">
                   <template #default="{ row }">
                     {{ formatDecimal(row.出库数量) }}
                   </template>
                 </el-table-column>
-                <el-table-column prop="备注" label="备注" min-width="160" show-overflow-tooltip />
-                <el-table-column label="附件" min-width="120">
+                <el-table-column prop="备注" label="备注" min-width="130" show-overflow-tooltip />
+                <el-table-column label="附件" min-width="120" fixed="right">
                   <template #default="{ row }">
                     <template v-if="timelineViewData.出库单号 && row.项目编号">
                       <el-button
@@ -485,7 +485,7 @@
     <el-dialog
       v-model="viewDialogVisible"
       :title="''"
-      :width="isMobile ? '100%' : 'min(1540px, calc(100vw - 48px))'"
+      :width="isMobile ? '100%' : 'min(1400px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="od-dialog od-dialog-view"
@@ -576,7 +576,7 @@
           <div v-if="!isMobile" class="dialog-table-wrapper">
             <el-table :data="viewDocumentData.details" border size="small" style="width: 100%">
               <el-table-column type="index" label="序号" width="45" align="center" />
-              <el-table-column prop="项目编号" label="项目编号" min-width="135" />
+              <el-table-column prop="项目编号" label="项目编号" min-width="140" />
               <el-table-column
                 prop="产品名称"
                 label="产品名称"
@@ -586,41 +586,22 @@
               <el-table-column
                 prop="产品图号"
                 label="产品图号"
-                min-width="130"
+                min-width="120"
                 show-overflow-tooltip
               />
               <el-table-column
                 prop="客户模号"
                 label="客户模号"
-                min-width="130"
-                show-overflow-tooltip
-              />
-              <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
-              <el-table-column prop="产品材质" label="产品材质" width="110" show-overflow-tooltip />
-              <el-table-column
-                prop="模具尺寸"
-                label="模具尺寸"
                 min-width="120"
                 show-overflow-tooltip
               />
-              <el-table-column label="模具重量" width="100" align="right">
-                <template #default="{ row }">
-                  {{ row.模具重量 ?? '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="流道类型" label="流道类型" width="110" show-overflow-tooltip />
-              <el-table-column label="流道数量" width="90" align="center">
-                <template #default="{ row }">
-                  {{ row.流道数量 ?? '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column label="数量" width="90" align="right">
+              <el-table-column label="数量" width="140" align="center">
                 <template #default="{ row }">
                   {{ formatDecimal(row.出库数量) }}
                 </template>
               </el-table-column>
-              <el-table-column prop="备注" label="备注" min-width="160" show-overflow-tooltip />
-              <el-table-column label="附件" min-width="120">
+              <el-table-column prop="备注" label="备注" min-width="130" show-overflow-tooltip />
+              <el-table-column label="附件" min-width="120" fixed="right">
                 <template #default="{ row }">
                   <template v-if="viewDocumentData.出库单号 && row.项目编号">
                     <el-button
@@ -670,30 +651,6 @@
                 <div class="view-dialog-mobile-detail-row">
                   <span class="label">客户模号</span>
                   <span class="value">{{ detail.客户模号 || '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">模具穴数</span>
-                  <span class="value">{{ detail.模具穴数 ?? '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">产品材质</span>
-                  <span class="value">{{ detail.产品材质 || '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">模具尺寸</span>
-                  <span class="value">{{ detail.模具尺寸 || '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">模具重量</span>
-                  <span class="value">{{ detail.模具重量 ?? '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">流道类型</span>
-                  <span class="value">{{ detail.流道类型 || '-' }}</span>
-                </div>
-                <div class="view-dialog-mobile-detail-row">
-                  <span class="label">流道数量</span>
-                  <span class="value">{{ detail.流道数量 ?? '-' }}</span>
                 </div>
                 <div class="view-dialog-mobile-detail-row" v-if="detail.备注">
                   <span class="label">备注</span>
