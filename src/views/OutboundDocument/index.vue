@@ -595,6 +595,25 @@
                 min-width="130"
                 show-overflow-tooltip
               />
+              <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
+              <el-table-column prop="产品材质" label="产品材质" width="110" show-overflow-tooltip />
+              <el-table-column
+                prop="模具尺寸"
+                label="模具尺寸"
+                min-width="120"
+                show-overflow-tooltip
+              />
+              <el-table-column label="模具重量" width="100" align="right">
+                <template #default="{ row }">
+                  {{ row.模具重量 ?? '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="流道类型" label="流道类型" width="110" show-overflow-tooltip />
+              <el-table-column label="流道数量" width="90" align="center">
+                <template #default="{ row }">
+                  {{ row.流道数量 ?? '-' }}
+                </template>
+              </el-table-column>
               <el-table-column label="数量" width="90" align="right">
                 <template #default="{ row }">
                   {{ formatDecimal(row.出库数量) }}
@@ -651,6 +670,30 @@
                 <div class="view-dialog-mobile-detail-row">
                   <span class="label">客户模号</span>
                   <span class="value">{{ detail.客户模号 || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">模具穴数</span>
+                  <span class="value">{{ detail.模具穴数 ?? '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">产品材质</span>
+                  <span class="value">{{ detail.产品材质 || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">模具尺寸</span>
+                  <span class="value">{{ detail.模具尺寸 || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">模具重量</span>
+                  <span class="value">{{ detail.模具重量 ?? '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">流道类型</span>
+                  <span class="value">{{ detail.流道类型 || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">流道数量</span>
+                  <span class="value">{{ detail.流道数量 ?? '-' }}</span>
                 </div>
                 <div class="view-dialog-mobile-detail-row" v-if="detail.备注">
                   <span class="label">备注</span>

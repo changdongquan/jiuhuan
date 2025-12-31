@@ -84,6 +84,27 @@
                   min-width="120"
                   show-overflow-tooltip
                 />
+                <el-table-column prop="模具穴数" label="模具穴数" width="80" align="center" />
+                <el-table-column
+                  prop="产品材质"
+                  label="产品材质"
+                  min-width="110"
+                  show-overflow-tooltip
+                />
+                <el-table-column
+                  prop="模具尺寸"
+                  label="模具尺寸"
+                  min-width="110"
+                  show-overflow-tooltip
+                />
+                <el-table-column prop="模具重量" label="模具重量" width="90" align="right" />
+                <el-table-column
+                  prop="流道类型"
+                  label="流道类型"
+                  min-width="100"
+                  show-overflow-tooltip
+                />
+                <el-table-column prop="流道数量" label="流道数量" width="80" align="center" />
                 <el-table-column prop="出库数量" label="出库数量" width="90" align="right" />
                 <el-table-column prop="备注" label="备注" min-width="120" show-overflow-tooltip />
               </el-table>

@@ -10,6 +10,12 @@ export interface OutboundDocument {
   产品名称?: string
   产品图号?: string
   客户模号?: string
+  模具穴数?: string
+  产品材质?: string
+  模具尺寸?: string
+  模具重量?: number
+  流道类型?: string
+  流道数量?: number
   出库类型?: string // 销售出库、生产出库、调拨出库等
   仓库?: string
   出库数量?: number

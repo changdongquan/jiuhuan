@@ -430,12 +430,12 @@ router.get('/list', async (req, res) => {
 
     if (keyword) {
       where.push(`(
-        出库单号 LIKE @kw OR 客户名称 LIKE @kw OR 项目编号 LIKE @kw OR 产品名称 LIKE @kw OR 产品图号 LIKE @kw OR 客户模号 LIKE @kw
+        od.出库单号 LIKE @kw OR od.客户名称 LIKE @kw OR od.项目编号 LIKE @kw OR od.产品名称 LIKE @kw OR od.产品图号 LIKE @kw OR od.客户模号 LIKE @kw
       )`)
       params.kw = `%${keyword}%`
     }
     if (outboundType) {
-      where.push('出库类型 = @outboundType')
+      where.push('od.出库类型 = @outboundType')
       params.outboundType = outboundType
     }
 
@@ -456,8 +456,16 @@ router.get('/list', async (req, res) => {
     // 为了仿照“销售订单”的汇总行 + 展开明细效果，这里先查出所有符合条件的明细行，
     // 再按“出库单号”分组、汇总、分页（分页按出库单号分组后的数量计算）。
     const allSql = `
-      SELECT *
-      FROM 出库单明细
+      SELECT
+        od.*,
+        p.模具穴数,
+        p.产品材质,
+        p.模具尺寸,
+        p.模具重量,
+        p.流道类型,
+        p.流道数量
+      FROM 出库单明细 od
+      LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号
       ${whereSql}
     `
     const allRows = await query(allSql, params)
@@ -552,7 +560,20 @@ router.get('/detail', async (req, res) => {
     }
 
     const rows = await query(
-      `SELECT * FROM 出库单明细 WHERE 出库单号 = @documentNo ORDER BY id ASC`,
+      `
+        SELECT
+          od.*,
+          p.模具穴数,
+          p.产品材质,
+          p.模具尺寸,
+          p.模具重量,
+          p.流道类型,
+          p.流道数量
+        FROM 出库单明细 od
+        LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号
+        WHERE od.出库单号 = @documentNo
+        ORDER BY od.id ASC
+      `,
       { documentNo }
     )
     const header = rows[0] || null
