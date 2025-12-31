@@ -20,6 +20,14 @@ const routesToSync = [
     parent_route: 'SalesOrders'
   },
 
+  // 出库单
+  {
+    route_name: 'OutboundDocumentIndex',
+    route_path: '/outbound-document/index',
+    page_title: '出库单',
+    parent_route: 'OutboundDocument'
+  },
+
   // 项目管理
   {
     route_name: 'ProjectManagementIndex',
