@@ -409,7 +409,11 @@
           width="105"
           show-overflow-tooltip
           sortable="custom"
-        />
+        >
+          <template #default="{ row }">
+            {{ formatOperatorName(row.经办人) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="备注" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="190" fixed="right" class-name="pm-op-column">
           <template #default="{ row }">
@@ -515,7 +519,9 @@
             </div>
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">经办人：</span>
-              <span class="view-dialog-info-value">{{ viewDocumentData.经办人 || '-' }}</span>
+              <span class="view-dialog-info-value">{{
+                formatOperatorName(viewDocumentData.经办人) || '-'
+              }}</span>
             </div>
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">总数量：</span>
@@ -1911,7 +1917,11 @@ const handleCreate = async () => {
   createForm.仓库 = '成品仓'
   createForm.客户ID = null
   createForm.客户名称 = ''
-  createForm.经办人 = userStore.getUserInfo?.username || ''
+  createForm.经办人 =
+    (userStore.getUserInfo as any)?.realName ||
+    userStore.getUserInfo?.displayName ||
+    userStore.getUserInfo?.username ||
+    ''
   createForm.details = [makeCreateDetailRow()]
 
   createDialogVisible.value = true
@@ -2204,6 +2214,20 @@ const formatDecimal = (value: unknown) => {
   return num.toLocaleString('zh-Hans-CN', { maximumFractionDigits: 2 })
 }
 
+const formatOperatorName = (value: unknown) => {
+  const raw = String(value || '').trim()
+  if (!raw) return '-'
+  const currentUsername = String(userStore.getUserInfo?.username || '').trim()
+  const currentRealName = String(
+    (userStore.getUserInfo as any)?.realName || userStore.getUserInfo?.displayName || ''
+  ).trim()
+  if (currentUsername && raw.toLowerCase() === currentUsername.toLowerCase() && currentRealName) {
+    return currentRealName
+  }
+  if (raw.includes('@')) return raw.split('@')[0]
+  return raw
+}
+
 // 格式化日期，只显示年月日
 const formatDate = (date?: string | null) => {
   if (!date) return '-'
@@ -2403,7 +2427,13 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editForm.仓库 = String(data.仓库 || '')
     editForm.客户ID = data.客户ID ? Number(data.客户ID) : null
     editForm.客户名称 = String(data.客户名称 || '')
-    editForm.经办人 = String(data.经办人 || userStore.getUserInfo?.username || '')
+    editForm.经办人 = String(
+      data.经办人 ||
+        (userStore.getUserInfo as any)?.realName ||
+        userStore.getUserInfo?.displayName ||
+        userStore.getUserInfo?.username ||
+        ''
+    )
     editForm.备注 = String(data.备注 || '')
 
     const detailRows = Array.isArray(data.details) ? data.details : []
@@ -2431,7 +2461,12 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editForm.仓库 = ''
     editForm.客户ID = null
     editForm.客户名称 = ''
-    editForm.经办人 = String(userStore.getUserInfo?.username || '')
+    editForm.经办人 = String(
+      (userStore.getUserInfo as any)?.realName ||
+        userStore.getUserInfo?.displayName ||
+        userStore.getUserInfo?.username ||
+        ''
+    )
     editForm.备注 = ''
     editForm.details = [makeCreateDetailRow()]
     editDialogVisible.value = true
