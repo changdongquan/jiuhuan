@@ -29,18 +29,14 @@
           <div v-else class="paper__content">
             <div class="doc-header">
               <div class="doc-title">出库单</div>
-              <div class="doc-subtitle">出库单号：{{ documentData.出库单号 || '-' }}</div>
+              <div class="doc-subtitle">客户名称：{{ documentData.客户名称 || '-' }}</div>
             </div>
 
             <div class="doc-info">
               <div class="doc-info__row">
                 <div class="doc-info__item">
-                  <span class="label">客户名称：</span>
-                  <span class="value">{{ documentData.客户名称 || '-' }}</span>
-                </div>
-                <div class="doc-info__item">
-                  <span class="label">出库类型：</span>
-                  <span class="value">{{ documentData.出库类型 || '-' }}</span>
+                  <span class="label">出库单号：</span>
+                  <span class="value">{{ documentData.出库单号 || '-' }}</span>
                 </div>
                 <div class="doc-info__item">
                   <span class="label">仓库：</span>
@@ -53,8 +49,8 @@
                   <span class="value">{{ formatDate(documentData.出库日期) || '-' }}</span>
                 </div>
                 <div class="doc-info__item">
-                  <span class="label">经办人：</span>
-                  <span class="value">{{ documentData.经办人 || '-' }}</span>
+                  <span class="label">出库类型：</span>
+                  <span class="value">{{ documentData.出库类型 || '-' }}</span>
                 </div>
               </div>
             </div>
@@ -67,8 +63,8 @@
                     <col style="width: 120px" />
                     <col style="width: 135px" />
                     <col style="width: 120px" />
-                    <col style="width: 110px" />
-                    <col style="width: 60px" />
+                    <col style="width: 115px" />
+                    <col style="width: 61px" />
                     <col style="width: 100px" />
                   </colgroup>
                   <thead>
@@ -143,26 +139,11 @@
               <el-table v-else :data="documentData.details" border style="width: 100%" size="small">
                 <el-table-column type="index" label="序号" width="50" align="center" />
                 <el-table-column prop="项目编号" label="项目编号" width="120" />
-                <el-table-column
-                  prop="产品名称"
-                  label="产品名称"
-                  width="135"
-                  show-overflow-tooltip
-                />
-                <el-table-column
-                  prop="产品图号"
-                  label="产品图号"
-                  width="120"
-                  show-overflow-tooltip
-                />
-                <el-table-column
-                  prop="客户模号"
-                  label="客户模号"
-                  width="110"
-                  show-overflow-tooltip
-                />
-                <el-table-column prop="出库数量" label="数量" width="60" align="right" />
-                <el-table-column prop="备注" label="备注" width="100" show-overflow-tooltip />
+                <el-table-column prop="产品名称" label="产品名称" width="135" />
+                <el-table-column prop="产品图号" label="产品图号" width="120" />
+                <el-table-column prop="客户模号" label="客户模号" width="115" />
+                <el-table-column prop="出库数量" label="数量" width="61" align="right" />
+                <el-table-column prop="备注" label="备注" width="100" />
               </el-table>
             </div>
 
@@ -172,8 +153,7 @@
                 <span class="value">{{ totalQuantity }}</span>
               </div>
               <div class="doc-sign">
-                <div class="doc-sign__item">制单：</div>
-                <div class="doc-sign__item">审核：</div>
+                <div class="doc-sign__item">经办人：{{ documentData.经办人 || '' }}</div>
                 <div class="doc-sign__item">签收：</div>
               </div>
             </div>
@@ -193,13 +173,15 @@ import { getOutboundDocumentDetailApi } from '@/api/outbound-document'
 const router = useRouter()
 const route = useRoute()
 
-const MEILING_CUSTOMER_ID = 51
+const SPECIAL_PRINT_CUSTOMER_IDS = new Set<number>([51, 57])
 
 const zoom = ref<number>(0.75)
 const loading = ref(false)
 const documentData = ref<any>(null)
 
-const isMeiling = computed(() => Number(documentData.value?.客户ID || 0) === MEILING_CUSTOMER_ID)
+const isMeiling = computed(() =>
+  SPECIAL_PRINT_CUSTOMER_IDS.has(Number(documentData.value?.客户ID || 0))
+)
 
 const totalQuantity = computed(() => {
   const details = Array.isArray(documentData.value?.details) ? documentData.value.details : []
@@ -264,6 +246,36 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: a4;
+  }
+
+  .print-page {
+    background: #fff;
+  }
+
+  .print-toolbar {
+    display: none !important;
+  }
+
+  .print-canvas {
+    padding: 0;
+  }
+
+  .paper {
+    width: auto;
+    min-height: auto;
+    padding: 0;
+    border-radius: 0;
+    transform: none !important;
+    box-shadow: none;
+  }
+}
+
 .print-page {
   min-height: 100vh;
   background: #f5f7fa;
@@ -311,7 +323,7 @@ onMounted(() => {
 .print-table td {
   padding: 6px 8px;
   vertical-align: top;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid #000;
 }
 
 .print-table thead th {
@@ -332,9 +344,9 @@ onMounted(() => {
 }
 
 .cell-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .meiling-extra-grid {
@@ -357,11 +369,39 @@ onMounted(() => {
 }
 
 .meiling-extra-grid__value {
-  flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  white-space: normal;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+:deep(.doc-table .el-table .cell) {
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 加粗 Element Plus 表格边框（仅打印预览页） */
+:deep(.doc-table .el-table--border),
+:deep(.doc-table .el-table--group) {
+  border: 1px solid #000;
+}
+
+:deep(.doc-table .el-table--border::before) {
+  height: 1px;
+  background-color: #000;
+}
+
+:deep(.doc-table .el-table--border::after) {
+  width: 1px;
+  background-color: #000;
+}
+
+:deep(.doc-table .el-table--border .el-table__cell) {
+  border-right: 1px solid #000 !important;
+  border-bottom: 1px solid #000 !important;
 }
 
 .paper {
@@ -413,6 +453,10 @@ onMounted(() => {
   gap: 10px;
 }
 
+.doc-info__row .doc-info__item:last-child:nth-child(2) {
+  grid-column: 3;
+}
+
 .doc-info__item {
   display: flex;
   align-items: baseline;
@@ -438,7 +482,7 @@ onMounted(() => {
 
 .doc-footer {
   display: flex;
-  margin-top: 14px;
+  margin-top: 64px;
   font-size: 13px;
   color: #303133;
   align-items: flex-end;
@@ -454,7 +498,7 @@ onMounted(() => {
   display: flex;
   gap: 26px;
   color: #606266;
-  transform: translateX(-100px);
+  transform: translateX(-80px);
 }
 
 .doc-sign__item {
@@ -462,33 +506,5 @@ onMounted(() => {
   padding-top: 8px;
   text-align: center;
   border-top: 1px solid #dcdfe6;
-}
-
-@media print {
-  @page {
-    margin: 12mm;
-    size: a4;
-  }
-
-  .print-page {
-    background: #fff;
-  }
-
-  .print-toolbar {
-    display: none !important;
-  }
-
-  .print-canvas {
-    padding: 0;
-  }
-
-  .paper {
-    width: auto;
-    min-height: auto;
-    padding: 0;
-    border-radius: 0;
-    transform: none !important;
-    box-shadow: none;
-  }
 }
 </style>
