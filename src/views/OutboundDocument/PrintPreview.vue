@@ -64,7 +64,7 @@
                     <col style="width: 135px" />
                     <col style="width: 120px" />
                     <col style="width: 115px" />
-                    <col style="width: 61px" />
+                    <col style="width: 60px" />
                     <col style="width: 100px" />
                   </colgroup>
                   <thead>
@@ -142,7 +142,7 @@
                 <el-table-column prop="产品名称" label="产品名称" width="135" />
                 <el-table-column prop="产品图号" label="产品图号" width="120" />
                 <el-table-column prop="客户模号" label="客户模号" width="115" />
-                <el-table-column prop="出库数量" label="数量" width="61" align="right" />
+                <el-table-column prop="出库数量" label="数量" width="60" align="right" />
                 <el-table-column prop="备注" label="备注" width="100" />
               </el-table>
             </div>
@@ -421,7 +421,7 @@ onMounted(() => {
 .doc-header {
   padding-bottom: 10px;
   text-align: center;
-  border-bottom: 1px solid #dcdfe6;
+  border-bottom: 1px solid #000;
 }
 
 .doc-title {
@@ -503,6 +503,6 @@ onMounted(() => {
   min-width: 70px;
   padding-top: 8px;
   text-align: center;
-  border-top: 1px solid #dcdfe6;
+  border-top: 1px solid #000;
 }
 </style>
