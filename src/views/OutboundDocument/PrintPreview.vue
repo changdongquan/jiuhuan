@@ -175,7 +175,7 @@ const route = useRoute()
 
 const SPECIAL_PRINT_CUSTOMER_IDS = new Set<number>([51, 57])
 
-const zoom = ref<number>(0.75)
+const zoom = ref<number>(1)
 const loading = ref(false)
 const documentData = ref<any>(null)
 
@@ -246,8 +246,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-
 @media print {
   @page {
     margin: 12mm;

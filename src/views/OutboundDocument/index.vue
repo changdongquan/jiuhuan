@@ -836,14 +836,20 @@
               </el-table-column>
               <el-table-column label="数量" width="140" align="center">
                 <template #default="{ row }">
-                  <el-input-number
-                    v-model="row.quantity"
-                    :min="1"
-                    :step="1"
-                    :precision="0"
-                    step-strictly
-                    style="width: 100%"
-                  />
+                  <el-tooltip
+                    :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <el-input-number
+                      v-model="row.quantity"
+                      :min="1"
+                      :step="1"
+                      :precision="0"
+                      step-strictly
+                      style="width: 100%"
+                    />
+                  </el-tooltip>
                 </template>
               </el-table-column>
               <el-table-column label="备注" min-width="130">
@@ -891,14 +897,20 @@
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">数量</div>
-                  <el-input-number
-                    v-model="detail.quantity"
-                    :min="1"
-                    :step="1"
-                    :precision="0"
-                    step-strictly
-                    style="width: 100%"
-                  />
+                  <el-tooltip
+                    :content="`剩余可出货：${formatRemainingShippable(detail.remainingShippable)}`"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <el-input-number
+                      v-model="detail.quantity"
+                      :min="1"
+                      :step="1"
+                      :precision="0"
+                      step-strictly
+                      style="width: 100%"
+                    />
+                  </el-tooltip>
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">备注</div>
@@ -1133,14 +1145,20 @@
               </el-table-column>
               <el-table-column label="数量" width="140" align="center">
                 <template #default="{ row }">
-                  <el-input-number
-                    v-model="row.quantity"
-                    :min="1"
-                    :step="1"
-                    :precision="0"
-                    step-strictly
-                    style="width: 100%"
-                  />
+                  <el-tooltip
+                    :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <el-input-number
+                      v-model="row.quantity"
+                      :min="1"
+                      :step="1"
+                      :precision="0"
+                      step-strictly
+                      style="width: 100%"
+                    />
+                  </el-tooltip>
                 </template>
               </el-table-column>
               <el-table-column label="备注" min-width="130">
@@ -1200,14 +1218,20 @@
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">数量</div>
-                  <el-input-number
-                    v-model="detail.quantity"
-                    :min="1"
-                    :step="1"
-                    :precision="0"
-                    step-strictly
-                    style="width: 100%"
-                  />
+                  <el-tooltip
+                    :content="`剩余可出货：${formatRemainingShippable(detail.remainingShippable)}`"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <el-input-number
+                      v-model="detail.quantity"
+                      :min="1"
+                      :step="1"
+                      :precision="0"
+                      step-strictly
+                      style="width: 100%"
+                    />
+                  </el-tooltip>
                 </div>
                 <div class="dialog-mobile-detail-field">
                   <div class="dialog-mobile-detail-label">备注</div>
@@ -1571,7 +1595,8 @@ type CreateDetailRow = {
   productName: string
   productDrawingNo: string
   customerPartNo: string
-  quantity: number
+  quantity: number | null
+  remainingShippable: number | null
   remark: string
 }
 
@@ -1620,7 +1645,8 @@ const makeCreateDetailRow = (): CreateDetailRow => ({
   productName: '',
   productDrawingNo: '',
   customerPartNo: '',
-  quantity: 0,
+  quantity: null,
+  remainingShippable: null,
   remark: ''
 })
 
@@ -1654,9 +1680,6 @@ const addCreateDetailRow = () => {
 const removeCreateDetailRow = (index: number) => {
   if (!Array.isArray(createForm.details)) return
   createForm.details.splice(index, 1)
-  if (createForm.details.length === 0) {
-    createForm.details.push(makeCreateDetailRow())
-  }
 }
 
 const inventoryDialogVisible = ref(false)
@@ -1797,8 +1820,8 @@ const confirmInventorySelect = () => {
     ElMessage.warning('所选记录客户不一致，未自动选择客户')
   }
 
-  if (!Array.isArray(targetForm.details) || targetForm.details.length === 0) {
-    targetForm.details = [makeCreateDetailRow()]
+  if (!Array.isArray(targetForm.details)) {
+    targetForm.details = []
   }
 
   const isBlankRow = (d: CreateDetailRow) =>
@@ -1824,7 +1847,12 @@ const confirmInventorySelect = () => {
       productName: String((r as any).productName || r.产品名称 || ''),
       productDrawingNo: String((r as any).productDrawing || r.产品图号 || ''),
       customerPartNo: String((r as any).客户模号 || ''),
-      quantity: 0,
+      remainingShippable: (() => {
+        const raw = (r as any)?.['剩余可出货']
+        const num = Number(raw)
+        return Number.isFinite(num) ? num : null
+      })(),
+      quantity: null,
       remark: ''
     })
   }
@@ -1929,7 +1957,8 @@ const handleCreate = async () => {
     userStore.getUserInfo?.displayName ||
     userStore.getUserInfo?.username ||
     ''
-  createForm.details = [makeCreateDetailRow()]
+  // 方案A：新增弹窗不预置空行；仅从存货选择/手动新增行才产生明细
+  createForm.details = []
 
   createDialogVisible.value = true
   await nextTick()
@@ -2221,6 +2250,54 @@ const formatDecimal = (value: unknown) => {
   return num.toLocaleString('zh-Hans-CN', { maximumFractionDigits: 2 })
 }
 
+const formatRemainingShippable = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return '-'
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return '-'
+  return String(Math.max(0, Math.trunc(num)))
+}
+
+const fetchInventoryRemainingByItemCode = async (itemCode: string) => {
+  const code = String(itemCode || '').trim()
+  if (!code) return null
+  try {
+    const resp: any = await getOutboundInventoryListApi({ page: 1, pageSize: 50, keyword: code })
+    const payload: any = resp?.data ?? resp
+    const list = payload?.data?.list ?? payload?.list ?? payload?.data ?? []
+    const rows = Array.isArray(list) ? list : []
+    const hit = rows.find((r: any) => String(r?.项目编号 || '').trim() === code) || rows[0]
+    if (!hit) return null
+    const remaining = Number(hit?.['剩余可出货'])
+    return Number.isFinite(remaining) ? remaining : null
+  } catch {
+    return null
+  }
+}
+
+const fillEditDetailsRemainingShippable = async (_documentNo: string) => {
+  const details = Array.isArray(editForm.details) ? editForm.details : []
+  const uniqueCodes = Array.from(
+    new Set(details.map((d) => String(d.itemCode || '').trim()).filter(Boolean))
+  )
+  if (!uniqueCodes.length) return
+
+  const results = await Promise.all(
+    uniqueCodes.map(async (code) => [code, await fetchInventoryRemainingByItemCode(code)] as const)
+  )
+  const map = new Map<string, number | null>(results)
+
+  details.forEach((d) => {
+    const code = String(d.itemCode || '').trim()
+    const remaining = map.get(code)
+    if (remaining === null || remaining === undefined) {
+      d.remainingShippable = null
+      return
+    }
+    const currentQty = Number(d.quantity || 0)
+    d.remainingShippable = remaining + (Number.isFinite(currentQty) ? currentQty : 0)
+  })
+}
+
 const formatOperatorName = (value: unknown) => {
   const raw = String(value || '').trim()
   if (!raw) return '-'
@@ -2464,6 +2541,7 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
           productName: String(d.产品名称 || ''),
           productDrawingNo: String(d.产品图号 || ''),
           customerPartNo: String(d.客户模号 || ''),
+          remainingShippable: null,
           quantity: Number(d.出库数量 || 0),
           remark: String(d.备注 || '')
         }))
@@ -2472,6 +2550,9 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editDialogVisible.value = true
     await nextTick()
     editFormRef.value?.clearValidate?.()
+
+    // 提示用“剩余可出货”：从存货接口取当前剩余，再加回本单数量（得到本行可调整的上限）
+    await fillEditDetailsRemainingShippable(documentNo)
   } catch (error) {
     console.error('加载出库单详情失败:', error)
     ElMessage.error('加载出库单详情失败')
