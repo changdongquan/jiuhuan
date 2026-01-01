@@ -157,6 +157,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
           roles: ['*'],
           noCache: true
         }
+      },
+      {
+        path: 'quotation-part-demo',
+        name: 'QuotationPartDemo',
+        component: () => import('@/views/Quotation/PartPrintPreview.vue'),
+        meta: {
+          hidden: true,
+          title: '零件报价单预览',
+          canTo: true,
+          activeMenu: '/project-management/quotation'
+        }
       }
     ]
   },

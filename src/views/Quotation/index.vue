@@ -199,10 +199,76 @@
       :image-size="180"
     />
 
+    <!-- 新增报价单：选择弹窗（报价单号 / 报价日期 / 客户名称） -->
+    <el-dialog
+      v-model="preCreateDialogVisible"
+      title="新增报价单"
+      :width="isMobile ? '100%' : '620px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="preCreateFormRef"
+        :model="preCreateForm"
+        :rules="preCreateRules"
+        :label-width="isMobile ? 'auto' : '110px'"
+        :label-position="isMobile ? 'top' : 'right'"
+      >
+        <el-form-item label="报价类型" prop="quotationType">
+          <el-radio-group v-model="preCreateForm.quotationType">
+            <el-radio-button value="mold">改模报价单</el-radio-button>
+            <el-radio-button value="part">零件报价单</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="isMobile ? 24 : 14">
+            <el-form-item label="报价单号" prop="quotationNo">
+              <el-input v-model="preCreateForm.quotationNo" disabled placeholder="自动生成" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="isMobile ? 24 : 10">
+            <el-form-item label="报价日期" prop="quotationDate">
+              <el-date-picker
+                v-model="preCreateForm.quotationDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="请选择报价日期"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="客户名称" prop="customerName">
+          <el-select
+            v-model="preCreateForm.customerName"
+            placeholder="请选择客户名称"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            :loading="customerLoading"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="customer in customerList"
+              :key="customer.id"
+              :label="customer.customerName"
+              :value="customer.customerName"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="preCreateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleConfirmPreCreate">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 报价单编辑/查看对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      :width="isMobile ? '100%' : '980px'"
+      :width="isMobile ? '100%' : '1130px'"
       :fullscreen="isMobile"
       class="qt-edit-dialog"
       :close-on-click-modal="false"
@@ -222,22 +288,151 @@
       >
         <!-- 顶部字段：报价单号、报价日期、客户名称 -->
         <div class="quotation-top-fields">
-          <div class="quotation-top-left">
+          <template v-if="quotationForm.quotationType === 'part'">
+            <div class="quotation-top-part">
+              <div class="quotation-top-part__row">
+                <el-form-item
+                  prop="customerName"
+                  class="quotation-top-field quotation-top-field--inline quotation-top-part__customer"
+                  :show-message="false"
+                >
+                  <span class="field-required">*</span>
+                  <span class="field-label-inline">客户名称：</span>
+                  <el-select
+                    v-model="quotationForm.customerName"
+                    placeholder="请选择客户名称"
+                    :disabled="isViewMode || dialogMode === 'create'"
+                    filterable
+                    clearable
+                    :loading="customerLoading"
+                    class="field-input-inline field-input-customer-name"
+                  >
+                    <el-option
+                      v-for="customer in customerList"
+                      :key="customer.id"
+                      :label="customer.customerName"
+                      :value="customer.customerName"
+                    />
+                  </el-select>
+                </el-form-item>
+              </div>
+
+              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
+                <el-form-item
+                  prop="quotationNo"
+                  class="quotation-top-field quotation-top-field--inline"
+                >
+                  <span class="field-label-inline">报价单号：</span>
+                  <el-input
+                    v-model="quotationForm.quotationNo"
+                    :disabled="true"
+                    placeholder="报价单号"
+                    class="field-input-inline field-input-quotation-no"
+                  />
+                </el-form-item>
+
+                <el-form-item
+                  prop="quotationDate"
+                  class="quotation-top-field quotation-top-field--inline"
+                  :show-message="false"
+                >
+                  <span class="field-label-inline">报价日期：</span>
+                  <el-date-picker
+                    v-model="quotationForm.quotationDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择报价日期"
+                    :disabled="isViewMode"
+                    clearable
+                    class="field-input-inline field-input-quotation-date"
+                    style="width: 140px !important"
+                  />
+                </el-form-item>
+
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">联系人：</span>
+                  <el-input
+                    v-model="quotationForm.contactName"
+                    :disabled="isViewMode"
+                    placeholder="联系人"
+                    class="field-input-inline field-input-contact"
+                  />
+                </el-form-item>
+
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">联系电话：</span>
+                  <el-input
+                    v-model="quotationForm.contactPhone"
+                    :disabled="isViewMode"
+                    placeholder="联系电话"
+                    class="field-input-inline field-input-contact"
+                  />
+                </el-form-item>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <div v-if="dialogMode === 'create'" class="quotation-top-summary">
+              <div class="quotation-top-summary__item">
+                <span class="field-label-inline">报价单号：</span>
+                <span class="field-value-inline">{{ quotationForm.quotationNo || '-' }}</span>
+              </div>
+              <div class="quotation-top-summary__item">
+                <span class="field-label-inline">客户名称：</span>
+                <span class="field-value-inline">{{ quotationForm.customerName || '-' }}</span>
+              </div>
+              <div class="quotation-top-summary__item">
+                <span class="field-label-inline">报价日期：</span>
+                <span class="field-value-inline">{{ quotationForm.quotationDate || '-' }}</span>
+              </div>
+            </div>
+
+            <div v-else class="quotation-top-left">
+              <el-form-item
+                prop="quotationNo"
+                class="quotation-top-field quotation-top-field--inline"
+              >
+                <span class="field-label-inline">报价单号：</span>
+                <el-input
+                  v-model="quotationForm.quotationNo"
+                  :disabled="true"
+                  placeholder="报价单号"
+                  class="field-input-inline field-input-quotation-no"
+                />
+              </el-form-item>
+
+              <el-form-item
+                prop="customerName"
+                class="quotation-top-field quotation-top-field--inline"
+                :show-message="false"
+              >
+                <span class="field-required">*</span>
+                <span class="field-label-inline">客户名称：</span>
+                <el-select
+                  v-model="quotationForm.customerName"
+                  placeholder="请选择客户名称"
+                  :disabled="isViewMode"
+                  filterable
+                  clearable
+                  :loading="customerLoading"
+                  class="field-input-inline field-input-customer-name"
+                >
+                  <el-option
+                    v-for="customer in customerList"
+                    :key="customer.id"
+                    :label="customer.customerName"
+                    :value="customer.customerName"
+                  />
+                </el-select>
+              </el-form-item>
+            </div>
+
             <el-form-item
-              prop="quotationNo"
-              class="quotation-top-field quotation-top-field--inline"
-            >
-              <span class="field-label-inline">报价单号：</span>
-              <el-input
-                v-model="quotationForm.quotationNo"
-                :disabled="true"
-                placeholder="报价单号"
-                class="field-input-inline field-input-quotation-no"
-              />
-            </el-form-item>
-            <el-form-item
+              v-if="dialogMode !== 'create'"
               prop="quotationDate"
               class="quotation-top-field quotation-top-field--inline"
+              :show-message="false"
             >
               <span class="field-label-inline">报价日期：</span>
               <el-date-picker
@@ -246,35 +441,12 @@
                 value-format="YYYY-MM-DD"
                 placeholder="请选择报价日期"
                 :disabled="isViewMode"
+                clearable
                 class="field-input-inline field-input-quotation-date"
                 style="width: 140px !important"
               />
             </el-form-item>
-          </div>
-          <el-form-item
-            prop="customerName"
-            class="quotation-top-field quotation-top-field--inline"
-            :show-message="false"
-          >
-            <span class="field-required">*</span>
-            <span class="field-label-inline">客户名称：</span>
-            <el-select
-              v-model="quotationForm.customerName"
-              placeholder="请选择客户名称"
-              :disabled="isViewMode"
-              filterable
-              clearable
-              :loading="customerLoading"
-              class="field-input-inline field-input-customer-name"
-            >
-              <el-option
-                v-for="customer in customerList"
-                :key="customer.id"
-                :label="customer.customerName"
-                :value="customer.customerName"
-              />
-            </el-select>
-          </el-form-item>
+          </template>
           <!-- 操作按钮 -->
           <div class="qt-dialog-actions">
             <el-button size="small" @click="dialogVisible = false">取消</el-button>
@@ -282,7 +454,7 @@
               保存
             </el-button>
             <el-button
-              v-if="!isViewMode"
+              v-if="!isViewMode && quotationForm.quotationType !== 'part'"
               size="small"
               type="primary"
               plain
@@ -303,7 +475,7 @@
               {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
             </el-button>
             <el-button
-              v-if="isViewMode && quotationForm.id"
+              v-if="isViewMode && quotationForm.id && quotationForm.quotationType !== 'part'"
               size="small"
               type="primary"
               :loading="downloading"
@@ -315,7 +487,7 @@
           </div>
         </div>
 
-        <div class="quotation-sheet">
+        <div v-if="quotationForm.quotationType === 'mold'" class="quotation-sheet">
           <table class="qs-table">
             <tbody>
               <!-- 加工日期 / 更改通知单号 -->
@@ -534,11 +706,186 @@
                 <td colspan="3"></td>
                 <td class="qs-label">含税价格</td>
                 <td class="qs-total qs-number">
-                  {{ formatAmount(taxIncludedPrice) }}
+                  {{ formatAmount(effectiveTaxIncludedPrice) }}
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-else class="quotation-sheet quotation-sheet--part">
+          <div class="qt-card qt-part-items-card">
+            <div class="qt-part-items__toolbar">
+              <div class="qt-part-items__title">产品明细</div>
+              <el-button
+                v-if="!isViewMode"
+                size="small"
+                type="primary"
+                plain
+                @click="handleAddPartItem"
+              >
+                添加行
+              </el-button>
+            </div>
+
+            <el-table
+              :data="quotationForm.partItems"
+              border
+              class="qt-part-items-table"
+              row-key="lineNo"
+            >
+              <el-table-column type="index" label="序号" width="60" align="center" />
+              <el-table-column label="产品名称" min-width="200">
+                <template #default="{ row }">
+                  <el-input v-model="row.partName" :disabled="isViewMode" placeholder="产品名称" />
+                </template>
+              </el-table-column>
+              <el-table-column label="产品图号" min-width="160">
+                <template #default="{ row }">
+                  <el-input v-model="row.drawingNo" :disabled="isViewMode" placeholder="产品图号" />
+                </template>
+              </el-table-column>
+              <el-table-column label="材质" min-width="120">
+                <template #default="{ row }">
+                  <el-input v-model="row.material" :disabled="isViewMode" placeholder="材质" />
+                </template>
+              </el-table-column>
+              <el-table-column label="工序" min-width="140">
+                <template #default="{ row }">
+                  <el-input v-model="row.process" :disabled="isViewMode" placeholder="工序" />
+                </template>
+              </el-table-column>
+              <el-table-column label="数量" width="90" align="right">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.quantity"
+                    :disabled="isViewMode"
+                    :min="1"
+                    :precision="0"
+                    :controls="false"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="120" align="right">
+                <template #default="{ row }">
+                  <el-input
+                    :model-value="
+                      row.unitPriceText !== undefined
+                        ? row.unitPriceText
+                        : formatMoneyText(row.unitPrice)
+                    "
+                    :disabled="isViewMode"
+                    placeholder="-"
+                    class="qt-money-input"
+                    @focus="
+                      () => {
+                        row.unitPriceText = toPlainMoneyText(row.unitPrice)
+                      }
+                    "
+                    @update:model-value="(v: string) => (row.unitPriceText = v)"
+                    @blur="
+                      () => {
+                        row.unitPrice = parseMoneyText(row.unitPriceText || '')
+                        row.unitPriceText = undefined
+                      }
+                    "
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="金额(元)" width="105" align="right">
+                <template #default="{ row }">
+                  {{
+                    row.quantity === undefined || row.unitPrice === undefined
+                      ? '-'
+                      : formatAmount((row.quantity || 0) * (row.unitPrice || 0))
+                  }}
+                </template>
+              </el-table-column>
+              <el-table-column v-if="!isViewMode" label="操作" width="90" align="center">
+                <template #default="{ $index }">
+                  <el-button type="danger" size="small" @click="handleRemovePartItem($index)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="qt-part-summary-row">
+            <div class="qt-part-summary-row__spacer"></div>
+            <div class="qt-card qt-part-summary-card">
+              <div class="qt-part-summary-item">
+                <div class="qt-part-summary-label">其它费用</div>
+                <div class="qt-part-summary-value">
+                  <template v-if="isViewMode">
+                    {{ formatMoneyDisplay(quotationForm.otherFee) }}
+                  </template>
+                  <el-input
+                    v-else
+                    :model-value="
+                      otherFeeText !== undefined
+                        ? otherFeeText
+                        : formatMoneyText(quotationForm.otherFee)
+                    "
+                    placeholder="-"
+                    class="qt-money-input"
+                    @focus="() => (otherFeeText = toPlainMoneyText(quotationForm.otherFee))"
+                    @update:model-value="(v: string) => (otherFeeText = v)"
+                    @blur="
+                      () => {
+                        quotationForm.otherFee = parseMoneyText(otherFeeText || '')
+                        otherFeeText = undefined
+                      }
+                    "
+                  />
+                </div>
+              </div>
+              <div class="qt-part-summary-item">
+                <div class="qt-part-summary-label">运输费用</div>
+                <div class="qt-part-summary-value">
+                  <template v-if="isViewMode">
+                    {{ formatMoneyDisplay(quotationForm.transportFee) }}
+                  </template>
+                  <el-input
+                    v-else
+                    :model-value="
+                      transportFeeText !== undefined
+                        ? transportFeeText
+                        : formatMoneyText(quotationForm.transportFee)
+                    "
+                    placeholder="-"
+                    class="qt-money-input"
+                    @focus="() => (transportFeeText = toPlainMoneyText(quotationForm.transportFee))"
+                    @update:model-value="(v: string) => (transportFeeText = v)"
+                    @blur="
+                      () => {
+                        quotationForm.transportFee = parseMoneyText(transportFeeText || '')
+                        transportFeeText = undefined
+                      }
+                    "
+                  />
+                </div>
+              </div>
+              <div class="qt-part-summary-item qt-part-summary-item--total">
+                <div class="qt-part-summary-label">含税价格</div>
+                <div class="qt-part-summary-value qt-part-summary-value--total">
+                  {{ hasAnyPartMoney ? formatAmount(effectiveTaxIncludedPrice) : '-' }}
+                </div>
+              </div>
+
+              <div class="qt-part-summary-remark">
+                <div class="qt-part-summary-remark__label">备注</div>
+                <el-input
+                  v-model="quotationForm.remark"
+                  :disabled="isViewMode"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入备注"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </el-form>
     </el-dialog>
@@ -639,7 +986,7 @@ import {
   ElTableColumn
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
@@ -674,16 +1021,33 @@ interface QuotationFormModel {
   quotationNo: string
   quotationDate: string | ''
   customerName: string
+  quotationType: 'mold' | 'part'
   processingDate: string | ''
   changeOrderNo: string
   partName: string
   moldNo: string
   department: string
   applicant: string
+  contactName: string
+  contactPhone: string
+  remark: string
+  deliveryTerms: string
+  paymentTerms: string
+  validityDays: number | undefined
+  partItems: Array<{
+    lineNo: number
+    partName: string
+    drawingNo: string
+    material: string
+    process: string
+    quantity: number | undefined
+    unitPrice: number | undefined
+    unitPriceText?: string
+  }>
   materials: QuotationMaterialItem[]
   processes: QuotationProcessItem[]
-  otherFee: number
-  transportFee: number
+  otherFee: number | undefined
+  transportFee: number | undefined
   quantity: number
 }
 
@@ -758,12 +1122,20 @@ const createEmptyForm = (): QuotationFormModel => ({
   quotationNo: '',
   quotationDate: '',
   customerName: '',
+  quotationType: 'mold',
   processingDate: '',
   changeOrderNo: '',
   partName: '',
   moldNo: '',
   department: '',
   applicant: '',
+  contactName: '',
+  contactPhone: '',
+  remark: '',
+  deliveryTerms: '',
+  paymentTerms: '',
+  validityDays: undefined,
+  partItems: [],
   materials: [
     { name: '紫铜电极', unitPrice: 0, quantity: 0 },
     { name: '配件', unitPrice: 0, quantity: 0 }
@@ -787,11 +1159,30 @@ const createEmptyForm = (): QuotationFormModel => ({
 
 const quotationForm = reactive<QuotationFormModel>(createEmptyForm())
 
-const formRules: FormRules = {
-  // 报价日期、客户名称、加工零件名称 为必填
+const otherFeeText = ref<string | undefined>(undefined)
+const transportFeeText = ref<string | undefined>(undefined)
+
+// 新增报价单：先选择 报价单号/报价日期/客户名称
+const preCreateDialogVisible = ref(false)
+const preCreateFormRef = ref<FormInstance>()
+const preCreateForm = reactive({
+  quotationType: 'mold' as 'mold' | 'part',
+  quotationNo: '',
+  quotationDate: '',
+  customerName: ''
+})
+
+const preCreateRules: FormRules = {
+  quotationType: [{ required: true, message: '请选择报价类型', trigger: 'change' }],
+  quotationNo: [{ required: true, message: '报价单号不能为空', trigger: 'blur' }],
   quotationDate: [{ required: true, message: '请选择报价日期', trigger: 'change' }],
-  customerName: [{ required: true, message: '请选择客户名称', trigger: 'change' }],
-  partName: [{ required: true, message: '请输入加工零件名称', trigger: 'blur' }]
+  customerName: [{ required: true, message: '请选择客户名称', trigger: 'change' }]
+}
+
+const formRules: FormRules = {
+  // 报价日期、客户名称 为必填（其余字段按报价类型在提交时做额外校验）
+  quotationDate: [{ required: true, message: '请选择报价日期', trigger: 'change' }],
+  customerName: [{ required: true, message: '请选择客户名称', trigger: 'change' }]
 }
 
 // 金额计算
@@ -803,27 +1194,104 @@ const processingTotal = computed(() =>
   quotationForm.processes.reduce((sum, item) => sum + item.unitPrice * item.hours, 0)
 )
 
-const taxIncludedPrice = computed(
-  () =>
-    materialsTotal.value +
-    processingTotal.value +
-    quotationForm.otherFee +
-    quotationForm.transportFee
+const taxIncludedPrice = computed(() => {
+  const otherFee = Number(quotationForm.otherFee || 0)
+  const transportFee = Number(quotationForm.transportFee || 0)
+  return materialsTotal.value + processingTotal.value + otherFee + transportFee
+})
+
+const partItemsTotal = computed(() =>
+  quotationForm.partItems.reduce(
+    (sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+    0
+  )
 )
 
+const effectiveTaxIncludedPrice = computed(() => {
+  if (quotationForm.quotationType === 'part') {
+    const otherFee = Number(quotationForm.otherFee || 0)
+    const transportFee = Number(quotationForm.transportFee || 0)
+    return partItemsTotal.value + otherFee + transportFee
+  }
+  return taxIncludedPrice.value
+})
+
 const calcMaterialsTotal = (row: QuotationRecord) =>
-  row.materials.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
+  (row.materials || []).reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
 
 const calcProcessingTotal = (row: QuotationRecord) =>
-  row.processes.reduce((sum, item) => sum + item.unitPrice * item.hours, 0)
+  (row.processes || []).reduce((sum, item) => sum + item.unitPrice * item.hours, 0)
 
-const calcTaxIncludedPrice = (row: QuotationRecord) =>
-  calcMaterialsTotal(row) + calcProcessingTotal(row) + row.otherFee + row.transportFee
-
-const formatAmount = (value: number) => {
-  if (!value) return '0'
-  return value.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+const calcTaxIncludedPrice = (row: QuotationRecord) => {
+  if (row.quotationType === 'part') {
+    const partTotal = (row.partItems || []).reduce(
+      (sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 0),
+      0
+    )
+    return partTotal + (row.otherFee || 0) + (row.transportFee || 0)
+  }
+  return (
+    calcMaterialsTotal(row) +
+    calcProcessingTotal(row) +
+    (row.otherFee || 0) +
+    (row.transportFee || 0)
+  )
 }
+
+const formatAmount = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '-'
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return '-'
+  return numericValue.toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+}
+
+const formatMoneyDisplay = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '-'
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return '-'
+  return numericValue.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+const formatMoneyText = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return ''
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return ''
+  return numericValue.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+const toPlainMoneyText = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return ''
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return ''
+  return String(numericValue)
+}
+
+const parseMoneyText = (text: string) => {
+  const normalized = String(text || '')
+    .trim()
+    .replace(/,/g, '')
+  if (!normalized) return undefined
+  const numericValue = Number(normalized)
+  return Number.isFinite(numericValue) ? numericValue : undefined
+}
+
+const hasAnyPartMoney = computed(() => {
+  if (quotationForm.quotationType !== 'part') return false
+  const hasLineAmount = quotationForm.partItems.some(
+    (item) => Number(item.quantity) > 0 && Number(item.unitPrice) > 0
+  )
+  const hasFees = Number(quotationForm.otherFee) > 0 || Number(quotationForm.transportFee) > 0
+  return hasLineAmount || hasFees
+})
 
 // 格式化日期：YYYY-MM-DD
 const formatDate = (dateStr: string | null | undefined) => {
@@ -925,18 +1393,61 @@ const handleCreate = async () => {
       return
     }
 
-    // 设置报价单号
-    quotationForm.quotationNo = newQuotationNo
-
-    // 设置默认报价日期为今天
-    const today = new Date()
-    quotationForm.quotationDate = today.toISOString().split('T')[0]
-
     await fetchCustomerList()
-    dialogVisible.value = true
+
+    // 先打开选择弹窗：报价单号 / 报价日期 / 客户名称
+    preCreateForm.quotationType = 'mold'
+    preCreateForm.quotationNo = newQuotationNo
+    preCreateForm.customerName = ''
+    const today = new Date()
+    preCreateForm.quotationDate = today.toISOString().split('T')[0]
+    preCreateDialogVisible.value = true
+    await nextTick()
+    preCreateFormRef.value?.clearValidate?.()
   } catch (error) {
     console.error('打开新建对话框失败:', error)
     ElMessage.error('打开新建对话框失败')
+  }
+}
+
+const handleConfirmPreCreate = async () => {
+  if (!preCreateFormRef.value) return
+  try {
+    await preCreateFormRef.value.validate()
+  } catch {
+    return
+  }
+
+  const typedCustomerName = (preCreateForm.customerName || '').trim()
+  const isKnownCustomer =
+    !typedCustomerName ||
+    customerList.value.some((c) => (c.customerName || '').trim() === typedCustomerName)
+  if (!isKnownCustomer) {
+    try {
+      await ElMessageBox.confirm(`客户【${typedCustomerName}】不在客户档案中，是否继续？`, '提示', {
+        confirmButtonText: '继续',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+    } catch {
+      return
+    }
+  }
+
+  quotationForm.quotationNo = preCreateForm.quotationNo
+  quotationForm.quotationDate = preCreateForm.quotationDate
+  quotationForm.customerName = typedCustomerName
+  quotationForm.quotationType = preCreateForm.quotationType === 'part' ? 'part' : 'mold'
+
+  preCreateDialogVisible.value = false
+  dialogVisible.value = true
+
+  if (quotationForm.quotationType === 'part' && quotationForm.partItems.length === 0) {
+    quotationForm.otherFee = undefined
+    quotationForm.transportFee = undefined
+    otherFeeText.value = undefined
+    transportFeeText.value = undefined
+    handleAddPartItem()
   }
 }
 
@@ -946,8 +1457,30 @@ const handleEdit = async (row: QuotationRecord) => {
   dialogTitle.value = '编辑报价单'
   Object.assign(quotationForm, {
     ...row,
-    materials: row.materials.map((m) => ({ ...m })),
-    processes: row.processes.map((p) => ({ ...p }))
+    quotationType: row.quotationType === 'part' ? 'part' : 'mold',
+    processingDate: row.processingDate || '',
+    changeOrderNo: row.changeOrderNo || '',
+    partName: row.partName || '',
+    moldNo: row.moldNo || '',
+    department: row.department || '',
+    applicant: row.applicant || '',
+    contactName: (row as any).contactName || '',
+    contactPhone: (row as any).contactPhone || '',
+    remark: (row as any).remark || '',
+    deliveryTerms: (row as any).deliveryTerms || '',
+    paymentTerms: (row as any).paymentTerms || '',
+    validityDays: (row as any).validityDays ?? undefined,
+    partItems: (row.partItems || []).map((p, idx) => ({
+      lineNo: idx + 1,
+      partName: p.partName || '',
+      drawingNo: p.drawingNo || '',
+      material: p.material || '',
+      process: (p as any).process || '',
+      quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
+      unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
+    })),
+    materials: (row.materials || []).map((m) => ({ ...m })),
+    processes: (row.processes || []).map((p) => ({ ...p }))
   })
   await fetchCustomerList()
   dialogVisible.value = true
@@ -959,8 +1492,30 @@ const handleView = async (row: QuotationRecord) => {
   dialogTitle.value = '查看报价单'
   Object.assign(quotationForm, {
     ...row,
-    materials: row.materials.map((m) => ({ ...m })),
-    processes: row.processes.map((p) => ({ ...p }))
+    quotationType: row.quotationType === 'part' ? 'part' : 'mold',
+    processingDate: row.processingDate || '',
+    changeOrderNo: row.changeOrderNo || '',
+    partName: row.partName || '',
+    moldNo: row.moldNo || '',
+    department: row.department || '',
+    applicant: row.applicant || '',
+    contactName: (row as any).contactName || '',
+    contactPhone: (row as any).contactPhone || '',
+    remark: (row as any).remark || '',
+    deliveryTerms: (row as any).deliveryTerms || '',
+    paymentTerms: (row as any).paymentTerms || '',
+    validityDays: (row as any).validityDays ?? undefined,
+    partItems: (row.partItems || []).map((p, idx) => ({
+      lineNo: idx + 1,
+      partName: p.partName || '',
+      drawingNo: p.drawingNo || '',
+      material: p.material || '',
+      process: (p as any).process || '',
+      quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
+      unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
+    })),
+    materials: (row.materials || []).map((m) => ({ ...m })),
+    processes: (row.processes || []).map((p) => ({ ...p }))
   })
   await fetchCustomerList()
   dialogVisible.value = true
@@ -1002,6 +1557,11 @@ const handleDownloadCompletionPdf = async () => {
     return
   }
 
+  if (quotationForm.quotationType === 'part') {
+    ElMessage.warning('零件报价单不支持完工单下载')
+    return
+  }
+
   const missingFields: string[] = []
   if (!quotationForm.processingDate) missingFields.push('加工日期')
   if (!quotationForm.partName || !quotationForm.partName.trim()) missingFields.push('加工零件名称')
@@ -1035,6 +1595,31 @@ const handleDownloadCompletionPdf = async () => {
   } finally {
     downloading.value = false
   }
+}
+
+const handleAddPartItem = () => {
+  const nextLineNo =
+    quotationForm.partItems.length > 0
+      ? Math.max(...quotationForm.partItems.map((i) => i.lineNo || 0)) + 1
+      : 1
+  quotationForm.partItems.push({
+    lineNo: nextLineNo,
+    partName: '',
+    drawingNo: '',
+    material: '',
+    process: '',
+    quantity: undefined,
+    unitPrice: undefined
+  })
+}
+
+const handleRemovePartItem = (index: number) => {
+  quotationForm.partItems.splice(index, 1)
+  quotationForm.partItems = quotationForm.partItems.map((item, idx) => ({
+    ...item,
+    lineNo: idx + 1,
+    unitPriceText: undefined
+  }))
 }
 
 // 项目代入对话框分页
@@ -1206,24 +1791,107 @@ const handleSubmit = async () => {
 
     await formRef.value.validate()
 
-    // 额外校验：加工零件名称为必填项（表格区域未使用 el-form-item）
-    if (!quotationForm.partName || !quotationForm.partName.trim()) {
-      ElMessage.error('请输入加工零件名称')
-      return
+    if (quotationForm.quotationType === 'mold') {
+      if (!quotationForm.partName || !quotationForm.partName.trim()) {
+        ElMessage.error('请输入加工零件名称')
+        return
+      }
+      if (!quotationForm.moldNo || !quotationForm.moldNo.trim()) {
+        ElMessage.error('请输入模具编号')
+        return
+      }
+      if (!quotationForm.department || !quotationForm.department.trim()) {
+        ElMessage.error('请输入申请更改部门')
+        return
+      }
+      if (!quotationForm.applicant || !quotationForm.applicant.trim()) {
+        ElMessage.error('请输入申请更改人')
+        return
+      }
+    } else {
+      const cleanedPartItems = quotationForm.partItems
+        .map((item) => ({
+          partName: (item.partName || '').trim(),
+          drawingNo: (item.drawingNo || '').trim(),
+          material: (item.material || '').trim(),
+          process: (item.process || '').trim(),
+          quantity:
+            item.quantity === null || item.quantity === undefined
+              ? undefined
+              : Number(item.quantity),
+          unitPrice: Number(item.unitPrice || 0)
+        }))
+        .filter((item) => {
+          const hasText = !!item.partName || !!item.drawingNo || !!item.material || !!item.process
+          const hasNumber = Number(item.quantity) > 0 || item.unitPrice > 0
+          return hasText || hasNumber
+        })
+
+      if (cleanedPartItems.length === 0) {
+        ElMessage.error('请至少填写一行零件明细')
+        return
+      }
+
+      for (let i = 0; i < cleanedPartItems.length; i += 1) {
+        const item = cleanedPartItems[i]
+        const rowLabel = `第 ${i + 1} 行`
+
+        if (!item.partName) {
+          ElMessage.error(`${rowLabel}：产品名称不能为空`)
+          return
+        }
+        if (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) <= 0) {
+          ElMessage.error(`${rowLabel}：数量必须为大于 0 的整数`)
+          return
+        }
+        if (!Number.isFinite(item.unitPrice) || item.unitPrice <= 0) {
+          ElMessage.error(`${rowLabel}：单价必须大于 0`)
+          return
+        }
+      }
+
+      quotationForm.partItems = cleanedPartItems.map((item, idx) => ({
+        lineNo: idx + 1,
+        ...item
+      }))
     }
 
     const payload: QuotationFormData = {
       quotationNo: quotationForm.quotationNo?.trim() || '',
       quotationDate: quotationForm.quotationDate || '',
       customerName: quotationForm.customerName?.trim() || '',
+      quotationType: quotationForm.quotationType,
       processingDate: quotationForm.processingDate || '',
       changeOrderNo: quotationForm.changeOrderNo?.trim() || '',
       partName: quotationForm.partName?.trim() || '',
       moldNo: quotationForm.moldNo?.trim() || '',
       department: quotationForm.department?.trim() || '',
       applicant: quotationForm.applicant?.trim() || '',
-      materials: quotationForm.materials.map((m) => ({ ...m })),
-      processes: quotationForm.processes.map((p) => ({ ...p })),
+      contactName: quotationForm.contactName?.trim() || '',
+      contactPhone: quotationForm.contactPhone?.trim() || '',
+      remark: quotationForm.remark?.trim() || '',
+      deliveryTerms: '',
+      paymentTerms: '',
+      validityDays: null,
+      materials:
+        quotationForm.quotationType === 'part'
+          ? []
+          : quotationForm.materials.map((m) => ({ ...m })),
+      processes:
+        quotationForm.quotationType === 'part'
+          ? []
+          : quotationForm.processes.map((p) => ({ ...p })),
+      partItems:
+        quotationForm.quotationType === 'part'
+          ? quotationForm.partItems.map((item) => ({
+              partName: item.partName,
+              drawingNo: item.drawingNo,
+              material: item.material,
+              process: item.process,
+              quantity: Number(item.quantity),
+              unitPrice: Number(item.unitPrice)
+            }))
+          : [],
       otherFee: quotationForm.otherFee || 0,
       transportFee: quotationForm.transportFee || 0,
       quantity: quotationForm.quantity || 1
@@ -1602,6 +2270,49 @@ onMounted(() => {
   gap: 4px;
 }
 
+.quotation-top-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quotation-top-part__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.quotation-top-part__row--inline-fields {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.quotation-top-part__customer {
+  flex: 1 1 auto;
+}
+
+.quotation-top-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  flex: 1 1 auto;
+}
+
+.quotation-top-summary__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-value-inline {
+  font-weight: 500;
+  color: #303133;
+  word-break: break-word;
+}
+
 .quotation-top-field {
   position: relative;
   margin-bottom: 0;
@@ -1634,10 +2345,13 @@ onMounted(() => {
 }
 
 .field-label-inline {
-  margin-left: 10px;
+  display: inline-block;
+  width: 78px;
+  margin-left: 0;
   font-size: 13px;
   font-weight: 500;
   color: #606266;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -1696,11 +2410,148 @@ onMounted(() => {
   width: 240px !important;
 }
 
+.field-input-inline.field-input-contact {
+  width: 160px !important;
+  flex: 0 0 160px !important;
+}
+
+.field-input-inline.field-input-contact :deep(.el-input__wrapper),
+.field-input-inline.field-input-contact :deep(.el-input) {
+  width: 160px !important;
+}
+
 /* 报价单弹窗样式 */
 .quotation-sheet {
   margin-top: -8px;
   font-size: 13px;
   color: #333;
+}
+
+.qt-card {
+  padding: 12px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.quotation-sheet--part {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qt-part-items__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.qt-part-items__title {
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 细竖线：保留 border，但用更浅的颜色 */
+.qt-part-items-table :deep(.el-table__header-wrapper th) {
+  font-weight: 600;
+  color: #606266;
+  background-color: #f5f7fa;
+}
+
+.qt-part-items-table :deep(.el-table--border) {
+  border-color: #ebeef5;
+}
+
+.qt-part-items-table :deep(.el-table--border::after),
+.qt-part-items-table :deep(.el-table--border::before),
+.qt-part-items-table :deep(.el-table__inner-wrapper::before) {
+  background-color: #ebeef5;
+}
+
+.qt-part-items-table :deep(.el-table td.el-table__cell),
+.qt-part-items-table :deep(.el-table th.el-table__cell) {
+  border-color: #ebeef5;
+}
+
+.qt-part-items-table :deep(.el-table__cell) {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.qt-part-items-table :deep(.el-input-number .el-input__inner) {
+  text-align: right;
+}
+
+.qt-part-summary-card :deep(.el-input-number .el-input__inner) {
+  text-align: right;
+}
+
+.qt-money-input :deep(.el-input__inner) {
+  text-align: right;
+}
+
+.qt-part-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.qt-part-summary-row__spacer {
+  flex: 1 1 auto;
+}
+
+.qt-part-summary-card {
+  width: 360px;
+  padding: 12px 14px;
+}
+
+.qt-part-summary-item {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.qt-part-summary-item:last-child {
+  border-bottom: none;
+}
+
+.qt-part-summary-label {
+  font-weight: 500;
+  color: #606266;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.qt-part-summary-value {
+  text-align: right;
+}
+
+.qt-part-summary-item--total {
+  padding-top: 10px;
+}
+
+.qt-part-summary-value--total {
+  padding: 6px 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #303133;
+  background: #eaf7e9;
+  border: 1px solid #d5f0d1;
+  border-radius: 6px;
+}
+
+.qt-part-summary-remark {
+  padding-top: 10px;
+}
+
+.qt-part-summary-remark__label {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .qs-table {

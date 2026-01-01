@@ -33,14 +33,30 @@ export interface QuotationFormData {
   quotationNo: string
   quotationDate: string
   customerName: string
+  quotationType?: 'mold' | 'part'
   processingDate: string
   changeOrderNo: string
   partName: string
   moldNo: string
   department: string
   applicant: string
+  contactName?: string
+  contactPhone?: string
+  remark?: string
+  deliveryTerms?: string
+  paymentTerms?: string
+  validityDays?: number | null
   materials: QuotationMaterialItem[]
   processes: QuotationProcessItem[]
+  partItems?: Array<{
+    partName: string
+    drawingNo?: string
+    material?: string
+    process?: string
+    quantity: number
+    unit?: string
+    unitPrice: number
+  }>
   otherFee: number
   transportFee: number
   quantity: number

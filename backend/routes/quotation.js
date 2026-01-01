@@ -11,9 +11,185 @@ const sql = require('mssql')
 const execFileAsync = promisify(execFile)
 const router = express.Router()
 
+let quotationRemarkColumnEnsured = false
+const ensureQuotationRemarkColumn = async () => {
+  if (quotationRemarkColumnEnsured) return
+
+  const rows = await query(`SELECT COL_LENGTH(N'报价单', N'备注') as len`)
+  const exists = rows?.[0]?.len !== null && rows?.[0]?.len !== undefined
+
+  if (!exists) {
+    await query(`ALTER TABLE 报价单 ADD 备注 NVARCHAR(MAX) NULL`)
+  }
+
+  quotationRemarkColumnEnsured = true
+}
+
+const toDateString = (value) => {
+  if (!value) return ''
+  try {
+    return String(value).split('T')[0]
+  } catch {
+    return ''
+  }
+}
+
+const buildPartQuotationWorkbook = ({ row, partItems }) => {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('零件报价单', {
+    pageSetup: {
+      paperSize: 9, // A4
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0
+    }
+  })
+
+  const borderThin = { style: 'thin', color: { argb: 'FF000000' } }
+  const setBorderAll = (cell) => {
+    cell.border = {
+      top: borderThin,
+      left: borderThin,
+      bottom: borderThin,
+      right: borderThin
+    }
+  }
+
+  const columns = [
+    { key: 'seq', width: 6 },
+    { key: 'name', width: 26 },
+    { key: 'drawing', width: 18 },
+    { key: 'material', width: 14 },
+    { key: 'process', width: 14 },
+    { key: 'qty', width: 10 },
+    { key: 'unitPrice', width: 12 },
+    { key: 'amount', width: 12 }
+  ]
+  sheet.columns = columns
+
+  // Header
+  sheet.mergeCells('A1:H1')
+  sheet.getCell('A1').value = '零件报价单'
+  sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getCell('A1').font = { bold: true, size: 16 }
+
+  sheet.mergeCells('A2:H2')
+  sheet.getCell('A2').value = `报价单号：${row.quotationNo || ''}    报价日期：${toDateString(
+    row.quotationDate
+  )}`
+  sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getCell('A2').font = { size: 11, color: { argb: 'FF606266' } }
+  sheet.getCell('A2').border = { bottom: borderThin }
+
+  // Info row (match demo density)
+  const infoRowIndex = 4
+  sheet.getCell(`A${infoRowIndex}`).value = '客户名称：'
+  sheet.getCell(`B${infoRowIndex}`).value = row.customerName || ''
+  sheet.mergeCells(`B${infoRowIndex}:C${infoRowIndex}`)
+
+  sheet.getCell(`D${infoRowIndex}`).value = '联系人：'
+  sheet.getCell(`E${infoRowIndex}`).value = row.contactName || '-'
+
+  sheet.getCell(`F${infoRowIndex}`).value = '联系电话：'
+  sheet.mergeCells(`G${infoRowIndex}:H${infoRowIndex}`)
+  sheet.getCell(`G${infoRowIndex}`).value = row.contactPhone || '-'
+
+  sheet.getRow(infoRowIndex).font = { size: 11 }
+  sheet.getRow(infoRowIndex).alignment = { vertical: 'middle' }
+  ;['A', 'D', 'F'].forEach((col) => {
+    sheet.getCell(`${col}${infoRowIndex}`).font = { size: 11, color: { argb: 'FF606266' } }
+    sheet.getCell(`${col}${infoRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
+  })
+
+  // Table header
+  const headerRowIndex = 6
+  const header = ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
+  sheet.getRow(headerRowIndex).values = [null, ...header]
+  sheet.getRow(headerRowIndex).font = { bold: true, size: 11 }
+  sheet.getRow(headerRowIndex).alignment = {
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true
+  }
+  sheet.getRow(headerRowIndex).height = 22
+  for (let c = 1; c <= 8; c += 1) {
+    const cell = sheet.getRow(headerRowIndex).getCell(c)
+    setBorderAll(cell)
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+  }
+
+  // Lines
+  const lineStart = headerRowIndex + 1
+  partItems.forEach((item, idx) => {
+    const qty = Number(item?.quantity) || 0
+    const unitPrice = Number(item?.unitPrice)
+    const amount = qty * (Number.isFinite(unitPrice) ? unitPrice : 0)
+    const rowIdx = lineStart + idx
+    const rowObj = sheet.getRow(rowIdx)
+    rowObj.values = [
+      null,
+      idx + 1,
+      item?.partName || '',
+      item?.drawingNo || '',
+      item?.material || '',
+      item?.process || '',
+      qty || '',
+      Number.isFinite(unitPrice) ? unitPrice : '',
+      Number.isFinite(unitPrice) && qty ? amount : ''
+    ]
+    rowObj.font = { size: 11 }
+    rowObj.alignment = { vertical: 'top', wrapText: true }
+    rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+    rowObj.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(6).numFmt = '#,##0'
+    rowObj.getCell(7).numFmt = '#,##0.00'
+    rowObj.getCell(8).numFmt = '#,##0.00'
+    for (let c = 1; c <= 8; c += 1) setBorderAll(rowObj.getCell(c))
+  })
+
+  const totalRowIndex = lineStart + partItems.length
+  const totalAmount = partItems.reduce(
+    (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
+    0
+  )
+  sheet.mergeCells(`A${totalRowIndex}:G${totalRowIndex}`)
+  sheet.getCell(`A${totalRowIndex}`).value = '合计'
+  sheet.getCell(`A${totalRowIndex}`).alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getCell(`H${totalRowIndex}`).value = totalAmount || ''
+  sheet.getCell(`H${totalRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
+  sheet.getCell(`H${totalRowIndex}`).numFmt = '#,##0.00'
+  sheet.getRow(totalRowIndex).font = { bold: true, size: 11 }
+  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
+
+  // Notes / Remark box
+  const notesTitleRow = totalRowIndex + 2
+  sheet.mergeCells(`A${notesTitleRow}:H${notesTitleRow}`)
+  sheet.getCell(`A${notesTitleRow}`).value = '备注'
+  sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11 }
+  sheet.getCell(`A${notesTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
+
+  const notesBodyRow = notesTitleRow + 1
+  sheet.mergeCells(`A${notesBodyRow}:H${notesBodyRow}`)
+  sheet.getCell(`A${notesBodyRow}`).value = row.remark || ''
+  sheet.getCell(`A${notesBodyRow}`).alignment = {
+    horizontal: 'left',
+    vertical: 'top',
+    wrapText: true
+  }
+  sheet.getRow(notesBodyRow).height = 60
+  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
+
+  return workbook
+}
+
 // 获取报价单列表
 router.get('/list', async (req, res) => {
   try {
+    await ensureQuotationRemarkColumn()
     const { keyword, processingDate, page = 1, pageSize = 20 } = req.query
 
     // 构建查询条件
@@ -57,15 +233,23 @@ router.get('/list', async (req, res) => {
         报价单号 as quotationNo,
         报价日期 as quotationDate,
         客户名称 as customerName,
+        报价类型 as quotationType,
         加工日期 as processingDate,
         更改通知单号 as changeOrderNo,
         加工零件名称 as partName,
         模具编号 as moldNo,
         申请更改部门 as department,
         申请更改人 as applicant,
-        材料明细 as materialsJson,
-        加工费用明细 as processesJson,
-        其他费用 as otherFee,
+	        联系人 as contactName,
+	        联系电话 as contactPhone,
+	        交货方式 as deliveryTerms,
+	        付款方式 as paymentTerms,
+	        报价有效期天数 as validityDays,
+	        备注 as remark,
+	        材料明细 as materialsJson,
+	        加工费用明细 as processesJson,
+	        零件明细 as partItemsJson,
+	        其他费用 as otherFee,
         运输费用 as transportFee,
         加工数量 as quantity,
         含税价格 as taxIncludedPrice,
@@ -84,6 +268,7 @@ router.get('/list', async (req, res) => {
     const quotations = data.map((row) => {
       let materials = []
       let processes = []
+      let partItems = []
       try {
         materials = JSON.parse(row.materialsJson || '[]')
       } catch (e) {
@@ -96,11 +281,18 @@ router.get('/list', async (req, res) => {
         console.error('解析加工费用明细JSON失败:', e)
         processes = []
       }
+      try {
+        partItems = JSON.parse(row.partItemsJson || '[]')
+      } catch (e) {
+        console.error('解析零件明细JSON失败:', e)
+        partItems = []
+      }
 
       return {
         ...row,
         materials,
-        processes
+        processes,
+        partItems
       }
     })
 
@@ -206,24 +398,35 @@ router.get('/generate-no', async (req, res) => {
 // 创建报价单
 router.post('/create', async (req, res) => {
   try {
+    await ensureQuotationRemarkColumn()
     console.log('收到创建报价单请求，请求体:', JSON.stringify(req.body, null, 2))
 
     const {
       quotationNo,
       quotationDate,
       customerName,
+      quotationType = 'mold',
       processingDate,
       changeOrderNo,
       partName,
       moldNo,
       department,
       applicant,
+      contactName,
+      contactPhone,
+      remark,
+      deliveryTerms,
+      paymentTerms,
+      validityDays,
       materials,
       processes,
+      partItems,
       otherFee,
       transportFee,
       quantity
     } = req.body
+
+    const normalizedType = quotationType === 'part' ? 'part' : 'mold'
 
     // 验证必填字段
     if (!quotationNo) {
@@ -253,13 +456,60 @@ router.post('/create', async (req, res) => {
       })
     }
 
-    if (!partName) {
-      console.log('验证失败: 加工零件名称为空')
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '加工零件名称不能为空'
-      })
+    if (normalizedType === 'mold') {
+      if (!partName) {
+        console.log('验证失败: 加工零件名称为空')
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '加工零件名称不能为空'
+        })
+      }
+      if (!moldNo) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '模具编号不能为空'
+        })
+      }
+      if (!department) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '申请更改部门不能为空'
+        })
+      }
+      if (!applicant) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '申请更改人不能为空'
+        })
+      }
+    } else {
+      const items = Array.isArray(partItems) ? partItems : []
+      if (!items.length) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '零件明细不能为空'
+        })
+      }
+      const badLine = items.find(
+        (x) =>
+          !String(x?.partName || '').trim() ||
+          !Number.isFinite(Number(x?.quantity)) ||
+          Number(x?.quantity) <= 0 ||
+          !Number.isFinite(Number(x?.unitPrice)) ||
+          Number(x?.unitPrice) < 0
+      )
+      if (badLine) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '零件明细中存在不完整的行（名称/数量/单价）'
+        })
+      }
     }
 
     // 加工日期如果未提供，则默认使用报价日期，确保数据库非空
@@ -289,15 +539,21 @@ router.post('/create', async (req, res) => {
       (sum, item) => sum + (item.unitPrice || 0) * (item.hours || 0),
       0
     )
-    const taxIncludedPrice =
-      materialsTotal + processingTotal + (otherFee || 0) + (transportFee || 0)
+    const partItemsTotal = (Array.isArray(partItems) ? partItems : []).reduce(
+      (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
+      0
+    )
+    const baseTotal = normalizedType === 'part' ? partItemsTotal : materialsTotal + processingTotal
+    const taxIncludedPrice = baseTotal + (otherFee || 0) + (transportFee || 0)
 
     // 将材料明细和加工费用明细转换为JSON字符串
     const materialsJson = JSON.stringify(materials || [])
     const processesJson = JSON.stringify(processes || [])
+    const partItemsJson = JSON.stringify(partItems || [])
 
     console.log('材料明细JSON:', materialsJson)
     console.log('加工费用明细JSON:', processesJson)
+    console.log('零件明细JSON:', partItemsJson)
 
     // 使用 getPool 直接执行，以便正确处理 NVARCHAR(MAX) 类型
     const pool = await getPool()
@@ -307,14 +563,22 @@ router.post('/create', async (req, res) => {
     request.input('quotationNo', sql.NVarChar(50), quotationNo)
     request.input('quotationDate', sql.Date, quotationDate)
     request.input('customerName', sql.NVarChar(200), customerName)
+    request.input('quotationType', sql.NVarChar(20), normalizedType)
     request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
-    request.input('partName', sql.NVarChar(200), partName)
-    request.input('moldNo', sql.NVarChar(100), moldNo)
-    request.input('department', sql.NVarChar(100), department)
-    request.input('applicant', sql.NVarChar(50), applicant)
+    request.input('partName', sql.NVarChar(200), partName || null)
+    request.input('moldNo', sql.NVarChar(100), moldNo || null)
+    request.input('department', sql.NVarChar(100), department || null)
+    request.input('applicant', sql.NVarChar(50), applicant || null)
+    request.input('contactName', sql.NVarChar(50), contactName || null)
+    request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
+    request.input('remark', sql.NVarChar, remark || null)
+    request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
+    request.input('paymentTerms', sql.NVarChar(100), paymentTerms || null)
+    request.input('validityDays', sql.Int, validityDays ?? null)
     request.input('materialsJson', sql.NVarChar, materialsJson)
     request.input('processesJson', sql.NVarChar, processesJson)
+    request.input('partItemsJson', sql.NVarChar, partItemsJson)
     request.input('otherFee', sql.Decimal(18, 2), otherFee || 0)
     request.input('transportFee', sql.Decimal(18, 2), transportFee || 0)
     request.input('quantity', sql.Int, quantity || 1)
@@ -322,17 +586,23 @@ router.post('/create', async (req, res) => {
 
     // 插入报价单
     const insertQuery = `
-      INSERT INTO 报价单 (
-        报价单号, 报价日期, 客户名称, 加工日期, 更改通知单号,
-        加工零件名称, 模具编号, 申请更改部门, 申请更改人,
-        材料明细, 加工费用明细, 其他费用, 运输费用, 加工数量, 含税价格
-      ) VALUES (
-        @quotationNo, @quotationDate, @customerName, @processingDate, @changeOrderNo,
-        @partName, @moldNo, @department, @applicant,
-        @materialsJson, @processesJson, @otherFee, @transportFee, @quantity, @taxIncludedPrice
-      )
-      SELECT SCOPE_IDENTITY() as id
-    `
+	      INSERT INTO 报价单 (
+	        报价单号, 报价日期, 客户名称, 报价类型,
+	        加工日期, 更改通知单号,
+	        加工零件名称, 模具编号, 申请更改部门, 申请更改人,
+	        联系人, 联系电话, 备注, 交货方式, 付款方式, 报价有效期天数,
+	        材料明细, 加工费用明细, 零件明细,
+	        其他费用, 运输费用, 加工数量, 含税价格
+	      ) VALUES (
+	        @quotationNo, @quotationDate, @customerName, @quotationType,
+	        @processingDate, @changeOrderNo,
+	        @partName, @moldNo, @department, @applicant,
+	        @contactName, @contactPhone, @remark, @deliveryTerms, @paymentTerms, @validityDays,
+	        @materialsJson, @processesJson, @partItemsJson,
+	        @otherFee, @transportFee, @quantity, @taxIncludedPrice
+	      )
+	      SELECT SCOPE_IDENTITY() as id
+	    `
 
     const result = await request.query(insertQuery)
 
@@ -364,23 +634,34 @@ router.post('/create', async (req, res) => {
 // 更新报价单
 router.put('/:id', async (req, res) => {
   try {
+    await ensureQuotationRemarkColumn()
     const { id } = req.params
     const {
       quotationNo,
       quotationDate,
       customerName,
+      quotationType = 'mold',
       processingDate,
       changeOrderNo,
       partName,
       moldNo,
       department,
       applicant,
+      contactName,
+      contactPhone,
+      remark,
+      deliveryTerms,
+      paymentTerms,
+      validityDays,
       materials,
       processes,
+      partItems,
       otherFee,
       transportFee,
       quantity
     } = req.body
+
+    const normalizedType = quotationType === 'part' ? 'part' : 'mold'
 
     // 验证必填字段
     if (!quotationNo) {
@@ -389,6 +670,46 @@ router.put('/:id', async (req, res) => {
         success: false,
         message: '报价单号不能为空'
       })
+    }
+
+    if (normalizedType === 'mold') {
+      if (!partName) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '加工零件名称不能为空'
+        })
+      }
+      if (!moldNo) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '模具编号不能为空'
+        })
+      }
+      if (!department) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '申请更改部门不能为空'
+        })
+      }
+      if (!applicant) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '申请更改人不能为空'
+        })
+      }
+    } else {
+      const items = Array.isArray(partItems) ? partItems : []
+      if (!items.length) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '零件明细不能为空'
+        })
+      }
     }
 
     // 检查报价单是否存在
@@ -433,12 +754,17 @@ router.put('/:id', async (req, res) => {
       (sum, item) => sum + (item.unitPrice || 0) * (item.hours || 0),
       0
     )
-    const taxIncludedPrice =
-      materialsTotal + processingTotal + (otherFee || 0) + (transportFee || 0)
+    const partItemsTotal = (Array.isArray(partItems) ? partItems : []).reduce(
+      (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
+      0
+    )
+    const baseTotal = normalizedType === 'part' ? partItemsTotal : materialsTotal + processingTotal
+    const taxIncludedPrice = baseTotal + (otherFee || 0) + (transportFee || 0)
 
     // 将材料明细和加工费用明细转换为JSON字符串
     const materialsJson = JSON.stringify(materials || [])
     const processesJson = JSON.stringify(processes || [])
+    const partItemsJson = JSON.stringify(partItems || [])
 
     // 使用 getPool 直接执行，以便正确处理 NVARCHAR(MAX) 类型
     const pool = await getPool()
@@ -449,14 +775,22 @@ router.put('/:id', async (req, res) => {
     request.input('quotationNo', sql.NVarChar(50), quotationNo)
     request.input('quotationDate', sql.Date, quotationDate)
     request.input('customerName', sql.NVarChar(200), customerName)
+    request.input('quotationType', sql.NVarChar(20), normalizedType)
     request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
-    request.input('partName', sql.NVarChar(200), partName)
-    request.input('moldNo', sql.NVarChar(100), moldNo)
-    request.input('department', sql.NVarChar(100), department)
-    request.input('applicant', sql.NVarChar(50), applicant)
+    request.input('partName', sql.NVarChar(200), partName || null)
+    request.input('moldNo', sql.NVarChar(100), moldNo || null)
+    request.input('department', sql.NVarChar(100), department || null)
+    request.input('applicant', sql.NVarChar(50), applicant || null)
+    request.input('contactName', sql.NVarChar(50), contactName || null)
+    request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
+    request.input('remark', sql.NVarChar, remark || null)
+    request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
+    request.input('paymentTerms', sql.NVarChar(100), paymentTerms || null)
+    request.input('validityDays', sql.Int, validityDays ?? null)
     request.input('materialsJson', sql.NVarChar, materialsJson)
     request.input('processesJson', sql.NVarChar, processesJson)
+    request.input('partItemsJson', sql.NVarChar, partItemsJson)
     request.input('otherFee', sql.Decimal(18, 2), otherFee || 0)
     request.input('transportFee', sql.Decimal(18, 2), transportFee || 0)
     request.input('quantity', sql.Int, quantity || 1)
@@ -464,18 +798,26 @@ router.put('/:id', async (req, res) => {
 
     // 更新报价单
     const updateQuery = `
-      UPDATE 报价单 SET
-        报价单号 = @quotationNo,
-        报价日期 = @quotationDate,
-        客户名称 = @customerName,
-        加工日期 = @processingDate,
-        更改通知单号 = @changeOrderNo,
-        加工零件名称 = @partName,
-        模具编号 = @moldNo,
-        申请更改部门 = @department,
-        申请更改人 = @applicant,
-        材料明细 = @materialsJson,
-        加工费用明细 = @processesJson,
+	      UPDATE 报价单 SET
+	        报价单号 = @quotationNo,
+	        报价日期 = @quotationDate,
+	        客户名称 = @customerName,
+	        报价类型 = @quotationType,
+	        加工日期 = @processingDate,
+	        更改通知单号 = @changeOrderNo,
+	        加工零件名称 = @partName,
+	        模具编号 = @moldNo,
+	        申请更改部门 = @department,
+	        申请更改人 = @applicant,
+	        联系人 = @contactName,
+	        联系电话 = @contactPhone,
+	        备注 = @remark,
+	        交货方式 = @deliveryTerms,
+	        付款方式 = @paymentTerms,
+	        报价有效期天数 = @validityDays,
+	        材料明细 = @materialsJson,
+	        加工费用明细 = @processesJson,
+	        零件明细 = @partItemsJson,
         其他费用 = @otherFee,
         运输费用 = @transportFee,
         加工数量 = @quantity,
@@ -537,6 +879,7 @@ router.delete('/:id', async (req, res) => {
 // 下载当前报价单对应的 Excel 文件（基于美菱改模报价单模板）
 router.get('/:id/export-excel', async (req, res) => {
   try {
+    await ensureQuotationRemarkColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -547,14 +890,22 @@ router.get('/:id/export-excel', async (req, res) => {
           报价单号 as quotationNo,
           报价日期 as quotationDate,
           客户名称 as customerName,
+          报价类型 as quotationType,
           加工日期 as processingDate,
           更改通知单号 as changeOrderNo,
           加工零件名称 as partName,
           模具编号 as moldNo,
           申请更改部门 as department,
           申请更改人 as applicant,
-          材料明细 as materialsJson,
-          加工费用明细 as processesJson,
+	          联系人 as contactName,
+	          联系电话 as contactPhone,
+	          备注 as remark,
+	          交货方式 as deliveryTerms,
+	          付款方式 as paymentTerms,
+	          报价有效期天数 as validityDays,
+	          材料明细 as materialsJson,
+	          加工费用明细 as processesJson,
+          零件明细 as partItemsJson,
           其他费用 as otherFee,
           运输费用 as transportFee,
           加工数量 as quantity,
@@ -574,6 +925,32 @@ router.get('/:id/export-excel', async (req, res) => {
     }
 
     const row = rows[0]
+
+    const quotationType = row.quotationType === 'part' ? 'part' : 'mold'
+
+    if (quotationType === 'part') {
+      // 零件报价单：用 ExcelJS 直接生成工作簿（样式对齐 demo）
+      let partItems = []
+      try {
+        partItems = JSON.parse(row.partItemsJson || '[]')
+      } catch (e) {
+        console.error('解析零件明细JSON失败:', e)
+        partItems = []
+      }
+
+      const workbook = buildPartQuotationWorkbook({ row, partItems })
+      const buffer = await workbook.xlsx.writeBuffer()
+
+      const filenameBase = row.quotationNo || '报价单'
+      const encodedFilename = encodeURIComponent(`${filenameBase}.xlsx`)
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+      return res.send(buffer)
+    }
 
     // 解析 JSON 字段
     let materials = []
@@ -715,6 +1092,7 @@ router.get('/:id/export-excel', async (req, res) => {
 // 下载当前报价单对应的 报价 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
 router.get('/:id/export-pdf', async (req, res) => {
   try {
+    await ensureQuotationRemarkColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -725,14 +1103,22 @@ router.get('/:id/export-pdf', async (req, res) => {
           报价单号 as quotationNo,
           报价日期 as quotationDate,
           客户名称 as customerName,
+          报价类型 as quotationType,
           加工日期 as processingDate,
           更改通知单号 as changeOrderNo,
           加工零件名称 as partName,
           模具编号 as moldNo,
           申请更改部门 as department,
           申请更改人 as applicant,
-          材料明细 as materialsJson,
-          加工费用明细 as processesJson,
+	          联系人 as contactName,
+	          联系电话 as contactPhone,
+	          备注 as remark,
+	          交货方式 as deliveryTerms,
+	          付款方式 as paymentTerms,
+	          报价有效期天数 as validityDays,
+	          材料明细 as materialsJson,
+	          加工费用明细 as processesJson,
+          零件明细 as partItemsJson,
           其他费用 as otherFee,
           运输费用 as transportFee,
           加工数量 as quantity,
@@ -752,6 +1138,91 @@ router.get('/:id/export-pdf', async (req, res) => {
     }
 
     const row = rows[0]
+
+    const quotationType = row.quotationType === 'part' ? 'part' : 'mold'
+
+    if (quotationType === 'part') {
+      // 零件报价 PDF：先生成工作簿，再通过 LibreOffice 转 PDF
+      let partItems = []
+      try {
+        partItems = JSON.parse(row.partItemsJson || '[]')
+      } catch (e) {
+        console.error('解析零件明细JSON失败:', e)
+        partItems = []
+      }
+
+      const workbook = buildPartQuotationWorkbook({ row, partItems })
+
+      const tmpDir = os.tmpdir()
+      const safeBase = `quotation-part-${row.id || id}-${Date.now()}`
+      const xlsxPath = path.join(tmpDir, `${safeBase}.xlsx`)
+      const pdfPath = path.join(tmpDir, `${safeBase}.pdf`)
+
+      await workbook.xlsx.writeFile(xlsxPath)
+
+      const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+      try {
+        const loUserDir = path.join(tmpDir, 'libreoffice-profile')
+        try {
+          await fs.promises.mkdir(loUserDir, { recursive: true })
+        } catch {}
+
+        const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+        const env = { ...process.env, HOME: loUserDir }
+
+        await execFileAsync(
+          sofficePath,
+          [
+            '--headless',
+            `-env:UserInstallation=${loUserDirUrl}`,
+            '--convert-to',
+            'pdf',
+            '--outdir',
+            tmpDir,
+            xlsxPath
+          ],
+          { env }
+        )
+      } catch (err) {
+        console.error('调用 LibreOffice 失败（零件报价单）:', err)
+        try {
+          await fs.promises.unlink(xlsxPath)
+        } catch {}
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message: '服务器未安装 LibreOffice 或转换 PDF 失败'
+        })
+      }
+
+      let pdfBuffer
+      try {
+        pdfBuffer = await fs.promises.readFile(pdfPath)
+      } catch (err) {
+        console.error('读取生成的 PDF 文件失败（零件报价单）:', err)
+        try {
+          await fs.promises.unlink(xlsxPath)
+        } catch {}
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message: '生成 PDF 文件失败'
+        })
+      }
+
+      try {
+        await fs.promises.unlink(xlsxPath)
+      } catch {}
+      try {
+        await fs.promises.unlink(pdfPath)
+      } catch {}
+
+      const filenameBase = row.quotationNo || '报价单'
+      const encodedFilename = encodeURIComponent(`${filenameBase}报价.pdf`)
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+      return res.send(pdfBuffer)
+    }
 
     // 解析 JSON 字段
     let materials = []
