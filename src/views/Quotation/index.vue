@@ -735,22 +735,22 @@
               row-key="lineNo"
             >
               <el-table-column type="index" label="序号" width="60" align="center" />
-              <el-table-column label="产品名称" min-width="200">
+              <el-table-column label="产品名称" min-width="160">
                 <template #default="{ row }">
                   <el-input v-model="row.partName" :disabled="isViewMode" placeholder="产品名称" />
                 </template>
               </el-table-column>
-              <el-table-column label="产品图号" min-width="160">
+              <el-table-column label="产品图号" min-width="120">
                 <template #default="{ row }">
                   <el-input v-model="row.drawingNo" :disabled="isViewMode" placeholder="产品图号" />
                 </template>
               </el-table-column>
-              <el-table-column label="材质" min-width="120">
+              <el-table-column label="材质" min-width="100">
                 <template #default="{ row }">
                   <el-input v-model="row.material" :disabled="isViewMode" placeholder="材质" />
                 </template>
               </el-table-column>
-              <el-table-column label="工序" min-width="140">
+              <el-table-column label="工序" min-width="120">
                 <template #default="{ row }">
                   <el-input v-model="row.process" :disabled="isViewMode" placeholder="工序" />
                 </template>
@@ -767,7 +767,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="单价(元)" width="120" align="right">
+              <el-table-column label="单价(元)" width="100" align="right">
                 <template #default="{ row }">
                   <el-input
                     :model-value="
