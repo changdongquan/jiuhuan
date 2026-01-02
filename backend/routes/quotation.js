@@ -315,21 +315,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     return null
   }
 
-  const unwrapPartItemImageUrl = (imageUrl) => {
-    const raw = String(imageUrl || '').trim()
-    if (!raw) return ''
-    const apiPrefix = '/api/quotation/part-item-image?'
-    if (!raw.startsWith(apiPrefix)) return raw
-    try {
-      const query = raw.slice(apiPrefix.length)
-      const params = new URLSearchParams(query)
-      const inner = params.get('url')
-      return inner ? String(inner) : raw
-    } catch {
-      return raw
-    }
-  }
-
   const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
 
   const columns = isEnabled
@@ -411,8 +396,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const header = isEnabled
     ? ['序号', '产品名称', '产品图号', '材质', '工序', '图示', '数量', '单价(元)', '金额(元)']
     : ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
-  // 注意：ExcelJS row.values 的数组是从第 1 列开始写入；如果前面塞一个 null，会导致整表右移一列（出现“空列”）
-  sheet.getRow(headerRowIndex).values = header
+  sheet.getRow(headerRowIndex).values = [null, ...header]
   sheet.getRow(headerRowIndex).font = { bold: true, size: 11, name: '微软雅黑' }
   sheet.getRow(headerRowIndex).alignment = {
     horizontal: 'center',
@@ -456,7 +440,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
           Number.isFinite(unitPrice) ? unitPrice : '',
           Number.isFinite(unitPrice) && qty ? amount : ''
         ]
-    rowObj.values = lineCells
+    rowObj.values = [null, ...lineCells]
     rowObj.font = { size: 11, name: '微软雅黑' }
     rowObj.alignment = { vertical: 'top', wrapText: true }
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
@@ -480,8 +464,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     if (isEnabled) {
       const imageUrl = item?.imageUrl
       if (imageUrl) {
-        const normalizedImageUrl = unwrapPartItemImageUrl(imageUrl)
-        const imagePath = resolveAnyQuotationImagePath(normalizedImageUrl)
+        const imagePath = resolveStoredQuotationImagePath(imageUrl)
         if (imagePath && fs.existsSync(imagePath)) {
           try {
             const buffer = fs.readFileSync(imagePath)
@@ -547,6 +530,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     { label: '含税价格', value: row.taxIncludedPrice, fmt: '#,##0.00', isTotal: true }
   ].forEach((it, i) => {
     const r = summaryStart + i
+    sheet.mergeCells(`${sumLabelLetter}${r}:${colLetter(colCount - 1)}${r}`)
     sheet.getCell(`${sumLabelLetter}${r}`).value = it.label
     sheet.getCell(`${sumLabelLetter}${r}`).alignment = { horizontal: 'center', vertical: 'middle' }
     sheet.getCell(`${sumLabelLetter}${r}`).font = {
@@ -565,7 +549,9 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       ? { bold: true, size: 13, name: '微软雅黑' }
       : { size: 11, name: '微软雅黑' }
     if (it.isTotal) sheet.getCell(`${sumValueLetter}${r}`).fill = fillSuccess
-    for (let c = summaryLabelCol; c <= colCount; c += 1) setBorderAll(sheet.getRow(r).getCell(c))
+    ;[`${sumLabelLetter}${r}`, `${sumValueLetter}${r}`].forEach((addr) =>
+      setBorderAll(sheet.getCell(addr))
+    )
     sheet.getRow(r).height = it.isTotal ? 24 : 20
   })
 
