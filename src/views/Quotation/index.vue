@@ -371,11 +371,6 @@
                     class="field-input-inline field-input-contact"
                   />
                 </el-form-item>
-
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
-                  <span class="field-label-inline">图示：</span>
-                  <el-switch v-model="quotationForm.enableImage" :disabled="isViewMode" />
-                </el-form-item>
               </div>
             </div>
           </template>
@@ -725,15 +720,21 @@
           <div class="qt-card qt-part-items-card">
             <div class="qt-part-items__toolbar">
               <div class="qt-part-items__title">产品明细</div>
-              <el-button
-                v-if="!isViewMode"
-                size="small"
-                type="primary"
-                plain
-                @click="handleAddPartItem"
-              >
-                添加行
-              </el-button>
+              <div class="qt-part-items__toolbar-right">
+                <div class="qt-part-items__image-toggle">
+                  <span class="qt-part-items__image-toggle-label">图示</span>
+                  <el-switch v-model="quotationForm.enableImage" :disabled="isViewMode" />
+                </div>
+                <el-button
+                  v-if="!isViewMode"
+                  size="small"
+                  type="primary"
+                  plain
+                  @click="handleAddPartItem"
+                >
+                  添加行
+                </el-button>
+              </div>
             </div>
 
             <el-table
@@ -2719,6 +2720,24 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.qt-part-items__toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qt-part-items__image-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qt-part-items__image-toggle-label {
+  font-weight: 500;
+  color: #606266;
+  white-space: nowrap;
 }
 
 .qt-part-items__title {
