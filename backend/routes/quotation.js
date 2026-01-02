@@ -65,6 +65,41 @@ const resolveTempQuotationImagePath = (imageUrl) => {
   return resolved
 }
 
+const resolveStoredQuotationImagePath = (imageUrl) => {
+  const url = String(imageUrl || '')
+  const oldPrefix = '/uploads/quotation-images/'
+  if (url.startsWith(oldPrefix)) {
+    const name = decodeURIComponent(url.slice(oldPrefix.length))
+    const safeName = path.basename(name)
+    if (!safeName) return null
+    return path.join(QUOTATION_IMAGES_DIR, safeName)
+  }
+
+  const newPrefix = '/uploads/报价单/'
+  if (url.startsWith(newPrefix)) {
+    const parts = url.split('/').filter(Boolean)
+    // /uploads/报价单/<quotationNo>/报价单图示/<filename>
+    if (parts.length < 5) return null
+    if (parts[0] !== 'uploads') return null
+    if (parts[1] !== '报价单') return null
+    if (parts[3] !== QUOTATION_IMAGE_SUBDIR) return null
+    const quotationNo = decodeURIComponent(parts[2] || '')
+    const safeQuotationNo = safeQuotationNoForPath(quotationNo)
+    const fileName = decodeURIComponent(parts[4] || '')
+    const safeFileName = path.basename(fileName)
+    if (!safeQuotationNo || !safeFileName) return null
+    return path.join(FILE_ROOT, '报价单', safeQuotationNo, QUOTATION_IMAGE_SUBDIR, safeFileName)
+  }
+
+  return null
+}
+
+const resolveAnyQuotationImagePath = (imageUrl) => {
+  const url = String(imageUrl || '')
+  if (url.startsWith(QUOTATION_TEMP_URL_PREFIX)) return resolveTempQuotationImagePath(url)
+  return resolveStoredQuotationImagePath(url)
+}
+
 const cleanupEmptyParents = async (startPath, stopDir) => {
   const stop = path.resolve(stopDir)
   let current = path.dirname(path.resolve(startPath))
@@ -264,35 +299,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     return null
   }
 
-  const resolveQuotationImagePath = (imageUrl) => {
-    const url = String(imageUrl || '')
-    const oldPrefix = '/uploads/quotation-images/'
-    if (url.startsWith(oldPrefix)) {
-      const name = decodeURIComponent(url.slice(oldPrefix.length))
-      const safeName = path.basename(name)
-      if (!safeName) return null
-      return path.join(QUOTATION_IMAGES_DIR, safeName)
-    }
-
-    const newPrefix = '/uploads/报价单/'
-    if (url.startsWith(newPrefix)) {
-      const parts = url.split('/').filter(Boolean)
-      // /uploads/报价单/<quotationNo>/报价单图示/<filename>
-      if (parts.length < 5) return null
-      if (parts[0] !== 'uploads') return null
-      if (parts[1] !== '报价单') return null
-      if (parts[3] !== QUOTATION_IMAGE_SUBDIR) return null
-      const quotationNo = decodeURIComponent(parts[2] || '')
-      const safeQuotationNo = safeQuotationNoForPath(quotationNo)
-      const fileName = decodeURIComponent(parts[4] || '')
-      const safeFileName = path.basename(fileName)
-      if (!safeQuotationNo || !safeFileName) return null
-      return path.join(FILE_ROOT, '报价单', safeQuotationNo, QUOTATION_IMAGE_SUBDIR, safeFileName)
-    }
-
-    return null
-  }
-
   const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
 
   const columns = isEnabled
@@ -426,7 +432,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     if (isEnabled) {
       const imageUrl = item?.imageUrl
       if (imageUrl) {
-        const imagePath = resolveQuotationImagePath(imageUrl)
+        const imagePath = resolveStoredQuotationImagePath(imageUrl)
         if (imagePath && fs.existsSync(imagePath)) {
           try {
             const buffer = fs.readFileSync(imagePath)
@@ -569,6 +575,39 @@ router.post('/delete-temp-part-item-image', async (req, res) => {
   } catch (e) {
     console.error('删除临时图示失败:', e)
     return res.status(500).json({ code: 500, success: false, message: '删除临时图示失败' })
+  }
+})
+
+// 通过 API 预览零件报价单图示（兼容临时/最终/历史路径，只依赖 /api，不依赖 /uploads 静态映射）
+router.get('/part-item-image', async (req, res) => {
+  try {
+    const url = String(req.query?.url || '').trim()
+    if (!url) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 url' })
+    }
+
+    const filePath = resolveAnyQuotationImagePath(url)
+    if (!filePath) {
+      return res.status(404).json({ code: 404, success: false, message: '图片不存在' })
+    }
+
+    try {
+      await fs.promises.access(filePath, fs.constants.R_OK)
+    } catch {
+      return res.status(404).json({ code: 404, success: false, message: '图片不存在' })
+    }
+
+    // 临时图片不缓存，避免“删除后仍显示”
+    if (url.startsWith(QUOTATION_TEMP_URL_PREFIX)) {
+      res.setHeader('Cache-Control', 'no-store')
+    } else {
+      res.setHeader('Cache-Control', 'private, max-age=60')
+    }
+
+    return res.sendFile(filePath)
+  } catch (e) {
+    console.error('读取图示失败:', e)
+    return res.status(500).json({ code: 500, success: false, message: '读取图片失败' })
   }
 })
 

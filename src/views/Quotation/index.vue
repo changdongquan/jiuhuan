@@ -793,8 +793,8 @@
                         <el-image
                           class="qt-part-image-thumb"
                           :style="{ '--img-scale': String(row.imageScale || 1) }"
-                          :src="row.imageUrl"
-                          :preview-src-list="[row.imageUrl]"
+                          :src="toPartItemImageDisplayUrl(row.imageUrl)"
+                          :preview-src-list="[toPartItemImageDisplayUrl(row.imageUrl)]"
                           :preview-teleported="true"
                           fit="contain"
                         />
@@ -1289,6 +1289,12 @@ const partImageFileTargetRow = ref<any>(null)
 const TEMP_PART_IMAGE_PREFIX = '/uploads/_temp/quotation-images/'
 
 const isTempPartImageUrl = (url: any) => String(url || '').startsWith(TEMP_PART_IMAGE_PREFIX)
+
+const toPartItemImageDisplayUrl = (imageUrl: any) => {
+  const url = String(imageUrl || '').trim()
+  if (!url) return ''
+  return `/api/quotation/part-item-image?url=${encodeURIComponent(url)}`
+}
 
 const deleteTempPartImageIfNeeded = async (imageUrl: any) => {
   const url = String(imageUrl || '').trim()
