@@ -12,7 +12,11 @@ const sql = require('mssql')
 const execFileAsync = promisify(execFile)
 const router = express.Router()
 
-const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+// 文件存储根目录：建议使用 JIUHUAN_FILES_ROOT（兼容旧变量 SALES_ORDER_FILES_ROOT）
+const FILE_ROOT =
+  process.env.JIUHUAN_FILES_ROOT ||
+  process.env.SALES_ORDER_FILES_ROOT ||
+  path.resolve(__dirname, '../uploads')
 const QUOTATION_BASE_DIR = path.join(FILE_ROOT, '报价单')
 const QUOTATION_IMAGE_SUBDIR = '报价单图示'
 const QUOTATION_TEMP_DIR_ROOT = path.join(FILE_ROOT, '_temp', 'quotation-images')

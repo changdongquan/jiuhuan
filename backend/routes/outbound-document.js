@@ -12,9 +12,12 @@ let tablesReady = false
 let attachmentsTableReady = false
 
 // 出库单附件存储配置（与生产任务/项目管理使用同一根目录）
-// 生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
+// 生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
 // 本地开发环境则默认使用 backend/uploads 目录
-const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const FILE_ROOT =
+  process.env.JIUHUAN_FILES_ROOT ||
+  process.env.SALES_ORDER_FILES_ROOT ||
+  path.resolve(__dirname, '../uploads')
 const OUTBOUND_SUBDIR = process.env.OUTBOUND_DOCUMENT_FILES_SUBDIR || 'outbound-documents'
 const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.OUTBOUND_DOCUMENT_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
@@ -149,16 +152,16 @@ const getFileFullPath = (relativePath, storedFileName) =>
 const attachmentStorage = multer.diskStorage({
   destination(req, _file, cb) {
     try {
-      const tempDir = path.posix.join(
-        OUTBOUND_SUBDIR,
+      const tempRelativeDir = path.posix.join(
         '_temp',
+        OUTBOUND_SUBDIR,
         String(Date.now()),
         String(Math.random().toString(36).slice(2, 8))
       )
-      const fullDir = path.join(FILE_ROOT, tempDir)
+      const fullDir = path.join(FILE_ROOT, tempRelativeDir)
       ensureDirSync(fullDir)
 
-      req._tempAttachmentDir = tempDir
+      req._tempAttachmentDir = tempRelativeDir
       req._tempAttachmentFullDir = fullDir
 
       cb(null, fullDir)

@@ -8,9 +8,12 @@ const router = express.Router()
 const fsp = fs.promises
 
 // 销售订单附件存储配置
-// 生产环境建议通过环境变量显式设置 SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
+// 生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
 // 本地开发环境则默认使用 backend/uploads 目录，避免没有 /mnt 权限导致上传失败
-const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const FILE_ROOT =
+  process.env.JIUHUAN_FILES_ROOT ||
+  process.env.SALES_ORDER_FILES_ROOT ||
+  path.resolve(__dirname, '../uploads')
 const SALES_SUBDIR = process.env.SALES_ORDER_FILES_SUBDIR || 'sales-orders'
 const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.SALES_ORDER_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
@@ -115,17 +118,17 @@ const attachmentStorage = multer.diskStorage({
 
       // 注意：destination 在路由处理前执行，此时无法查询数据库获取项目编号
       // 所以先使用临时目录，在路由处理中查询到项目编号后再移动文件到正确位置
-      const tempDir = path.posix.join(
-        SALES_SUBDIR,
+      const tempRelativeDir = path.posix.join(
         '_temp',
+        SALES_SUBDIR,
         String(Date.now()),
         String(Math.random().toString(36).slice(2, 8))
       )
-      const fullDir = path.join(FILE_ROOT, tempDir)
+      const fullDir = path.join(FILE_ROOT, tempRelativeDir)
       ensureDirSync(fullDir)
 
       // 记录临时目录，用于后续移动文件
-      req._tempAttachmentDir = tempDir
+      req._tempAttachmentDir = tempRelativeDir
       req._tempAttachmentFullDir = fullDir
 
       cb(null, fullDir)

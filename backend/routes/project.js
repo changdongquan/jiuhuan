@@ -8,7 +8,11 @@ const multer = require('multer')
 
 // 项目管理附件存储配置
 // 使用与销售订单相同的路径配置
-const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+// 附件存储根目录：建议使用 JIUHUAN_FILES_ROOT（兼容旧变量 SALES_ORDER_FILES_ROOT）
+const FILE_ROOT =
+  process.env.JIUHUAN_FILES_ROOT ||
+  process.env.SALES_ORDER_FILES_ROOT ||
+  path.resolve(__dirname, '../uploads')
 const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.PROJECT_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
   10
@@ -76,16 +80,16 @@ const attachmentStorage = multer.diskStorage({
       }
 
       // 使用临时目录，在路由处理中查询后再移动文件到正确位置
-      const tempDir = path.posix.join(
-        'project-management',
+      const tempRelativeDir = path.posix.join(
         '_temp',
+        'project-management',
         String(Date.now()),
         String(Math.random().toString(36).slice(2, 8))
       )
-      const fullDir = path.join(FILE_ROOT, tempDir)
+      const fullDir = path.join(FILE_ROOT, tempRelativeDir)
       ensureDirSync(fullDir)
 
-      req._tempAttachmentDir = tempDir
+      req._tempAttachmentDir = tempRelativeDir
       req._tempAttachmentFullDir = fullDir
 
       cb(null, fullDir)

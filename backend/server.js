@@ -29,7 +29,11 @@ const salaryRoutes = require('./routes/salary')
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const UPLOADS_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, 'uploads')
+// 文件存储根目录：建议使用 JIUHUAN_FILES_ROOT（兼容旧变量 SALES_ORDER_FILES_ROOT）
+const UPLOADS_ROOT =
+  process.env.JIUHUAN_FILES_ROOT ||
+  process.env.SALES_ORDER_FILES_ROOT ||
+  path.resolve(__dirname, 'uploads')
 // 报价单图示：按“报价单/<报价单号>/报价单图示/”归档（中文目录）
 const QUOTATION_BASE_DIR = path.join(UPLOADS_ROOT, '报价单')
 // 兼容旧版路径：/uploads/quotation-images/*
