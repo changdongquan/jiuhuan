@@ -13,6 +13,11 @@ const execFileAsync = promisify(execFile)
 const router = express.Router()
 
 const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const QUOTATION_BASE_DIR = path.join(FILE_ROOT, '报价单')
+const QUOTATION_IMAGE_SUBDIR = '报价单图示'
+const QUOTATION_TEMP_DIR_ROOT = path.join(FILE_ROOT, '_temp', 'quotation-images')
+const QUOTATION_TEMP_URL_PREFIX = '/uploads/_temp/quotation-images/'
+// 兼容旧版：/uploads/quotation-images/*
 const QUOTATION_IMAGES_DIR = path.join(FILE_ROOT, 'quotation-images')
 const QUOTATION_IMAGE_MAX_SIZE_BYTES = parseInt(
   process.env.QUOTATION_IMAGE_MAX_SIZE || String(5 * 1024 * 1024),
@@ -25,14 +30,104 @@ const ensureDirSync = (dirPath) => {
   }
 }
 
+const moveFileWithFallback = async (fromPath, toPath) => {
+  try {
+    await fs.promises.rename(fromPath, toPath)
+  } catch (err) {
+    if (err && err.code === 'EXDEV') {
+      await fs.promises.copyFile(fromPath, toPath)
+      await fs.promises.unlink(fromPath)
+      return
+    }
+    throw err
+  }
+}
+
+const safeQuotationNoForPath = (quotationNo) => {
+  if (!quotationNo) return 'UNKNOWN'
+  return String(quotationNo)
+    .trim()
+    .replace(/[\s/\\?%*:|"<>]+/g, '_')
+}
+
+const resolveTempQuotationImagePath = (imageUrl) => {
+  const url = String(imageUrl || '')
+  if (!url.startsWith(QUOTATION_TEMP_URL_PREFIX)) return null
+  const rel = url.slice(QUOTATION_TEMP_URL_PREFIX.length)
+  const parts = rel
+    .split('/')
+    .filter(Boolean)
+    .map((p) => decodeURIComponent(p))
+  if (!parts.length) return null
+  const resolved = path.resolve(QUOTATION_TEMP_DIR_ROOT, ...parts)
+  const rootResolved = path.resolve(QUOTATION_TEMP_DIR_ROOT)
+  if (!resolved.startsWith(rootResolved + path.sep) && resolved !== rootResolved) return null
+  return resolved
+}
+
+const cleanupEmptyParents = async (startPath, stopDir) => {
+  const stop = path.resolve(stopDir)
+  let current = path.dirname(path.resolve(startPath))
+  while (current.startsWith(stop + path.sep) && current !== stop) {
+    try {
+      const entries = await fs.promises.readdir(current)
+      if (entries.length > 0) break
+      await fs.promises.rmdir(current)
+    } catch {
+      break
+    }
+    current = path.dirname(current)
+  }
+}
+
+const finalizePartItemImages = async (quotationNo, partItems) => {
+  const safeQuotationNo = safeQuotationNoForPath(quotationNo)
+  const moved = {}
+  const items = Array.isArray(partItems) ? partItems : []
+  for (const item of items) {
+    const imageUrl = String(item?.imageUrl || '').trim()
+    if (!imageUrl) continue
+    if (!imageUrl.startsWith(QUOTATION_TEMP_URL_PREFIX)) continue
+
+    const fromPath = resolveTempQuotationImagePath(imageUrl)
+    if (!fromPath) continue
+
+    const fileName = path.basename(fromPath)
+    if (!fileName) continue
+
+    const finalDir = path.join(QUOTATION_BASE_DIR, safeQuotationNo, QUOTATION_IMAGE_SUBDIR)
+    ensureDirSync(finalDir)
+    const toPath = path.join(finalDir, fileName)
+
+    try {
+      await moveFileWithFallback(fromPath, toPath)
+      await cleanupEmptyParents(fromPath, QUOTATION_TEMP_DIR_ROOT)
+      const finalUrl = `/uploads/报价单/${safeQuotationNo}/${QUOTATION_IMAGE_SUBDIR}/${fileName}`
+      item.imageUrl = finalUrl
+      moved[imageUrl] = finalUrl
+    } catch (e) {
+      console.error('归档报价单图示失败:', e)
+    }
+  }
+  return { partItems: items, movedImages: moved }
+}
+
+ensureDirSync(QUOTATION_BASE_DIR)
+ensureDirSync(QUOTATION_TEMP_DIR_ROOT)
 ensureDirSync(QUOTATION_IMAGES_DIR)
 
 const uploadPartItemImage = multer({
   storage: multer.diskStorage({
     destination(req, file, cb) {
       try {
-        ensureDirSync(QUOTATION_IMAGES_DIR)
-        cb(null, QUOTATION_IMAGES_DIR)
+        const tempDir = path.join(
+          QUOTATION_TEMP_DIR_ROOT,
+          String(Date.now()),
+          String(Math.random().toString(36).slice(2, 8))
+        )
+        ensureDirSync(tempDir)
+        req._quotationImageTempDir = tempDir
+        cb(null, tempDir)
       } catch (err) {
         cb(err)
       }
@@ -48,8 +143,11 @@ const uploadPartItemImage = multer({
               ? '.webp'
               : ''
       const ext = extFromMime || path.extname(file.originalname || '') || '.png'
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-      cb(null, `qt-${unique}${ext}`)
+      const rand = String(Math.floor(Math.random() * 1e9)).padStart(9, '0')
+      const timestamp = Date.now()
+      const storedFileName = `qt-${timestamp}-${rand}${ext}`
+      req._quotationImageStoredFileName = storedFileName
+      cb(null, storedFileName)
     }
   }),
   limits: { fileSize: QUOTATION_IMAGE_MAX_SIZE_BYTES }
@@ -168,12 +266,31 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
   const resolveQuotationImagePath = (imageUrl) => {
     const url = String(imageUrl || '')
-    const prefix = '/uploads/quotation-images/'
-    if (!url.startsWith(prefix)) return null
-    const name = decodeURIComponent(url.slice(prefix.length))
-    const safeName = path.basename(name)
-    if (!safeName) return null
-    return path.join(QUOTATION_IMAGES_DIR, safeName)
+    const oldPrefix = '/uploads/quotation-images/'
+    if (url.startsWith(oldPrefix)) {
+      const name = decodeURIComponent(url.slice(oldPrefix.length))
+      const safeName = path.basename(name)
+      if (!safeName) return null
+      return path.join(QUOTATION_IMAGES_DIR, safeName)
+    }
+
+    const newPrefix = '/uploads/报价单/'
+    if (url.startsWith(newPrefix)) {
+      const parts = url.split('/').filter(Boolean)
+      // /uploads/报价单/<quotationNo>/报价单图示/<filename>
+      if (parts.length < 5) return null
+      if (parts[0] !== 'uploads') return null
+      if (parts[1] !== '报价单') return null
+      if (parts[3] !== QUOTATION_IMAGE_SUBDIR) return null
+      const quotationNo = decodeURIComponent(parts[2] || '')
+      const safeQuotationNo = safeQuotationNoForPath(quotationNo)
+      const fileName = decodeURIComponent(parts[4] || '')
+      const safeFileName = path.basename(fileName)
+      if (!safeQuotationNo || !safeFileName) return null
+      return path.join(FILE_ROOT, '报价单', safeQuotationNo, QUOTATION_IMAGE_SUBDIR, safeFileName)
+    }
+
+    return null
   }
 
   const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
@@ -407,9 +524,52 @@ router.post('/upload-part-item-image', (req, res) => {
         .json({ code: 400, success: false, message: '仅支持 png/jpg/webp 图片' })
     }
 
-    const urlPath = `/uploads/quotation-images/${encodeURIComponent(file.filename)}`
-    return res.json({ code: 0, success: true, data: { url: urlPath } })
+    try {
+      const rel = path.relative(QUOTATION_TEMP_DIR_ROOT, file.path)
+      const safeRel = String(rel || '').replace(/\\/g, '/')
+      if (!safeRel || safeRel.startsWith('..')) {
+        try {
+          fs.unlinkSync(file.path)
+        } catch {}
+        return res.status(500).json({ code: 500, success: false, message: '生成临时预览地址失败' })
+      }
+      const parts = safeRel.split('/').filter(Boolean)
+      const urlPath = `${QUOTATION_TEMP_URL_PREFIX}${parts.map((p) => encodeURIComponent(p)).join('/')}`
+      return res.json({ code: 0, success: true, data: { url: urlPath } })
+    } catch (e) {
+      try {
+        fs.unlinkSync(file.path)
+      } catch {}
+      console.error('生成临时图示URL失败:', e)
+      return res.status(500).json({ code: 500, success: false, message: '保存图片失败' })
+    }
   })
+})
+
+// 删除临时图示（取消/关闭弹窗时调用）
+router.post('/delete-temp-part-item-image', async (req, res) => {
+  try {
+    const url = String(req.body?.url || '').trim()
+    if (!url) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 url' })
+    }
+    const filePath = resolveTempQuotationImagePath(url)
+    if (!filePath) {
+      return res.status(400).json({ code: 400, success: false, message: '不是合法的临时图示地址' })
+    }
+
+    try {
+      await fs.promises.unlink(filePath)
+    } catch (e) {
+      // 文件不存在也视为成功，避免重复清理导致报错
+      if (e && e.code !== 'ENOENT') throw e
+    }
+    await cleanupEmptyParents(filePath, QUOTATION_TEMP_DIR_ROOT)
+    return res.json({ code: 0, success: true })
+  } catch (e) {
+    console.error('删除临时图示失败:', e)
+    return res.status(500).json({ code: 500, success: false, message: '删除临时图示失败' })
+  }
 })
 
 // 获取报价单列表
@@ -778,10 +938,21 @@ router.post('/create', async (req, res) => {
     const baseTotal = normalizedType === 'part' ? partItemsTotal : materialsTotal + processingTotal
     const taxIncludedPrice = baseTotal + (otherFee || 0) + (transportFee || 0)
 
+    let finalPartItems = partItems || []
+    let movedImages = {}
+    if (normalizedType === 'part') {
+      const finalized = await finalizePartItemImages(
+        quotationNo,
+        Array.isArray(partItems) ? partItems : []
+      )
+      finalPartItems = finalized.partItems
+      movedImages = finalized.movedImages
+    }
+
     // 将材料明细和加工费用明细转换为JSON字符串
     const materialsJson = JSON.stringify(materials || [])
     const processesJson = JSON.stringify(processes || [])
-    const partItemsJson = JSON.stringify(partItems || [])
+    const partItemsJson = JSON.stringify(finalPartItems || [])
 
     console.log('材料明细JSON:', materialsJson)
     console.log('加工费用明细JSON:', processesJson)
@@ -848,7 +1019,7 @@ router.post('/create', async (req, res) => {
     res.json({
       code: 0,
       success: true,
-      data: { id: newId },
+      data: { id: newId, movedImages },
       message: '创建报价单成功'
     })
   } catch (error) {
@@ -1000,10 +1171,21 @@ router.put('/:id', async (req, res) => {
     const baseTotal = normalizedType === 'part' ? partItemsTotal : materialsTotal + processingTotal
     const taxIncludedPrice = baseTotal + (otherFee || 0) + (transportFee || 0)
 
+    let finalPartItems = partItems || []
+    let movedImages = {}
+    if (normalizedType === 'part') {
+      const finalized = await finalizePartItemImages(
+        quotationNo,
+        Array.isArray(partItems) ? partItems : []
+      )
+      finalPartItems = finalized.partItems
+      movedImages = finalized.movedImages
+    }
+
     // 将材料明细和加工费用明细转换为JSON字符串
     const materialsJson = JSON.stringify(materials || [])
     const processesJson = JSON.stringify(processes || [])
-    const partItemsJson = JSON.stringify(partItems || [])
+    const partItemsJson = JSON.stringify(finalPartItems || [])
 
     // 使用 getPool 直接执行，以便正确处理 NVARCHAR(MAX) 类型
     const pool = await getPool()
@@ -1072,6 +1254,7 @@ router.put('/:id', async (req, res) => {
     res.json({
       code: 0,
       success: true,
+      data: { movedImages },
       message: '更新报价单成功'
     })
   } catch (error) {

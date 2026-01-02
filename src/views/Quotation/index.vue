@@ -275,6 +275,7 @@
         { 'qt-edit-dialog--part': quotationForm.quotationType === 'part' }
       ]"
       :close-on-click-modal="false"
+      :close-on-press-escape="false"
       :show-close="false"
     >
       <template #header>
@@ -452,7 +453,7 @@
           </template>
           <!-- 操作按钮 -->
           <div class="qt-dialog-actions">
-            <el-button size="small" @click="dialogVisible = false">取消</el-button>
+            <el-button size="small" @click="handleCancelQuotationDialog">取消</el-button>
             <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit">
               保存
             </el-button>
@@ -1114,6 +1115,7 @@ import {
   downloadQuotationPdfApi,
   downloadQuotationCompletionPdfApi,
   uploadQuotationPartItemImageApi,
+  deleteQuotationTempPartItemImageApi,
   type QuotationFormData
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
@@ -1284,6 +1286,19 @@ const transportFeeText = ref<string | undefined>(undefined)
 const partImageUploading = reactive<Record<number, boolean>>({})
 const partImageFileInputRef = ref<HTMLInputElement>()
 const partImageFileTargetRow = ref<any>(null)
+const TEMP_PART_IMAGE_PREFIX = '/uploads/_temp/quotation-images/'
+
+const isTempPartImageUrl = (url: any) => String(url || '').startsWith(TEMP_PART_IMAGE_PREFIX)
+
+const deleteTempPartImageIfNeeded = async (imageUrl: any) => {
+  const url = String(imageUrl || '').trim()
+  if (!isTempPartImageUrl(url)) return
+  try {
+    await deleteQuotationTempPartItemImageApi(url)
+  } catch (e) {
+    console.warn('删除临时图示失败（忽略）:', e)
+  }
+}
 
 const IMAGE_SCALE_OPTIONS: Array<{ label: string; value: 0.5 | 0.75 | 1 }> = [
   { label: '50%', value: 0.5 },
@@ -1302,12 +1317,19 @@ const getPartItemsRowStyle = () => (quotationForm.enableImage ? { height: '64px'
 const uploadPartItemImage = async (file: File, row: any) => {
   if (!file) return
   if (isViewMode.value) return
+  if (!quotationForm.quotationNo) {
+    ElMessage.warning('请先生成/填写报价单号后再上传图示')
+    return
+  }
 
   const lineNo = Number(row?.lineNo || 0)
   if (lineNo) partImageUploading[lineNo] = true
 
   try {
-    const resp: any = await uploadQuotationPartItemImageApi(file)
+    if (row?.imageUrl) {
+      await deleteTempPartImageIfNeeded(row.imageUrl)
+    }
+    const resp: any = await uploadQuotationPartItemImageApi(String(quotationForm.quotationNo), file)
     const pr: any = resp
     const url = pr?.data?.url || pr?.data?.data?.url || ''
     if (!url) {
@@ -1380,7 +1402,25 @@ const handlePartItemImageScaleCommand = (row: any, cmd: any) => {
 
 const handleRemovePartItemImage = (row: any) => {
   if (isViewMode.value) return
+  void deleteTempPartImageIfNeeded(row?.imageUrl)
   row.imageUrl = ''
+}
+
+const cleanupTempPartImagesInForm = async () => {
+  if (quotationForm.quotationType !== 'part') return
+  const urls = (quotationForm.partItems || []).map((x: any) => String(x?.imageUrl || '').trim())
+  const uniq = Array.from(new Set(urls.filter((u) => isTempPartImageUrl(u))))
+  if (!uniq.length) return
+  await Promise.allSettled(uniq.map((u) => deleteTempPartImageIfNeeded(u)))
+}
+
+const handleCancelQuotationDialog = async () => {
+  if (isViewMode.value) {
+    dialogVisible.value = false
+    return
+  }
+  await cleanupTempPartImagesInForm()
+  dialogVisible.value = false
 }
 
 // 新增报价单：先选择 报价单号/报价日期/客户名称

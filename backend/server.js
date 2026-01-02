@@ -30,12 +30,19 @@ const salaryRoutes = require('./routes/salary')
 const app = express()
 const PORT = process.env.PORT || 3001
 const UPLOADS_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, 'uploads')
+// 报价单图示：按“报价单/<报价单号>/报价单图示/”归档（中文目录）
+const QUOTATION_BASE_DIR = path.join(UPLOADS_ROOT, '报价单')
+// 兼容旧版路径：/uploads/quotation-images/*
 const QUOTATION_IMAGES_DIR = path.join(UPLOADS_ROOT, 'quotation-images')
+// 零件报价单图示：临时目录（粘贴后用于预览，保存报价单时再搬运到最终目录）
+const QUOTATION_TEMP_IMAGES_DIR = path.join(UPLOADS_ROOT, '_temp', 'quotation-images')
 
 try {
+  fs.mkdirSync(QUOTATION_BASE_DIR, { recursive: true })
   fs.mkdirSync(QUOTATION_IMAGES_DIR, { recursive: true })
+  fs.mkdirSync(QUOTATION_TEMP_IMAGES_DIR, { recursive: true })
 } catch (e) {
-  console.error('创建 quotation-images 目录失败:', e)
+  console.error('创建报价单上传目录失败:', e)
 }
 
 // CORS 设置：允许域内站点和浏览器携带 Kerberos 凭据
@@ -89,7 +96,38 @@ app.options('*', cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// 报价单截图：匿名静态资源（仅暴露该目录，避免泄露其他附件）
+// 临时图示：匿名静态资源（仅暴露该目录；取消/关闭弹窗会清理）
+app.use('/uploads/_temp/quotation-images', express.static(QUOTATION_TEMP_IMAGES_DIR))
+
+// 报价单图示：匿名静态资源（仅暴露该目录，避免泄露其他附件）
+// 注意：浏览器会对中文路径做 URL 编码（例如 /uploads/%E6%8A%A5%E4%BB%B7%E5%8D%95/...），
+// Express 的 path 匹配默认用原始 URL，直接用 '/uploads/报价单' 会匹配失败，因此这里兼容中英文/编码写法。
+const QUOTATION_URL_SEGMENT = '报价单'
+const QUOTATION_URL_SEGMENT_ENCODED = encodeURIComponent(QUOTATION_URL_SEGMENT)
+const quotationStatic = express.static(QUOTATION_BASE_DIR)
+app.use('/uploads', (req, res, next) => {
+  const originalUrl = req.url || ''
+  const prefixEncoded = `/${QUOTATION_URL_SEGMENT_ENCODED}`
+  const prefixPlain = `/${QUOTATION_URL_SEGMENT}`
+
+  if (
+    originalUrl === prefixEncoded ||
+    originalUrl.startsWith(`${prefixEncoded}/`) ||
+    originalUrl === prefixPlain ||
+    originalUrl.startsWith(`${prefixPlain}/`)
+  ) {
+    req.url = originalUrl.startsWith(prefixEncoded)
+      ? originalUrl.slice(prefixEncoded.length) || '/'
+      : originalUrl.slice(prefixPlain.length) || '/'
+    return quotationStatic(req, res, (err) => {
+      req.url = originalUrl
+      next(err)
+    })
+  }
+
+  return next()
+})
+// 兼容旧版：报价单截图（仅暴露该目录，避免泄露其他附件）
 app.use('/uploads/quotation-images', express.static(QUOTATION_IMAGES_DIR))
 
 // 路由

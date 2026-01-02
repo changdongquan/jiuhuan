@@ -148,8 +148,9 @@ export const downloadQuotationCompletionPdfApi = (id: number) => {
 }
 
 // 上传零件报价单明细截图（匿名静态资源 URL）
-export const uploadQuotationPartItemImageApi = (file: File) => {
+export const uploadQuotationPartItemImageApi = (quotationNo: string, file: File) => {
   const formData = new FormData()
+  formData.append('quotationNo', quotationNo)
   formData.append('file', file)
   return request.post<{
     code: number
@@ -160,6 +161,18 @@ export const uploadQuotationPartItemImageApi = (file: File) => {
     url: '/api/quotation/upload-part-item-image',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 删除临时图示（取消/关闭弹窗时调用）
+export const deleteQuotationTempPartItemImageApi = (url: string) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: '/api/quotation/delete-temp-part-item-image',
+    data: { url }
   })
 }
 
