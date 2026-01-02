@@ -161,6 +161,12 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
           timeout: 180000,
           proxyTimeout: 180000,
           rewrite: (path) => path.replace(/^\/api/, '/api')
+        },
+        '/uploads': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          timeout: 180000,
+          proxyTimeout: 180000
         }
       },
       hmr: {

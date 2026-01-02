@@ -270,7 +270,10 @@
       v-model="dialogVisible"
       :width="isMobile ? '100%' : '1130px'"
       :fullscreen="isMobile"
-      class="qt-edit-dialog"
+      :class="[
+        'qt-edit-dialog',
+        { 'qt-edit-dialog--part': quotationForm.quotationType === 'part' }
+      ]"
       :close-on-click-modal="false"
       :show-close="false"
     >
@@ -733,9 +736,10 @@
               border
               class="qt-part-items-table"
               row-key="lineNo"
+              :row-style="getPartItemsRowStyle"
             >
               <el-table-column type="index" label="序号" width="60" align="center" />
-              <el-table-column label="产品名称" min-width="160">
+              <el-table-column label="产品名称" min-width="140">
                 <template #default="{ row }">
                   <el-input v-model="row.partName" :disabled="isViewMode" placeholder="产品名称" />
                 </template>
@@ -750,9 +754,91 @@
                   <el-input v-model="row.material" :disabled="isViewMode" placeholder="材质" />
                 </template>
               </el-table-column>
-              <el-table-column label="工序" min-width="120">
+              <el-table-column label="工序" min-width="100">
                 <template #default="{ row }">
                   <el-input v-model="row.process" :disabled="isViewMode" placeholder="工序" />
+                </template>
+              </el-table-column>
+              <el-table-column label="图示" width="140" align="center">
+                <template #default="{ row }">
+                  <div
+                    class="qt-part-image-cell"
+                    :class="{ 'qt-part-image-cell--readonly': isViewMode }"
+                    tabindex="0"
+                    @mousedown="handleFocusPartItemImageCell"
+                    @paste="(e) => handlePartItemImagePaste(e, row)"
+                    @dragover="handlePartItemImageDragOver"
+                    @drop="(e) => handlePartItemImageDrop(e, row)"
+                  >
+                    <div v-if="partImageUploading[row.lineNo]" class="qt-part-image-cell__loading">
+                      上传中
+                    </div>
+                    <template v-else>
+                      <template v-if="row.imageUrl">
+                        <el-image
+                          class="qt-part-image-thumb"
+                          :style="{ '--img-scale': String(row.imageScale || 1) }"
+                          :src="row.imageUrl"
+                          :preview-src-list="[row.imageUrl]"
+                          :preview-teleported="true"
+                          fit="contain"
+                        />
+                        <div class="qt-part-image-scale">
+                          <el-dropdown
+                            v-if="!isViewMode"
+                            trigger="click"
+                            @command="(cmd) => handlePartItemImageScaleCommand(row, cmd)"
+                          >
+                            <span class="qt-part-image-scale-badge">
+                              {{ Math.round((row.imageScale || 1) * 100) }}%
+                            </span>
+                            <template #dropdown>
+                              <el-dropdown-menu>
+                                <el-dropdown-item
+                                  v-for="opt in IMAGE_SCALE_OPTIONS"
+                                  :key="opt.value"
+                                  :command="opt.value"
+                                >
+                                  {{ opt.label }}
+                                </el-dropdown-item>
+                              </el-dropdown-menu>
+                            </template>
+                          </el-dropdown>
+                        </div>
+                        <button
+                          v-if="!isViewMode"
+                          type="button"
+                          class="qt-part-image-remove"
+                          @click.stop="handleRemovePartItemImage(row)"
+                        >
+                          ×
+                        </button>
+                        <button
+                          v-if="!isViewMode"
+                          type="button"
+                          class="qt-part-image-pick"
+                          title="选择文件"
+                          @click.stop="handlePickPartItemImage(row)"
+                        >
+                          ⤒
+                        </button>
+                      </template>
+                      <template v-else>
+                        <div class="qt-part-image-empty">
+                          <div class="qt-part-image-empty__text">粘贴/拖拽</div>
+                        </div>
+                        <button
+                          v-if="!isViewMode"
+                          type="button"
+                          class="qt-part-image-pick"
+                          title="选择文件"
+                          @click.stop="handlePickPartItemImage(row)"
+                        >
+                          ⤒
+                        </button>
+                      </template>
+                    </template>
+                  </div>
                 </template>
               </el-table-column>
               <el-table-column label="数量" width="90" align="right">
@@ -793,7 +879,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="金额(元)" width="105" align="right">
+              <el-table-column label="金额(元)" width="95" align="right">
                 <template #default="{ row }">
                   {{
                     row.quantity === undefined || row.unitPrice === undefined
@@ -802,7 +888,7 @@
                   }}
                 </template>
               </el-table-column>
-              <el-table-column v-if="!isViewMode" label="操作" width="90" align="center">
+              <el-table-column v-if="!isViewMode" label="操作" width="80" align="center">
                 <template #default="{ $index }">
                   <el-button type="danger" size="small" @click="handleRemovePartItem($index)">
                     删除
@@ -810,6 +896,13 @@
                 </template>
               </el-table-column>
             </el-table>
+            <input
+              ref="partImageFileInputRef"
+              class="qt-part-image-file-input"
+              type="file"
+              accept="image/*"
+              @change="handlePartItemImageFileChange"
+            />
           </div>
 
           <div class="qt-part-summary-row">
@@ -874,15 +967,17 @@
                 </div>
               </div>
 
-              <div class="qt-part-summary-remark">
-                <div class="qt-part-summary-remark__label">备注</div>
-                <el-input
-                  v-model="quotationForm.remark"
-                  :disabled="isViewMode"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="请输入备注"
-                />
+              <div class="qt-part-summary-item qt-part-summary-item--remark">
+                <div class="qt-part-summary-label">备注</div>
+                <div class="qt-part-summary-value qt-part-summary-value--remark">
+                  <el-input
+                    v-model="quotationForm.remark"
+                    :disabled="isViewMode"
+                    type="textarea"
+                    :rows="1"
+                    placeholder="请输入备注"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -970,9 +1065,13 @@ import {
   ElCard,
   ElDatePicker,
   ElDialog,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElEmpty,
   ElForm,
   ElFormItem,
+  ElImage,
   ElInput,
   ElInputNumber,
   ElMessage,
@@ -998,6 +1097,7 @@ import {
   getQuotationListApi,
   downloadQuotationPdfApi,
   downloadQuotationCompletionPdfApi,
+  uploadQuotationPartItemImageApi,
   type QuotationFormData
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
@@ -1040,6 +1140,8 @@ interface QuotationFormModel {
     drawingNo: string
     material: string
     process: string
+    imageUrl: string
+    imageScale: 0.5 | 0.75 | 1
     quantity: number | undefined
     unitPrice: number | undefined
     unitPriceText?: string
@@ -1161,6 +1263,107 @@ const quotationForm = reactive<QuotationFormModel>(createEmptyForm())
 
 const otherFeeText = ref<string | undefined>(undefined)
 const transportFeeText = ref<string | undefined>(undefined)
+const partImageUploading = reactive<Record<number, boolean>>({})
+const partImageFileInputRef = ref<HTMLInputElement>()
+const partImageFileTargetRow = ref<any>(null)
+
+const IMAGE_SCALE_OPTIONS: Array<{ label: string; value: 0.5 | 0.75 | 1 }> = [
+  { label: '50%', value: 0.5 },
+  { label: '75%', value: 0.75 },
+  { label: '100%', value: 1 }
+]
+
+const normalizeImageScale = (value: any): 0.5 | 0.75 | 1 => {
+  if (value === 0.5 || value === '0.5' || value === '50%') return 0.5
+  if (value === 0.75 || value === '0.75' || value === '75%') return 0.75
+  return 1
+}
+
+const getPartItemsRowStyle = () => ({ height: '64px' })
+
+const uploadPartItemImage = async (file: File, row: any) => {
+  if (!file) return
+  if (isViewMode.value) return
+
+  const lineNo = Number(row?.lineNo || 0)
+  if (lineNo) partImageUploading[lineNo] = true
+
+  try {
+    const resp: any = await uploadQuotationPartItemImageApi(file)
+    const pr: any = resp
+    const url = pr?.data?.url || pr?.data?.data?.url || ''
+    if (!url) {
+      ElMessage.error(pr?.message || '上传失败')
+      return
+    }
+    row.imageUrl = url
+    row.imageScale = normalizeImageScale(row.imageScale)
+  } catch (error) {
+    console.error('上传图示失败:', error)
+    ElMessage.error('上传图示失败')
+  } finally {
+    if (lineNo) partImageUploading[lineNo] = false
+  }
+}
+
+const handlePickPartItemImage = (row: any) => {
+  if (isViewMode.value) return
+  partImageFileTargetRow.value = row
+  partImageFileInputRef.value?.click()
+}
+
+const handleFocusPartItemImageCell = (e: MouseEvent) => {
+  const el = e.currentTarget as HTMLElement | null
+  el?.focus?.()
+}
+
+const handlePartItemImageFileChange = async (e: Event) => {
+  const input = e.target as HTMLInputElement | null
+  const file = input?.files?.[0]
+  const row = partImageFileTargetRow.value
+  partImageFileTargetRow.value = null
+  if (input) input.value = ''
+  if (!file || !row) return
+  await uploadPartItemImage(file, row)
+}
+
+const handlePartItemImagePaste = async (e: ClipboardEvent, row: any) => {
+  if (isViewMode.value) return
+  const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : []
+  const imageItem = items.find((it) => String(it.type || '').startsWith('image/'))
+  if (!imageItem) return
+  const file = imageItem.getAsFile()
+  if (!file) return
+  e.preventDefault()
+  await uploadPartItemImage(file, row)
+}
+
+const handlePartItemImageDragOver = (e: DragEvent) => {
+  if (isViewMode.value) return
+  e.preventDefault()
+}
+
+const handlePartItemImageDrop = async (e: DragEvent, row: any) => {
+  if (isViewMode.value) return
+  e.preventDefault()
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  if (!String(file.type || '').startsWith('image/')) {
+    ElMessage.warning('仅支持拖拽图片文件')
+    return
+  }
+  await uploadPartItemImage(file, row)
+}
+
+const handlePartItemImageScaleCommand = (row: any, cmd: any) => {
+  if (isViewMode.value) return
+  row.imageScale = normalizeImageScale(cmd)
+}
+
+const handleRemovePartItemImage = (row: any) => {
+  if (isViewMode.value) return
+  row.imageUrl = ''
+}
 
 // 新增报价单：先选择 报价单号/报价日期/客户名称
 const preCreateDialogVisible = ref(false)
@@ -1476,6 +1679,12 @@ const handleEdit = async (row: QuotationRecord) => {
       drawingNo: p.drawingNo || '',
       material: p.material || '',
       process: (p as any).process || '',
+      imageUrl: (p as any).imageUrl || '',
+      imageScale: ((p as any).imageScale === 0.5 ||
+      (p as any).imageScale === 0.75 ||
+      (p as any).imageScale === 1
+        ? (p as any).imageScale
+        : 1) as 0.5 | 0.75 | 1,
       quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
       unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
     })),
@@ -1511,6 +1720,12 @@ const handleView = async (row: QuotationRecord) => {
       drawingNo: p.drawingNo || '',
       material: p.material || '',
       process: (p as any).process || '',
+      imageUrl: (p as any).imageUrl || '',
+      imageScale: ((p as any).imageScale === 0.5 ||
+      (p as any).imageScale === 0.75 ||
+      (p as any).imageScale === 1
+        ? (p as any).imageScale
+        : 1) as 0.5 | 0.75 | 1,
       quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
       unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
     })),
@@ -1608,6 +1823,8 @@ const handleAddPartItem = () => {
     drawingNo: '',
     material: '',
     process: '',
+    imageUrl: '',
+    imageScale: 1,
     quantity: undefined,
     unitPrice: undefined
   })
@@ -1620,6 +1837,9 @@ const handleRemovePartItem = (index: number) => {
     lineNo: idx + 1,
     unitPriceText: undefined
   }))
+  Object.keys(partImageUploading).forEach((key) => {
+    delete partImageUploading[Number(key)]
+  })
 }
 
 // 项目代入对话框分页
@@ -1815,6 +2035,11 @@ const handleSubmit = async () => {
           drawingNo: (item.drawingNo || '').trim(),
           material: (item.material || '').trim(),
           process: (item.process || '').trim(),
+          imageUrl: (item.imageUrl || '').trim(),
+          imageScale:
+            item.imageScale === 0.5 || item.imageScale === 0.75 || item.imageScale === 1
+              ? item.imageScale
+              : 1,
           quantity:
             item.quantity === null || item.quantity === undefined
               ? undefined
@@ -1822,7 +2047,12 @@ const handleSubmit = async () => {
           unitPrice: Number(item.unitPrice || 0)
         }))
         .filter((item) => {
-          const hasText = !!item.partName || !!item.drawingNo || !!item.material || !!item.process
+          const hasText =
+            !!item.partName ||
+            !!item.drawingNo ||
+            !!item.material ||
+            !!item.process ||
+            !!item.imageUrl
           const hasNumber = Number(item.quantity) > 0 || item.unitPrice > 0
           return hasText || hasNumber
         })
@@ -1888,6 +2118,8 @@ const handleSubmit = async () => {
               drawingNo: item.drawingNo,
               material: item.material,
               process: item.process,
+              imageUrl: item.imageUrl,
+              imageScale: item.imageScale,
               quantity: Number(item.quantity),
               unitPrice: Number(item.unitPrice)
             }))
@@ -2003,6 +2235,11 @@ onMounted(() => {
 
 <style scoped>
 @media (width <= 768px) {
+  :deep(.qt-edit-dialog--part .el-dialog) {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
   :deep(.qt-edit-dialog) {
     width: 100% !important;
     max-width: 100% !important;
@@ -2475,8 +2712,138 @@ onMounted(() => {
 }
 
 .qt-part-items-table :deep(.el-table__cell) {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  vertical-align: middle;
+}
+
+.qt-part-items-table :deep(.el-table__row) {
+  height: 64px;
+}
+
+.qt-part-image-file-input {
+  display: none;
+}
+
+.qt-part-image-cell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 64px;
+  outline: none;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.qt-part-image-cell--readonly {
+  cursor: default;
+}
+
+.qt-part-image-cell__loading {
+  display: flex;
+  width: 100%;
+  height: 64px;
+  font-size: 12px;
+  color: #909399;
+  background: #f5f7fa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.qt-part-image-empty {
+  display: flex;
+  width: 100%;
+  height: 64px;
+  font-size: 11px;
+  color: #909399;
+  background: #fafafa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.qt-part-image-empty__text {
+  line-height: 1.1;
+  text-align: center;
+  user-select: none;
+}
+
+.qt-part-image-thumb {
+  width: 100%;
+  height: 64px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.qt-part-image-thumb :deep(.el-image__inner) {
+  width: 100%;
+  height: 64px;
+  object-fit: contain;
+  transform: scale(var(--img-scale, 1));
+  transform-origin: center;
+}
+
+.qt-part-image-scale {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+}
+
+.qt-part-image-scale-badge {
+  display: inline-flex;
+  height: 18px;
+  min-width: 34px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #303133;
+  cursor: pointer;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dcdfe6;
+  border-radius: 10px;
+  user-select: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.qt-part-image-remove {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 14px;
+  color: #606266;
+  text-align: center;
+  cursor: pointer;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+}
+
+.qt-part-image-pick {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 14px;
+  color: #606266;
+  text-align: center;
+  cursor: pointer;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
 }
 
 .qt-part-items-table :deep(.el-input-number .el-input__inner) {
@@ -2544,14 +2911,18 @@ onMounted(() => {
   border-radius: 6px;
 }
 
-.qt-part-summary-remark {
+.qt-part-summary-item--remark {
+  align-items: start;
   padding-top: 10px;
+  border-bottom: none;
 }
 
-.qt-part-summary-remark__label {
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #303133;
+.qt-part-summary-value--remark {
+  text-align: left;
+}
+
+.qt-part-summary-value--remark :deep(.el-textarea__inner) {
+  resize: vertical;
 }
 
 .qs-table {
@@ -2620,15 +2991,22 @@ onMounted(() => {
 }
 
 /* 弹窗整体高度控制（PC 端） */
-:deep(.qt-edit-dialog .el-dialog) {
-  max-height: none;
+:deep(.qt-edit-dialog--part.el-dialog),
+:deep(.qt-edit-dialog--part .el-dialog) {
+  display: flex;
+  height: 850px;
+  max-height: 850px;
   margin-top: 0;
+  flex-direction: column;
 }
 
-:deep(.qt-edit-dialog .el-dialog__body) {
+:deep(.qt-edit-dialog--part.el-dialog .el-dialog__body),
+:deep(.qt-edit-dialog--part .el-dialog__body) {
   position: relative;
+  min-height: 0;
   padding: 0 12px 12px;
-  overflow-y: visible;
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
 :deep(.qt-edit-dialog .el-dialog__header) {
@@ -2647,6 +3025,31 @@ onMounted(() => {
 .qt-dialog-header__title {
   font-weight: 600;
   text-align: center;
+  flex: 1 1 auto;
+}
+
+.qt-edit-dialog--part .quotation-form {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.qt-edit-dialog--part .quotation-sheet--part {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.qt-edit-dialog--part .qt-part-items-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.qt-edit-dialog--part :deep(.qt-part-items-table) {
+  height: 100%;
+  min-height: 0;
   flex: 1 1 auto;
 }
 

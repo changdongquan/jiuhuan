@@ -5,6 +5,8 @@ try {
   // dotenv 未安装或 .env 文件不存在，使用系统环境变量
 }
 
+const path = require('path')
+const fs = require('fs')
 const express = require('express')
 const cors = require('cors')
 const { initDatabase } = require('./database')
@@ -27,6 +29,14 @@ const salaryRoutes = require('./routes/salary')
 
 const app = express()
 const PORT = process.env.PORT || 3001
+const UPLOADS_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, 'uploads')
+const QUOTATION_IMAGES_DIR = path.join(UPLOADS_ROOT, 'quotation-images')
+
+try {
+  fs.mkdirSync(QUOTATION_IMAGES_DIR, { recursive: true })
+} catch (e) {
+  console.error('创建 quotation-images 目录失败:', e)
+}
 
 // CORS 设置：允许域内站点和浏览器携带 Kerberos 凭据
 const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
@@ -78,6 +88,9 @@ app.options('*', cors(corsOptions))
 // 中间件
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+// 报价单截图：匿名静态资源（仅暴露该目录，避免泄露其他附件）
+app.use('/uploads/quotation-images', express.static(QUOTATION_IMAGES_DIR))
 
 // 路由
 app.use('/api/goods', goodsRoutes)

@@ -5,11 +5,55 @@ const os = require('os')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
 const ExcelJS = require('exceljs')
+const multer = require('multer')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
 
 const execFileAsync = promisify(execFile)
 const router = express.Router()
+
+const FILE_ROOT = process.env.SALES_ORDER_FILES_ROOT || path.resolve(__dirname, '../uploads')
+const QUOTATION_IMAGES_DIR = path.join(FILE_ROOT, 'quotation-images')
+const QUOTATION_IMAGE_MAX_SIZE_BYTES = parseInt(
+  process.env.QUOTATION_IMAGE_MAX_SIZE || String(5 * 1024 * 1024),
+  10
+)
+
+const ensureDirSync = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+ensureDirSync(QUOTATION_IMAGES_DIR)
+
+const uploadPartItemImage = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      try {
+        ensureDirSync(QUOTATION_IMAGES_DIR)
+        cb(null, QUOTATION_IMAGES_DIR)
+      } catch (err) {
+        cb(err)
+      }
+    },
+    filename(req, file, cb) {
+      const mime = String(file.mimetype || '').toLowerCase()
+      const extFromMime =
+        mime === 'image/png'
+          ? '.png'
+          : mime === 'image/jpeg' || mime === 'image/jpg'
+            ? '.jpg'
+            : mime === 'image/webp'
+              ? '.webp'
+              : ''
+      const ext = extFromMime || path.extname(file.originalname || '') || '.png'
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+      cb(null, `qt-${unique}${ext}`)
+    }
+  }),
+  limits: { fileSize: QUOTATION_IMAGE_MAX_SIZE_BYTES }
+})
 
 let quotationRemarkColumnEnsured = false
 const ensureQuotationRemarkColumn = async () => {
@@ -56,12 +100,73 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     }
   }
 
+  const excelColumnWidthToPixels = (width) => {
+    const w = Number(width)
+    if (!Number.isFinite(w) || w <= 0) return 64
+    return Math.floor(w * 7 + 5)
+  }
+
+  const excelRowHeightPointsToPixels = (points) => {
+    const p = Number(points)
+    if (!Number.isFinite(p) || p <= 0) return 64
+    return Math.floor((p * 4) / 3)
+  }
+
+  const getImageDimensions = (buffer) => {
+    if (!buffer || buffer.length < 24) return null
+
+    // PNG: IHDR width/height at offset 16
+    if (
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    ) {
+      const width = buffer.readUInt32BE(16)
+      const height = buffer.readUInt32BE(20)
+      return { width, height, extension: 'png' }
+    }
+
+    // JPEG: scan for SOF0/SOF2
+    if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let offset = 2
+      while (offset + 9 < buffer.length) {
+        if (buffer[offset] !== 0xff) break
+        const marker = buffer[offset + 1]
+        const size = buffer.readUInt16BE(offset + 2)
+        if (marker === 0xc0 || marker === 0xc2) {
+          const height = buffer.readUInt16BE(offset + 5)
+          const width = buffer.readUInt16BE(offset + 7)
+          return { width, height, extension: 'jpeg' }
+        }
+        offset += 2 + size
+      }
+    }
+
+    return null
+  }
+
+  const resolveQuotationImagePath = (imageUrl) => {
+    const url = String(imageUrl || '')
+    const prefix = '/uploads/quotation-images/'
+    if (!url.startsWith(prefix)) return null
+    const name = decodeURIComponent(url.slice(prefix.length))
+    const safeName = path.basename(name)
+    if (!safeName) return null
+    return path.join(QUOTATION_IMAGES_DIR, safeName)
+  }
+
   const columns = [
     { key: 'seq', width: 6 },
     { key: 'name', width: 26 },
     { key: 'drawing', width: 18 },
     { key: 'material', width: 14 },
     { key: 'process', width: 14 },
+    { key: 'image', width: 9 },
     { key: 'qty', width: 10 },
     { key: 'unitPrice', width: 12 },
     { key: 'amount', width: 12 }
@@ -69,12 +174,12 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
   sheet.columns = columns
 
   // Header
-  sheet.mergeCells('A1:H1')
+  sheet.mergeCells('A1:I1')
   sheet.getCell('A1').value = '零件报价单'
   sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getCell('A1').font = { bold: true, size: 16 }
 
-  sheet.mergeCells('A2:H2')
+  sheet.mergeCells('A2:I2')
   sheet.getCell('A2').value = `报价单号：${row.quotationNo || ''}    报价日期：${toDateString(
     row.quotationDate
   )}`
@@ -92,7 +197,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
   sheet.getCell(`E${infoRowIndex}`).value = row.contactName || '-'
 
   sheet.getCell(`F${infoRowIndex}`).value = '联系电话：'
-  sheet.mergeCells(`G${infoRowIndex}:H${infoRowIndex}`)
+  sheet.mergeCells(`G${infoRowIndex}:I${infoRowIndex}`)
   sheet.getCell(`G${infoRowIndex}`).value = row.contactPhone || '-'
 
   sheet.getRow(infoRowIndex).font = { size: 11 }
@@ -104,7 +209,17 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
 
   // Table header
   const headerRowIndex = 6
-  const header = ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
+  const header = [
+    '序号',
+    '产品名称',
+    '产品图号',
+    '材质',
+    '工序',
+    '图示',
+    '数量',
+    '单价(元)',
+    '金额(元)'
+  ]
   sheet.getRow(headerRowIndex).values = [null, ...header]
   sheet.getRow(headerRowIndex).font = { bold: true, size: 11 }
   sheet.getRow(headerRowIndex).alignment = {
@@ -113,7 +228,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     wrapText: true
   }
   sheet.getRow(headerRowIndex).height = 22
-  for (let c = 1; c <= 8; c += 1) {
+  for (let c = 1; c <= 9; c += 1) {
     const cell = sheet.getRow(headerRowIndex).getCell(c)
     setBorderAll(cell)
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
@@ -127,6 +242,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     const amount = qty * (Number.isFinite(unitPrice) ? unitPrice : 0)
     const rowIdx = lineStart + idx
     const rowObj = sheet.getRow(rowIdx)
+    rowObj.height = 48
     rowObj.values = [
       null,
       idx + 1,
@@ -134,6 +250,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
       item?.drawingNo || '',
       item?.material || '',
       item?.process || '',
+      '',
       qty || '',
       Number.isFinite(unitPrice) ? unitPrice : '',
       Number.isFinite(unitPrice) && qty ? amount : ''
@@ -141,13 +258,45 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     rowObj.font = { size: 11 }
     rowObj.alignment = { vertical: 'top', wrapText: true }
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    rowObj.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
     rowObj.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' }
     rowObj.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(6).numFmt = '#,##0'
-    rowObj.getCell(7).numFmt = '#,##0.00'
+    rowObj.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(7).numFmt = '#,##0'
     rowObj.getCell(8).numFmt = '#,##0.00'
-    for (let c = 1; c <= 8; c += 1) setBorderAll(rowObj.getCell(c))
+    rowObj.getCell(9).numFmt = '#,##0.00'
+    for (let c = 1; c <= 9; c += 1) setBorderAll(rowObj.getCell(c))
+
+    const imageUrl = item?.imageUrl
+    if (imageUrl) {
+      const imagePath = resolveQuotationImagePath(imageUrl)
+      if (imagePath && fs.existsSync(imagePath)) {
+        try {
+          const buffer = fs.readFileSync(imagePath)
+          const info = getImageDimensions(buffer)
+          if (info?.width && info?.height) {
+            const imageId = workbook.addImage({ buffer, extension: info.extension })
+            const imageCol = 6 // 图示列
+            const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageCol).width)
+            const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
+            const scalePref = Number(item?.imageScale)
+            const userScale =
+              scalePref === 0.5 || scalePref === 0.75 || scalePref === 1 ? scalePref : 1
+            const maxPx = Math.max(1, Math.floor(Math.min(cellPxW, cellPxH) * userScale))
+            const fitScale = Math.min(maxPx / info.width, maxPx / info.height, 1)
+            const imgW = Math.max(1, Math.round(info.width * fitScale))
+            const imgH = Math.max(1, Math.round(info.height * fitScale))
+            const offsetCol = (cellPxW - imgW) / cellPxW / 2
+            const offsetRow = (cellPxH - imgH) / cellPxH / 2
+            sheet.addImage(imageId, {
+              tl: { col: imageCol - 1 + offsetCol, row: rowIdx - 1 + offsetRow },
+              ext: { width: imgW, height: imgH }
+            })
+          }
+        } catch (e) {
+          console.error('插入图示失败:', e)
+        }
+      }
+    }
   })
 
   const totalRowIndex = lineStart + partItems.length
@@ -155,25 +304,25 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
     0
   )
-  sheet.mergeCells(`A${totalRowIndex}:G${totalRowIndex}`)
+  sheet.mergeCells(`A${totalRowIndex}:H${totalRowIndex}`)
   sheet.getCell(`A${totalRowIndex}`).value = '合计'
   sheet.getCell(`A${totalRowIndex}`).alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell(`H${totalRowIndex}`).value = totalAmount || ''
-  sheet.getCell(`H${totalRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
-  sheet.getCell(`H${totalRowIndex}`).numFmt = '#,##0.00'
+  sheet.getCell(`I${totalRowIndex}`).value = totalAmount || ''
+  sheet.getCell(`I${totalRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
+  sheet.getCell(`I${totalRowIndex}`).numFmt = '#,##0.00'
   sheet.getRow(totalRowIndex).font = { bold: true, size: 11 }
-  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
+  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
 
   // Notes / Remark box
   const notesTitleRow = totalRowIndex + 2
-  sheet.mergeCells(`A${notesTitleRow}:H${notesTitleRow}`)
+  sheet.mergeCells(`A${notesTitleRow}:I${notesTitleRow}`)
   sheet.getCell(`A${notesTitleRow}`).value = '备注'
   sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11 }
   sheet.getCell(`A${notesTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
+  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
 
   const notesBodyRow = notesTitleRow + 1
-  sheet.mergeCells(`A${notesBodyRow}:H${notesBodyRow}`)
+  sheet.mergeCells(`A${notesBodyRow}:I${notesBodyRow}`)
   sheet.getCell(`A${notesBodyRow}`).value = row.remark || ''
   sheet.getCell(`A${notesBodyRow}`).alignment = {
     horizontal: 'left',
@@ -181,10 +330,42 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     wrapText: true
   }
   sheet.getRow(notesBodyRow).height = 60
-  for (let c = 1; c <= 8; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
+  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
 
   return workbook
 }
+
+// 上传零件报价单明细截图（返回匿名静态资源 URL）
+router.post('/upload-part-item-image', (req, res) => {
+  uploadPartItemImage.single('file')(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `上传失败：图片不能超过 ${Math.round(QUOTATION_IMAGE_MAX_SIZE_BYTES / 1024 / 1024)}MB`
+          : err?.message || '上传失败'
+      return res.status(400).json({ code: 400, success: false, message })
+    }
+
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+    }
+
+    const mime = String(file.mimetype || '').toLowerCase()
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!allowed.includes(mime)) {
+      try {
+        fs.unlinkSync(file.path)
+      } catch {}
+      return res
+        .status(400)
+        .json({ code: 400, success: false, message: '仅支持 png/jpg/webp 图片' })
+    }
+
+    const urlPath = `/uploads/quotation-images/${encodeURIComponent(file.filename)}`
+    return res.json({ code: 0, success: true, data: { url: urlPath } })
+  })
+})
 
 // 获取报价单列表
 router.get('/list', async (req, res) => {

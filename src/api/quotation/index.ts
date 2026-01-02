@@ -53,6 +53,8 @@ export interface QuotationFormData {
     drawingNo?: string
     material?: string
     process?: string
+    imageUrl?: string
+    imageScale?: number
     quantity: number
     unit?: string
     unitPrice: number
@@ -141,6 +143,22 @@ export const downloadQuotationCompletionPdfApi = (id: number) => {
   return request.get<Blob>({
     url: `/api/quotation/${id}/export-completion-pdf`,
     responseType: 'blob'
+  })
+}
+
+// 上传零件报价单明细截图（匿名静态资源 URL）
+export const uploadQuotationPartItemImageApi = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<{
+    code: number
+    success: boolean
+    data: { url: string }
+    message?: string
+  }>({
+    url: '/api/quotation/upload-part-item-image',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
