@@ -34,6 +34,7 @@ export interface QuotationFormData {
   quotationDate: string
   customerName: string
   quotationType?: 'mold' | 'part'
+  enableImage?: boolean
   processingDate: string
   changeOrderNo: string
   partName: string

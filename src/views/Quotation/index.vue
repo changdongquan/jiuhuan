@@ -371,6 +371,11 @@
                     class="field-input-inline field-input-contact"
                   />
                 </el-form-item>
+
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">图示：</span>
+                  <el-switch v-model="quotationForm.enableImage" :disabled="isViewMode" />
+                </el-form-item>
               </div>
             </div>
           </template>
@@ -734,7 +739,10 @@
             <el-table
               :data="quotationForm.partItems"
               border
-              class="qt-part-items-table"
+              :class="[
+                'qt-part-items-table',
+                { 'qt-part-items-table--with-image': quotationForm.enableImage }
+              ]"
               row-key="lineNo"
               :row-style="getPartItemsRowStyle"
             >
@@ -759,7 +767,12 @@
                   <el-input v-model="row.process" :disabled="isViewMode" placeholder="工序" />
                 </template>
               </el-table-column>
-              <el-table-column label="图示" width="140" align="center">
+              <el-table-column
+                v-if="quotationForm.enableImage"
+                label="图示"
+                width="140"
+                align="center"
+              >
                 <template #default="{ row }">
                   <div
                     class="qt-part-image-cell"
@@ -897,6 +910,7 @@
               </el-table-column>
             </el-table>
             <input
+              v-if="quotationForm.enableImage"
               ref="partImageFileInputRef"
               class="qt-part-image-file-input"
               type="file"
@@ -1081,6 +1095,7 @@ import {
   ElRadioGroup,
   ElRadioButton,
   ElSelect,
+  ElSwitch,
   ElTable,
   ElTableColumn
 } from 'element-plus'
@@ -1122,6 +1137,7 @@ interface QuotationFormModel {
   quotationDate: string | ''
   customerName: string
   quotationType: 'mold' | 'part'
+  enableImage: boolean
   processingDate: string | ''
   changeOrderNo: string
   partName: string
@@ -1225,6 +1241,7 @@ const createEmptyForm = (): QuotationFormModel => ({
   quotationDate: '',
   customerName: '',
   quotationType: 'mold',
+  enableImage: false,
   processingDate: '',
   changeOrderNo: '',
   partName: '',
@@ -1279,7 +1296,7 @@ const normalizeImageScale = (value: any): 0.5 | 0.75 | 1 => {
   return 1
 }
 
-const getPartItemsRowStyle = () => ({ height: '64px' })
+const getPartItemsRowStyle = () => (quotationForm.enableImage ? { height: '64px' } : {})
 
 const uploadPartItemImage = async (file: File, row: any) => {
   if (!file) return
@@ -1641,6 +1658,7 @@ const handleConfirmPreCreate = async () => {
   quotationForm.quotationDate = preCreateForm.quotationDate
   quotationForm.customerName = typedCustomerName
   quotationForm.quotationType = preCreateForm.quotationType === 'part' ? 'part' : 'mold'
+  quotationForm.enableImage = quotationForm.quotationType === 'part'
 
   preCreateDialogVisible.value = false
   dialogVisible.value = true
@@ -1658,9 +1676,18 @@ const handleConfirmPreCreate = async () => {
 const handleEdit = async (row: QuotationRecord) => {
   dialogMode.value = 'edit'
   dialogTitle.value = '编辑报价单'
+  const normalizedType = row.quotationType === 'part' ? 'part' : 'mold'
+  const rawEnableImage = (row as any).enableImage
+  const effectiveEnableImage =
+    normalizedType === 'part'
+      ? rawEnableImage === undefined
+        ? true
+        : Boolean(Number(rawEnableImage))
+      : false
   Object.assign(quotationForm, {
     ...row,
-    quotationType: row.quotationType === 'part' ? 'part' : 'mold',
+    quotationType: normalizedType,
+    enableImage: effectiveEnableImage,
     processingDate: row.processingDate || '',
     changeOrderNo: row.changeOrderNo || '',
     partName: row.partName || '',
@@ -1699,9 +1726,18 @@ const handleEdit = async (row: QuotationRecord) => {
 const handleView = async (row: QuotationRecord) => {
   dialogMode.value = 'view'
   dialogTitle.value = '查看报价单'
+  const normalizedType = row.quotationType === 'part' ? 'part' : 'mold'
+  const rawEnableImage = (row as any).enableImage
+  const effectiveEnableImage =
+    normalizedType === 'part'
+      ? rawEnableImage === undefined
+        ? true
+        : Boolean(Number(rawEnableImage))
+      : false
   Object.assign(quotationForm, {
     ...row,
-    quotationType: row.quotationType === 'part' ? 'part' : 'mold',
+    quotationType: normalizedType,
+    enableImage: effectiveEnableImage,
     processingDate: row.processingDate || '',
     changeOrderNo: row.changeOrderNo || '',
     partName: row.partName || '',
@@ -2091,6 +2127,7 @@ const handleSubmit = async () => {
       quotationDate: quotationForm.quotationDate || '',
       customerName: quotationForm.customerName?.trim() || '',
       quotationType: quotationForm.quotationType,
+      enableImage: quotationForm.quotationType === 'part' ? quotationForm.enableImage : false,
       processingDate: quotationForm.processingDate || '',
       changeOrderNo: quotationForm.changeOrderNo?.trim() || '',
       partName: quotationForm.partName?.trim() || '',
@@ -2711,13 +2748,13 @@ onMounted(() => {
   border-color: #ebeef5;
 }
 
-.qt-part-items-table :deep(.el-table__cell) {
+.qt-part-items-table--with-image :deep(.el-table__cell) {
   padding-top: 4px;
   padding-bottom: 4px;
   vertical-align: middle;
 }
 
-.qt-part-items-table :deep(.el-table__row) {
+.qt-part-items-table--with-image :deep(.el-table__row) {
   height: 64px;
 }
 

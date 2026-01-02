@@ -69,6 +69,22 @@ const ensureQuotationRemarkColumn = async () => {
   quotationRemarkColumnEnsured = true
 }
 
+let quotationEnableImageColumnEnsured = false
+const ensureQuotationEnableImageColumn = async () => {
+  if (quotationEnableImageColumnEnsured) return
+
+  const rows = await query(`SELECT COL_LENGTH(N'报价单', N'启用图示') as len`)
+  const exists = rows?.[0]?.len !== null && rows?.[0]?.len !== undefined
+
+  if (!exists) {
+    await query(
+      `ALTER TABLE 报价单 ADD 启用图示 BIT NOT NULL CONSTRAINT DF_报价单_启用图示 DEFAULT (1)`
+    )
+  }
+
+  quotationEnableImageColumnEnsured = true
+}
+
 const toDateString = (value) => {
   if (!value) return ''
   try {
@@ -78,7 +94,7 @@ const toDateString = (value) => {
   }
 }
 
-const buildPartQuotationWorkbook = ({ row, partItems }) => {
+const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('零件报价单', {
     pageSetup: {
@@ -160,26 +176,43 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     return path.join(QUOTATION_IMAGES_DIR, safeName)
   }
 
-  const columns = [
-    { key: 'seq', width: 6 },
-    { key: 'name', width: 26 },
-    { key: 'drawing', width: 18 },
-    { key: 'material', width: 14 },
-    { key: 'process', width: 14 },
-    { key: 'image', width: 9 },
-    { key: 'qty', width: 10 },
-    { key: 'unitPrice', width: 12 },
-    { key: 'amount', width: 12 }
-  ]
+  const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
+
+  const columns = isEnabled
+    ? [
+        { key: 'seq', width: 6 },
+        { key: 'name', width: 26 },
+        { key: 'drawing', width: 18 },
+        { key: 'material', width: 14 },
+        { key: 'process', width: 14 },
+        { key: 'image', width: 9 },
+        { key: 'qty', width: 10 },
+        { key: 'unitPrice', width: 12 },
+        { key: 'amount', width: 12 }
+      ]
+    : [
+        { key: 'seq', width: 6 },
+        { key: 'name', width: 26 },
+        { key: 'drawing', width: 18 },
+        { key: 'material', width: 14 },
+        { key: 'process', width: 14 },
+        { key: 'qty', width: 10 },
+        { key: 'unitPrice', width: 12 },
+        { key: 'amount', width: 12 }
+      ]
   sheet.columns = columns
 
+  const colCount = columns.length
+  const colLetter = (idx) => String.fromCharCode('A'.charCodeAt(0) + idx - 1)
+  const lastCol = colLetter(colCount)
+
   // Header
-  sheet.mergeCells('A1:I1')
+  sheet.mergeCells(`A1:${lastCol}1`)
   sheet.getCell('A1').value = '零件报价单'
   sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getCell('A1').font = { bold: true, size: 16 }
 
-  sheet.mergeCells('A2:I2')
+  sheet.mergeCells(`A2:${lastCol}2`)
   sheet.getCell('A2').value = `报价单号：${row.quotationNo || ''}    报价日期：${toDateString(
     row.quotationDate
   )}`
@@ -197,7 +230,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
   sheet.getCell(`E${infoRowIndex}`).value = row.contactName || '-'
 
   sheet.getCell(`F${infoRowIndex}`).value = '联系电话：'
-  sheet.mergeCells(`G${infoRowIndex}:I${infoRowIndex}`)
+  sheet.mergeCells(`G${infoRowIndex}:${lastCol}${infoRowIndex}`)
   sheet.getCell(`G${infoRowIndex}`).value = row.contactPhone || '-'
 
   sheet.getRow(infoRowIndex).font = { size: 11 }
@@ -209,17 +242,9 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
 
   // Table header
   const headerRowIndex = 6
-  const header = [
-    '序号',
-    '产品名称',
-    '产品图号',
-    '材质',
-    '工序',
-    '图示',
-    '数量',
-    '单价(元)',
-    '金额(元)'
-  ]
+  const header = isEnabled
+    ? ['序号', '产品名称', '产品图号', '材质', '工序', '图示', '数量', '单价(元)', '金额(元)']
+    : ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
   sheet.getRow(headerRowIndex).values = [null, ...header]
   sheet.getRow(headerRowIndex).font = { bold: true, size: 11 }
   sheet.getRow(headerRowIndex).alignment = {
@@ -228,7 +253,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     wrapText: true
   }
   sheet.getRow(headerRowIndex).height = 22
-  for (let c = 1; c <= 9; c += 1) {
+  for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(headerRowIndex).getCell(c)
     setBorderAll(cell)
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
@@ -242,58 +267,75 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     const amount = qty * (Number.isFinite(unitPrice) ? unitPrice : 0)
     const rowIdx = lineStart + idx
     const rowObj = sheet.getRow(rowIdx)
-    rowObj.height = 48
-    rowObj.values = [
-      null,
+    if (isEnabled) rowObj.height = 48
+    const baseCells = [
       idx + 1,
       item?.partName || '',
       item?.drawingNo || '',
       item?.material || '',
-      item?.process || '',
-      '',
-      qty || '',
-      Number.isFinite(unitPrice) ? unitPrice : '',
-      Number.isFinite(unitPrice) && qty ? amount : ''
+      item?.process || ''
     ]
+    const lineCells = isEnabled
+      ? [
+          ...baseCells,
+          '',
+          qty || '',
+          Number.isFinite(unitPrice) ? unitPrice : '',
+          Number.isFinite(unitPrice) && qty ? amount : ''
+        ]
+      : [
+          ...baseCells,
+          qty || '',
+          Number.isFinite(unitPrice) ? unitPrice : '',
+          Number.isFinite(unitPrice) && qty ? amount : ''
+        ]
+    rowObj.values = [null, ...lineCells]
     rowObj.font = { size: 11 }
     rowObj.alignment = { vertical: 'top', wrapText: true }
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    rowObj.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(7).numFmt = '#,##0'
-    rowObj.getCell(8).numFmt = '#,##0.00'
-    rowObj.getCell(9).numFmt = '#,##0.00'
-    for (let c = 1; c <= 9; c += 1) setBorderAll(rowObj.getCell(c))
 
-    const imageUrl = item?.imageUrl
-    if (imageUrl) {
-      const imagePath = resolveQuotationImagePath(imageUrl)
-      if (imagePath && fs.existsSync(imagePath)) {
-        try {
-          const buffer = fs.readFileSync(imagePath)
-          const info = getImageDimensions(buffer)
-          if (info?.width && info?.height) {
-            const imageId = workbook.addImage({ buffer, extension: info.extension })
-            const imageCol = 6 // 图示列
-            const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageCol).width)
-            const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
-            const scalePref = Number(item?.imageScale)
-            const userScale =
-              scalePref === 0.5 || scalePref === 0.75 || scalePref === 1 ? scalePref : 1
-            const maxPx = Math.max(1, Math.floor(Math.min(cellPxW, cellPxH) * userScale))
-            const fitScale = Math.min(maxPx / info.width, maxPx / info.height, 1)
-            const imgW = Math.max(1, Math.round(info.width * fitScale))
-            const imgH = Math.max(1, Math.round(info.height * fitScale))
-            const offsetCol = (cellPxW - imgW) / cellPxW / 2
-            const offsetRow = (cellPxH - imgH) / cellPxH / 2
-            sheet.addImage(imageId, {
-              tl: { col: imageCol - 1 + offsetCol, row: rowIdx - 1 + offsetRow },
-              ext: { width: imgW, height: imgH }
-            })
+    const qtyCol = isEnabled ? 7 : 6
+    const unitPriceCol = isEnabled ? 8 : 7
+    const amountCol = isEnabled ? 9 : 8
+
+    rowObj.getCell(qtyCol).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(unitPriceCol).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(amountCol).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(qtyCol).numFmt = '#,##0'
+    rowObj.getCell(unitPriceCol).numFmt = '#,##0.00'
+    rowObj.getCell(amountCol).numFmt = '#,##0.00'
+    for (let c = 1; c <= colCount; c += 1) setBorderAll(rowObj.getCell(c))
+
+    if (isEnabled) {
+      const imageUrl = item?.imageUrl
+      if (imageUrl) {
+        const imagePath = resolveQuotationImagePath(imageUrl)
+        if (imagePath && fs.existsSync(imagePath)) {
+          try {
+            const buffer = fs.readFileSync(imagePath)
+            const info = getImageDimensions(buffer)
+            if (info?.width && info?.height) {
+              const imageId = workbook.addImage({ buffer, extension: info.extension })
+              const imageCol = 6 // 图示列
+              const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageCol).width)
+              const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
+              const scalePref = Number(item?.imageScale)
+              const userScale =
+                scalePref === 0.5 || scalePref === 0.75 || scalePref === 1 ? scalePref : 1
+              const maxPx = Math.max(1, Math.floor(Math.min(cellPxW, cellPxH) * userScale))
+              const fitScale = Math.min(maxPx / info.width, maxPx / info.height, 1)
+              const imgW = Math.max(1, Math.round(info.width * fitScale))
+              const imgH = Math.max(1, Math.round(info.height * fitScale))
+              const offsetCol = (cellPxW - imgW) / cellPxW / 2
+              const offsetRow = (cellPxH - imgH) / cellPxH / 2
+              sheet.addImage(imageId, {
+                tl: { col: imageCol - 1 + offsetCol, row: rowIdx - 1 + offsetRow },
+                ext: { width: imgW, height: imgH }
+              })
+            }
+          } catch (e) {
+            console.error('插入图示失败:', e)
           }
-        } catch (e) {
-          console.error('插入图示失败:', e)
         }
       }
     }
@@ -304,25 +346,28 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
     0
   )
-  sheet.mergeCells(`A${totalRowIndex}:H${totalRowIndex}`)
+  sheet.mergeCells(`A${totalRowIndex}:${colLetter(colCount - 1)}${totalRowIndex}`)
   sheet.getCell(`A${totalRowIndex}`).value = '合计'
   sheet.getCell(`A${totalRowIndex}`).alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell(`I${totalRowIndex}`).value = totalAmount || ''
-  sheet.getCell(`I${totalRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
-  sheet.getCell(`I${totalRowIndex}`).numFmt = '#,##0.00'
+  sheet.getCell(`${lastCol}${totalRowIndex}`).value = totalAmount || ''
+  sheet.getCell(`${lastCol}${totalRowIndex}`).alignment = {
+    horizontal: 'right',
+    vertical: 'middle'
+  }
+  sheet.getCell(`${lastCol}${totalRowIndex}`).numFmt = '#,##0.00'
   sheet.getRow(totalRowIndex).font = { bold: true, size: 11 }
-  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
+  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
 
   // Notes / Remark box
   const notesTitleRow = totalRowIndex + 2
-  sheet.mergeCells(`A${notesTitleRow}:I${notesTitleRow}`)
+  sheet.mergeCells(`A${notesTitleRow}:${lastCol}${notesTitleRow}`)
   sheet.getCell(`A${notesTitleRow}`).value = '备注'
   sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11 }
   sheet.getCell(`A${notesTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
+  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
 
   const notesBodyRow = notesTitleRow + 1
-  sheet.mergeCells(`A${notesBodyRow}:I${notesBodyRow}`)
+  sheet.mergeCells(`A${notesBodyRow}:${lastCol}${notesBodyRow}`)
   sheet.getCell(`A${notesBodyRow}`).value = row.remark || ''
   sheet.getCell(`A${notesBodyRow}`).alignment = {
     horizontal: 'left',
@@ -330,7 +375,7 @@ const buildPartQuotationWorkbook = ({ row, partItems }) => {
     wrapText: true
   }
   sheet.getRow(notesBodyRow).height = 60
-  for (let c = 1; c <= 9; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
+  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
 
   return workbook
 }
@@ -371,6 +416,7 @@ router.post('/upload-part-item-image', (req, res) => {
 router.get('/list', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
+    await ensureQuotationEnableImageColumn()
     const { keyword, processingDate, page = 1, pageSize = 20 } = req.query
 
     // 构建查询条件
@@ -427,6 +473,7 @@ router.get('/list', async (req, res) => {
 	        付款方式 as paymentTerms,
 	        报价有效期天数 as validityDays,
 	        备注 as remark,
+	        启用图示 as enableImage,
 	        材料明细 as materialsJson,
 	        加工费用明细 as processesJson,
 	        零件明细 as partItemsJson,
@@ -580,6 +627,7 @@ router.get('/generate-no', async (req, res) => {
 router.post('/create', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
+    await ensureQuotationEnableImageColumn()
     console.log('收到创建报价单请求，请求体:', JSON.stringify(req.body, null, 2))
 
     const {
@@ -587,6 +635,7 @@ router.post('/create', async (req, res) => {
       quotationDate,
       customerName,
       quotationType = 'mold',
+      enableImage,
       processingDate,
       changeOrderNo,
       partName,
@@ -608,6 +657,8 @@ router.post('/create', async (req, res) => {
     } = req.body
 
     const normalizedType = quotationType === 'part' ? 'part' : 'mold'
+    const effectiveEnableImage =
+      normalizedType === 'part' ? (enableImage === undefined ? 1 : enableImage ? 1 : 0) : 0
 
     // 验证必填字段
     if (!quotationNo) {
@@ -754,6 +805,7 @@ router.post('/create', async (req, res) => {
     request.input('contactName', sql.NVarChar(50), contactName || null)
     request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
     request.input('remark', sql.NVarChar, remark || null)
+    request.input('enableImage', sql.Bit, effectiveEnableImage)
     request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
     request.input('paymentTerms', sql.NVarChar(100), paymentTerms || null)
     request.input('validityDays', sql.Int, validityDays ?? null)
@@ -772,6 +824,7 @@ router.post('/create', async (req, res) => {
 	        加工日期, 更改通知单号,
 	        加工零件名称, 模具编号, 申请更改部门, 申请更改人,
 	        联系人, 联系电话, 备注, 交货方式, 付款方式, 报价有效期天数,
+	        启用图示,
 	        材料明细, 加工费用明细, 零件明细,
 	        其他费用, 运输费用, 加工数量, 含税价格
 	      ) VALUES (
@@ -779,6 +832,7 @@ router.post('/create', async (req, res) => {
 	        @processingDate, @changeOrderNo,
 	        @partName, @moldNo, @department, @applicant,
 	        @contactName, @contactPhone, @remark, @deliveryTerms, @paymentTerms, @validityDays,
+	        @enableImage,
 	        @materialsJson, @processesJson, @partItemsJson,
 	        @otherFee, @transportFee, @quantity, @taxIncludedPrice
 	      )
@@ -816,12 +870,14 @@ router.post('/create', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
+    await ensureQuotationEnableImageColumn()
     const { id } = req.params
     const {
       quotationNo,
       quotationDate,
       customerName,
       quotationType = 'mold',
+      enableImage,
       processingDate,
       changeOrderNo,
       partName,
@@ -843,6 +899,8 @@ router.put('/:id', async (req, res) => {
     } = req.body
 
     const normalizedType = quotationType === 'part' ? 'part' : 'mold'
+    const effectiveEnableImage =
+      normalizedType === 'part' ? (enableImage === undefined ? 1 : enableImage ? 1 : 0) : 0
 
     // 验证必填字段
     if (!quotationNo) {
@@ -966,6 +1024,7 @@ router.put('/:id', async (req, res) => {
     request.input('contactName', sql.NVarChar(50), contactName || null)
     request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
     request.input('remark', sql.NVarChar, remark || null)
+    request.input('enableImage', sql.Bit, effectiveEnableImage)
     request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
     request.input('paymentTerms', sql.NVarChar(100), paymentTerms || null)
     request.input('validityDays', sql.Int, validityDays ?? null)
@@ -993,6 +1052,7 @@ router.put('/:id', async (req, res) => {
 	        联系人 = @contactName,
 	        联系电话 = @contactPhone,
 	        备注 = @remark,
+	        启用图示 = @enableImage,
 	        交货方式 = @deliveryTerms,
 	        付款方式 = @paymentTerms,
 	        报价有效期天数 = @validityDays,
@@ -1061,6 +1121,7 @@ router.delete('/:id', async (req, res) => {
 router.get('/:id/export-excel', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
+    await ensureQuotationEnableImageColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -1081,6 +1142,7 @@ router.get('/:id/export-excel', async (req, res) => {
 	          联系人 as contactName,
 	          联系电话 as contactPhone,
 	          备注 as remark,
+	          启用图示 as enableImage,
 	          交货方式 as deliveryTerms,
 	          付款方式 as paymentTerms,
 	          报价有效期天数 as validityDays,
@@ -1119,7 +1181,7 @@ router.get('/:id/export-excel', async (req, res) => {
         partItems = []
       }
 
-      const workbook = buildPartQuotationWorkbook({ row, partItems })
+      const workbook = buildPartQuotationWorkbook({ row, partItems, enableImage: row.enableImage })
       const buffer = await workbook.xlsx.writeBuffer()
 
       const filenameBase = row.quotationNo || '报价单'
@@ -1274,6 +1336,7 @@ router.get('/:id/export-excel', async (req, res) => {
 router.get('/:id/export-pdf', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
+    await ensureQuotationEnableImageColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -1294,6 +1357,7 @@ router.get('/:id/export-pdf', async (req, res) => {
 	          联系人 as contactName,
 	          联系电话 as contactPhone,
 	          备注 as remark,
+	          启用图示 as enableImage,
 	          交货方式 as deliveryTerms,
 	          付款方式 as paymentTerms,
 	          报价有效期天数 as validityDays,
@@ -1332,7 +1396,7 @@ router.get('/:id/export-pdf', async (req, res) => {
         partItems = []
       }
 
-      const workbook = buildPartQuotationWorkbook({ row, partItems })
+      const workbook = buildPartQuotationWorkbook({ row, partItems, enableImage: row.enableImage })
 
       const tmpDir = os.tmpdir()
       const safeBase = `quotation-part-${row.id || id}-${Date.now()}`
