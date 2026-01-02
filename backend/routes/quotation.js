@@ -233,6 +233,15 @@ const toDateString = (value) => {
 
 const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'CraftSys'
+  workbook.created = new Date()
+
+  const colorTextMuted = { argb: 'FF606266' }
+  const colorHeaderBg = { argb: 'FFF3F4F6' }
+  const colorStripeBg = { argb: 'FFFAFAFB' }
+  const colorTotalBg = { argb: 'FFE8F5E9' }
+  const borderThin = { style: 'thin', color: { argb: 'FF000000' } }
+
   const sheet = workbook.addWorksheet('零件报价单', {
     pageSetup: {
       paperSize: 9, // A4
@@ -240,47 +249,126 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
-      margins: {
-        left: 0.3,
-        right: 0.3,
-        top: 0.5,
-        bottom: 0.5,
-        header: 0.2,
-        footer: 0.2
-      }
+      horizontalCentered: true,
+      verticalCentered: false,
+      margins: { left: 0.35, right: 0.35, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 }
     }
   })
 
-  const borderThin = { style: 'thin', color: { argb: 'FF000000' } }
-  const colorTextMuted = { argb: 'FF606266' }
-  const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F3F5' } }
-  const fillStripe = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCFCFD' } }
-  const fillSuccess = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } }
-  const setBorderAll = (cell) => {
-    cell.border = {
-      top: borderThin,
-      left: borderThin,
-      bottom: borderThin,
-      right: borderThin
-    }
+  const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
+
+  const pxToExcelWidth = (px) => {
+    const n = Number(px)
+    if (!Number.isFinite(n) || n <= 0) return 10
+    return Math.max(4, Math.round(((n - 5) / 7) * 100) / 100)
   }
 
+  const setBorderAll = (cell) => {
+    cell.border = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin }
+  }
+
+  const fillSolid = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
+
+  // Column widths（近似像素 -> Excel 宽度），打印会按 fitToWidth 缩放
+  const cols = isEnabled
+    ? [
+        { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
+        { header: '产品名称', key: 'name', width: pxToExcelWidth(140) },
+        { header: '产品图号', key: 'drawing', width: pxToExcelWidth(120) },
+        { header: '材质', key: 'material', width: pxToExcelWidth(100) },
+        { header: '工序', key: 'process', width: pxToExcelWidth(100) },
+        { header: '图示', key: 'image', width: pxToExcelWidth(140) },
+        { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
+        { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
+        { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+      ]
+    : [
+        { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
+        { header: '产品名称', key: 'name', width: pxToExcelWidth(160) },
+        { header: '产品图号', key: 'drawing', width: pxToExcelWidth(130) },
+        { header: '材质', key: 'material', width: pxToExcelWidth(110) },
+        { header: '工序', key: 'process', width: pxToExcelWidth(110) },
+        { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
+        { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
+        { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+      ]
+  sheet.columns = cols
+
+  const colCount = cols.length
+  const colLetter = (idx) => String.fromCharCode('A'.charCodeAt(0) + idx - 1)
+  const lastCol = colLetter(colCount)
+
+  // ===== Title =====
+  sheet.mergeCells(`A1:${lastCol}1`)
+  sheet.getCell('A1').value = '零件报价单'
+  sheet.getCell('A1').font = { bold: true, size: 18 }
+  sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getRow(1).height = 28
+
+  // ===== Meta (manufacturing standard) =====
+  // Layout: left block (A-D) + right block (E-last)
+  const metaRow1 = 2
+  const metaRow2 = 3
+  const metaRow3 = 4
+  const leftEnd = Math.min(4, colCount) // D or last
+  const rightStart = Math.min(5, colCount) // E or last
+
+  const mergeLeft = (r) => sheet.mergeCells(`${colLetter(1)}${r}:${colLetter(leftEnd)}${r}`)
+  const mergeRight = (r) => sheet.mergeCells(`${colLetter(rightStart)}${r}:${lastCol}${r}`)
+  mergeLeft(metaRow1)
+  mergeRight(metaRow1)
+  mergeLeft(metaRow2)
+  mergeRight(metaRow2)
+  mergeLeft(metaRow3)
+  mergeRight(metaRow3)
+
+  const metaFont = { size: 11 }
+  const metaMutedFont = { size: 11, color: colorTextMuted }
+  const setMetaCell = (addr, value, muted = false) => {
+    const cell = sheet.getCell(addr)
+    cell.value = value
+    cell.font = muted ? metaMutedFont : metaFont
+    cell.alignment = { horizontal: 'left', vertical: 'middle' }
+  }
+
+  setMetaCell(`A${metaRow1}`, `客户名称：${row.customerName || ''}`)
+  setMetaCell(`${colLetter(rightStart)}${metaRow1}`, `报价单号：${row.quotationNo || ''}`, true)
+  setMetaCell(`A${metaRow2}`, `报价日期：${toDateString(row.quotationDate) || '-'}`, true)
+  setMetaCell(`${colLetter(rightStart)}${metaRow2}`, `联系人：${row.contactName || '-'}`)
+  setMetaCell(`A${metaRow3}`, `联系电话：${row.contactPhone || '-'}`)
+  setMetaCell(`${colLetter(rightStart)}${metaRow3}`, ' ', true)
+  ;[metaRow1, metaRow2, metaRow3].forEach((r) => {
+    sheet.getRow(r).height = 18
+    sheet.getCell(`A${r}`).border = { bottom: borderThin }
+    sheet.getCell(`${colLetter(rightStart)}${r}`).border = { bottom: borderThin }
+  })
+
+  // ===== Table header =====
+  const headerRow = 6
+  const headerTitles = cols.map((c) => c.header)
+  sheet.getRow(headerRow).values = headerTitles
+  sheet.getRow(headerRow).height = 24
+  sheet.getRow(headerRow).font = { bold: true, size: 11 }
+  sheet.getRow(headerRow).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  for (let c = 1; c <= colCount; c += 1) {
+    const cell = sheet.getRow(headerRow).getCell(c)
+    setBorderAll(cell)
+    cell.fill = fillSolid(colorHeaderBg.argb)
+  }
+
+  // ===== Detail rows =====
   const excelColumnWidthToPixels = (width) => {
     const w = Number(width)
     if (!Number.isFinite(w) || w <= 0) return 64
     return Math.floor(w * 7 + 5)
   }
-
   const excelRowHeightPointsToPixels = (points) => {
     const p = Number(points)
     if (!Number.isFinite(p) || p <= 0) return 64
     return Math.floor((p * 4) / 3)
   }
-
   const getImageDimensions = (buffer) => {
     if (!buffer || buffer.length < 24) return null
-
-    // PNG: IHDR width/height at offset 16
     if (
       buffer[0] === 0x89 &&
       buffer[1] === 0x50 &&
@@ -295,8 +383,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       const height = buffer.readUInt32BE(20)
       return { width, height, extension: 'png' }
     }
-
-    // JPEG: scan for SOF0/SOF2
     if (buffer[0] === 0xff && buffer[1] === 0xd8) {
       let offset = 2
       while (offset + 9 < buffer.length) {
@@ -311,181 +397,91 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         offset += 2 + size
       }
     }
-
     return null
   }
 
-  const isEnabled = enableImage !== undefined ? !!enableImage : Number(row?.enableImage ?? 1) !== 0
+  const imageColIndex = isEnabled ? 6 : -1
+  const qtyColIndex = isEnabled ? 7 : 6
+  const unitPriceColIndex = isEnabled ? 8 : 7
+  const amountColIndex = isEnabled ? 9 : 8
 
-  const columns = isEnabled
-    ? [
-        { key: 'seq', width: 6 },
-        { key: 'name', width: 22 },
-        { key: 'drawing', width: 18 },
-        { key: 'material', width: 14 },
-        { key: 'process', width: 14 },
-        { key: 'image', width: 12 },
-        { key: 'qty', width: 10 },
-        { key: 'unitPrice', width: 12 },
-        { key: 'amount', width: 12 }
-      ]
-    : [
-        { key: 'seq', width: 6 },
-        { key: 'name', width: 26 },
-        { key: 'drawing', width: 18 },
-        { key: 'material', width: 14 },
-        { key: 'process', width: 14 },
-        { key: 'qty', width: 10 },
-        { key: 'unitPrice', width: 12 },
-        { key: 'amount', width: 12 }
-      ]
-  sheet.columns = columns
+  const firstDetailRow = headerRow + 1
+  // 启用图示：按 64px 行高（约 48pt）固定行高，方便缩略图展示
+  const detailRowHeight = isEnabled ? 48 : 22
 
-  const colCount = columns.length
-  const colLetter = (idx) => String.fromCharCode('A'.charCodeAt(0) + idx - 1)
-  const lastCol = colLetter(colCount)
-
-  // Header
-  sheet.mergeCells(`A1:${lastCol}1`)
-  sheet.getCell('A1').value = '零件报价单'
-  sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell('A1').font = { bold: true, size: 18, name: '微软雅黑' }
-  sheet.getRow(1).height = 26
-
-  // Meta block (3 lines)
-  const metaStartRow = 2
-  const customerRow = metaStartRow
-  sheet.mergeCells(`A${customerRow}:${lastCol}${customerRow}`)
-  sheet.getCell(`A${customerRow}`).value = `客户名称：${row.customerName || ''}`
-  sheet.getCell(`A${customerRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getCell(`A${customerRow}`).font = { size: 11, name: '微软雅黑' }
-  sheet.getRow(customerRow).height = 18
-
-  const rowNoDate = metaStartRow + 1
-  sheet.mergeCells(`A${rowNoDate}:D${rowNoDate}`)
-  sheet.getCell(`A${rowNoDate}`).value = `报价单号：${row.quotationNo || ''}`
-  sheet.getCell(`A${rowNoDate}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getCell(`A${rowNoDate}`).font = { size: 11, name: '微软雅黑' }
-
-  sheet.mergeCells(`E${rowNoDate}:${lastCol}${rowNoDate}`)
-  sheet.getCell(`E${rowNoDate}`).value = `报价日期：${toDateString(row.quotationDate)}`
-  sheet.getCell(`E${rowNoDate}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getCell(`E${rowNoDate}`).font = { size: 11, name: '微软雅黑' }
-  sheet.getRow(rowNoDate).height = 18
-
-  const rowContact = metaStartRow + 2
-  sheet.mergeCells(`A${rowContact}:D${rowContact}`)
-  sheet.getCell(`A${rowContact}`).value = `联系人：${row.contactName || '-'}`
-  sheet.getCell(`A${rowContact}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getCell(`A${rowContact}`).font = { size: 11, name: '微软雅黑' }
-
-  sheet.mergeCells(`E${rowContact}:${lastCol}${rowContact}`)
-  sheet.getCell(`E${rowContact}`).value = `联系电话：${row.contactPhone || '-'}`
-  sheet.getCell(`E${rowContact}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getCell(`E${rowContact}`).font = { size: 11, name: '微软雅黑' }
-  sheet.getRow(rowContact).height = 18
-
-  // subtle separator under meta
-  sheet.getCell(`A${rowContact}`).border = { bottom: borderThin }
-  sheet.getCell(`E${rowContact}`).border = { bottom: borderThin }
-  sheet.getCell(`A${rowNoDate}`).font = { size: 11, name: '微软雅黑', color: colorTextMuted }
-  sheet.getCell(`E${rowNoDate}`).font = { size: 11, name: '微软雅黑', color: colorTextMuted }
-
-  // Table header
-  const headerRowIndex = metaStartRow + 4
-  const header = isEnabled
-    ? ['序号', '产品名称', '产品图号', '材质', '工序', '图示', '数量', '单价(元)', '金额(元)']
-    : ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
-  sheet.getRow(headerRowIndex).values = [null, ...header]
-  sheet.getRow(headerRowIndex).font = { bold: true, size: 11, name: '微软雅黑' }
-  sheet.getRow(headerRowIndex).alignment = {
-    horizontal: 'center',
-    vertical: 'middle',
-    wrapText: true
-  }
-  sheet.getRow(headerRowIndex).height = 24
-  for (let c = 1; c <= colCount; c += 1) {
-    const cell = sheet.getRow(headerRowIndex).getCell(c)
-    setBorderAll(cell)
-    cell.fill = fillHeader
-  }
-
-  // Lines
-  const lineStart = headerRowIndex + 1
   partItems.forEach((item, idx) => {
-    const qty = Number(item?.quantity) || 0
+    const r = firstDetailRow + idx
+    const rowObj = sheet.getRow(r)
+    rowObj.height = detailRowHeight
+    rowObj.font = { size: 11 }
+    rowObj.alignment = { vertical: 'middle', wrapText: true }
+
+    const qty = Number(item?.quantity)
     const unitPrice = Number(item?.unitPrice)
-    const amount = qty * (Number.isFinite(unitPrice) ? unitPrice : 0)
-    const rowIdx = lineStart + idx
-    const rowObj = sheet.getRow(rowIdx)
-    rowObj.height = isEnabled ? 48 : 20
-    const baseCells = [
+    const safeQty = Number.isFinite(qty) ? qty : null
+    const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null
+    const amount =
+      safeQty !== null && safeUnitPrice !== null ? Number(safeQty) * Number(safeUnitPrice) : null
+
+    const base = [
       idx + 1,
       item?.partName || '',
       item?.drawingNo || '',
       item?.material || '',
       item?.process || ''
     ]
-    const lineCells = isEnabled
-      ? [
-          ...baseCells,
-          '',
-          qty || '',
-          Number.isFinite(unitPrice) ? unitPrice : '',
-          Number.isFinite(unitPrice) && qty ? amount : ''
-        ]
-      : [
-          ...baseCells,
-          qty || '',
-          Number.isFinite(unitPrice) ? unitPrice : '',
-          Number.isFinite(unitPrice) && qty ? amount : ''
-        ]
-    rowObj.values = [null, ...lineCells]
-    rowObj.font = { size: 11, name: '微软雅黑' }
-    rowObj.alignment = { vertical: 'top', wrapText: true }
+    const values = isEnabled
+      ? [...base, '', safeQty ?? '', safeUnitPrice ?? '', amount ?? '']
+      : [...base, safeQty ?? '', safeUnitPrice ?? '', amount ?? '']
+    rowObj.values = values
+
+    // Alignments
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
+    rowObj.getCell(qtyColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(unitPriceColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(amountColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(qtyColIndex).numFmt = '#,##0'
+    rowObj.getCell(unitPriceColIndex).numFmt = '#,##0.00'
+    rowObj.getCell(amountColIndex).numFmt = '#,##0.00'
 
-    const qtyCol = isEnabled ? 7 : 6
-    const unitPriceCol = isEnabled ? 8 : 7
-    const amountCol = isEnabled ? 9 : 8
-
-    rowObj.getCell(qtyCol).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(unitPriceCol).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(amountCol).alignment = { horizontal: 'right', vertical: 'middle' }
-    rowObj.getCell(qtyCol).numFmt = '#,##0'
-    rowObj.getCell(unitPriceCol).numFmt = '#,##0.00'
-    rowObj.getCell(amountCol).numFmt = '#,##0.00'
     for (let c = 1; c <= colCount; c += 1) {
       const cell = rowObj.getCell(c)
       setBorderAll(cell)
-      if (idx % 2 === 0) cell.fill = fillStripe
+      if (idx % 2 === 1) cell.fill = fillSolid(colorStripeBg.argb)
     }
 
+    // Image embed (LibreOffice-friendly twoCell anchor)
     if (isEnabled) {
-      const imageUrl = item?.imageUrl
+      const imageUrl = String(item?.imageUrl || '').trim()
       if (imageUrl) {
-        const imagePath = resolveStoredQuotationImagePath(imageUrl)
+        const imagePath = resolveAnyQuotationImagePath(imageUrl)
         if (imagePath && fs.existsSync(imagePath)) {
           try {
             const buffer = fs.readFileSync(imagePath)
             const info = getImageDimensions(buffer)
             if (info?.width && info?.height) {
               const imageId = workbook.addImage({ buffer, extension: info.extension })
-              const imageCol = 6 // 图示列
-              const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageCol).width)
+              const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageColIndex).width)
               const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
               const scalePref = Number(item?.imageScale)
               const userScale =
                 scalePref === 0.5 || scalePref === 0.75 || scalePref === 1 ? scalePref : 1
-              const maxPx = Math.max(1, Math.floor(Math.min(cellPxW, cellPxH) * userScale))
-              const fitScale = Math.min(maxPx / info.width, maxPx / info.height, 1)
+              // 允许图片按单元格宽高分别自适应（contain），避免被 min(w,h) 过度限制导致“图示很小”
+              const maxW = Math.max(1, Math.floor(cellPxW * userScale))
+              const maxH = Math.max(1, Math.floor(cellPxH * userScale))
+              const fitScale = Math.min(maxW / info.width, maxH / info.height, 1)
               const imgW = Math.max(1, Math.round(info.width * fitScale))
               const imgH = Math.max(1, Math.round(info.height * fitScale))
-              const offsetCol = (cellPxW - imgW) / cellPxW / 2
-              const offsetRow = (cellPxH - imgH) / cellPxH / 2
+              const offsetX = (cellPxW - imgW) / 2
+              const offsetY = (cellPxH - imgH) / 2
+              const tlCol = imageColIndex - 1 + offsetX / cellPxW
+              const tlRow = r - 1 + offsetY / cellPxH
+              const brCol = tlCol + imgW / cellPxW
+              const brRow = tlRow + imgH / cellPxH
               sheet.addImage(imageId, {
-                tl: { col: imageCol - 1 + offsetCol, row: rowIdx - 1 + offsetRow },
-                ext: { width: imgW, height: imgH }
+                tl: { col: tlCol, row: tlRow },
+                br: { col: brCol, row: brRow },
+                editAs: 'twoCell'
               })
             }
           } catch (e) {
@@ -496,87 +492,83 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     }
   })
 
-  const totalRowIndex = lineStart + partItems.length
+  // ===== Total row =====
+  const totalRow = firstDetailRow + partItems.length
   const totalAmount = partItems.reduce(
     (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
     0
   )
-  sheet.mergeCells(`A${totalRowIndex}:${colLetter(colCount - 1)}${totalRowIndex}`)
-  sheet.getCell(`A${totalRowIndex}`).value = '合计'
-  sheet.getCell(`A${totalRowIndex}`).alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell(`${lastCol}${totalRowIndex}`).value = totalAmount || ''
-  sheet.getCell(`${lastCol}${totalRowIndex}`).alignment = {
-    horizontal: 'right',
-    vertical: 'middle'
-  }
-  sheet.getCell(`${lastCol}${totalRowIndex}`).numFmt = '#,##0.00'
-  sheet.getRow(totalRowIndex).font = { bold: true, size: 11, name: '微软雅黑' }
-  sheet.getRow(totalRowIndex).height = 22
+  sheet.mergeCells(`A${totalRow}:${colLetter(colCount - 1)}${totalRow}`)
+  sheet.getCell(`A${totalRow}`).value = '合计'
+  sheet.getCell(`A${totalRow}`).alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getCell(`${lastCol}${totalRow}`).value = totalAmount || ''
+  sheet.getCell(`${lastCol}${totalRow}`).numFmt = '#,##0.00'
+  sheet.getCell(`${lastCol}${totalRow}`).alignment = { horizontal: 'right', vertical: 'middle' }
+  sheet.getRow(totalRow).height = 24
+  sheet.getRow(totalRow).font = { bold: true, size: 11 }
   for (let c = 1; c <= colCount; c += 1) {
-    const cell = sheet.getRow(totalRowIndex).getCell(c)
+    const cell = sheet.getRow(totalRow).getCell(c)
     setBorderAll(cell)
-    cell.fill = fillHeader
+    cell.fill = fillSolid(colorHeaderBg.argb)
   }
 
-  // Summary block (right side)
-  const summaryStart = totalRowIndex + 2
-  const summaryLabelCol = colCount - 2
-  const summaryValueCol = colCount - 1
-  const sumLabelLetter = colLetter(summaryLabelCol)
-  const sumValueLetter = colLetter(summaryValueCol)
-  ;[
-    { label: '其它费用', value: row.otherFee, fmt: '#,##0.00' },
-    { label: '运输费用', value: row.transportFee, fmt: '#,##0.00' },
-    { label: '含税价格', value: row.taxIncludedPrice, fmt: '#,##0.00', isTotal: true }
-  ].forEach((it, i) => {
-    const r = summaryStart + i
-    sheet.mergeCells(`${sumLabelLetter}${r}:${colLetter(colCount - 1)}${r}`)
-    sheet.getCell(`${sumLabelLetter}${r}`).value = it.label
-    sheet.getCell(`${sumLabelLetter}${r}`).alignment = { horizontal: 'center', vertical: 'middle' }
-    sheet.getCell(`${sumLabelLetter}${r}`).font = {
-      size: 11,
-      name: '微软雅黑',
-      color: colorTextMuted
-    }
-    sheet.getCell(`${sumLabelLetter}${r}`).fill = fillHeader
+  // ===== Summary box (right-bottom, 2 cols label + 1 col value) =====
+  const sumBoxStartRow = totalRow + 2
+  const sumLabelStartCol = Math.max(1, colCount - 2)
+  const sumLabelEndCol = Math.max(1, colCount - 1)
+  const sumValueCol = colCount
 
-    sheet.mergeCells(`${sumValueLetter}${r}:${lastCol}${r}`)
-    sheet.getCell(`${sumValueLetter}${r}`).value =
-      it.value === null || it.value === undefined || Number(it.value) === 0 ? '' : Number(it.value)
-    sheet.getCell(`${sumValueLetter}${r}`).numFmt = it.fmt
-    sheet.getCell(`${sumValueLetter}${r}`).alignment = { horizontal: 'right', vertical: 'middle' }
-    sheet.getCell(`${sumValueLetter}${r}`).font = it.isTotal
-      ? { bold: true, size: 13, name: '微软雅黑' }
-      : { size: 11, name: '微软雅黑' }
-    if (it.isTotal) sheet.getCell(`${sumValueLetter}${r}`).fill = fillSuccess
-    ;[`${sumLabelLetter}${r}`, `${sumValueLetter}${r}`].forEach((addr) =>
-      setBorderAll(sheet.getCell(addr))
-    )
-    sheet.getRow(r).height = it.isTotal ? 24 : 20
-  })
+  const putSummaryRow = (r, label, value, isTotal = false) => {
+    sheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumLabelEndCol)}${r}`)
+    const labelCell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
+    labelCell.value = label
+    labelCell.font = { size: 11, color: colorTextMuted }
+    labelCell.alignment = { horizontal: 'center', vertical: 'middle' }
+    labelCell.fill = fillSolid(colorHeaderBg.argb)
 
-  // Notes / Remark box
-  const notesTitleRow = summaryStart + 4
-  sheet.mergeCells(`A${notesTitleRow}:${lastCol}${notesTitleRow}`)
-  sheet.getCell(`A${notesTitleRow}`).value = '备注'
-  sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11, name: '微软雅黑' }
-  sheet.getCell(`A${notesTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
+    const valueCell = sheet.getCell(`${colLetter(sumValueCol)}${r}`)
+    valueCell.value =
+      value === null || value === undefined || Number(value) === 0 ? '' : Number(value)
+    valueCell.numFmt = '#,##0.00'
+    valueCell.alignment = { horizontal: 'right', vertical: 'middle' }
+    valueCell.font = isTotal ? { bold: true, size: 13 } : { size: 11 }
+    if (isTotal) valueCell.fill = fillSolid(colorTotalBg.argb)
 
-  const notesBodyRow = notesTitleRow + 1
-  sheet.mergeCells(`A${notesBodyRow}:${lastCol}${notesBodyRow}`)
-  sheet.getCell(`A${notesBodyRow}`).value = row.remark || ''
-  sheet.getCell(`A${notesBodyRow}`).alignment = {
+    for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
+      setBorderAll(sheet.getRow(r).getCell(c))
+    sheet.getRow(r).height = isTotal ? 24 : 20
+  }
+
+  putSummaryRow(sumBoxStartRow, '其它费用', row.otherFee)
+  putSummaryRow(sumBoxStartRow + 1, '运输费用', row.transportFee)
+  putSummaryRow(sumBoxStartRow + 2, '含税价格', row.taxIncludedPrice, true)
+
+  // ===== Remark =====
+  const remarkTitleRow = sumBoxStartRow + 4
+  const remarkBodyRow = remarkTitleRow + 1
+  sheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
+  sheet.getCell(`A${remarkTitleRow}`).value = '备注'
+  sheet.getCell(`A${remarkTitleRow}`).font = { bold: true, size: 11 }
+  sheet.getCell(`A${remarkTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  for (let c = 1; c <= colCount; c += 1) {
+    const cell = sheet.getRow(remarkTitleRow).getCell(c)
+    setBorderAll(cell)
+    cell.fill = fillSolid(colorHeaderBg.argb)
+  }
+  sheet.mergeCells(`A${remarkBodyRow}:${lastCol}${remarkBodyRow}`)
+  sheet.getCell(`A${remarkBodyRow}`).value = row.remark || ''
+  sheet.getCell(`A${remarkBodyRow}`).font = { size: 11 }
+  sheet.getCell(`A${remarkBodyRow}`).alignment = {
     horizontal: 'left',
     vertical: 'top',
     wrapText: true
   }
-  sheet.getRow(notesBodyRow).height = 60
-  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
+  sheet.getRow(remarkBodyRow).height = 80
+  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(remarkBodyRow).getCell(c))
 
-  // Print helpers
-  sheet.views = [{ state: 'frozen', ySplit: headerRowIndex }]
-  sheet.pageSetup.printArea = `A1:${lastCol}${notesBodyRow}`
+  // ===== Print helpers =====
+  sheet.views = [{ state: 'frozen', ySplit: headerRow }]
+  sheet.pageSetup.printArea = `A1:${lastCol}${remarkBodyRow}`
   sheet.headerFooter.oddFooter = `&L零件报价单&R第 &P 页 / 共 &N 页`
 
   return workbook
