@@ -239,11 +239,23 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       orientation: 'portrait',
       fitToPage: true,
       fitToWidth: 1,
-      fitToHeight: 0
+      fitToHeight: 0,
+      margins: {
+        left: 0.3,
+        right: 0.3,
+        top: 0.5,
+        bottom: 0.5,
+        header: 0.2,
+        footer: 0.2
+      }
     }
   })
 
   const borderThin = { style: 'thin', color: { argb: 'FF000000' } }
+  const colorTextMuted = { argb: 'FF606266' }
+  const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F3F5' } }
+  const fillStripe = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCFCFD' } }
+  const fillSuccess = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } }
   const setBorderAll = (cell) => {
     cell.border = {
       top: borderThin,
@@ -308,11 +320,11 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const columns = isEnabled
     ? [
         { key: 'seq', width: 6 },
-        { key: 'name', width: 26 },
+        { key: 'name', width: 22 },
         { key: 'drawing', width: 18 },
         { key: 'material', width: 14 },
         { key: 'process', width: 14 },
-        { key: 'image', width: 9 },
+        { key: 'image', width: 12 },
         { key: 'qty', width: 10 },
         { key: 'unitPrice', width: 12 },
         { key: 'amount', width: 12 }
@@ -337,53 +349,65 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.mergeCells(`A1:${lastCol}1`)
   sheet.getCell('A1').value = '零件报价单'
   sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell('A1').font = { bold: true, size: 16 }
+  sheet.getCell('A1').font = { bold: true, size: 18, name: '微软雅黑' }
+  sheet.getRow(1).height = 26
 
-  sheet.mergeCells(`A2:${lastCol}2`)
-  sheet.getCell('A2').value = `报价单号：${row.quotationNo || ''}    报价日期：${toDateString(
-    row.quotationDate
-  )}`
-  sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getCell('A2').font = { size: 11, color: { argb: 'FF606266' } }
-  sheet.getCell('A2').border = { bottom: borderThin }
+  // Meta block (3 lines)
+  const metaStartRow = 2
+  const customerRow = metaStartRow
+  sheet.mergeCells(`A${customerRow}:${lastCol}${customerRow}`)
+  sheet.getCell(`A${customerRow}`).value = `客户名称：${row.customerName || ''}`
+  sheet.getCell(`A${customerRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getCell(`A${customerRow}`).font = { size: 11, name: '微软雅黑' }
+  sheet.getRow(customerRow).height = 18
 
-  // Info row (match demo density)
-  const infoRowIndex = 4
-  sheet.getCell(`A${infoRowIndex}`).value = '客户名称：'
-  sheet.getCell(`B${infoRowIndex}`).value = row.customerName || ''
-  sheet.mergeCells(`B${infoRowIndex}:C${infoRowIndex}`)
+  const rowNoDate = metaStartRow + 1
+  sheet.mergeCells(`A${rowNoDate}:D${rowNoDate}`)
+  sheet.getCell(`A${rowNoDate}`).value = `报价单号：${row.quotationNo || ''}`
+  sheet.getCell(`A${rowNoDate}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getCell(`A${rowNoDate}`).font = { size: 11, name: '微软雅黑' }
 
-  sheet.getCell(`D${infoRowIndex}`).value = '联系人：'
-  sheet.getCell(`E${infoRowIndex}`).value = row.contactName || '-'
+  sheet.mergeCells(`E${rowNoDate}:${lastCol}${rowNoDate}`)
+  sheet.getCell(`E${rowNoDate}`).value = `报价日期：${toDateString(row.quotationDate)}`
+  sheet.getCell(`E${rowNoDate}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getCell(`E${rowNoDate}`).font = { size: 11, name: '微软雅黑' }
+  sheet.getRow(rowNoDate).height = 18
 
-  sheet.getCell(`F${infoRowIndex}`).value = '联系电话：'
-  sheet.mergeCells(`G${infoRowIndex}:${lastCol}${infoRowIndex}`)
-  sheet.getCell(`G${infoRowIndex}`).value = row.contactPhone || '-'
+  const rowContact = metaStartRow + 2
+  sheet.mergeCells(`A${rowContact}:D${rowContact}`)
+  sheet.getCell(`A${rowContact}`).value = `联系人：${row.contactName || '-'}`
+  sheet.getCell(`A${rowContact}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getCell(`A${rowContact}`).font = { size: 11, name: '微软雅黑' }
 
-  sheet.getRow(infoRowIndex).font = { size: 11 }
-  sheet.getRow(infoRowIndex).alignment = { vertical: 'middle' }
-  ;['A', 'D', 'F'].forEach((col) => {
-    sheet.getCell(`${col}${infoRowIndex}`).font = { size: 11, color: { argb: 'FF606266' } }
-    sheet.getCell(`${col}${infoRowIndex}`).alignment = { horizontal: 'right', vertical: 'middle' }
-  })
+  sheet.mergeCells(`E${rowContact}:${lastCol}${rowContact}`)
+  sheet.getCell(`E${rowContact}`).value = `联系电话：${row.contactPhone || '-'}`
+  sheet.getCell(`E${rowContact}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getCell(`E${rowContact}`).font = { size: 11, name: '微软雅黑' }
+  sheet.getRow(rowContact).height = 18
+
+  // subtle separator under meta
+  sheet.getCell(`A${rowContact}`).border = { bottom: borderThin }
+  sheet.getCell(`E${rowContact}`).border = { bottom: borderThin }
+  sheet.getCell(`A${rowNoDate}`).font = { size: 11, name: '微软雅黑', color: colorTextMuted }
+  sheet.getCell(`E${rowNoDate}`).font = { size: 11, name: '微软雅黑', color: colorTextMuted }
 
   // Table header
-  const headerRowIndex = 6
+  const headerRowIndex = metaStartRow + 4
   const header = isEnabled
     ? ['序号', '产品名称', '产品图号', '材质', '工序', '图示', '数量', '单价(元)', '金额(元)']
     : ['序号', '产品名称', '产品图号', '材质', '工序', '数量', '单价(元)', '金额(元)']
   sheet.getRow(headerRowIndex).values = [null, ...header]
-  sheet.getRow(headerRowIndex).font = { bold: true, size: 11 }
+  sheet.getRow(headerRowIndex).font = { bold: true, size: 11, name: '微软雅黑' }
   sheet.getRow(headerRowIndex).alignment = {
     horizontal: 'center',
     vertical: 'middle',
     wrapText: true
   }
-  sheet.getRow(headerRowIndex).height = 22
+  sheet.getRow(headerRowIndex).height = 24
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(headerRowIndex).getCell(c)
     setBorderAll(cell)
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+    cell.fill = fillHeader
   }
 
   // Lines
@@ -394,7 +418,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     const amount = qty * (Number.isFinite(unitPrice) ? unitPrice : 0)
     const rowIdx = lineStart + idx
     const rowObj = sheet.getRow(rowIdx)
-    if (isEnabled) rowObj.height = 48
+    rowObj.height = isEnabled ? 48 : 20
     const baseCells = [
       idx + 1,
       item?.partName || '',
@@ -417,7 +441,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
           Number.isFinite(unitPrice) && qty ? amount : ''
         ]
     rowObj.values = [null, ...lineCells]
-    rowObj.font = { size: 11 }
+    rowObj.font = { size: 11, name: '微软雅黑' }
     rowObj.alignment = { vertical: 'top', wrapText: true }
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
 
@@ -431,7 +455,11 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     rowObj.getCell(qtyCol).numFmt = '#,##0'
     rowObj.getCell(unitPriceCol).numFmt = '#,##0.00'
     rowObj.getCell(amountCol).numFmt = '#,##0.00'
-    for (let c = 1; c <= colCount; c += 1) setBorderAll(rowObj.getCell(c))
+    for (let c = 1; c <= colCount; c += 1) {
+      const cell = rowObj.getCell(c)
+      setBorderAll(cell)
+      if (idx % 2 === 0) cell.fill = fillStripe
+    }
 
     if (isEnabled) {
       const imageUrl = item?.imageUrl
@@ -482,14 +510,56 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     vertical: 'middle'
   }
   sheet.getCell(`${lastCol}${totalRowIndex}`).numFmt = '#,##0.00'
-  sheet.getRow(totalRowIndex).font = { bold: true, size: 11 }
-  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(totalRowIndex).getCell(c))
+  sheet.getRow(totalRowIndex).font = { bold: true, size: 11, name: '微软雅黑' }
+  sheet.getRow(totalRowIndex).height = 22
+  for (let c = 1; c <= colCount; c += 1) {
+    const cell = sheet.getRow(totalRowIndex).getCell(c)
+    setBorderAll(cell)
+    cell.fill = fillHeader
+  }
+
+  // Summary block (right side)
+  const summaryStart = totalRowIndex + 2
+  const summaryLabelCol = colCount - 2
+  const summaryValueCol = colCount - 1
+  const sumLabelLetter = colLetter(summaryLabelCol)
+  const sumValueLetter = colLetter(summaryValueCol)
+  ;[
+    { label: '其它费用', value: row.otherFee, fmt: '#,##0.00' },
+    { label: '运输费用', value: row.transportFee, fmt: '#,##0.00' },
+    { label: '含税价格', value: row.taxIncludedPrice, fmt: '#,##0.00', isTotal: true }
+  ].forEach((it, i) => {
+    const r = summaryStart + i
+    sheet.mergeCells(`${sumLabelLetter}${r}:${colLetter(colCount - 1)}${r}`)
+    sheet.getCell(`${sumLabelLetter}${r}`).value = it.label
+    sheet.getCell(`${sumLabelLetter}${r}`).alignment = { horizontal: 'center', vertical: 'middle' }
+    sheet.getCell(`${sumLabelLetter}${r}`).font = {
+      size: 11,
+      name: '微软雅黑',
+      color: colorTextMuted
+    }
+    sheet.getCell(`${sumLabelLetter}${r}`).fill = fillHeader
+
+    sheet.mergeCells(`${sumValueLetter}${r}:${lastCol}${r}`)
+    sheet.getCell(`${sumValueLetter}${r}`).value =
+      it.value === null || it.value === undefined || Number(it.value) === 0 ? '' : Number(it.value)
+    sheet.getCell(`${sumValueLetter}${r}`).numFmt = it.fmt
+    sheet.getCell(`${sumValueLetter}${r}`).alignment = { horizontal: 'right', vertical: 'middle' }
+    sheet.getCell(`${sumValueLetter}${r}`).font = it.isTotal
+      ? { bold: true, size: 13, name: '微软雅黑' }
+      : { size: 11, name: '微软雅黑' }
+    if (it.isTotal) sheet.getCell(`${sumValueLetter}${r}`).fill = fillSuccess
+    ;[`${sumLabelLetter}${r}`, `${sumValueLetter}${r}`].forEach((addr) =>
+      setBorderAll(sheet.getCell(addr))
+    )
+    sheet.getRow(r).height = it.isTotal ? 24 : 20
+  })
 
   // Notes / Remark box
-  const notesTitleRow = totalRowIndex + 2
+  const notesTitleRow = summaryStart + 4
   sheet.mergeCells(`A${notesTitleRow}:${lastCol}${notesTitleRow}`)
   sheet.getCell(`A${notesTitleRow}`).value = '备注'
-  sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11 }
+  sheet.getCell(`A${notesTitleRow}`).font = { bold: true, size: 11, name: '微软雅黑' }
   sheet.getCell(`A${notesTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
   for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesTitleRow).getCell(c))
 
@@ -503,6 +573,11 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   }
   sheet.getRow(notesBodyRow).height = 60
   for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(notesBodyRow).getCell(c))
+
+  // Print helpers
+  sheet.views = [{ state: 'frozen', ySplit: headerRowIndex }]
+  sheet.pageSetup.printArea = `A1:${lastCol}${notesBodyRow}`
+  sheet.headerFooter.oddFooter = `&L零件报价单&R第 &P 页 / 共 &N 页`
 
   return workbook
 }
