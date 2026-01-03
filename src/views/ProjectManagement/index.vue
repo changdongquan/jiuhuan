@@ -666,13 +666,81 @@
                         />
                       </el-form-item>
                       <el-form-item label="前模材质">
-                        <el-input v-model="editForm.前模材质" placeholder="前模材质" />
+                        <el-autocomplete
+                          v-model="frontMouldMaterialModel"
+                          placeholder="请输入或选择"
+                          clearable
+                          :trigger-on-focus="true"
+                          highlight-first-item
+                          :fetch-suggestions="queryMouldMaterialSuggestions"
+                          style="width: 100%"
+                          @focus="materialUi.front.focus = true"
+                          @blur="materialUi.front.focus = false"
+                          @mouseenter="materialUi.front.hover = true"
+                          @mouseleave="materialUi.front.hover = false"
+                        >
+                          <template #suffix>
+                            <Icon
+                              icon="vi-ep:arrow-down"
+                              :size="14"
+                              class="pm-autocomplete-caret"
+                              v-show="showMaterialCaret(frontMouldMaterialModel, materialUi.front)"
+                              @mousedown.prevent="handleMaterialCaretMouseDown"
+                            />
+                          </template>
+                        </el-autocomplete>
                       </el-form-item>
                       <el-form-item label="后模材质">
-                        <el-input v-model="editForm.后模材质" placeholder="后模材质" />
+                        <el-autocomplete
+                          v-model="rearMouldMaterialModel"
+                          placeholder="请输入或选择"
+                          clearable
+                          :trigger-on-focus="true"
+                          highlight-first-item
+                          :fetch-suggestions="queryMouldMaterialSuggestions"
+                          style="width: 100%"
+                          @focus="materialUi.rear.focus = true"
+                          @blur="materialUi.rear.focus = false"
+                          @mouseenter="materialUi.rear.hover = true"
+                          @mouseleave="materialUi.rear.hover = false"
+                        >
+                          <template #suffix>
+                            <Icon
+                              icon="vi-ep:arrow-down"
+                              :size="14"
+                              class="pm-autocomplete-caret"
+                              v-show="showMaterialCaret(rearMouldMaterialModel, materialUi.rear)"
+                              @mousedown.prevent="handleMaterialCaretMouseDown"
+                            />
+                          </template>
+                        </el-autocomplete>
                       </el-form-item>
                       <el-form-item label="滑块材质">
-                        <el-input v-model="editForm.滑块材质" placeholder="滑块材质" />
+                        <el-autocomplete
+                          v-model="sliderMouldMaterialModel"
+                          placeholder="请输入或选择"
+                          clearable
+                          :trigger-on-focus="true"
+                          highlight-first-item
+                          :fetch-suggestions="queryMouldMaterialSuggestions"
+                          style="width: 100%"
+                          @focus="materialUi.slider.focus = true"
+                          @blur="materialUi.slider.focus = false"
+                          @mouseenter="materialUi.slider.hover = true"
+                          @mouseleave="materialUi.slider.hover = false"
+                        >
+                          <template #suffix>
+                            <Icon
+                              icon="vi-ep:arrow-down"
+                              :size="14"
+                              class="pm-autocomplete-caret"
+                              v-show="
+                                showMaterialCaret(sliderMouldMaterialModel, materialUi.slider)
+                              "
+                              @mousedown.prevent="handleMaterialCaretMouseDown"
+                            />
+                          </template>
+                        </el-autocomplete>
                       </el-form-item>
                     </el-col>
 
@@ -735,17 +803,27 @@
                     <!-- 第3列：设备参数 -->
                     <el-col :xs="24" :sm="12" :lg="6">
                       <el-form-item label="机台吨位（吨）">
-                        <el-input-number
-                          v-model="editForm.机台吨位"
-                          :min="0"
-                          :controls="false"
+                        <el-select
+                          v-model="machineTonnageModel"
+                          placeholder="请选择机台吨位"
+                          clearable
+                          filterable
                           style="width: 100%"
-                        />
+                          @change="handleMachineTonnageChange"
+                        >
+                          <el-option
+                            v-for="opt in machineTonnageOptions"
+                            :key="opt.tonnage"
+                            :label="String(opt.tonnage)"
+                            :value="opt.tonnage"
+                          />
+                        </el-select>
                       </el-form-item>
                       <el-form-item label="锁模力">
                         <el-input-number
                           v-model="editForm.锁模力"
                           :min="0"
+                          :disabled="!machineSpecUnlocked"
                           :controls="false"
                           style="width: 100%"
                         />
@@ -754,15 +832,20 @@
                         <el-input-number
                           v-model="editForm.定位圈"
                           :min="0"
+                          :disabled="!machineSpecUnlocked"
                           :controls="false"
                           style="width: 100%"
                         />
                       </el-form-item>
                       <el-form-item label="容模量">
-                        <el-input v-model="editForm.容模量" placeholder="容模量" />
+                        <el-input v-model="editForm.容模量" :disabled="!machineSpecUnlocked" />
                       </el-form-item>
                       <el-form-item label="拉杆间距">
-                        <el-input v-model="editForm.拉杆间距" clearable />
+                        <el-input
+                          v-model="editForm.拉杆间距"
+                          clearable
+                          :disabled="!machineSpecUnlocked"
+                        />
                       </el-form-item>
                       <el-form-item label="成型周期（秒）">
                         <el-input-number
@@ -1377,9 +1460,39 @@ const editDialogBodyRef = ref<HTMLElement>()
 const editDialogBaseHeight = ref<number>()
 
 const runnerTypeOptions = [
-  { label: '热流道', value: '热流道' },
+  { label: '开放式热流道', value: '开放式热流道' },
+  { label: '点浇口热流道', value: '点浇口热流道' },
+  { label: '针阀式热流道', value: '针阀式热流道' },
   { label: '冷流道', value: '冷流道' }
 ]
+
+const mouldMaterialOptions = [
+  { label: 'XPM ESR国产', value: 'XPM ESR国产' },
+  { label: 'XPM国产', value: 'XPM国产' },
+  { label: 'NAK80国产', value: 'NAK80国产' },
+  { label: '2738HH国产', value: '2738HH国产' },
+  { label: 'S136国产', value: 'S136国产' },
+  { label: 'S136HH国产', value: 'S136HH国产' },
+  { label: 'P20国产', value: 'P20国产' },
+  { label: 'SKD-61', value: 'SKD-61' },
+  { label: '718H国产', value: '718H国产' }
+]
+
+const queryMouldMaterialSuggestions = (queryString: string, cb: (items: any[]) => void) => {
+  const q = String(queryString || '')
+    .trim()
+    .toLowerCase()
+  const list = mouldMaterialOptions
+    .map((x) => ({ value: x.value }))
+    .filter((x) => (!q ? true : String(x.value).toLowerCase().includes(q)))
+  cb(list)
+}
+
+const handleMaterialCaretMouseDown = (e: MouseEvent) => {
+  const target = e.currentTarget as HTMLElement | null
+  const input = target?.closest('.el-input')?.querySelector('input') as HTMLInputElement | null
+  input?.focus()
+}
 const gateTypeOptions = [
   { label: '点浇口', value: '点浇口' },
   { label: '侧浇口', value: '侧浇口' },
@@ -1414,6 +1527,94 @@ const gateCountModel = computed<number | undefined>({
     ;(editForm as any).浇口数量 = val === undefined ? null : val
   }
 })
+
+const frontMouldMaterialModel = computed<string>({
+  get: () => String((editForm as any).前模材质 ?? ''),
+  set: (val) => {
+    ;(editForm as any).前模材质 = String(val ?? '')
+  }
+})
+
+const rearMouldMaterialModel = computed<string>({
+  get: () => String((editForm as any).后模材质 ?? ''),
+  set: (val) => {
+    ;(editForm as any).后模材质 = String(val ?? '')
+  }
+})
+
+const sliderMouldMaterialModel = computed<string>({
+  get: () => String((editForm as any).滑块材质 ?? ''),
+  set: (val) => {
+    ;(editForm as any).滑块材质 = String(val ?? '')
+  }
+})
+
+const materialUi = reactive({
+  front: { hover: false, focus: false },
+  rear: { hover: false, focus: false },
+  slider: { hover: false, focus: false }
+})
+
+const showMaterialCaret = (value: string, ui: { hover: boolean; focus: boolean }) => {
+  const v = String(value || '').trim()
+  if (!v) return true
+  // clear 图标出现时（hover/focus），隐藏下拉箭头，避免两个图标并排与位移
+  return !(ui.hover || ui.focus)
+}
+
+const machineTonnageOptions = [
+  { tonnage: 80, lockForce: 80, moldCapacity: 360, tiebarSpacing: '365*365' },
+  { tonnage: 110, lockForce: 110, moldCapacity: 430, tiebarSpacing: '400*400' },
+  { tonnage: 150, lockForce: 150, moldCapacity: 500, tiebarSpacing: '460*460' },
+  { tonnage: 200, lockForce: 200, moldCapacity: 510, tiebarSpacing: '510*510' },
+  { tonnage: 250, lockForce: 250, moldCapacity: 570, tiebarSpacing: '570*570' },
+  { tonnage: 300, lockForce: 300, moldCapacity: 630, tiebarSpacing: '630*630' },
+  { tonnage: 360, lockForce: 360, moldCapacity: 710, tiebarSpacing: '710*710' },
+  { tonnage: 450, lockForce: 450, moldCapacity: 750, tiebarSpacing: '750*750' },
+  { tonnage: 530, lockForce: 530, moldCapacity: 820, tiebarSpacing: '820*820' },
+  { tonnage: 650, lockForce: 650, moldCapacity: 900, tiebarSpacing: '900*900' },
+  { tonnage: 780, lockForce: 780, moldCapacity: 980, tiebarSpacing: '980*980' },
+  { tonnage: 1000, lockForce: 1000, moldCapacity: 1100, tiebarSpacing: '1100*1100' },
+  { tonnage: 1250, lockForce: 1250, moldCapacity: 1250, tiebarSpacing: '1250*1250' },
+  { tonnage: 1600, lockForce: 1600, moldCapacity: 1400, tiebarSpacing: '1500*1350' },
+  { tonnage: 1800, lockForce: 1800, moldCapacity: 1560, tiebarSpacing: '1650*1500' },
+  { tonnage: 2500, lockForce: 2500, moldCapacity: 1800, tiebarSpacing: '1800*1600' }
+] as const
+
+const machineTonnageModel = computed<number | undefined>({
+  get: () => {
+    const v = (editForm as any).机台吨位
+    if (v === null || v === undefined || v === '') return undefined
+    const n = Number(v)
+    return Number.isFinite(n) ? n : undefined
+  },
+  set: (val) => {
+    ;(editForm as any).机台吨位 = val === undefined ? null : val
+  }
+})
+
+const machineSpecUnlocked = computed(() => {
+  const t = machineTonnageModel.value
+  return Number.isFinite(Number(t)) && Number(t) > 0
+})
+
+const handleMachineTonnageChange = (val: number | undefined) => {
+  if (val === undefined || val === null) return
+  const tonnage = Number(val)
+  if (!Number.isFinite(tonnage) || tonnage <= 0) return
+
+  const spec = machineTonnageOptions.find((x) => x.tonnage === tonnage)
+  if (!spec) return
+  ;(editForm as any).机台吨位 = spec.tonnage
+  ;(editForm as any).锁模力 = spec.lockForce
+  ;(editForm as any).容模量 = String(spec.moldCapacity)
+  ;(editForm as any).拉杆间距 = spec.tiebarSpacing
+
+  const locatingRing = Number((editForm as any).定位圈)
+  if (!Number.isFinite(locatingRing) || locatingRing <= 0) {
+    ;(editForm as any).定位圈 = 100
+  }
+}
 
 const setEditDialogBaseHeight = () => {
   const bodyEl = editDialogBodyRef.value
@@ -1831,6 +2032,10 @@ const handleEdit = (row: Partial<ProjectInfo>) => {
   editTitle.value = '编辑项目'
   currentProjectCode.value = row.项目编号 || ''
   Object.assign(editForm, row)
+  // 若已有吨位，则自动补齐设备参数（不覆盖已填定位圈）
+  if (machineTonnageModel.value) {
+    handleMachineTonnageChange(machineTonnageModel.value)
+  }
 
   // 编辑时自动加载货物信息
   if (row.项目编号) {
@@ -2889,6 +3094,12 @@ onMounted(() => {
   margin-left: 4px;
   background-color: var(--el-color-success);
   border-radius: 50%;
+}
+
+.pm-autocomplete-caret {
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  user-select: none;
 }
 
 .mobile-top-bar {
