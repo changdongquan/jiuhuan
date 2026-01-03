@@ -41,13 +41,13 @@ export interface ProjectInfo {
   锁模力?: number
   定位圈?: number
   容模量?: string
-  拉杆间距?: number
+  拉杆间距?: string | number
   封样时间?: string
   浇口类型?: string
-  浇口数量?: number
+  浇口数量?: number | null
   料柄重量?: number
   成型周期?: number
-  流道数量?: number
+  流道数量?: number | null
   费用出处?: string
 }
 

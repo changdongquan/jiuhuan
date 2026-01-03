@@ -679,25 +679,55 @@
                     <!-- 第2列：流道/浇口 -->
                     <el-col :xs="24" :sm="12" :lg="6">
                       <el-form-item label="流道类型">
-                        <el-input v-model="editForm.流道类型" placeholder="流道类型" />
+                        <el-select
+                          v-model="editForm.流道类型"
+                          placeholder="请选择"
+                          clearable
+                          style="width: 100%"
+                        >
+                          <el-option
+                            v-for="opt in runnerTypeOptions"
+                            :key="opt.value"
+                            :label="opt.label"
+                            :value="opt.value"
+                          />
+                        </el-select>
                       </el-form-item>
-                      <el-form-item label="流道数量">
+                      <el-form-item label="流道数量" :required="!!editForm.流道类型">
                         <el-input-number
-                          v-model="editForm.流道数量"
+                          v-model="runnerCountModel"
                           :min="0"
+                          :disabled="!editForm.流道类型"
                           :controls="false"
                           style="width: 100%"
+                          ref="runnerCountInputRef"
+                          @change="handleRunnerCountChange"
                         />
                       </el-form-item>
                       <el-form-item label="浇口类型">
-                        <el-input v-model="editForm.浇口类型" placeholder="浇口类型" />
+                        <el-select
+                          v-model="editForm.浇口类型"
+                          placeholder="请选择"
+                          clearable
+                          style="width: 100%"
+                        >
+                          <el-option
+                            v-for="opt in gateTypeOptions"
+                            :key="opt.value"
+                            :label="opt.label"
+                            :value="opt.value"
+                          />
+                        </el-select>
                       </el-form-item>
-                      <el-form-item label="浇口数量">
+                      <el-form-item label="浇口数量" :required="!!editForm.浇口类型">
                         <el-input-number
-                          v-model="editForm.浇口数量"
+                          v-model="gateCountModel"
                           :min="0"
+                          :disabled="!editForm.浇口类型"
                           :controls="false"
                           style="width: 100%"
+                          ref="gateCountInputRef"
+                          @change="handleGateCountChange"
                         />
                       </el-form-item>
                     </el-col>
@@ -732,12 +762,7 @@
                         <el-input v-model="editForm.容模量" placeholder="容模量" />
                       </el-form-item>
                       <el-form-item label="拉杆间距">
-                        <el-input-number
-                          v-model="editForm.拉杆间距"
-                          :min="0"
-                          :controls="false"
-                          style="width: 100%"
-                        />
+                        <el-input v-model="editForm.拉杆间距" clearable />
                       </el-form-item>
                       <el-form-item label="成型周期（秒）">
                         <el-input-number
@@ -1351,11 +1376,44 @@ const currentProjectCode = ref('')
 const editDialogBodyRef = ref<HTMLElement>()
 const editDialogBaseHeight = ref<number>()
 
+const runnerTypeOptions = [
+  { label: '热流道', value: '热流道' },
+  { label: '冷流道', value: '冷流道' }
+]
+const gateTypeOptions = [
+  { label: '点浇口', value: '点浇口' },
+  { label: '侧浇口', value: '侧浇口' },
+  { label: '潜伏浇口', value: '潜伏浇口' }
+]
+
+const runnerCountInputRef = ref<any>()
+const gateCountInputRef = ref<any>()
+
 const editDialogBodyStyle = computed(() =>
   editDialogBaseHeight.value
     ? { '--pm-edit-body-fixed-height': `${editDialogBaseHeight.value}px` }
     : {}
 )
+
+const runnerCountModel = computed<number | undefined>({
+  get: () => {
+    const v = (editForm as any).流道数量
+    return v === null || v === undefined || v === '' ? undefined : Number(v)
+  },
+  set: (val) => {
+    ;(editForm as any).流道数量 = val === undefined ? null : val
+  }
+})
+
+const gateCountModel = computed<number | undefined>({
+  get: () => {
+    const v = (editForm as any).浇口数量
+    return v === null || v === undefined || v === '' ? undefined : Number(v)
+  },
+  set: (val) => {
+    ;(editForm as any).浇口数量 = val === undefined ? null : val
+  }
+})
 
 const setEditDialogBaseHeight = () => {
   const bodyEl = editDialogBodyRef.value
@@ -1427,7 +1485,39 @@ const mouldTabCompleted = computed(() => {
 })
 
 const editRules: FormRules = {
-  项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }]
+  项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
+  流道数量: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!editForm.流道类型) return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请选择流道类型后，流道数量不能为空'))
+        }
+        const n = Number(value)
+        if (!Number.isFinite(n) || n <= 0) {
+          return callback(new Error('流道数量必须大于 0'))
+        }
+        return callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
+  浇口数量: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!editForm.浇口类型) return callback()
+        if (value === null || value === undefined || value === '') {
+          return callback(new Error('请选择浇口类型后，浇口数量不能为空'))
+        }
+        const n = Number(value)
+        if (!Number.isFinite(n) || n <= 0) {
+          return callback(new Error('浇口数量必须大于 0'))
+        }
+        return callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ]
 }
 
 watch(isMobile, (mobile) => {
@@ -2232,6 +2322,56 @@ watch(
     }
   }
 )
+
+watch(
+  () => editForm.流道类型,
+  async (val, prev) => {
+    if (!val) {
+      editForm.流道数量 = null
+      editFormRef.value?.clearValidate?.(['流道数量'])
+      return
+    }
+    if (val !== prev) {
+      await nextTick()
+      runnerCountInputRef.value?.focus?.()
+    }
+  }
+)
+
+watch(
+  () => editForm.浇口类型,
+  async (val, prev) => {
+    if (!val) {
+      editForm.浇口数量 = null
+      editFormRef.value?.clearValidate?.(['浇口数量'])
+      return
+    }
+    if (val !== prev) {
+      await nextTick()
+      gateCountInputRef.value?.focus?.()
+    }
+  }
+)
+
+const handleRunnerCountChange = (val: unknown) => {
+  if (!editForm.流道类型) return
+  const n = Number(val)
+  if (Number.isFinite(n) && n === 0) {
+    editForm.流道数量 = null
+    ElMessage.error('流道数量不能为 0')
+    nextTick(() => editFormRef.value?.validateField?.(['流道数量']))
+  }
+}
+
+const handleGateCountChange = (val: unknown) => {
+  if (!editForm.浇口类型) return
+  const n = Number(val)
+  if (Number.isFinite(n) && n === 0) {
+    editForm.浇口数量 = null
+    ElMessage.error('浇口数量不能为 0')
+    nextTick(() => editFormRef.value?.validateField?.(['浇口数量']))
+  }
+}
 
 const handleSubmitEdit = async () => {
   if (!editFormRef.value) return
