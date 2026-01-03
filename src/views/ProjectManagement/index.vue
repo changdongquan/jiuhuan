@@ -647,158 +647,244 @@
                 </template>
                 <div class="pm-edit-section">
                   <div class="pm-edit-section-title">模具信息</div>
-                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                    <!-- 第1列：模具信息 -->
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="模具穴数">
-                        <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
-                      </el-form-item>
-                      <el-form-item label="模具尺寸">
-                        <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
-                      </el-form-item>
-                      <el-form-item label="模具重量（吨）">
-                        <el-input-number
-                          v-model="editForm.模具重量"
-                          :min="0"
-                          :precision="2"
-                          :controls="false"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="前模材质">
-                        <el-autocomplete
-                          v-model="frontMouldMaterialModel"
-                          placeholder="请输入或选择"
-                          clearable
-                          :trigger-on-focus="true"
-                          highlight-first-item
-                          :fetch-suggestions="queryMouldMaterialSuggestions"
-                          style="width: 100%"
-                          @focus="materialUi.front.focus = true"
-                          @blur="materialUi.front.focus = false"
-                          @mouseenter="materialUi.front.hover = true"
-                          @mouseleave="materialUi.front.hover = false"
-                        >
-                          <template #suffix>
-                            <Icon
-                              icon="vi-ep:arrow-down"
-                              :size="14"
-                              class="pm-autocomplete-caret"
-                              v-show="showMaterialCaret(frontMouldMaterialModel, materialUi.front)"
-                              @mousedown.prevent="handleMaterialCaretMouseDown"
-                            />
-                          </template>
-                        </el-autocomplete>
-                      </el-form-item>
-                      <el-form-item label="后模材质">
-                        <el-autocomplete
-                          v-model="rearMouldMaterialModel"
-                          placeholder="请输入或选择"
-                          clearable
-                          :trigger-on-focus="true"
-                          highlight-first-item
-                          :fetch-suggestions="queryMouldMaterialSuggestions"
-                          style="width: 100%"
-                          @focus="materialUi.rear.focus = true"
-                          @blur="materialUi.rear.focus = false"
-                          @mouseenter="materialUi.rear.hover = true"
-                          @mouseleave="materialUi.rear.hover = false"
-                        >
-                          <template #suffix>
-                            <Icon
-                              icon="vi-ep:arrow-down"
-                              :size="14"
-                              class="pm-autocomplete-caret"
-                              v-show="showMaterialCaret(rearMouldMaterialModel, materialUi.rear)"
-                              @mousedown.prevent="handleMaterialCaretMouseDown"
-                            />
-                          </template>
-                        </el-autocomplete>
-                      </el-form-item>
-                      <el-form-item label="滑块材质">
-                        <el-autocomplete
-                          v-model="sliderMouldMaterialModel"
-                          placeholder="请输入或选择"
-                          clearable
-                          :trigger-on-focus="true"
-                          highlight-first-item
-                          :fetch-suggestions="queryMouldMaterialSuggestions"
-                          style="width: 100%"
-                          @focus="materialUi.slider.focus = true"
-                          @blur="materialUi.slider.focus = false"
-                          @mouseenter="materialUi.slider.hover = true"
-                          @mouseleave="materialUi.slider.hover = false"
-                        >
-                          <template #suffix>
-                            <Icon
-                              icon="vi-ep:arrow-down"
-                              :size="14"
-                              class="pm-autocomplete-caret"
-                              v-show="
-                                showMaterialCaret(sliderMouldMaterialModel, materialUi.slider)
-                              "
-                              @mousedown.prevent="handleMaterialCaretMouseDown"
-                            />
-                          </template>
-                        </el-autocomplete>
-                      </el-form-item>
+                  <el-row class="pm-mould-grid-row" :gutter="isMobile ? 8 : 12" justify="center">
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <div class="pm-mould-group">
+                        <div class="pm-mould-group__title">模具基本</div>
+                        <el-form-item label="模具穴数">
+                          <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
+                        </el-form-item>
+                        <el-form-item label="模具尺寸">
+                          <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
+                        </el-form-item>
+                        <el-form-item label="模具重量（吨）">
+                          <el-input-number
+                            v-model="editForm.模具重量"
+                            :min="0"
+                            :precision="2"
+                            :controls="false"
+                            style="width: 100%"
+                          />
+                        </el-form-item>
+                      </div>
                     </el-col>
 
-                    <!-- 第2列：流道/浇口 -->
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="流道类型">
-                        <el-select
-                          v-model="editForm.流道类型"
-                          placeholder="请选择"
-                          clearable
-                          style="width: 100%"
-                        >
-                          <el-option
-                            v-for="opt in runnerTypeOptions"
-                            :key="opt.value"
-                            :label="opt.label"
-                            :value="opt.value"
-                          />
-                        </el-select>
-                      </el-form-item>
-                      <el-form-item label="流道数量" :required="!!editForm.流道类型">
-                        <el-input-number
-                          v-model="runnerCountModel"
-                          :min="0"
-                          :disabled="!editForm.流道类型"
-                          :controls="false"
-                          style="width: 100%"
-                          ref="runnerCountInputRef"
-                          @change="handleRunnerCountChange"
-                        />
-                      </el-form-item>
-                      <el-form-item label="浇口类型">
-                        <el-select
-                          v-model="editForm.浇口类型"
-                          placeholder="请选择"
-                          clearable
-                          style="width: 100%"
-                        >
-                          <el-option
-                            v-for="opt in gateTypeOptions"
-                            :key="opt.value"
-                            :label="opt.label"
-                            :value="opt.value"
-                          />
-                        </el-select>
-                      </el-form-item>
-                      <el-form-item label="浇口数量" :required="!!editForm.浇口类型">
-                        <el-input-number
-                          v-model="gateCountModel"
-                          :min="0"
-                          :disabled="!editForm.浇口类型"
-                          :controls="false"
-                          style="width: 100%"
-                          ref="gateCountInputRef"
-                          @change="handleGateCountChange"
-                        />
-                      </el-form-item>
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <div class="pm-mould-group">
+                        <div class="pm-mould-group__title">模具材质</div>
+                        <el-form-item label="前模材质">
+                          <el-autocomplete
+                            v-model="frontMouldMaterialModel"
+                            placeholder="请输入或选择"
+                            clearable
+                            :trigger-on-focus="true"
+                            highlight-first-item
+                            :fetch-suggestions="queryMouldMaterialSuggestions"
+                            style="width: 100%"
+                            @focus="materialUi.front.focus = true"
+                            @blur="materialUi.front.focus = false"
+                            @mouseenter="materialUi.front.hover = true"
+                            @mouseleave="materialUi.front.hover = false"
+                          >
+                            <template #suffix>
+                              <Icon
+                                icon="vi-ep:arrow-down"
+                                :size="14"
+                                class="pm-autocomplete-caret"
+                                v-show="
+                                  showMaterialCaret(frontMouldMaterialModel, materialUi.front)
+                                "
+                                @mousedown.prevent="handleMaterialCaretMouseDown"
+                              />
+                            </template>
+                          </el-autocomplete>
+                        </el-form-item>
+                        <el-form-item label="后模材质">
+                          <el-autocomplete
+                            v-model="rearMouldMaterialModel"
+                            placeholder="请输入或选择"
+                            clearable
+                            :trigger-on-focus="true"
+                            highlight-first-item
+                            :fetch-suggestions="queryMouldMaterialSuggestions"
+                            style="width: 100%"
+                            @focus="materialUi.rear.focus = true"
+                            @blur="materialUi.rear.focus = false"
+                            @mouseenter="materialUi.rear.hover = true"
+                            @mouseleave="materialUi.rear.hover = false"
+                          >
+                            <template #suffix>
+                              <Icon
+                                icon="vi-ep:arrow-down"
+                                :size="14"
+                                class="pm-autocomplete-caret"
+                                v-show="showMaterialCaret(rearMouldMaterialModel, materialUi.rear)"
+                                @mousedown.prevent="handleMaterialCaretMouseDown"
+                              />
+                            </template>
+                          </el-autocomplete>
+                        </el-form-item>
+                        <el-form-item label="滑块材质">
+                          <el-autocomplete
+                            v-model="sliderMouldMaterialModel"
+                            placeholder="请输入或选择"
+                            clearable
+                            :trigger-on-focus="true"
+                            highlight-first-item
+                            :fetch-suggestions="queryMouldMaterialSuggestions"
+                            style="width: 100%"
+                            @focus="materialUi.slider.focus = true"
+                            @blur="materialUi.slider.focus = false"
+                            @mouseenter="materialUi.slider.hover = true"
+                            @mouseleave="materialUi.slider.hover = false"
+                          >
+                            <template #suffix>
+                              <Icon
+                                icon="vi-ep:arrow-down"
+                                :size="14"
+                                class="pm-autocomplete-caret"
+                                v-show="
+                                  showMaterialCaret(sliderMouldMaterialModel, materialUi.slider)
+                                "
+                                @mousedown.prevent="handleMaterialCaretMouseDown"
+                              />
+                            </template>
+                          </el-autocomplete>
+                        </el-form-item>
+                      </div>
                     </el-col>
+
+                    <el-col v-if="isPlasticMould" :xs="24" :sm="12" :lg="8">
+                      <div class="pm-mould-group pm-mould-group--light">
+                        <div class="pm-mould-group__title">抽芯方式</div>
+                        <el-form-item label="" :label-width="0" prop="抽芯明细">
+                          <el-checkbox-group v-model="corePullSelected" class="pm-core-pull-table">
+                            <div class="pm-core-pull-table__header">
+                              <span>方式</span>
+                              <span>数量</span>
+                            </div>
+                            <div
+                              v-for="opt in corePullMethodOptions"
+                              :key="opt"
+                              class="pm-core-pull-table__row"
+                            >
+                              <el-checkbox :label="opt" class="pm-core-pull-table__method">
+                                {{ opt }}
+                              </el-checkbox>
+                              <el-input-number
+                                :ref="(el) => setCorePullQtyInputRef(opt, el)"
+                                v-model="corePullQty[opt]"
+                                :min="0"
+                                :controls="false"
+                                :disabled="!corePullSelected.includes(opt)"
+                                placeholder="数量"
+                                class="pm-core-pull-table__qty"
+                                @change="(v) => handleCorePullQtyChange(opt, v)"
+                              />
+                            </div>
+                          </el-checkbox-group>
+                        </el-form-item>
+                      </div>
+                    </el-col>
+                  </el-row>
+
+                  <!-- 第二行：流道/浇口 + 顶出/复位 -->
+                  <el-row class="pm-mould-grid-row" :gutter="isMobile ? 8 : 12" justify="center">
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <div class="pm-mould-group">
+                        <div class="pm-mould-group__title">流道 / 浇口</div>
+                        <el-form-item label="流道类型">
+                          <el-select
+                            v-model="runnerTypeModel"
+                            placeholder="请选择"
+                            clearable
+                            style="width: 100%"
+                          >
+                            <el-option
+                              v-for="opt in runnerTypeOptions"
+                              :key="opt.value"
+                              :label="opt.label"
+                              :value="opt.value"
+                            />
+                          </el-select>
+                        </el-form-item>
+                        <el-form-item
+                          label="流道数量"
+                          prop="流道数量"
+                          :required="!!editForm.流道类型"
+                        >
+                          <el-input-number
+                            v-model="runnerCountModel"
+                            :min="0"
+                            :precision="0"
+                            :disabled="!editForm.流道类型"
+                            :controls="false"
+                            style="width: 100%"
+                            ref="runnerCountInputRef"
+                            @change="handleRunnerCountChange"
+                          />
+                        </el-form-item>
+                        <el-form-item label="浇口类型">
+                          <el-select
+                            v-model="gateTypeModel"
+                            placeholder="请选择"
+                            clearable
+                            style="width: 100%"
+                          >
+                            <el-option
+                              v-for="opt in gateTypeOptions"
+                              :key="opt.value"
+                              :label="opt.label"
+                              :value="opt.value"
+                            />
+                          </el-select>
+                        </el-form-item>
+                        <el-form-item
+                          label="浇口数量"
+                          prop="浇口数量"
+                          :required="!!editForm.浇口类型"
+                        >
+                          <el-input-number
+                            v-model="gateCountModel"
+                            :min="0"
+                            :precision="0"
+                            :disabled="!editForm.浇口类型"
+                            :controls="false"
+                            style="width: 100%"
+                            ref="gateCountInputRef"
+                            @change="handleGateCountChange"
+                          />
+                        </el-form-item>
+                      </div>
+                    </el-col>
+
+                    <el-col v-if="isPlasticMould" :xs="24" :sm="12" :lg="8">
+                      <div class="pm-mould-group pm-mould-group--light">
+                        <div class="pm-mould-group__title">顶出 / 复位</div>
+                        <el-form-item label="顶出类型">
+                          <el-checkbox-group v-model="ejectTypeModel" class="pm-multi-options">
+                            <el-checkbox v-for="opt in ejectTypeOptions" :key="opt" :label="opt">
+                              {{ opt }}
+                            </el-checkbox>
+                          </el-checkbox-group>
+                        </el-form-item>
+                        <el-form-item label="顶出方式">
+                          <el-checkbox-group v-model="ejectWayModel" class="pm-multi-options">
+                            <el-checkbox v-for="opt in ejectWayOptions" :key="opt" :label="opt">
+                              {{ opt }}
+                            </el-checkbox>
+                          </el-checkbox-group>
+                        </el-form-item>
+                        <el-form-item label="复位方式">
+                          <el-checkbox-group v-model="resetWayModel" class="pm-multi-options">
+                            <el-checkbox v-for="opt in resetWayOptions" :key="opt" :label="opt">
+                              {{ opt }}
+                            </el-checkbox>
+                          </el-checkbox-group>
+                        </el-form-item>
+                      </div>
+                    </el-col>
+                    <el-col v-if="isPlasticMould" :xs="0" :sm="0" :lg="8" />
                   </el-row>
                 </div>
               </el-tab-pane>
@@ -820,6 +906,7 @@
                           filterable
                           style="width: 100%"
                           @change="handleMachineTonnageChange"
+                          @clear="handleMachineTonnageClear"
                         >
                           <el-option
                             v-for="opt in machineTonnageOptions"
@@ -1530,6 +1617,17 @@ const runnerCountModel = computed<number | undefined>({
   }
 })
 
+const runnerTypeModel = computed<string | undefined>({
+  get: () => {
+    const v = (editForm as any).流道类型
+    return v === null || v === undefined || v === '' ? undefined : String(v)
+  },
+  set: (val) => {
+    ;(editForm as any).流道类型 =
+      val === undefined || val === null || val === '' ? null : String(val)
+  }
+})
+
 const gateCountModel = computed<number | undefined>({
   get: () => {
     const v = (editForm as any).浇口数量
@@ -1539,6 +1637,167 @@ const gateCountModel = computed<number | undefined>({
     ;(editForm as any).浇口数量 = val === undefined ? null : val
   }
 })
+
+const gateTypeModel = computed<string | undefined>({
+  get: () => {
+    const v = (editForm as any).浇口类型
+    return v === null || v === undefined || v === '' ? undefined : String(v)
+  },
+  set: (val) => {
+    ;(editForm as any).浇口类型 =
+      val === undefined || val === null || val === '' ? null : String(val)
+  }
+})
+
+const isPlasticMould = computed(() => String((editForm as any).分类 || '').trim() === '塑胶模具')
+
+const corePullMethodOptions = ['斜导柱', '斜滑块', '油缸']
+const ejectTypeOptions = ['圆顶', '方顶', '顶片']
+const ejectWayOptions = ['机械顶出', '油缸顶出']
+const resetWayOptions = ['弹簧复位', '氮气弹簧复位', '强制复位', '油缸复位']
+
+const corePullSelected = ref<string[]>([])
+const corePullQty = reactive<Record<string, number | undefined>>({
+  斜导柱: undefined,
+  斜滑块: undefined,
+  油缸: undefined
+})
+const corePullQtyInputRefs = new Map<string, any>()
+const setCorePullQtyInputRef = (method: string, el: any) => {
+  if (el) corePullQtyInputRefs.set(method, el)
+  else corePullQtyInputRefs.delete(method)
+}
+
+const splitCsv = (val: unknown) =>
+  String(val || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+const unique = <T,>(arr: T[]) => Array.from(new Set(arr))
+
+const ejectTypeModel = computed<string[]>({
+  get: () => unique(splitCsv((editForm as any).顶出类型)),
+  set: (arr) => {
+    ;(editForm as any).顶出类型 = arr.length ? arr.join(',') : null
+  }
+})
+const ejectWayModel = computed<string[]>({
+  get: () => unique(splitCsv((editForm as any).顶出方式)),
+  set: (arr) => {
+    ;(editForm as any).顶出方式 = arr.length ? arr.join(',') : null
+  }
+})
+const resetWayModel = computed<string[]>({
+  get: () => unique(splitCsv((editForm as any).复位方式)),
+  set: (arr) => {
+    ;(editForm as any).复位方式 = arr.length ? arr.join(',') : null
+  }
+})
+
+const parseCorePullDetail = (val: unknown): { 方式: string; 数量: number | null }[] => {
+  const raw = String(val || '').trim()
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((x) => ({
+        方式: String(x?.方式 || '').trim(),
+        数量: x?.数量 === null || x?.数量 === undefined || x?.数量 === '' ? null : Number(x?.数量)
+      }))
+      .filter((x) => x.方式)
+      .map((x) => ({
+        方式: x.方式,
+        数量: Number.isFinite(x.数量 as number) ? (x.数量 as number) : null
+      }))
+  } catch {
+    return []
+  }
+}
+
+const initCorePullFromForm = () => {
+  corePullSelected.value = []
+  corePullMethodOptions.forEach((k) => {
+    corePullQty[k] = undefined
+  })
+  if (!isPlasticMould.value) return
+
+  const list = parseCorePullDetail((editForm as any).抽芯明细)
+  const selected: string[] = []
+  list.forEach((x) => {
+    if (!corePullMethodOptions.includes(x.方式)) return
+    selected.push(x.方式)
+    corePullQty[x.方式] = x.数量 === null ? undefined : Number(x.数量)
+  })
+  corePullSelected.value = unique(selected)
+}
+
+const syncCorePullToForm = () => {
+  // 分类未回填/非塑胶模具时，不主动清空，避免“打开弹窗时分类为空”导致把已保存数据误清空。
+  // 真正需要清空（从塑胶模具切换到非塑胶模具）在 isPlasticMould 的 watch 里处理。
+  if (!isPlasticMould.value) return
+  const details = corePullSelected.value.map((方式) => ({
+    方式,
+    数量: corePullQty[方式] ?? null
+  }))
+  ;(editForm as any).抽芯明细 = details.length ? JSON.stringify(details) : null
+}
+
+const safeValidateFields = (fields: string[]) => {
+  if (!editDialogVisible.value) return
+  const form = editFormRef.value
+  if (!form) return
+  try {
+    const ret = form.validateField?.(fields as any)
+    // Element Plus: validateField 返回 Promise，失败会 reject（避免控制台 Uncaught）
+    ;(ret as any)?.catch?.(() => {})
+  } catch {
+    // ignore
+  }
+}
+
+watch(
+  () => corePullSelected.value.slice(),
+  (nextSelected, prevSelected) => {
+    const prevSet = new Set(prevSelected || [])
+    const nextSet = new Set(nextSelected || [])
+    const added = (nextSelected || []).filter((k) => !prevSet.has(k))
+    const removed = (prevSelected || []).filter((k) => !nextSet.has(k))
+
+    // 被取消的项：清空数量
+    removed.forEach((k) => {
+      if (k in corePullQty) corePullQty[k] = undefined
+    })
+    syncCorePullToForm()
+    nextTick(() => safeValidateFields(['抽芯明细']))
+
+    // 新增勾选：自动聚焦数量输入
+    if (added.length) {
+      nextTick(() => {
+        corePullQtyInputRefs.get(added[0])?.focus?.()
+      })
+    }
+  }
+)
+
+watch(
+  corePullQty,
+  () => {
+    syncCorePullToForm()
+  },
+  { deep: true }
+)
+
+const handleCorePullQtyChange = (method: string, val: unknown) => {
+  if (!corePullSelected.value.includes(method)) return
+  const n = Number(val)
+  if (Number.isFinite(n) && n === 0) {
+    corePullQty[method] = undefined
+    ElMessage.error('抽芯数量不能为 0')
+    nextTick(() => safeValidateFields(['抽芯明细']))
+  }
+}
 
 const frontMouldMaterialModel = computed<string>({
   get: () => String((editForm as any).前模材质 ?? ''),
@@ -1610,8 +1869,19 @@ const machineSpecUnlocked = computed(() => {
   return Number.isFinite(Number(t)) && Number(t) > 0
 })
 
-const handleMachineTonnageChange = (val: number | undefined) => {
-  if (val === undefined || val === null) return
+const handleMachineTonnageClear = () => {
+  handleMachineTonnageChange(undefined)
+}
+
+const handleMachineTonnageChange = (val: unknown) => {
+  // 清除机台吨位时，同时清除关联字段
+  if (val === undefined || val === null || val === '') {
+    ;(editForm as any).锁模力 = null
+    ;(editForm as any).定位圈 = null
+    ;(editForm as any).容模量 = ''
+    ;(editForm as any).拉杆间距 = ''
+    return
+  }
   const tonnage = Number(val)
   if (!Number.isFinite(tonnage) || tonnage <= 0) return
 
@@ -1731,6 +2001,22 @@ const editRules: FormRules = {
         const n = Number(value)
         if (!Number.isFinite(n) || n <= 0) {
           return callback(new Error('浇口数量必须大于 0'))
+        }
+        return callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
+  抽芯明细: [
+    {
+      validator: (_rule, _value, callback) => {
+        if (!isPlasticMould.value) return callback()
+        if (corePullSelected.value.length === 0) return callback()
+        for (const method of corePullSelected.value) {
+          const qty = corePullQty[method]
+          if (qty === undefined || Number(qty) <= 0) {
+            return callback(new Error(`请填写“${method}”的抽芯数量（必须大于 0）`))
+          }
         }
         return callback()
       },
@@ -2046,24 +2332,39 @@ const handleEditFromView = () => {
   setTimeout(() => handleEdit(viewData.value), 100)
 }
 
-const handleEdit = (row: Partial<ProjectInfo>) => {
+const handleEdit = async (row: Partial<ProjectInfo>) => {
   editTitle.value = '编辑项目'
-  currentProjectCode.value = row.项目编号 || ''
+  const projectCode = row.项目编号 || ''
+  currentProjectCode.value = projectCode
+
+  // 先用列表行数据填充，避免弹窗打开前无内容
   Object.assign(editForm, row)
-  // 若已有吨位，则自动补齐设备参数（不覆盖已填定位圈）
-  if (machineTonnageModel.value) {
-    handleMachineTonnageChange(machineTonnageModel.value)
+
+  // 编辑：优先拉取详情，确保新字段（如 抽芯明细/顶出/复位）能回显
+  if (projectCode) {
+    try {
+      const response: any = await getProjectDetailApi(projectCode)
+      const detail = response?.data?.data || response?.data || null
+      if (detail) {
+        Object.assign(editForm, detail)
+      }
+    } catch {
+      // ignore：详情失败时回退到列表行数据
+    }
+
+    // 编辑时自动加载货物信息（用于分类/产品信息等）
+    await handleProjectCodeBlur()
   }
 
-  // 编辑时自动加载货物信息
-  if (row.项目编号) {
-    handleProjectCodeBlur()
+  // 若已有吨位，则自动补齐设备参数（不覆盖已填定位圈）
+  if (machineTonnageModel.value !== undefined) {
+    handleMachineTonnageChange(machineTonnageModel.value)
   }
 
   editDialogVisible.value = true
 
   // 加载附件列表
-  if (row.项目编号) {
+  if (projectCode) {
     loadAttachments()
     loadProductionTaskAttachments()
   }
@@ -2579,25 +2880,40 @@ watch(
 const handleRunnerCountChange = (val: unknown) => {
   if (!editForm.流道类型) return
   const n = Number(val)
+  if (Number.isFinite(n) && !Number.isInteger(n)) {
+    editForm.流道数量 = null
+    ElMessage.error('流道数量必须为整数')
+    nextTick(() => safeValidateFields(['流道数量']))
+    return
+  }
   if (Number.isFinite(n) && n === 0) {
     editForm.流道数量 = null
     ElMessage.error('流道数量不能为 0')
-    nextTick(() => editFormRef.value?.validateField?.(['流道数量']))
+    nextTick(() => safeValidateFields(['流道数量']))
   }
 }
 
 const handleGateCountChange = (val: unknown) => {
   if (!editForm.浇口类型) return
   const n = Number(val)
+  if (Number.isFinite(n) && !Number.isInteger(n)) {
+    editForm.浇口数量 = null
+    ElMessage.error('浇口数量必须为整数')
+    nextTick(() => safeValidateFields(['浇口数量']))
+    return
+  }
   if (Number.isFinite(n) && n === 0) {
     editForm.浇口数量 = null
     ElMessage.error('浇口数量不能为 0')
-    nextTick(() => editFormRef.value?.validateField?.(['浇口数量']))
+    nextTick(() => safeValidateFields(['浇口数量']))
   }
 }
 
 const handleSubmitEdit = async () => {
   if (!editFormRef.value) return
+
+  // 兜底：避免“勾选/输入后立刻保存”导致 watcher 未及时同步到 editForm
+  syncCorePullToForm()
 
   try {
     await editFormRef.value.validate()
@@ -2644,7 +2960,8 @@ const handleSubmitEdit = async () => {
   try {
     if (currentProjectCode.value) {
       // 过滤掉 productName 和 productDrawing，这两个字段不属于项目管理表
-      const { productName, productDrawing, ...updateData } = editForm
+      // 同时过滤掉“分类”，它属于货物信息表，不应回写到项目管理表
+      const { productName, productDrawing, 分类, ...updateData } = editForm as any
       await updateProjectApi(currentProjectCode.value, updateData)
       ElMessage.success('更新成功')
     } else {
@@ -2654,7 +2971,7 @@ const handleSubmitEdit = async () => {
         return
       }
       // 过滤掉 productName 和 productDrawing
-      const { productName, productDrawing, ...createData } = editForm
+      const { productName, productDrawing, 分类, ...createData } = editForm as any
       await createProjectApi(createData as ProjectInfo)
       ElMessage.success('创建成功')
     }
@@ -2695,16 +3012,21 @@ const handleProjectCodeBlur = async () => {
       // 使用 Object.assign 确保响应式更新
       Object.assign(editForm, {
         productName: goodsData.productName || '',
-        productDrawing: goodsData.productDrawing || ''
+        productDrawing: goodsData.productDrawing || '',
+        分类: goodsData.category || ''
       } as Partial<ProjectInfo>)
 
       console.log('填充后的 editForm:', editForm)
       console.log('productName:', editForm.productName, 'productDrawing:', editForm.productDrawing)
+
+      // 分类回填后，重新从已保存的“抽芯明细”初始化 UI（避免再次打开看不到）
+      nextTick(() => initCorePullFromForm())
     } else {
       console.log('未找到货物信息')
       // 清空产品信息
       editForm.productName = ''
       editForm.productDrawing = ''
+      editForm.分类 = ''
     }
 
     if (editDialogVisible.value) {
@@ -2721,6 +3043,10 @@ const handleEditDialogClosed = () => {
   editFormRef.value?.resetFields()
   Object.keys(editForm).forEach((key) => delete (editForm as any)[key])
   currentProjectCode.value = ''
+  corePullSelected.value = []
+  corePullMethodOptions.forEach((k) => {
+    corePullQty[k] = undefined
+  })
 }
 
 watch(
@@ -2728,9 +3054,35 @@ watch(
   (visible) => {
     if (visible) {
       editActiveTab.value = 'basic'
-      nextTick(() => setEditDialogBaseHeight())
+      nextTick(() => {
+        initCorePullFromForm()
+        setEditDialogBaseHeight()
+      })
     } else {
       editDialogBaseHeight.value = undefined
+    }
+  }
+)
+
+watch(
+  () => isPlasticMould.value,
+  (val, prev) => {
+    // 仅当从“塑胶模具”切换到“非塑胶模具”时，才清空相关字段
+    if (prev === true && val === false) {
+      ;(editForm as any).抽芯明细 = null
+      ;(editForm as any).顶出类型 = null
+      ;(editForm as any).顶出方式 = null
+      ;(editForm as any).复位方式 = null
+      corePullSelected.value = []
+      corePullMethodOptions.forEach((k) => {
+        corePullQty[k] = undefined
+      })
+      editFormRef.value?.clearValidate?.(['抽芯明细'])
+      return
+    }
+
+    if (val === true && prev !== true) {
+      initCorePullFromForm()
     }
   }
 )
@@ -2937,11 +3289,11 @@ onMounted(() => {
 
 /* PC 端编辑弹窗：拉高整体高度并收紧头/脚边距，主体自适应填充 */
 @media (width >= 769px) {
-  :deep(.pm-edit-dialog .el-dialog) {
+  :deep(.pm-edit-dialog) {
     display: flex;
-    height: 720px;
-    max-height: 720px;
-    min-height: 720px;
+    height: 800px;
+    max-height: 800px;
+    min-height: 800px;
     margin: auto;
     flex-direction: column;
   }
@@ -3077,13 +3429,6 @@ onMounted(() => {
   margin-top: 4px;
   overflow: hidden;
   flex-direction: column;
-}
-
-/* 固定 tabs 内容区域高度，确保切换页签时弹窗高度不变 */
-:deep(.pm-edit-tabs .el-tabs__content) {
-  min-height: 0;
-  overflow: hidden auto;
-  flex: 1;
 }
 
 :deep(.pm-edit-tabs .el-tab-pane) {
@@ -3645,6 +3990,87 @@ onMounted(() => {
 
 :deep(.pm-attachment-card .el-card__body) {
   padding: 12px;
+}
+
+/* 模具信息：抽芯/顶出/复位 */
+.pm-core-pull-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.pm-core-pull-table__header {
+  display: flex;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--el-text-color-secondary);
+  justify-content: space-between;
+}
+
+.pm-core-pull-table__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pm-core-pull-table__method {
+  flex: 1;
+  min-width: 0;
+  margin-right: 0;
+}
+
+.pm-core-pull-table__qty {
+  flex: 0 0 120px;
+}
+
+.pm-core-pull-table__qty :deep(.el-input__inner) {
+  text-align: right;
+}
+
+.pm-multi-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+:deep(.pm-multi-options .el-checkbox) {
+  margin-right: 0;
+}
+
+.pm-mould-group {
+  padding: 12px 14px 2px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.pm-mould-group__title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--el-text-color-primary);
+}
+
+.pm-mould-group--light :deep(.el-form-item__label),
+.pm-mould-group--light :deep(.el-checkbox__label),
+.pm-mould-group--light :deep(.el-checkbox) {
+  font-weight: 400 !important;
+}
+
+.pm-mould-grid-row :deep(.el-col) {
+  display: flex;
+}
+
+.pm-mould-grid-row .pm-mould-group {
+  flex: 1;
+}
+
+.pm-mould-grid-row + .pm-mould-grid-row {
+  margin-top: 12px;
 }
 
 /* 响应式优化 */

@@ -3,6 +3,7 @@ import request from '@/axios'
 // 项目信息类型定义
 export interface ProjectInfo {
   项目编号: string
+  分类?: string
   产品名称?: string
   产品图号?: string
   productName?: string // 产品名称（从货物信息表获取）
@@ -33,6 +34,10 @@ export interface ProjectInfo {
   产品颜色?: string
   模具重量?: number
   流道类型?: string
+  抽芯明细?: string | null
+  顶出类型?: string | null
+  顶出方式?: string | null
+  复位方式?: string | null
   机台吨位?: number
   备注?: string
   是否归档?: boolean

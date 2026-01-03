@@ -449,6 +449,7 @@ router.get('/goods', async (req, res) => {
       SELECT TOP 1
         g.产品图号 as productDrawing,
         g.产品名称 as productName,
+        g.分类 as category,
         p.客户模号 as customerModelNo
       FROM 货物信息 g
       LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
