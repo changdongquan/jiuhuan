@@ -757,32 +757,30 @@
                     <el-col v-if="isPlasticMould" :xs="24" :sm="12" :lg="8">
                       <div class="pm-mould-group pm-mould-group--light">
                         <div class="pm-mould-group__title">抽芯方式</div>
-                        <el-form-item label="" :label-width="0" prop="抽芯明细">
-                          <el-checkbox-group v-model="corePullSelected" class="pm-core-pull-table">
-                            <div class="pm-core-pull-table__header">
-                              <span>方式</span>
-                              <span>数量</span>
-                            </div>
-                            <div
-                              v-for="opt in corePullMethodOptions"
-                              :key="opt"
-                              class="pm-core-pull-table__row"
+                        <el-form-item
+                          v-for="opt in corePullMethodOptions"
+                          :key="opt"
+                          class="pm-core-pull-item"
+                        >
+                          <template #label>
+                            <el-checkbox
+                              class="pm-core-pull-item__checkbox"
+                              :model-value="corePullSelected.includes(opt)"
+                              @change="(checked) => handleCorePullToggle(opt, checked)"
                             >
-                              <el-checkbox :label="opt" class="pm-core-pull-table__method">
-                                {{ opt }}
-                              </el-checkbox>
-                              <el-input-number
-                                :ref="(el) => setCorePullQtyInputRef(opt, el)"
-                                v-model="corePullQty[opt]"
-                                :min="0"
-                                :controls="false"
-                                :disabled="!corePullSelected.includes(opt)"
-                                placeholder="数量"
-                                class="pm-core-pull-table__qty"
-                                @change="(v) => handleCorePullQtyChange(opt, v)"
-                              />
-                            </div>
-                          </el-checkbox-group>
+                              {{ opt }}
+                            </el-checkbox>
+                          </template>
+                          <el-input-number
+                            :ref="(el) => setCorePullQtyInputRef(opt, el)"
+                            v-model="corePullQty[opt]"
+                            :min="0"
+                            :precision="0"
+                            :controls="false"
+                            :disabled="!corePullSelected.includes(opt)"
+                            class="pm-core-pull-item__qty"
+                            @change="(v) => handleCorePullQtyChange(opt, v)"
+                          />
                         </el-form-item>
                       </div>
                     </el-col>
@@ -1668,6 +1666,18 @@ const setCorePullQtyInputRef = (method: string, el: any) => {
   else corePullQtyInputRefs.delete(method)
 }
 
+const handleCorePullToggle = (method: string, checked: unknown) => {
+  const isChecked = Boolean(checked)
+  const list = corePullSelected.value.slice()
+  const idx = list.indexOf(method)
+  if (isChecked) {
+    if (idx === -1) list.push(method)
+  } else if (idx !== -1) {
+    list.splice(idx, 1)
+  }
+  corePullSelected.value = list
+}
+
 const splitCsv = (val: unknown) =>
   String(val || '')
     .split(',')
@@ -1770,7 +1780,6 @@ watch(
       if (k in corePullQty) corePullQty[k] = undefined
     })
     syncCorePullToForm()
-    nextTick(() => safeValidateFields(['抽芯明细']))
 
     // 新增勾选：自动聚焦数量输入
     if (added.length) {
@@ -1795,7 +1804,6 @@ const handleCorePullQtyChange = (method: string, val: unknown) => {
   if (Number.isFinite(n) && n === 0) {
     corePullQty[method] = undefined
     ElMessage.error('抽芯数量不能为 0')
-    nextTick(() => safeValidateFields(['抽芯明细']))
   }
 }
 
@@ -2001,22 +2009,6 @@ const editRules: FormRules = {
         const n = Number(value)
         if (!Number.isFinite(n) || n <= 0) {
           return callback(new Error('浇口数量必须大于 0'))
-        }
-        return callback()
-      },
-      trigger: ['blur', 'change']
-    }
-  ],
-  抽芯明细: [
-    {
-      validator: (_rule, _value, callback) => {
-        if (!isPlasticMould.value) return callback()
-        if (corePullSelected.value.length === 0) return callback()
-        for (const method of corePullSelected.value) {
-          const qty = corePullQty[method]
-          if (qty === undefined || Number(qty) <= 0) {
-            return callback(new Error(`请填写“${method}”的抽芯数量（必须大于 0）`))
-          }
         }
         return callback()
       },
@@ -2921,6 +2913,19 @@ const handleSubmitEdit = async () => {
     return
   }
 
+  // 抽芯方式：不在表单中做逐行提示校验，保存时统一校验并提示
+  if (isPlasticMould.value && corePullSelected.value.length > 0) {
+    const invalidMethod = corePullSelected.value.find((m) => {
+      const qty = corePullQty[m]
+      return qty === undefined || Number(qty) <= 0
+    })
+    if (invalidMethod) {
+      ElMessage.error('抽芯方式勾选后，请填写对应数量（必须大于 0）')
+      nextTick(() => corePullQtyInputRefs.get(invalidMethod)?.focus?.())
+      return
+    }
+  }
+
   // 当项目状态改为“已经移模”时，进行额外业务校验：
   // 1. 必须填写移模日期
   // 2. 对应生产任务的生产状态必须为“已完成”
@@ -3077,7 +3082,6 @@ watch(
       corePullMethodOptions.forEach((k) => {
         corePullQty[k] = undefined
       })
-      editFormRef.value?.clearValidate?.(['抽芯明细'])
       return
     }
 
@@ -3993,40 +3997,16 @@ onMounted(() => {
 }
 
 /* 模具信息：抽芯/顶出/复位 */
-.pm-core-pull-table {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.pm-core-pull-item__checkbox {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pm-core-pull-item__qty {
   width: 100%;
 }
 
-.pm-core-pull-table__header {
-  display: flex;
-  padding: 0 2px;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--el-text-color-secondary);
-  justify-content: space-between;
-}
-
-.pm-core-pull-table__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pm-core-pull-table__method {
-  flex: 1;
-  min-width: 0;
-  margin-right: 0;
-}
-
-.pm-core-pull-table__qty {
-  flex: 0 0 120px;
-}
-
-.pm-core-pull-table__qty :deep(.el-input__inner) {
+.pm-core-pull-item__qty :deep(.el-input__inner) {
   text-align: right;
 }
 
@@ -4067,10 +4047,15 @@ onMounted(() => {
 
 .pm-mould-grid-row .pm-mould-group {
   flex: 1;
+  height: 100%;
 }
 
 .pm-mould-grid-row + .pm-mould-grid-row {
   margin-top: 12px;
+}
+
+.pm-mould-grid-row {
+  align-items: stretch;
 }
 
 /* 响应式优化 */
