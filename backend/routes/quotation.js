@@ -326,48 +326,125 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.getRow(1).height = 28
 
   // ===== Meta (manufacturing standard) =====
-  // Layout: left block (A-D) + right block (E-last)
-  const metaRow1 = 2
-  const metaRow2 = 3
-  const metaRow3 = 4
-  const leftEnd = Math.min(4, colCount) // D or last
-  const rightStart = Math.min(5, colCount) // E or last
+  // 增加标题与客户名称之间的垂直间距：插入一行空行
+  const gapRow = 2
+  sheet.getRow(gapRow).height = 14
 
-  const mergeLeft = (r) => sheet.mergeCells(`${colLetter(1)}${r}:${colLetter(leftEnd)}${r}`)
-  const mergeRight = (r) => sheet.mergeCells(`${colLetter(rightStart)}${r}:${lastCol}${r}`)
-  mergeLeft(metaRow1)
-  mergeRight(metaRow1)
-  mergeLeft(metaRow2)
-  mergeRight(metaRow2)
-  mergeLeft(metaRow3)
-  mergeRight(metaRow3)
+  // 头部信息使用“标签 + 值”布局：
+  // - 冒号对齐（标签右对齐）
+  // - 下划线缩短（仅值区域带下划线）
+  // - 联系人/联系电话整体下移一行
+  const metaRow1 = 3
+  const metaRow2 = 4
+  const metaRow3 = 5
+  const metaLabelFont = { size: 11, color: colorTextMuted }
+  const metaValueFont = { size: 11 }
+  const metaValueMutedFont = { size: 11, color: colorTextMuted }
 
-  const metaFont = { size: 11 }
-  const metaMutedFont = { size: 11, color: colorTextMuted }
-  const setMetaCell = (addr, value, muted = false) => {
-    const cell = sheet.getCell(addr)
-    cell.value = value
-    cell.font = muted ? metaMutedFont : metaFont
-    cell.alignment = { horizontal: 'left', vertical: 'middle' }
+  const leftLabelCol = 1 // A
+  const leftValueStartCol = 2 // B
+  const leftValueEndCol = Math.min(4, colCount) // D
+
+  const rightLabelCol = Math.min(5, colCount) // E
+  const rightValueStartCol = Math.min(rightLabelCol + 1, colCount) // F
+  const rightValueEndCol = Math.min(colCount, rightLabelCol + 2) // 默认两列（F-G）
+
+  const applyBottomBorderForRange = (rowNo, startCol, endCol) => {
+    for (let c = startCol; c <= endCol; c += 1) {
+      sheet.getRow(rowNo).getCell(c).border = { bottom: borderThin }
+    }
   }
 
-  // 头部信息排版：
-  // - 报价单号在客户名称下方
-  // - 联系电话在联系人下方
-  setMetaCell(`A${metaRow1}`, `客户名称：${row.customerName || ''}`)
-  setMetaCell(`${colLetter(rightStart)}${metaRow1}`, `联系人：${row.contactName || '-'}`)
-  setMetaCell(`A${metaRow2}`, `报价单号：${row.quotationNo || ''}`, true)
-  setMetaCell(`${colLetter(rightStart)}${metaRow2}`, `联系电话：${row.contactPhone || '-'}`)
-  setMetaCell(`A${metaRow3}`, `报价日期：${toDateString(row.quotationDate) || '-'}`, true)
-  setMetaCell(`${colLetter(rightStart)}${metaRow3}`, ' ', true)
+  const setMetaField = ({
+    rowNo,
+    labelCol,
+    valueStartCol,
+    valueEndCol,
+    label,
+    value,
+    mutedValue,
+    underline = true
+  }) => {
+    const labelCell = sheet.getRow(rowNo).getCell(labelCol)
+    labelCell.value = label ? `${label}：` : ''
+    labelCell.font = metaLabelFont
+    labelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+    if (valueStartCol <= valueEndCol) {
+      sheet.mergeCells(`${colLetter(valueStartCol)}${rowNo}:${colLetter(valueEndCol)}${rowNo}`)
+      const valueCell = sheet.getCell(`${colLetter(valueStartCol)}${rowNo}`)
+      valueCell.value = value
+      valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+      if (underline) applyBottomBorderForRange(rowNo, valueStartCol, valueEndCol)
+    }
+  }
+
   ;[metaRow1, metaRow2, metaRow3].forEach((r) => {
     sheet.getRow(r).height = 18
-    sheet.getCell(`A${r}`).border = { bottom: borderThin }
-    sheet.getCell(`${colLetter(rightStart)}${r}`).border = { bottom: borderThin }
+  })
+
+  // 左侧：客户名称 / 报价单号 / 报价日期
+  setMetaField({
+    rowNo: metaRow1,
+    labelCol: leftLabelCol,
+    valueStartCol: leftValueStartCol,
+    valueEndCol: leftValueEndCol,
+    label: '客户名称',
+    value: row.customerName || '',
+    mutedValue: false
+  })
+  setMetaField({
+    rowNo: metaRow2,
+    labelCol: leftLabelCol,
+    valueStartCol: leftValueStartCol,
+    valueEndCol: leftValueEndCol,
+    label: '报价单号',
+    value: row.quotationNo || '',
+    mutedValue: true
+  })
+  setMetaField({
+    rowNo: metaRow3,
+    labelCol: leftLabelCol,
+    valueStartCol: leftValueStartCol,
+    valueEndCol: leftValueEndCol,
+    label: '报价日期',
+    value: toDateString(row.quotationDate) || '-',
+    mutedValue: true
+  })
+
+  // 右侧：留空 / 联系人 / 联系电话（下移一行）
+  setMetaField({
+    rowNo: metaRow1,
+    labelCol: rightLabelCol,
+    valueStartCol: rightValueStartCol,
+    valueEndCol: rightValueEndCol,
+    label: '',
+    value: '',
+    mutedValue: true,
+    underline: false
+  })
+  setMetaField({
+    rowNo: metaRow2,
+    labelCol: rightLabelCol,
+    valueStartCol: rightValueStartCol,
+    valueEndCol: rightValueEndCol,
+    label: '联系人',
+    value: row.contactName || '-',
+    mutedValue: false
+  })
+  setMetaField({
+    rowNo: metaRow3,
+    labelCol: rightLabelCol,
+    valueStartCol: rightValueStartCol,
+    valueEndCol: rightValueEndCol,
+    label: '联系电话',
+    value: row.contactPhone || '-',
+    mutedValue: false
   })
 
   // ===== Table header =====
-  const headerRow = 6
+  const headerRow = 7
   const headerTitles = cols.map((c) => c.header)
   sheet.getRow(headerRow).values = headerTitles
   sheet.getRow(headerRow).height = 24
