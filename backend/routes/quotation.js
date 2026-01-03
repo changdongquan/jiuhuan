@@ -225,6 +225,26 @@ const ensureQuotationEnableImageColumn = async () => {
 const toDateString = (value) => {
   if (!value) return ''
   try {
+    const pad2 = (n) => String(n).padStart(2, '0')
+    if (value instanceof Date && Number.isFinite(value.getTime())) {
+      return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`
+    }
+    if (typeof value === 'string') {
+      const s = value.trim()
+      if (!s) return ''
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+      if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {
+        const [y, m, d] = s.split(/[\/\s]/).filter(Boolean)
+        return `${y}-${pad2(m)}-${pad2(d)}`
+      }
+      const d = new Date(s)
+      if (!Number.isNaN(d.getTime()))
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+      return String(value).split('T')[0]
+    }
+    const d = new Date(value)
+    if (!Number.isNaN(d.getTime()))
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
     return String(value).split('T')[0]
   } catch {
     return ''
@@ -381,20 +401,79 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     ) {
       const width = buffer.readUInt32BE(16)
       const height = buffer.readUInt32BE(20)
-      return { width, height, extension: 'png' }
+      return { width, height, extension: 'png', orientation: 1 }
     }
     if (buffer[0] === 0xff && buffer[1] === 0xd8) {
       let offset = 2
+      let orientation = 1
       while (offset + 9 < buffer.length) {
         if (buffer[offset] !== 0xff) break
         const marker = buffer[offset + 1]
+        if (marker === 0xda) break // Start Of Scan
         const size = buffer.readUInt16BE(offset + 2)
+        if (marker === 0xe1) {
+          try {
+            const exifStart = offset + 4
+            const exifEnd = exifStart + Math.max(0, size - 2)
+            if (exifEnd <= buffer.length) {
+              const signature = buffer.toString('ascii', exifStart, exifStart + 6)
+              if (signature === 'Exif\0\0') {
+                const tiffStart = exifStart + 6
+                const endian = buffer.toString('ascii', tiffStart, tiffStart + 2)
+                const littleEndian = endian === 'II'
+                const readU16 = littleEndian
+                  ? (pos) => buffer.readUInt16LE(pos)
+                  : (pos) => buffer.readUInt16BE(pos)
+                const readU32 = littleEndian
+                  ? (pos) => buffer.readUInt32LE(pos)
+                  : (pos) => buffer.readUInt32BE(pos)
+                const magic = readU16(tiffStart + 2)
+                if (magic === 0x002a) {
+                  const ifd0Offset = readU32(tiffStart + 4)
+                  const ifd0 = tiffStart + ifd0Offset
+                  if (ifd0 + 2 <= exifEnd) {
+                    const count = readU16(ifd0)
+                    for (let i = 0; i < count; i += 1) {
+                      const entry = ifd0 + 2 + i * 12
+                      if (entry + 12 > exifEnd) break
+                      const tag = readU16(entry)
+                      if (tag !== 0x0112) continue
+                      const type = readU16(entry + 2)
+                      const valueCount = readU32(entry + 4)
+                      if (type === 3 && valueCount === 1) {
+                        orientation = readU16(entry + 8)
+                      } else {
+                        const valueOffset = readU32(entry + 8)
+                        const valuePos = tiffStart + valueOffset
+                        if (valuePos + 2 <= exifEnd) orientation = readU16(valuePos)
+                      }
+                      break
+                    }
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
         if (marker === 0xc0 || marker === 0xc2) {
           const height = buffer.readUInt16BE(offset + 5)
           const width = buffer.readUInt16BE(offset + 7)
-          return { width, height, extension: 'jpeg' }
+          return { width, height, extension: 'jpeg', orientation }
         }
         offset += 2 + size
+      }
+    }
+    // WebP (only for dimension probing; ExcelJS image embed may still require conversion)
+    if (
+      buffer.length >= 30 &&
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      const chunk = buffer.toString('ascii', 12, 16)
+      if (chunk === 'VP8X' && buffer.length >= 30) {
+        const width = 1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16))
+        const height = 1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16))
+        return { width, height, extension: 'webp', orientation: 1 }
       }
     }
     return null
@@ -406,8 +485,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const amountColIndex = isEnabled ? 9 : 8
 
   const firstDetailRow = headerRow + 1
-  // 启用图示：按 64px 行高（约 48pt）固定行高，方便缩略图展示
-  const detailRowHeight = isEnabled ? 48 : 22
+  // 启用图示：提高行高，避免 PDF 转换后图示过小
+  const detailRowHeight = isEnabled ? 60 : 22
 
   partItems.forEach((item, idx) => {
     const r = firstDetailRow + idx
@@ -460,28 +539,37 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
             const buffer = fs.readFileSync(imagePath)
             const info = getImageDimensions(buffer)
             if (info?.width && info?.height) {
+              if (info.extension === 'webp') return
               const imageId = workbook.addImage({ buffer, extension: info.extension })
               const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageColIndex).width)
               const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
               const scalePref = Number(item?.imageScale)
               const userScale =
-                scalePref === 0.5 || scalePref === 0.75 || scalePref === 1 ? scalePref : 1
+                Number.isFinite(scalePref) && scalePref > 0
+                  ? Math.max(0.25, Math.min(scalePref, 2))
+                  : 1
               // 允许图片按单元格宽高分别自适应（contain），避免被 min(w,h) 过度限制导致“图示很小”
               const maxW = Math.max(1, Math.floor(cellPxW * userScale))
               const maxH = Math.max(1, Math.floor(cellPxH * userScale))
-              const fitScale = Math.min(maxW / info.width, maxH / info.height, 1)
-              const imgW = Math.max(1, Math.round(info.width * fitScale))
-              const imgH = Math.max(1, Math.round(info.height * fitScale))
+              const rotated =
+                info.orientation === 5 ||
+                info.orientation === 6 ||
+                info.orientation === 7 ||
+                info.orientation === 8
+              const displayW = rotated ? info.height : info.width
+              const displayH = rotated ? info.width : info.height
+              // 允许放大到单元格大小（之前 cap=1 会导致“小图永远很小”）
+              const fitScale = Math.min(maxW / displayW, maxH / displayH)
+              const imgW = Math.max(1, Math.round(displayW * fitScale))
+              const imgH = Math.max(1, Math.round(displayH * fitScale))
               const offsetX = (cellPxW - imgW) / 2
               const offsetY = (cellPxH - imgH) / 2
               const tlCol = imageColIndex - 1 + offsetX / cellPxW
               const tlRow = r - 1 + offsetY / cellPxH
-              const brCol = tlCol + imgW / cellPxW
-              const brRow = tlRow + imgH / cellPxH
               sheet.addImage(imageId, {
                 tl: { col: tlCol, row: tlRow },
-                br: { col: brCol, row: brRow },
-                editAs: 'twoCell'
+                ext: { width: imgW, height: imgH },
+                editAs: 'oneCell'
               })
             }
           } catch (e) {
@@ -539,12 +627,24 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     sheet.getRow(r).height = isTotal ? 24 : 20
   }
 
-  putSummaryRow(sumBoxStartRow, '其它费用', row.otherFee)
-  putSummaryRow(sumBoxStartRow + 1, '运输费用', row.transportFee)
-  putSummaryRow(sumBoxStartRow + 2, '含税价格', row.taxIncludedPrice, true)
+  const otherFee = Number(row.otherFee || 0)
+  const transportFee = Number(row.transportFee || 0)
+  const computedTaxIncludedPrice =
+    row.taxIncludedPrice !== undefined && row.taxIncludedPrice !== null
+      ? Number(row.taxIncludedPrice) || 0
+      : totalAmount + otherFee + transportFee
+
+  const summaryLines = []
+  if (otherFee) summaryLines.push({ label: '其它费用', value: otherFee })
+  if (transportFee) summaryLines.push({ label: '运输费用', value: transportFee })
+  summaryLines.push({ label: '含税价格', value: computedTaxIncludedPrice, isTotal: true })
+
+  summaryLines.forEach((line, idx) =>
+    putSummaryRow(sumBoxStartRow + idx, line.label, line.value, !!line.isTotal)
+  )
 
   // ===== Remark =====
-  const remarkTitleRow = sumBoxStartRow + 4
+  const remarkTitleRow = sumBoxStartRow + summaryLines.length + 1
   const remarkBodyRow = remarkTitleRow + 1
   sheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
   sheet.getCell(`A${remarkTitleRow}`).value = '备注'
@@ -556,22 +656,53 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     cell.fill = fillSolid(colorHeaderBg.argb)
   }
   sheet.mergeCells(`A${remarkBodyRow}:${lastCol}${remarkBodyRow}`)
-  sheet.getCell(`A${remarkBodyRow}`).value = row.remark || ''
+  const remarkText = String(row.remark || '').trim()
+  sheet.getCell(`A${remarkBodyRow}`).value = remarkText
   sheet.getCell(`A${remarkBodyRow}`).font = { size: 11 }
   sheet.getCell(`A${remarkBodyRow}`).alignment = {
     horizontal: 'left',
     vertical: 'top',
     wrapText: true
   }
-  sheet.getRow(remarkBodyRow).height = 80
+  if (!remarkText) {
+    sheet.getRow(remarkBodyRow).height = 28
+  } else {
+    const approxCharsPerLine = 60
+    const approxLines = Math.max(1, Math.ceil(remarkText.length / approxCharsPerLine))
+    sheet.getRow(remarkBodyRow).height = Math.max(48, Math.min(120, approxLines * 18))
+  }
   for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(remarkBodyRow).getCell(c))
 
   // ===== Print helpers =====
   sheet.views = [{ state: 'frozen', ySplit: headerRow }]
+  sheet.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`
   sheet.pageSetup.printArea = `A1:${lastCol}${remarkBodyRow}`
   sheet.headerFooter.oddFooter = `&L零件报价单&R第 &P 页 / 共 &N 页`
 
   return workbook
+}
+
+const mkLibreOfficeProfileDir = async (tmpDir) => {
+  try {
+    const prefix = path.join(tmpDir, 'libreoffice-profile-')
+    return await fs.promises.mkdtemp(prefix)
+  } catch {
+    const fallback = path.join(
+      tmpDir,
+      `libreoffice-profile-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    )
+    try {
+      await fs.promises.mkdir(fallback, { recursive: true })
+    } catch {}
+    return fallback
+  }
+}
+
+const rmDirRecursive = async (dir) => {
+  if (!dir) return
+  try {
+    await fs.promises.rm(dir, { recursive: true, force: true })
+  } catch {}
 }
 
 // 上传零件报价单明细截图（返回匿名静态资源 URL）
@@ -1699,11 +1830,9 @@ router.get('/:id/export-pdf', async (req, res) => {
       await workbook.xlsx.writeFile(xlsxPath)
 
       const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+      let loUserDir
       try {
-        const loUserDir = path.join(tmpDir, 'libreoffice-profile')
-        try {
-          await fs.promises.mkdir(loUserDir, { recursive: true })
-        } catch {}
+        loUserDir = await mkLibreOfficeProfileDir(tmpDir)
 
         const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
         const env = { ...process.env, HOME: loUserDir }
@@ -1731,6 +1860,8 @@ router.get('/:id/export-pdf', async (req, res) => {
           success: false,
           message: '服务器未安装 LibreOffice 或转换 PDF 失败'
         })
+      } finally {
+        await rmDirRecursive(loUserDir)
       }
 
       let pdfBuffer
@@ -1891,12 +2022,10 @@ router.get('/:id/export-pdf', async (req, res) => {
 
     // 调用 LibreOffice 将 xlsx 转为 pdf
     const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    let loUserDir
     try {
-      // 为 LibreOffice 单独指定可写的用户配置目录，避免使用默认的 /var/www 等只读目录
-      const loUserDir = path.join(tmpDir, 'libreoffice-profile')
-      try {
-        await fs.promises.mkdir(loUserDir, { recursive: true })
-      } catch {}
+      // 为 LibreOffice 单独指定可写的用户配置目录；使用独立目录避免并发转换互相影响
+      loUserDir = await mkLibreOfficeProfileDir(tmpDir)
 
       // LibreOffice 要求 file:// 前缀的 URL 形式
       const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
@@ -1930,6 +2059,8 @@ router.get('/:id/export-pdf', async (req, res) => {
         success: false,
         message: '服务器未安装 LibreOffice 或转换 PDF 失败'
       })
+    } finally {
+      await rmDirRecursive(loUserDir)
     }
 
     // 读取生成的 PDF
@@ -2170,11 +2301,9 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
     await workbook.xlsx.writeFile(xlsxPath)
 
     const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    let loUserDir
     try {
-      const loUserDir = path.join(tmpDir, 'libreoffice-profile')
-      try {
-        await fs.promises.mkdir(loUserDir, { recursive: true })
-      } catch {}
+      loUserDir = await mkLibreOfficeProfileDir(tmpDir)
 
       const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
 
@@ -2206,6 +2335,8 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
         success: false,
         message: '服务器未安装 LibreOffice 或转换完工单 PDF 失败'
       })
+    } finally {
+      await rmDirRecursive(loUserDir)
     }
 
     let pdfBuffer

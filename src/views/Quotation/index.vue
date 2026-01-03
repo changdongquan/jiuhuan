@@ -474,7 +474,7 @@
               type="success"
               :loading="downloading"
               :disabled="downloading"
-              @click="handleDownloadExcel"
+              @click="handleDownloadQuotationPdf"
             >
               {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
             </el-button>
@@ -1160,7 +1160,7 @@ interface QuotationFormModel {
     material: string
     process: string
     imageUrl: string
-    imageScale: 0.5 | 0.75 | 1
+    imageScale: 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2
     quantity: number | undefined
     unitPrice: number | undefined
     unitPriceText?: string
@@ -1306,19 +1306,25 @@ const deleteTempPartImageIfNeeded = async (imageUrl: any) => {
   }
 }
 
-const IMAGE_SCALE_OPTIONS: Array<{ label: string; value: 0.5 | 0.75 | 1 }> = [
+const IMAGE_SCALE_OPTIONS: Array<{ label: string; value: 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2 }> = [
   { label: '50%', value: 0.5 },
   { label: '75%', value: 0.75 },
-  { label: '100%', value: 1 }
+  { label: '100%', value: 1 },
+  { label: '125%', value: 1.25 },
+  { label: '150%', value: 1.5 },
+  { label: '200%', value: 2 }
 ]
 
-const normalizeImageScale = (value: any): 0.5 | 0.75 | 1 => {
+const normalizeImageScale = (value: any): 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2 => {
   if (value === 0.5 || value === '0.5' || value === '50%') return 0.5
   if (value === 0.75 || value === '0.75' || value === '75%') return 0.75
+  if (value === 1.25 || value === '1.25' || value === '125%') return 1.25
+  if (value === 1.5 || value === '1.5' || value === '150%') return 1.5
+  if (value === 2 || value === '2' || value === '200%') return 2
   return 1
 }
 
-const getPartItemsRowStyle = () => (quotationForm.enableImage ? { height: '64px' } : {})
+const getPartItemsRowStyle = () => (quotationForm.enableImage ? { height: '80px' } : {})
 
 const uploadPartItemImage = async (file: File, row: any) => {
   if (!file) return
@@ -1754,11 +1760,7 @@ const handleEdit = async (row: QuotationRecord) => {
       material: p.material || '',
       process: (p as any).process || '',
       imageUrl: (p as any).imageUrl || '',
-      imageScale: ((p as any).imageScale === 0.5 ||
-      (p as any).imageScale === 0.75 ||
-      (p as any).imageScale === 1
-        ? (p as any).imageScale
-        : 1) as 0.5 | 0.75 | 1,
+      imageScale: normalizeImageScale((p as any).imageScale),
       quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
       unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
     })),
@@ -1804,11 +1806,7 @@ const handleView = async (row: QuotationRecord) => {
       material: p.material || '',
       process: (p as any).process || '',
       imageUrl: (p as any).imageUrl || '',
-      imageScale: ((p as any).imageScale === 0.5 ||
-      (p as any).imageScale === 0.75 ||
-      (p as any).imageScale === 1
-        ? (p as any).imageScale
-        : 1) as 0.5 | 0.75 | 1,
+      imageScale: normalizeImageScale((p as any).imageScale),
       quantity: p.quantity === null || p.quantity === undefined ? undefined : Number(p.quantity),
       unitPrice: p.unitPrice === null || p.unitPrice === undefined ? undefined : Number(p.unitPrice)
     })),
@@ -1819,8 +1817,8 @@ const handleView = async (row: QuotationRecord) => {
   dialogVisible.value = true
 }
 
-// 下载当前报价单的 Excel 文件
-const handleDownloadExcel = async () => {
+// 下载当前报价单的 报价 PDF 文件
+const handleDownloadQuotationPdf = async () => {
   if (!quotationForm.id) {
     ElMessage.warning('请先保存报价单后再下载')
     return
@@ -1841,7 +1839,7 @@ const handleDownloadExcel = async () => {
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('下载报价单 Excel 失败:', error)
+    console.error('下载报价单 PDF 失败:', error)
     ElMessage.error('下载报价单失败')
   } finally {
     downloading.value = false
@@ -2203,7 +2201,7 @@ const handleSubmit = async () => {
               material: item.material,
               process: item.process,
               imageUrl: item.imageUrl,
-              imageScale: item.imageScale,
+              imageScale: normalizeImageScale(item.imageScale),
               quantity: Number(item.quantity),
               unitPrice: Number(item.unitPrice)
             }))
