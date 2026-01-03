@@ -642,11 +642,11 @@
 
               <el-tab-pane name="mould">
                 <template #label>
-                  模具与设备参数
+                  模具信息
                   <span v-if="mouldTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
                 <div class="pm-edit-section">
-                  <div class="pm-edit-section-title">模具与设备参数</div>
+                  <div class="pm-edit-section-title">模具信息</div>
                   <el-row :gutter="isMobile ? 8 : 12" justify="center">
                     <!-- 第1列：模具信息 -->
                     <el-col :xs="24" :sm="12" :lg="6">
@@ -799,8 +799,18 @@
                         />
                       </el-form-item>
                     </el-col>
+                  </el-row>
+                </div>
+              </el-tab-pane>
 
-                    <!-- 第3列：设备参数 -->
+              <el-tab-pane name="machine">
+                <template #label>
+                  设备与工艺参数
+                  <span v-if="machineTabCompleted" class="pm-tab-complete-dot"></span>
+                </template>
+                <div class="pm-edit-section">
+                  <div class="pm-edit-section-title">设备与工艺参数</div>
+                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
                     <el-col :xs="24" :sm="12" :lg="6">
                       <el-form-item label="机台吨位（吨）">
                         <el-select
@@ -1451,7 +1461,9 @@ const viewData = ref<Partial<ProjectInfo>>({})
 
 const editDialogVisible = ref(false)
 const editTitle = ref('编辑项目')
-const editActiveTab = ref<'basic' | 'part' | 'mould' | 'attachments' | 'attachments2'>('basic')
+const editActiveTab = ref<'basic' | 'part' | 'mould' | 'machine' | 'attachments' | 'attachments2'>(
+  'basic'
+)
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
@@ -1674,7 +1686,13 @@ const mouldTabCompleted = computed(() => {
     '流道类型',
     '流道数量',
     '浇口类型',
-    '浇口数量',
+    '浇口数量'
+  ]
+  return fields.every((key) => isFieldFilled((editForm as any)[key]))
+})
+
+const machineTabCompleted = computed(() => {
+  const fields: (keyof ProjectInfo)[] = [
     '机台吨位',
     '锁模力',
     '定位圈',
@@ -1951,7 +1969,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { title: '基本信息', items: baseInfo },
     { title: '产品信息', items: productInfo },
     { title: '模具信息', items: mouldInfo },
-    { title: '设备参数', items: equipmentInfo },
+    { title: '设备与工艺参数', items: equipmentInfo },
     { title: '时间信息', items: dateInfo }
   ]
 })
