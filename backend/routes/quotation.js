@@ -296,7 +296,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         { header: '产品名称', key: 'name', width: pxToExcelWidth(140) },
         { header: '产品图号', key: 'drawing', width: pxToExcelWidth(120) },
         { header: '材质', key: 'material', width: pxToExcelWidth(100) },
-        { header: '工序', key: 'process', width: pxToExcelWidth(100) },
+        { header: '加工内容', key: 'process', width: pxToExcelWidth(100) },
         { header: '图示', key: 'image', width: pxToExcelWidth(140) },
         { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
         { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
@@ -307,7 +307,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         { header: '产品名称', key: 'name', width: pxToExcelWidth(160) },
         { header: '产品图号', key: 'drawing', width: pxToExcelWidth(130) },
         { header: '材质', key: 'material', width: pxToExcelWidth(110) },
-        { header: '工序', key: 'process', width: pxToExcelWidth(110) },
+        { header: '加工内容', key: 'process', width: pxToExcelWidth(110) },
         { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
         { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
         { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }

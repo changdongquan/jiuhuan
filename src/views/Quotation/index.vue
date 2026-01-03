@@ -764,9 +764,9 @@
                   <el-input v-model="row.material" :disabled="isViewMode" placeholder="材质" />
                 </template>
               </el-table-column>
-              <el-table-column label="工序" min-width="100">
+              <el-table-column label="加工内容" min-width="100">
                 <template #default="{ row }">
-                  <el-input v-model="row.process" :disabled="isViewMode" placeholder="工序" />
+                  <el-input v-model="row.process" :disabled="isViewMode" placeholder="加工内容" />
                 </template>
               </el-table-column>
               <el-table-column
