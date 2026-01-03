@@ -351,11 +351,14 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     cell.alignment = { horizontal: 'left', vertical: 'middle' }
   }
 
+  // 头部信息排版：
+  // - 报价单号在客户名称下方
+  // - 联系电话在联系人下方
   setMetaCell(`A${metaRow1}`, `客户名称：${row.customerName || ''}`)
-  setMetaCell(`${colLetter(rightStart)}${metaRow1}`, `报价单号：${row.quotationNo || ''}`, true)
-  setMetaCell(`A${metaRow2}`, `报价日期：${toDateString(row.quotationDate) || '-'}`, true)
-  setMetaCell(`${colLetter(rightStart)}${metaRow2}`, `联系人：${row.contactName || '-'}`)
-  setMetaCell(`A${metaRow3}`, `联系电话：${row.contactPhone || '-'}`)
+  setMetaCell(`${colLetter(rightStart)}${metaRow1}`, `联系人：${row.contactName || '-'}`)
+  setMetaCell(`A${metaRow2}`, `报价单号：${row.quotationNo || ''}`, true)
+  setMetaCell(`${colLetter(rightStart)}${metaRow2}`, `联系电话：${row.contactPhone || '-'}`)
+  setMetaCell(`A${metaRow3}`, `报价日期：${toDateString(row.quotationDate) || '-'}`, true)
   setMetaCell(`${colLetter(rightStart)}${metaRow3}`, ' ', true)
   ;[metaRow1, metaRow2, metaRow3].forEach((r) => {
     sheet.getRow(r).height = 18
