@@ -433,7 +433,7 @@
                 "
                 @click="handleDownloadTripartiteAgreementDocx"
               >
-                三方协议下载
+                {{ tripartiteAgreementDownloading ? '正在生成 PDF...' : '三方协议下载' }}
               </el-button>
             </div>
           </div>
