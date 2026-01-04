@@ -1486,7 +1486,7 @@ import {
   getProjectAttachmentsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
-  downloadTripartiteAgreementDocxApi,
+  downloadTripartiteAgreementPdfApi,
   type ProjectInfo,
   type ProjectAttachment,
   type ProjectAttachmentType
@@ -2683,12 +2683,12 @@ const handleDownloadTripartiteAgreementDocx = async () => {
 
   try {
     tripartiteAgreementDownloading.value = true
-    const resp = await downloadTripartiteAgreementDocxApi(projectCode)
+    const resp = await downloadTripartiteAgreementPdfApi(projectCode)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${projectCode}_三方协议.docx`
+    a.download = `${projectCode}_三方协议.pdf`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

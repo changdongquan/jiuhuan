@@ -3,9 +3,14 @@ const { query } = require('../database')
 const router = express.Router()
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const fsp = fs.promises
 const multer = require('multer')
 const JSZip = require('jszip')
+const { execFile } = require('child_process')
+const { promisify } = require('util')
+
+const execFileAsync = promisify(execFile)
 
 // 项目管理附件存储配置
 // 使用与销售订单相同的路径配置
@@ -26,6 +31,29 @@ const TRIPARTITE_TEMPLATE_PATH = path.join(
   'project-management',
   '三方协议模板.docx'
 )
+
+const mkLibreOfficeProfileDir = async (tmpDir) => {
+  try {
+    const prefix = path.join(tmpDir, 'libreoffice-profile-')
+    return await fs.promises.mkdtemp(prefix)
+  } catch {
+    const fallback = path.join(
+      tmpDir,
+      `libreoffice-profile-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    )
+    try {
+      await fs.promises.mkdir(fallback, { recursive: true })
+    } catch {}
+    return fallback
+  }
+}
+
+const rmDirRecursive = async (dir) => {
+  if (!dir) return
+  try {
+    await fs.promises.rm(dir, { recursive: true, force: true })
+  } catch {}
+}
 
 // 处理上传文件名中的中文乱码
 const normalizeAttachmentFileName = (name) => {
@@ -193,6 +221,40 @@ const buildTripartiteAgreementContext = (row) => {
     tiebar_spacing_mm:
       row?.拉杆间距 === null || row?.拉杆间距 === undefined ? '' : String(row.拉杆间距)
   }
+}
+
+const loadProjectRowForTripartiteAgreement = async (code) => {
+  const queryString = `
+      SELECT 
+        p.*,
+        (SELECT TOP 1 g1.产品名称 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productName,
+        (SELECT TOP 1 g1.产品图号 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productDrawing
+      FROM 项目管理 p 
+      WHERE p.项目编号 = @projectCode
+    `
+  const result = await query(queryString, { projectCode: code })
+  return Array.isArray(result) && result.length ? result[0] : null
+}
+
+const generateTripartiteAgreementDocxBuffer = async (row) => {
+  const ctx = buildTripartiteAgreementContext(row)
+  const tplBuffer = await fsp.readFile(TRIPARTITE_TEMPLATE_PATH)
+  const zip = await JSZip.loadAsync(tplBuffer)
+  const docXml = await zip.file('word/document.xml').async('string')
+  const filled = docXml.replace(/\{\{\s*([a-zA-Z0-9_]{1,80})\s*\}\}/g, (_m, key) => {
+    const v = ctx[key]
+    return v === null || v === undefined ? '' : String(v)
+  })
+  zip.file('word/document.xml', filled)
+  return await zip.generateAsync({ type: 'nodebuffer' })
 }
 
 // 根据项目编号获取分类名称
@@ -725,39 +787,12 @@ router.get('/tripartite-agreement-docx', async (req, res) => {
       })
     }
 
-    const queryString = `
-      SELECT 
-        p.*,
-        (SELECT TOP 1 g1.产品名称 
-         FROM 货物信息 g1 
-         WHERE g1.项目编号 = p.项目编号 
-           AND CAST(g1.IsNew AS INT) != 1
-         ORDER BY g1.货物ID) as productName,
-        (SELECT TOP 1 g1.产品图号 
-         FROM 货物信息 g1 
-         WHERE g1.项目编号 = p.项目编号 
-           AND CAST(g1.IsNew AS INT) != 1
-         ORDER BY g1.货物ID) as productDrawing
-      FROM 项目管理 p 
-      WHERE p.项目编号 = @projectCode
-    `
-    const result = await query(queryString, { projectCode: code })
-    if (!result || !result.length) {
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
       return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
     }
 
-    const row = result[0]
-    const ctx = buildTripartiteAgreementContext(row)
-
-    const tplBuffer = await fsp.readFile(TRIPARTITE_TEMPLATE_PATH)
-    const zip = await JSZip.loadAsync(tplBuffer)
-    const docXml = await zip.file('word/document.xml').async('string')
-    const filled = docXml.replace(/\{\{\s*([a-zA-Z0-9_]{1,80})\s*\}\}/g, (_m, key) => {
-      const v = ctx[key]
-      return v === null || v === undefined ? '' : String(v)
-    })
-    zip.file('word/document.xml', filled)
-    const outBuffer = await zip.generateAsync({ type: 'nodebuffer' })
+    const outBuffer = await generateTripartiteAgreementDocxBuffer(row)
 
     const filenameBase = row.项目编号 ? String(row.项目编号) : code
     const encodedFilename = encodeURIComponent(`${filenameBase}_三方协议.docx`)
@@ -769,6 +804,108 @@ router.get('/tripartite-agreement-docx', async (req, res) => {
     return res.send(outBuffer)
   } catch (error) {
     console.error('生成三方协议 docx 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成三方协议失败',
+      error: error.message
+    })
+  }
+})
+
+// 生成三方协议（pdf）：先填充 docx 模板，再通过 LibreOffice 转为 PDF
+router.get('/tripartite-agreement-pdf', async (req, res) => {
+  try {
+    const { projectCode } = req.query
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    if (!fs.existsSync(TRIPARTITE_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '三方协议模板不存在，请联系管理员'
+      })
+    }
+
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const docxBuffer = await generateTripartiteAgreementDocxBuffer(row)
+
+    const tmpDir = os.tmpdir()
+    const safeBase = `tripartite-${code}-${Date.now()}`
+    const docxPath = path.join(tmpDir, `${safeBase}.docx`)
+    const pdfPath = path.join(tmpDir, `${safeBase}.pdf`)
+
+    await fsp.writeFile(docxPath, docxBuffer)
+
+    const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    let loUserDir
+    try {
+      loUserDir = await mkLibreOfficeProfileDir(tmpDir)
+      const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+      const env = { ...process.env, HOME: loUserDir }
+      await execFileAsync(
+        sofficePath,
+        [
+          '--headless',
+          `-env:UserInstallation=${loUserDirUrl}`,
+          '--convert-to',
+          'pdf',
+          '--outdir',
+          tmpDir,
+          docxPath
+        ],
+        { env, timeout: 120000 }
+      )
+    } catch (err) {
+      console.error('调用 LibreOffice 失败（三方协议）:', err)
+      try {
+        await fsp.unlink(docxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '服务器未安装 LibreOffice 或转换 PDF 失败'
+      })
+    } finally {
+      await rmDirRecursive(loUserDir)
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await fsp.readFile(pdfPath)
+    } catch (err) {
+      console.error('读取生成的 PDF 文件失败（三方协议）:', err)
+      try {
+        await fsp.unlink(docxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '生成 PDF 文件失败'
+      })
+    }
+
+    try {
+      await fsp.unlink(docxPath)
+    } catch {}
+    try {
+      await fsp.unlink(pdfPath)
+    } catch {}
+
+    const filenameBase = row.项目编号 ? String(row.项目编号) : code
+    const encodedFilename = encodeURIComponent(`${filenameBase}_三方协议.pdf`)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+    return res.send(pdfBuffer)
+  } catch (error) {
+    console.error('生成三方协议 pdf 失败:', error)
     return res.status(500).json({
       code: 500,
       success: false,

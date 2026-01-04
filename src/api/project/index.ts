@@ -168,3 +168,12 @@ export const downloadTripartiteAgreementDocxApi = (projectCode: string) => {
     responseType: 'blob'
   })
 }
+
+// 生成并下载三方协议（pdf）
+export const downloadTripartiteAgreementPdfApi = (projectCode: string) => {
+  return request.get<Blob>({
+    url: `/api/project/tripartite-agreement-pdf`,
+    params: { projectCode },
+    responseType: 'blob'
+  })
+}
