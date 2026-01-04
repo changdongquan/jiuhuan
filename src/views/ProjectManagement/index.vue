@@ -408,18 +408,34 @@
         <!-- 顶部关键信息（在最上方） -->
         <div class="pm-edit-header">
           <div class="pm-edit-header-main">
-            <span class="pm-edit-header-code">{{
-              editForm.项目编号 || currentProjectCode || '新项目'
-            }}</span>
-            <el-tag
-              v-if="editForm.项目状态"
-              :type="getStatusTagType(editForm.项目状态)"
-              size="small"
-              class="pm-edit-header-status pm-status-tag"
-              :class="getStatusTagClass(editForm.项目状态)"
-            >
-              {{ editForm.项目状态 }}
-            </el-tag>
+            <div class="pm-edit-header-main-left">
+              <span class="pm-edit-header-code">{{
+                editForm.项目编号 || currentProjectCode || '新项目'
+              }}</span>
+              <el-tag
+                v-if="editForm.项目状态"
+                :type="getStatusTagType(editForm.项目状态)"
+                size="small"
+                class="pm-edit-header-status pm-status-tag"
+                :class="getStatusTagClass(editForm.项目状态)"
+              >
+                {{ editForm.项目状态 }}
+              </el-tag>
+            </div>
+            <div class="pm-edit-header-actions">
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                :loading="tripartiteAgreementDownloading"
+                :disabled="
+                  tripartiteAgreementDownloading || !(editForm.项目编号 || currentProjectCode)
+                "
+                @click="handleDownloadTripartiteAgreementDocx"
+              >
+                三方协议下载
+              </el-button>
+            </div>
           </div>
           <div class="pm-edit-header-sub">
             <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
@@ -1470,6 +1486,7 @@ import {
   getProjectAttachmentsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
+  downloadTripartiteAgreementDocxApi,
   type ProjectInfo,
   type ProjectAttachment,
   type ProjectAttachmentType
@@ -1552,6 +1569,7 @@ const editActiveTab = ref<'basic' | 'part' | 'mould' | 'machine' | 'attachments'
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
+const tripartiteAgreementDownloading = ref(false)
 const currentProjectCode = ref('')
 const editDialogBodyRef = ref<HTMLElement>()
 const editDialogBaseHeight = ref<number>()
@@ -2656,6 +2674,33 @@ const downloadAttachment = async (row: ProjectAttachment) => {
   }
 }
 
+const handleDownloadTripartiteAgreementDocx = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+
+  try {
+    tripartiteAgreementDownloading.value = true
+    const resp = await downloadTripartiteAgreementDocxApi(projectCode)
+    const blob = (resp as any)?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${projectCode}_三方协议.docx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载三方协议失败:', error)
+    ElMessage.error('下载三方协议失败')
+  } finally {
+    tripartiteAgreementDownloading.value = false
+  }
+}
+
 // 删除附件
 const deleteAttachment = async (row: ProjectAttachment) => {
   try {
@@ -3401,6 +3446,21 @@ onMounted(() => {
 .pm-edit-header-main {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pm-edit-header-main-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pm-edit-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 

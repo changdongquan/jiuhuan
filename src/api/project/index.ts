@@ -159,3 +159,12 @@ export const deleteProjectAttachmentApi = (attachmentId: number) => {
     url: `/api/project/attachments/${attachmentId}`
   })
 }
+
+// 生成并下载三方协议（docx）
+export const downloadTripartiteAgreementDocxApi = (projectCode: string) => {
+  return request.get<Blob>({
+    url: `/api/project/tripartite-agreement-docx`,
+    params: { projectCode },
+    responseType: 'blob'
+  })
+}

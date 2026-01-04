@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs')
 const fsp = fs.promises
 const multer = require('multer')
+const JSZip = require('jszip')
 
 // 项目管理附件存储配置
 // 使用与销售订单相同的路径配置
@@ -18,6 +19,14 @@ const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   10
 )
 
+const TRIPARTITE_TEMPLATE_PATH = path.join(
+  __dirname,
+  '..',
+  'templates',
+  'project-management',
+  '三方协议模板.docx'
+)
+
 // 处理上传文件名中的中文乱码
 const normalizeAttachmentFileName = (name) => {
   if (!name) return name
@@ -25,6 +34,164 @@ const normalizeAttachmentFileName = (name) => {
     return Buffer.from(name, 'latin1').toString('utf8')
   } catch {
     return name
+  }
+}
+
+const formatDateYYYYMMDD = (val) => {
+  if (!val) return ''
+  try {
+    if (val instanceof Date && Number.isFinite(val.getTime())) {
+      const y = val.getFullYear()
+      const m = String(val.getMonth() + 1).padStart(2, '0')
+      const d = String(val.getDate()).padStart(2, '0')
+      return `${y}-${m}-${d}`
+    }
+    const s = String(val).trim()
+    if (!s) return ''
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+    if (s.includes('T')) return s.split('T')[0]
+    const d = new Date(s)
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${dd}`
+    }
+    return s
+  } catch {
+    return ''
+  }
+}
+
+const toNumber = (val) => {
+  const n = typeof val === 'number' ? val : Number(val)
+  return Number.isFinite(n) ? n : null
+}
+
+const splitCsv = (val) =>
+  String(val || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+const hasCsvItem = (val, item) => splitCsv(val).includes(item)
+
+const mark = (checked) => (checked ? '■' : '□')
+
+const buildTripartiteAgreementContext = (row) => {
+  const runnerType = String(row?.流道类型 || '').trim()
+  const gateType = String(row?.浇口类型 || '').trim()
+
+  const productWeight = toNumber(row?.产品重量)
+  const sprueWeight = toNumber(row?.料柄重量)
+  const density =
+    productWeight && productWeight > 0 && sprueWeight !== null
+      ? `${((sprueWeight / productWeight) * 100).toFixed(1)}%`
+      : ''
+
+  const runnerQty =
+    row?.流道数量 === null || row?.流道数量 === undefined ? '' : String(row.流道数量)
+
+  let corePullMap = {}
+  try {
+    const raw = row?.抽芯明细
+    if (raw) {
+      const parsed = JSON.parse(String(raw))
+      if (Array.isArray(parsed)) {
+        corePullMap = parsed.reduce((acc, item) => {
+          if (!item || typeof item !== 'object') return acc
+          const key = String(item.方式 || '').trim()
+          if (!key) return acc
+          acc[key] = item.数量
+          return acc
+        }, {})
+      }
+    }
+  } catch {}
+
+  const corePullMarkQty = (methodLabel) => {
+    const qty = corePullMap[methodLabel]
+    const hasQty = qty !== null && qty !== undefined && String(qty).trim() !== ''
+    return { mark: mark(hasQty), qty: hasQty ? String(qty) : '' }
+  }
+
+  const pin = corePullMarkQty('斜导柱')
+  const slider = corePullMarkQty('斜滑块')
+  const cyl = corePullMarkQty('油缸')
+
+  return {
+    // 2.1
+    mould_no: row?.客户模号 ? String(row.客户模号) : '',
+    part_drawing: row?.productDrawing
+      ? String(row.productDrawing)
+      : row?.产品图号
+        ? String(row.产品图号)
+        : '',
+    part_name: row?.productName
+      ? String(row.productName)
+      : row?.产品名称
+        ? String(row.产品名称)
+        : '',
+    part_material: row?.产品材质 ? String(row.产品材质) : '',
+    cavity_material: row?.前模材质 ? String(row.前模材质) : '',
+    core_material: row?.后模材质 ? String(row.后模材质) : '',
+    slider_material: row?.滑块材质 ? String(row.滑块材质) : '',
+    cavity_count: row?.模具穴数 ? String(row.模具穴数) : '',
+    first_sample_date: formatDateYYYYMMDD(row?.首次送样日期),
+
+    // 3.1.1 runner marks + per-row count
+    runner_common_mark: mark(runnerType === '冷流道'),
+    runner_open_hot_mark: mark(runnerType === '开放式热流道'),
+    runner_point_hot_mark: mark(runnerType === '点浇口热流道'),
+    runner_pin_hot_mark: mark(runnerType === '针阀式热流道'),
+    runner_common_count: runnerType === '冷流道' ? runnerQty : '',
+    runner_open_hot_count: runnerType === '开放式热流道' ? runnerQty : '',
+    runner_point_hot_count: runnerType === '点浇口热流道' ? runnerQty : '',
+    runner_pin_hot_count: runnerType === '针阀式热流道' ? runnerQty : '',
+    runner_brand: '',
+
+    // 3.1.1 gate marks + count
+    gate_direct_mark: mark(gateType === '直接浇口'),
+    gate_point_mark: mark(gateType === '点浇口'),
+    gate_side_mark: mark(gateType === '侧浇口'),
+    gate_sub_mark: mark(gateType === '潜伏浇口'),
+    gate_count: row?.浇口数量 === null || row?.浇口数量 === undefined ? '' : String(row.浇口数量),
+
+    // weights/cycle
+    part_weight_g:
+      row?.产品重量 === null || row?.产品重量 === undefined ? '' : String(row.产品重量),
+    sprue_weight_g:
+      row?.料柄重量 === null || row?.料柄重量 === undefined ? '' : String(row.料柄重量),
+    density,
+    cycle_s: row?.成型周期 === null || row?.成型周期 === undefined ? '' : String(row.成型周期),
+
+    // 3.1.2 core pull / eject / reset
+    core_pull_pin_mark: pin.mark,
+    core_pull_pin_qty: pin.qty,
+    core_pull_slider_mark: slider.mark,
+    core_pull_slider_qty: slider.qty,
+    core_pull_cyl_mark: cyl.mark,
+    core_pull_cyl_qty: cyl.qty,
+
+    eject_round_mark: mark(hasCsvItem(row?.顶出类型, '圆顶')),
+    eject_square_mark: mark(hasCsvItem(row?.顶出类型, '方顶')),
+    eject_plate_mark: mark(hasCsvItem(row?.顶出类型, '顶片')),
+    eject_mech_mark: mark(hasCsvItem(row?.顶出方式, '机械顶出')),
+    eject_oil_mark: mark(hasCsvItem(row?.顶出方式, '油缸顶出')),
+    reset_spring_mark: mark(hasCsvItem(row?.复位方式, '弹簧复位')),
+    reset_nitrogen_mark: mark(hasCsvItem(row?.复位方式, '氮气弹簧复位')),
+    reset_forced_mark: mark(hasCsvItem(row?.复位方式, '强制复位')),
+    reset_oil_mark: mark(hasCsvItem(row?.复位方式, '油缸复位')),
+
+    // 3.2
+    mould_size_mm: row?.模具尺寸 ? String(row.模具尺寸) : '',
+    mould_weight_t:
+      row?.模具重量 === null || row?.模具重量 === undefined ? '' : String(row.模具重量),
+    lock_force_t: row?.锁模力 === null || row?.锁模力 === undefined ? '' : String(row.锁模力),
+    locating_ring_mm: row?.定位圈 === null || row?.定位圈 === undefined ? '' : String(row.定位圈),
+    mold_capacity_mm: row?.容模量 ? String(row.容模量) : '',
+    tiebar_spacing_mm:
+      row?.拉杆间距 === null || row?.拉杆间距 === undefined ? '' : String(row.拉杆间距)
   }
 }
 
@@ -536,6 +703,76 @@ router.get('/detail', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取项目信息失败',
+      error: error.message
+    })
+  }
+})
+
+// 生成三方协议（docx）：基于模板占位符填充，返回 docx 文件
+router.get('/tripartite-agreement-docx', async (req, res) => {
+  try {
+    const { projectCode } = req.query
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    if (!fs.existsSync(TRIPARTITE_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '三方协议模板不存在，请联系管理员'
+      })
+    }
+
+    const queryString = `
+      SELECT 
+        p.*,
+        (SELECT TOP 1 g1.产品名称 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productName,
+        (SELECT TOP 1 g1.产品图号 
+         FROM 货物信息 g1 
+         WHERE g1.项目编号 = p.项目编号 
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productDrawing
+      FROM 项目管理 p 
+      WHERE p.项目编号 = @projectCode
+    `
+    const result = await query(queryString, { projectCode: code })
+    if (!result || !result.length) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const row = result[0]
+    const ctx = buildTripartiteAgreementContext(row)
+
+    const tplBuffer = await fsp.readFile(TRIPARTITE_TEMPLATE_PATH)
+    const zip = await JSZip.loadAsync(tplBuffer)
+    const docXml = await zip.file('word/document.xml').async('string')
+    const filled = docXml.replace(/\{\{\s*([a-zA-Z0-9_]{1,80})\s*\}\}/g, (_m, key) => {
+      const v = ctx[key]
+      return v === null || v === undefined ? '' : String(v)
+    })
+    zip.file('word/document.xml', filled)
+    const outBuffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+    const filenameBase = row.项目编号 ? String(row.项目编号) : code
+    const encodedFilename = encodeURIComponent(`${filenameBase}_三方协议.docx`)
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+    return res.send(outBuffer)
+  } catch (error) {
+    console.error('生成三方协议 docx 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成三方协议失败',
       error: error.message
     })
   }
