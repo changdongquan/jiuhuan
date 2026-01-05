@@ -2075,14 +2075,10 @@ const validateTripartiteAgreementForEdit = () => {
 
 const editRules: FormRules = {
   项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
-  客户模号: [{ required: true, message: '客户模号不能为空', trigger: 'blur' }],
-  首次送样日期: [{ required: true, message: '首次送样日期不能为空', trigger: 'change' }],
-  productName: [{ required: true, message: '产品名称不能为空', trigger: 'blur' }],
-  productDrawing: [{ required: true, message: '产品图号不能为空', trigger: 'blur' }],
-  产品材质: [{ required: true, message: '产品材质不能为空', trigger: 'blur' }],
   产品重量: [
     {
       validator: (_rule, value, callback) => {
+        if (value === null || value === undefined || value === '') return callback()
         const n = Number(value)
         if (!Number.isFinite(n)) return callback(new Error('产品重量必须有数值'))
         return callback()
@@ -2090,19 +2086,17 @@ const editRules: FormRules = {
       trigger: ['blur', 'change']
     }
   ],
-  模具穴数: [{ required: true, message: '模具穴数不能为空', trigger: 'blur' }],
-  模具尺寸: [{ required: true, message: '模具尺寸不能为空', trigger: 'blur' }],
-  模具重量: [{ required: true, message: '模具重量不能为空', trigger: 'change' }],
-  前模材质: [{ required: true, message: '前模材质不能为空', trigger: 'blur' }],
-  后模材质: [{ required: true, message: '后模材质不能为空', trigger: 'blur' }],
-  滑块材质: [{ required: true, message: '滑块材质不能为空', trigger: 'blur' }],
-  流道类型: [{ required: true, message: '流道类型不能为空', trigger: 'change' }],
-  浇口类型: [{ required: true, message: '浇口类型不能为空', trigger: 'change' }],
-  锁模力: [{ required: true, message: '锁模力不能为空', trigger: 'change' }],
-  定位圈: [{ required: true, message: '定位圈不能为空', trigger: 'change' }],
-  容模量: [{ required: true, message: '容模量不能为空', trigger: 'blur' }],
-  拉杆间距: [{ required: true, message: '拉杆间距不能为空', trigger: 'blur' }],
-  成型周期: [{ required: true, message: '成型周期不能为空', trigger: 'change' }],
+  成型周期: [
+    {
+      validator: (_rule, value, callback) => {
+        if (value === null || value === undefined || value === '') return callback()
+        const n = Number(value)
+        if (!Number.isFinite(n)) return callback(new Error('成型周期必须有数值'))
+        return callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
   流道数量: [
     {
       validator: (_rule, value, callback) => {
@@ -2791,6 +2785,18 @@ const handleDownloadTripartiteAgreementDocx = async () => {
 
   try {
     tripartiteAgreementDownloading.value = true
+
+    // 下载时才校验三方协议完整性（允许先暂存/分步填写，保存不拦截）
+    syncCorePullToForm()
+    const localErrors = validateTripartiteAgreementForEdit()
+    if (localErrors.length) {
+      ElMessageBox.alert(localErrors.join('\n'), '三方协议字段缺失/不符合规则', {
+        type: 'error',
+        confirmButtonText: '确定'
+      })
+      return
+    }
+
     const resp = await downloadTripartiteAgreementPdfApi(projectCode)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
@@ -3101,14 +3107,7 @@ const handleSubmitEdit = async () => {
   }
 
   // 三方协议字段规则：保存时统一校验（一次性提示缺失项）
-  const tripartiteErrors = validateTripartiteAgreementForEdit()
-  if (tripartiteErrors.length) {
-    ElMessageBox.alert(tripartiteErrors.join('\n'), '三方协议字段缺失/不符合规则', {
-      type: 'error',
-      confirmButtonText: '确定'
-    })
-    return
-  }
+  // 注意：三方协议字段完整性校验仅在“下载三方协议”时执行
 
   // 当项目状态改为“已经移模”时，进行额外业务校验：
   // 1. 必须填写移模日期
