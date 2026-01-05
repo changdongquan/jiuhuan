@@ -1017,6 +1017,206 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
   }
 })
 
+// 生成三方协议（pdf）并保存到“项目管理附件-三方协议”（不直接下载）
+router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+
+    const { projectCode } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    if (!fs.existsSync(TRIPARTITE_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '三方协议模板不存在，请联系管理员'
+      })
+    }
+
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    // 客户模号为必填项：缺失则不生成
+    const customerModelNo = String(row.客户模号 || '').trim()
+    if (!customerModelNo) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '客户模号不能为空，请先补齐后再生成'
+      })
+    }
+
+    const validateErrors = validateTripartiteAgreementRow(row)
+    if (validateErrors.length) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '三方协议数据不完整，请先补齐后再生成',
+        errors: validateErrors
+      })
+    }
+
+    const docxBuffer = await generateTripartiteAgreementDocxBuffer(row)
+
+    const tmpDir = os.tmpdir()
+    const safeBase = `tripartite-${code}-${Date.now()}`
+    const docxPath = path.join(tmpDir, `${safeBase}.docx`)
+    const pdfPath = path.join(tmpDir, `${safeBase}.pdf`)
+    await fsp.writeFile(docxPath, docxBuffer)
+
+    const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+    let loUserDir
+    try {
+      loUserDir = await mkLibreOfficeProfileDir(tmpDir)
+      const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+      const env = { ...process.env, HOME: loUserDir }
+      await execFileAsync(
+        sofficePath,
+        [
+          '--headless',
+          `-env:UserInstallation=${loUserDirUrl}`,
+          '--convert-to',
+          'pdf',
+          '--outdir',
+          tmpDir,
+          docxPath
+        ],
+        { env, timeout: 120000 }
+      )
+    } catch (err) {
+      console.error('调用 LibreOffice 失败（三方协议）:', err)
+      try {
+        await fsp.unlink(docxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '服务器未安装 LibreOffice 或转换 PDF 失败'
+      })
+    } finally {
+      await rmDirRecursive(loUserDir)
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await fsp.readFile(pdfPath)
+    } catch (err) {
+      console.error('读取生成的 PDF 文件失败（三方协议）:', err)
+      try {
+        await fsp.unlink(docxPath)
+      } catch {}
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '生成 PDF 文件失败'
+      })
+    } finally {
+      try {
+        await fsp.unlink(docxPath)
+      } catch {}
+      try {
+        await fsp.unlink(pdfPath)
+      } catch {}
+    }
+
+    // 单文件覆盖：删除旧文件与记录
+    const existingRows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 项目编号 = @projectCode
+        AND 附件类型 = 'tripartite-agreement'
+      ORDER BY 上传时间 DESC, 附件ID DESC
+      `,
+      { projectCode: code }
+    )
+    if (existingRows.length > 0) {
+      const oldAttachment = existingRows[0]
+      const oldFullPath = getFileFullPath(oldAttachment.relativePath, oldAttachment.storedFileName)
+      await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, {
+        attachmentId: oldAttachment.id
+      })
+      try {
+        if (fs.existsSync(oldFullPath)) {
+          await fsp.unlink(oldFullPath)
+        }
+      } catch (fileErr) {
+        console.warn('删除旧三方协议文件失败:', fileErr)
+      }
+    }
+
+    const category = getCategoryFromProjectCode(code)
+    const safeProjectCode = safeProjectCodeForPath(code)
+    const finalRelativeDir = path.posix.join(category, safeProjectCode, '项目管理', '三方协议')
+    const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+    ensureDirSync(finalFullDir)
+
+    const storedFileName = safeFileName(`${customerModelNo}_三方协议.pdf`)
+    const finalFile = path.join(finalFullDir, storedFileName)
+    await fsp.writeFile(finalFile, pdfBuffer)
+
+    const inserted = await query(
+      `
+      INSERT INTO 项目管理附件 (
+        项目编号,
+        附件类型,
+        原始文件名,
+        存储文件名,
+        相对路径,
+        文件大小,
+        内容类型,
+        上传人
+      )
+      OUTPUT
+        INSERTED.附件ID as id,
+        INSERTED.上传时间 as uploadedAt
+      VALUES (
+        @projectCode,
+        'tripartite-agreement',
+        @originalName,
+        @storedFileName,
+        @relativePath,
+        @fileSize,
+        @contentType,
+        @uploadedBy
+      )
+    `,
+      {
+        projectCode: code,
+        originalName: storedFileName,
+        storedFileName,
+        relativePath: finalRelativeDir,
+        fileSize: pdfBuffer.length,
+        contentType: 'application/pdf',
+        uploadedBy: null
+      }
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      message: '生成三方协议成功',
+      data: { id: inserted?.[0]?.id, storedFileName }
+    })
+  } catch (error) {
+    console.error('生成并保存三方协议 pdf 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成三方协议失败',
+      error: error.message
+    })
+  }
+})
+
 // 新增项目信息
 router.post('/', async (req, res) => {
   try {

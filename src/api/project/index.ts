@@ -177,3 +177,16 @@ export const downloadTripartiteAgreementPdfApi = (projectCode: string) => {
     responseType: 'blob'
   })
 }
+
+// 生成三方协议（pdf）并保存到“项目管理附件-三方协议”（不直接下载）
+export const generateTripartiteAgreementPdfApi = (projectCode: string) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: { id?: number; storedFileName?: string }
+  }>({
+    url: `/api/project/tripartite-agreement-generate-pdf`,
+    data: { projectCode }
+  })
+}

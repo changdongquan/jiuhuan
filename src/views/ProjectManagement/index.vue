@@ -422,20 +422,7 @@
                 {{ editForm.项目状态 }}
               </el-tag>
             </div>
-            <div class="pm-edit-header-actions">
-              <el-button
-                size="small"
-                type="primary"
-                plain
-                :loading="tripartiteAgreementDownloading"
-                :disabled="
-                  tripartiteAgreementDownloading || !(editForm.项目编号 || currentProjectCode)
-                "
-                @click="handleDownloadTripartiteAgreementDocx"
-              >
-                {{ tripartiteAgreementDownloading ? '正在生成三方协议...' : '生成三方协议' }}
-              </el-button>
-            </div>
+            <!-- 三方协议入口移动到“附件区-三方协议”卡片，此处不再显示按钮 -->
           </div>
           <div class="pm-edit-header-sub">
             <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
@@ -1133,18 +1120,18 @@
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>三方协议</span>
-                            <el-upload
-                              :action="getAttachmentAction('tripartite-agreement')"
-                              :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
-                              :before-upload="
-                                (file) => beforeAttachmentUpload(file, 'tripartite-agreement')
+                            <el-button
+                              type="primary"
+                              size="small"
+                              :loading="tripartiteAgreementDownloading"
+                              :disabled="
+                                tripartiteAgreementDownloading ||
+                                !(editForm.项目编号 || currentProjectCode)
                               "
-                              :on-success="handleAttachmentUploadSuccess"
-                              :on-error="handleAttachmentUploadError"
+                              @click="handleGenerateTripartiteAgreement"
                             >
-                              <el-button type="primary" size="small">上传三方协议</el-button>
-                            </el-upload>
+                              {{ tripartiteAgreementDownloading ? '正在生成...' : '生成三方协议' }}
+                            </el-button>
                           </div>
                         </template>
                         <el-table
@@ -1486,7 +1473,7 @@ import {
   getProjectAttachmentsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
-  downloadTripartiteAgreementPdfApi,
+  generateTripartiteAgreementPdfApi,
   type ProjectInfo,
   type ProjectAttachment,
   type ProjectAttachmentType
@@ -2776,7 +2763,7 @@ const downloadAttachment = async (row: ProjectAttachment) => {
   }
 }
 
-const handleDownloadTripartiteAgreementDocx = async () => {
+const handleGenerateTripartiteAgreement = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
     ElMessage.warning('请先填写项目编号')
@@ -2786,7 +2773,7 @@ const handleDownloadTripartiteAgreementDocx = async () => {
   try {
     tripartiteAgreementDownloading.value = true
 
-    // 下载时才校验三方协议完整性（允许先暂存/分步填写，保存不拦截）
+    // 生成时才校验三方协议完整性（允许先暂存/分步填写，保存不拦截）
     syncCorePullToForm()
     const localErrors = validateTripartiteAgreementForEdit()
     if (localErrors.length) {
@@ -2797,25 +2784,30 @@ const handleDownloadTripartiteAgreementDocx = async () => {
       return
     }
 
-    const resp = await downloadTripartiteAgreementPdfApi(projectCode)
-    const blob = (resp as any)?.data ?? resp
-    const url = window.URL.createObjectURL(blob as Blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${projectCode}_三方协议.pdf`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    // 客户模号为必填项：缺失则不生成
+    const customerModelNo = String(editForm.客户模号 || '').trim()
+    if (!customerModelNo) {
+      ElMessage.error('客户模号不能为空，请先补齐后再生成三方协议')
+      return
+    }
+
+    const resp: any = await generateTripartiteAgreementPdfApi(projectCode)
+    if (resp?.code !== 0 && resp?.success !== true) {
+      ElMessage.error(resp?.message || '生成三方协议失败')
+      return
+    }
+
+    ElMessage.success('三方协议已生成并保存到附件')
+    await loadAttachments()
   } catch (error: any) {
-    console.error('下载三方协议失败:', error)
+    console.error('生成三方协议失败:', error)
     const resp = error?.response
     const data = resp?.data
     if (data instanceof Blob) {
       try {
         const text = await data.text()
         const json = JSON.parse(text)
-        const msg = json?.message || '下载三方协议失败'
+        const msg = json?.message || '生成三方协议失败'
         const errs = Array.isArray(json?.errors) ? json.errors : []
         if (errs.length) {
           const lines = errs.map((e: any) => {
@@ -2830,7 +2822,7 @@ const handleDownloadTripartiteAgreementDocx = async () => {
         return
       } catch {}
     }
-    ElMessage.error(resp?.data?.message || error?.message || '下载三方协议失败')
+    ElMessage.error(resp?.data?.message || error?.message || '生成三方协议失败')
   } finally {
     tripartiteAgreementDownloading.value = false
   }
