@@ -497,7 +497,7 @@
                       <el-form-item label="设计师">
                         <el-input v-model="editForm.设计师" placeholder="设计师" />
                       </el-form-item>
-                      <el-form-item label="客户模号">
+                      <el-form-item label="客户模号" prop="客户模号">
                         <el-input v-model="editForm.客户模号" placeholder="客户模号" />
                       </el-form-item>
                       <el-form-item label="制件厂家">
@@ -543,7 +543,7 @@
                           style="width: 100%"
                         />
                       </el-form-item>
-                      <el-form-item label="首次送样日期">
+                      <el-form-item label="首次送样日期" prop="首次送样日期">
                         <el-date-picker
                           v-model="editForm.首次送样日期"
                           type="date"
@@ -616,7 +616,7 @@
                       <el-form-item label="产品尺寸">
                         <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
                       </el-form-item>
-                      <el-form-item label="产品重量（克）">
+                      <el-form-item label="产品重量（克）" prop="产品重量">
                         <el-input-number
                           v-model="editForm.产品重量"
                           :min="0"
@@ -627,7 +627,7 @@
                       </el-form-item>
                     </el-col>
                     <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="产品材质">
+                      <el-form-item label="产品材质" prop="产品材质">
                         <el-input v-model="editForm.产品材质" placeholder="产品材质" />
                       </el-form-item>
                       <el-form-item label="产品颜色">
@@ -667,13 +667,13 @@
                     <el-col :xs="24" :sm="12" :lg="8">
                       <div class="pm-mould-group">
                         <div class="pm-mould-group__title">模具基本</div>
-                        <el-form-item label="模具穴数">
+                        <el-form-item label="模具穴数" prop="模具穴数">
                           <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
                         </el-form-item>
-                        <el-form-item label="模具尺寸">
+                        <el-form-item label="模具尺寸" prop="模具尺寸">
                           <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
                         </el-form-item>
-                        <el-form-item label="模具重量（吨）">
+                        <el-form-item label="模具重量（吨）" prop="模具重量">
                           <el-input-number
                             v-model="editForm.模具重量"
                             :min="0"
@@ -688,7 +688,7 @@
                     <el-col :xs="24" :sm="12" :lg="8">
                       <div class="pm-mould-group">
                         <div class="pm-mould-group__title">模具材质</div>
-                        <el-form-item label="前模材质">
+                        <el-form-item label="前模材质" prop="前模材质">
                           <el-autocomplete
                             v-model="frontMouldMaterialModel"
                             placeholder="请输入或选择"
@@ -715,7 +715,7 @@
                             </template>
                           </el-autocomplete>
                         </el-form-item>
-                        <el-form-item label="后模材质">
+                        <el-form-item label="后模材质" prop="后模材质">
                           <el-autocomplete
                             v-model="rearMouldMaterialModel"
                             placeholder="请输入或选择"
@@ -740,7 +740,7 @@
                             </template>
                           </el-autocomplete>
                         </el-form-item>
-                        <el-form-item label="滑块材质">
+                        <el-form-item label="滑块材质" prop="滑块材质">
                           <el-autocomplete
                             v-model="sliderMouldMaterialModel"
                             placeholder="请输入或选择"
@@ -807,7 +807,7 @@
                     <el-col :xs="24" :sm="12" :lg="8">
                       <div class="pm-mould-group">
                         <div class="pm-mould-group__title">流道 / 浇口</div>
-                        <el-form-item label="流道类型">
+                        <el-form-item label="流道类型" prop="流道类型">
                           <el-select
                             v-model="runnerTypeModel"
                             placeholder="请选择"
@@ -838,7 +838,7 @@
                             @change="handleRunnerCountChange"
                           />
                         </el-form-item>
-                        <el-form-item label="浇口类型">
+                        <el-form-item label="浇口类型" prop="浇口类型">
                           <el-select
                             v-model="gateTypeModel"
                             placeholder="请选择"
@@ -930,7 +930,7 @@
                           />
                         </el-select>
                       </el-form-item>
-                      <el-form-item label="锁模力">
+                      <el-form-item label="锁模力" prop="锁模力">
                         <el-input-number
                           v-model="editForm.锁模力"
                           :min="0"
@@ -939,7 +939,7 @@
                           style="width: 100%"
                         />
                       </el-form-item>
-                      <el-form-item label="定位圈">
+                      <el-form-item label="定位圈" prop="定位圈">
                         <el-input-number
                           v-model="editForm.定位圈"
                           :min="0"
@@ -948,17 +948,17 @@
                           style="width: 100%"
                         />
                       </el-form-item>
-                      <el-form-item label="容模量">
+                      <el-form-item label="容模量" prop="容模量">
                         <el-input v-model="editForm.容模量" :disabled="!machineSpecUnlocked" />
                       </el-form-item>
-                      <el-form-item label="拉杆间距">
+                      <el-form-item label="拉杆间距" prop="拉杆间距">
                         <el-input
                           v-model="editForm.拉杆间距"
                           clearable
                           :disabled="!machineSpecUnlocked"
                         />
                       </el-form-item>
-                      <el-form-item label="成型周期（秒）">
+                      <el-form-item label="成型周期（秒）" prop="成型周期">
                         <el-input-number
                           v-model="editForm.成型周期"
                           :min="0"
@@ -1999,8 +1999,110 @@ const machineTabCompleted = computed(() => {
   return fields.every((key) => isFieldFilled((editForm as any)[key]))
 })
 
+const toNumber = (val: unknown) => {
+  const n = typeof val === 'number' ? val : Number(val)
+  return Number.isFinite(n) ? n : null
+}
+
+const isPositiveInteger = (val: unknown) => {
+  const n = typeof val === 'number' ? val : Number(val)
+  return Number.isInteger(n) && n > 0
+}
+
+const validateTripartiteAgreementForEdit = () => {
+  const errors: string[] = []
+  const add = (msg: string) => errors.push(msg)
+  const filled = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== ''
+
+  // 2.1
+  if (!filled(editForm.客户模号)) add('客户模号不能为空')
+  if (!filled(editForm.productDrawing)) add('产品图号不能为空')
+  if (!filled(editForm.productName)) add('产品名称不能为空')
+  if (!filled((editForm as any).产品材质)) add('产品材质不能为空')
+  if (!filled((editForm as any).前模材质)) add('前模材质不能为空')
+  if (!filled((editForm as any).后模材质)) add('后模材质不能为空')
+  if (!filled((editForm as any).滑块材质)) add('滑块材质不能为空')
+  if (!filled((editForm as any).模具穴数)) add('模具穴数不能为空')
+  if (!filled((editForm as any).首次送样日期)) add('首次送样日期不能为空')
+
+  // 3.1.1
+  const runnerType = String((editForm as any).流道类型 || '').trim()
+  const runnerAllowed = ['冷流道', '开放式热流道', '点浇口热流道', '针阀式热流道']
+  if (!runnerAllowed.includes(runnerType)) add('流道及类型必须选择一项')
+  if (!isPositiveInteger((editForm as any).流道数量))
+    add('流道数量必须为正整数（不能为 0，也不能为小数）')
+
+  const gateType = String((editForm as any).浇口类型 || '').trim()
+  const gateAllowed = ['直接浇口', '点浇口', '侧浇口', '潜伏浇口']
+  if (!gateAllowed.includes(gateType)) add('浇口类型必须选择一项')
+  if (!isPositiveInteger((editForm as any).浇口数量))
+    add('浇口数量必须为正整数（不能为 0，也不能为小数）')
+
+  const partWeight = toNumber((editForm as any).产品重量)
+  if (partWeight === null) add('产品重量必须有数值')
+  const cycle = toNumber((editForm as any).成型周期)
+  if (cycle === null) add('成型周期必须有数值')
+
+  const sprueWeightRaw = (editForm as any).料柄重量
+  const sprueEmpty =
+    sprueWeightRaw === null || sprueWeightRaw === undefined || String(sprueWeightRaw).trim() === ''
+  if (sprueEmpty) {
+    if (runnerType && runnerType !== '针阀式热流道')
+      add('料柄重量为空时，流道类型必须为“针阀式热流道”')
+  } else if (toNumber(sprueWeightRaw) === null) {
+    add('料柄重量必须为数值或为空')
+  }
+
+  // 3.1.2 联动
+  const ejectTypeSelected = splitCsv((editForm as any).顶出类型).length > 0
+  const ejectWaySelected = splitCsv((editForm as any).顶出方式).length > 0
+  const resetWaySelected = splitCsv((editForm as any).复位方式).length > 0
+  const anySelected = ejectTypeSelected || ejectWaySelected || resetWaySelected
+  if (anySelected && !(ejectTypeSelected && ejectWaySelected && resetWaySelected)) {
+    add('顶出类型、顶出方式、复位方式需同时至少选择一项（或三项都不选）')
+  }
+
+  // 3.2
+  if (!filled((editForm as any).模具尺寸)) add('模具尺寸不能为空')
+  if (!filled((editForm as any).模具重量)) add('模具重量不能为空')
+  if (!filled((editForm as any).锁模力)) add('锁模力不能为空')
+  if (!filled((editForm as any).定位圈)) add('定位圈不能为空')
+  if (!filled((editForm as any).容模量)) add('容模量不能为空')
+  if (!filled((editForm as any).拉杆间距)) add('拉杆间距不能为空')
+
+  return errors
+}
+
 const editRules: FormRules = {
   项目编号: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
+  客户模号: [{ required: true, message: '客户模号不能为空', trigger: 'blur' }],
+  首次送样日期: [{ required: true, message: '首次送样日期不能为空', trigger: 'change' }],
+  productName: [{ required: true, message: '产品名称不能为空', trigger: 'blur' }],
+  productDrawing: [{ required: true, message: '产品图号不能为空', trigger: 'blur' }],
+  产品材质: [{ required: true, message: '产品材质不能为空', trigger: 'blur' }],
+  产品重量: [
+    {
+      validator: (_rule, value, callback) => {
+        const n = Number(value)
+        if (!Number.isFinite(n)) return callback(new Error('产品重量必须有数值'))
+        return callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
+  模具穴数: [{ required: true, message: '模具穴数不能为空', trigger: 'blur' }],
+  模具尺寸: [{ required: true, message: '模具尺寸不能为空', trigger: 'blur' }],
+  模具重量: [{ required: true, message: '模具重量不能为空', trigger: 'change' }],
+  前模材质: [{ required: true, message: '前模材质不能为空', trigger: 'blur' }],
+  后模材质: [{ required: true, message: '后模材质不能为空', trigger: 'blur' }],
+  滑块材质: [{ required: true, message: '滑块材质不能为空', trigger: 'blur' }],
+  流道类型: [{ required: true, message: '流道类型不能为空', trigger: 'change' }],
+  浇口类型: [{ required: true, message: '浇口类型不能为空', trigger: 'change' }],
+  锁模力: [{ required: true, message: '锁模力不能为空', trigger: 'change' }],
+  定位圈: [{ required: true, message: '定位圈不能为空', trigger: 'change' }],
+  容模量: [{ required: true, message: '容模量不能为空', trigger: 'blur' }],
+  拉杆间距: [{ required: true, message: '拉杆间距不能为空', trigger: 'blur' }],
+  成型周期: [{ required: true, message: '成型周期不能为空', trigger: 'change' }],
   流道数量: [
     {
       validator: (_rule, value, callback) => {
@@ -2011,6 +2113,9 @@ const editRules: FormRules = {
         const n = Number(value)
         if (!Number.isFinite(n) || n <= 0) {
           return callback(new Error('流道数量必须大于 0'))
+        }
+        if (!Number.isInteger(n)) {
+          return callback(new Error('流道数量必须为整数'))
         }
         return callback()
       },
@@ -2027,6 +2132,9 @@ const editRules: FormRules = {
         const n = Number(value)
         if (!Number.isFinite(n) || n <= 0) {
           return callback(new Error('浇口数量必须大于 0'))
+        }
+        if (!Number.isInteger(n)) {
+          return callback(new Error('浇口数量必须为整数'))
         }
         return callback()
       },
@@ -2693,9 +2801,30 @@ const handleDownloadTripartiteAgreementDocx = async () => {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载三方协议失败:', error)
-    ElMessage.error('下载三方协议失败')
+    const resp = error?.response
+    const data = resp?.data
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text()
+        const json = JSON.parse(text)
+        const msg = json?.message || '下载三方协议失败'
+        const errs = Array.isArray(json?.errors) ? json.errors : []
+        if (errs.length) {
+          const lines = errs.map((e: any) => {
+            const label = e?.label || e?.field || ''
+            const m = e?.message ? `：${e.message}` : ''
+            return `${label}${m}`
+          })
+          ElMessageBox.alert(lines.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+          return
+        }
+        ElMessage.error(msg)
+        return
+      } catch {}
+    }
+    ElMessage.error(resp?.data?.message || error?.message || '下载三方协议失败')
   } finally {
     tripartiteAgreementDownloading.value = false
   }
@@ -2969,6 +3098,16 @@ const handleSubmitEdit = async () => {
       nextTick(() => corePullQtyInputRefs.get(invalidMethod)?.focus?.())
       return
     }
+  }
+
+  // 三方协议字段规则：保存时统一校验（一次性提示缺失项）
+  const tripartiteErrors = validateTripartiteAgreementForEdit()
+  if (tripartiteErrors.length) {
+    ElMessageBox.alert(tripartiteErrors.join('\n'), '三方协议字段缺失/不符合规则', {
+      type: 'error',
+      confirmButtonText: '确定'
+    })
+    return
   }
 
   // 当项目状态改为“已经移模”时，进行额外业务校验：

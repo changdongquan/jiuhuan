@@ -257,6 +257,98 @@ const generateTripartiteAgreementDocxBuffer = async (row) => {
   return await zip.generateAsync({ type: 'nodebuffer' })
 }
 
+const validateTripartiteAgreementRow = (row) => {
+  const errors = []
+  const add = (field, label, message) => {
+    errors.push({ field, label, message })
+  }
+  const isEmpty = (v) => v === null || v === undefined || String(v).trim() === ''
+
+  const productName = row?.productName || row?.产品名称
+  const productDrawing = row?.productDrawing || row?.产品图号
+
+  // 2.1 必填
+  if (isEmpty(row?.客户模号)) add('mould_no', '客户模号', '不能为空')
+  if (isEmpty(productDrawing)) add('part_drawing', '产品图号', '不能为空')
+  if (isEmpty(productName)) add('part_name', '产品名称', '不能为空')
+  if (isEmpty(row?.产品材质)) add('part_material', '产品材质', '不能为空')
+  if (isEmpty(row?.前模材质)) add('cavity_material', '前模材质', '不能为空')
+  if (isEmpty(row?.后模材质)) add('core_material', '后模材质', '不能为空')
+  if (isEmpty(row?.滑块材质)) add('slider_material', '滑块材质', '不能为空')
+  if (isEmpty(row?.模具穴数)) add('cavity_count', '模具穴数', '不能为空')
+  if (isEmpty(row?.首次送样日期)) add('first_sample_date', '首次送样日期', '不能为空')
+
+  // 3.1.1 流道/浇口：唯一且数量为正整数
+  const runnerType = String(row?.流道类型 || '').trim()
+  const runnerTypeAllowed = ['冷流道', '开放式热流道', '点浇口热流道', '针阀式热流道']
+  if (!runnerType || !runnerTypeAllowed.includes(runnerType)) {
+    add('runner_type', '流道及类型', '必须且只能选择一项')
+  }
+
+  const runnerQty = row?.流道数量
+  const runnerQtyNum = typeof runnerQty === 'number' ? runnerQty : Number(runnerQty)
+  if (!Number.isInteger(runnerQtyNum) || runnerQtyNum <= 0) {
+    add('runner_count', '流道数量', '必须为正整数（不能为 0，也不能为小数）')
+  }
+
+  const gateType = String(row?.浇口类型 || '').trim()
+  const gateTypeAllowed = ['直接浇口', '点浇口', '侧浇口', '潜伏浇口']
+  if (!gateType || !gateTypeAllowed.includes(gateType)) {
+    add('gate_type', '浇口类型', '必须且只能选择一项')
+  }
+
+  const gateQty = row?.浇口数量
+  const gateQtyNum = typeof gateQty === 'number' ? gateQty : Number(gateQty)
+  if (!Number.isInteger(gateQtyNum) || gateQtyNum <= 0) {
+    add('gate_count', '浇口数量', '必须为正整数（不能为 0，也不能为小数）')
+  }
+
+  // 3.1.1 产品重量/成型周期 必填数值；料柄重量可空
+  const partWeight = row?.产品重量
+  const partWeightNum = typeof partWeight === 'number' ? partWeight : Number(partWeight)
+  if (!Number.isFinite(partWeightNum)) add('part_weight_g', '产品重量', '必须有数值')
+
+  const cycle = row?.成型周期
+  const cycleNum = typeof cycle === 'number' ? cycle : Number(cycle)
+  if (!Number.isFinite(cycleNum)) add('cycle_s', '成型周期', '必须有数值')
+
+  const sprueWeightRaw = row?.料柄重量
+  const sprueWeightEmpty =
+    sprueWeightRaw === null || sprueWeightRaw === undefined || String(sprueWeightRaw).trim() === ''
+  if (sprueWeightEmpty) {
+    if (runnerType && runnerType !== '针阀式热流道') {
+      add('sprue_weight_g', '料柄重量', '为空时流道类型必须为“针阀式热流道”')
+    }
+  } else {
+    const sprueWeightNum =
+      typeof sprueWeightRaw === 'number' ? sprueWeightRaw : Number(sprueWeightRaw)
+    if (!Number.isFinite(sprueWeightNum)) add('sprue_weight_g', '料柄重量', '必须为数值或为空')
+  }
+
+  // 3.1.2 联动必选：顶出类型/顶出方式/复位方式，要么全空，要么各至少一项
+  const ejectTypeSelected = splitCsv(row?.顶出类型).length > 0
+  const ejectWaySelected = splitCsv(row?.顶出方式).length > 0
+  const resetWaySelected = splitCsv(row?.复位方式).length > 0
+  const anySelected = ejectTypeSelected || ejectWaySelected || resetWaySelected
+  if (anySelected && !(ejectTypeSelected && ejectWaySelected && resetWaySelected)) {
+    add(
+      'eject_reset',
+      '顶出/复位',
+      '顶出类型、顶出方式、复位方式需同时至少选择一项（或三项都不选）'
+    )
+  }
+
+  // 3.2 必填
+  if (isEmpty(row?.模具尺寸)) add('mould_size_mm', '模具尺寸', '不能为空')
+  if (isEmpty(row?.模具重量)) add('mould_weight_t', '模具重量', '不能为空')
+  if (isEmpty(row?.锁模力)) add('lock_force_t', '锁模力', '不能为空')
+  if (isEmpty(row?.定位圈)) add('locating_ring_mm', '定位圈', '不能为空')
+  if (isEmpty(row?.容模量)) add('mold_capacity_mm', '容模量', '不能为空')
+  if (isEmpty(row?.拉杆间距)) add('tiebar_spacing_mm', '拉杆间距', '不能为空')
+
+  return errors
+}
+
 // 根据项目编号获取分类名称
 const getCategoryFromProjectCode = (projectCode) => {
   if (!projectCode) return '其他'
@@ -833,6 +925,16 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
     const row = await loadProjectRowForTripartiteAgreement(code)
     if (!row) {
       return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const validateErrors = validateTripartiteAgreementRow(row)
+    if (validateErrors.length) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '三方协议数据不完整，请先补齐后再下载',
+        errors: validateErrors
+      })
     }
 
     const docxBuffer = await generateTripartiteAgreementDocxBuffer(row)
