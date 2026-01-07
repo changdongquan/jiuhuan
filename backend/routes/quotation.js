@@ -222,6 +222,20 @@ const ensureQuotationEnableImageColumn = async () => {
   quotationEnableImageColumnEnsured = true
 }
 
+let quotationOperatorColumnEnsured = false
+const ensureQuotationOperatorColumn = async () => {
+  if (quotationOperatorColumnEnsured) return
+
+  const rows = await query(`SELECT COL_LENGTH(N'报价单', N'经办人') as len`)
+  const exists = rows?.[0]?.len !== null && rows?.[0]?.len !== undefined
+
+  if (!exists) {
+    await query(`ALTER TABLE 报价单 ADD 经办人 NVARCHAR(50) NULL`)
+  }
+
+  quotationOperatorColumnEnsured = true
+}
+
 const toDateString = (value) => {
   if (!value) return ''
   try {
@@ -318,6 +332,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const colLetter = (idx) => String.fromCharCode('A'.charCodeAt(0) + idx - 1)
   const lastCol = colLetter(colCount)
 
+  // A 列宽度由表格列定义自动设置（序号列宽度）
+
   // ===== Title =====
   sheet.mergeCells(`A1:${lastCol}1`)
   sheet.getCell('A1').value = '零件报价单'
@@ -330,7 +346,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const gapRow = 2
   sheet.getRow(gapRow).height = 14
 
-  // 头部信息使用“标签 + 值”布局：
+  // 头部信息使用"标签 + 值"布局：
   // - 冒号对齐（标签右对齐）
   // - 下划线缩短（仅值区域带下划线）
   // - 联系人/联系电话整体下移一行
@@ -341,13 +357,16 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const metaValueFont = { size: 11 }
   const metaValueMutedFont = { size: 11, color: colorTextMuted }
 
-  const leftLabelCol = 1 // A
-  const leftValueStartCol = 2 // B
-  const leftValueEndCol = Math.min(4, colCount) // D
+  // 左侧字段从 A 列开始，与表格第一列对齐
+  const leftStartCol = 1 // A
+  const leftEndCol = Math.min(4, colCount) // D（客户名称、报价单号、报价日期共用 A-D 列）
 
-  const rightLabelCol = Math.min(5, colCount) // E
-  const rightValueStartCol = Math.min(rightLabelCol + 1, colCount) // F
-  const rightValueEndCol = Math.min(colCount, rightLabelCol + 2) // 默认两列（F-G）
+  // 右侧字段：横线最右侧对齐表格最右侧
+  // 表格最右侧列是 colCount（lastCol）
+  // 标签列放在倒数第3列，值区域从倒数第2列开始，延伸到最右侧列
+  const rightValueEndCol = colCount // 值区域结束列 = 表格最右侧列
+  const rightLabelCol = Math.max(5, colCount - 2) // 标签列：至少是 E 列，或倒数第3列
+  const rightValueStartCol = Math.min(rightLabelCol + 1, colCount) // 值区域开始列 = 标签列 + 1
 
   const applyBottomBorderForRange = (rowNo, startCol, endCol) => {
     for (let c = startCol; c <= endCol; c += 1) {
@@ -356,6 +375,28 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   }
 
   const setMetaField = ({
+    rowNo,
+    startCol,
+    endCol,
+    label,
+    value,
+    mutedValue,
+    underline = true
+  }) => {
+    // 将标签和值合并为一个字符串，放在同一单元格中
+    const fullText = label ? `${label}：${value || ''}` : value || ''
+    if (startCol <= endCol) {
+      sheet.mergeCells(`${colLetter(startCol)}${rowNo}:${colLetter(endCol)}${rowNo}`)
+      const cell = sheet.getCell(`${colLetter(startCol)}${rowNo}`)
+      cell.value = fullText
+      // 标签部分使用 muted 字体，值部分使用正常字体（通过整体设置，实际显示时会有差异）
+      cell.font = mutedValue ? metaValueMutedFont : metaValueFont
+      cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+      if (underline) applyBottomBorderForRange(rowNo, startCol, endCol)
+    }
+  }
+
+  const setMetaFieldRight = ({
     rowNo,
     labelCol,
     valueStartCol,
@@ -375,7 +416,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       const valueCell = sheet.getCell(`${colLetter(valueStartCol)}${rowNo}`)
       valueCell.value = value
       valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont
-      valueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
       if (underline) applyBottomBorderForRange(rowNo, valueStartCol, valueEndCol)
     }
   }
@@ -384,37 +425,34 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     sheet.getRow(r).height = 18
   })
 
-  // 左侧：客户名称 / 报价单号 / 报价日期
+  // 左侧：客户名称 / 报价单号 / 报价日期（从 A 列开始，与表格对齐）
   setMetaField({
     rowNo: metaRow1,
-    labelCol: leftLabelCol,
-    valueStartCol: leftValueStartCol,
-    valueEndCol: leftValueEndCol,
+    startCol: leftStartCol,
+    endCol: leftEndCol,
     label: '客户名称',
     value: row.customerName || '',
     mutedValue: false
   })
   setMetaField({
     rowNo: metaRow2,
-    labelCol: leftLabelCol,
-    valueStartCol: leftValueStartCol,
-    valueEndCol: leftValueEndCol,
+    startCol: leftStartCol,
+    endCol: leftEndCol,
     label: '报价单号',
     value: row.quotationNo || '',
     mutedValue: true
   })
   setMetaField({
     rowNo: metaRow3,
-    labelCol: leftLabelCol,
-    valueStartCol: leftValueStartCol,
-    valueEndCol: leftValueEndCol,
+    startCol: leftStartCol,
+    endCol: leftEndCol,
     label: '报价日期',
     value: toDateString(row.quotationDate) || '-',
     mutedValue: true
   })
 
   // 右侧：留空 / 联系人 / 联系电话（下移一行）
-  setMetaField({
+  setMetaFieldRight({
     rowNo: metaRow1,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
@@ -424,7 +462,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     mutedValue: true,
     underline: false
   })
-  setMetaField({
+  setMetaFieldRight({
     rowNo: metaRow2,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
@@ -433,7 +471,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     value: row.contactName || '-',
     mutedValue: false
   })
-  setMetaField({
+  setMetaFieldRight({
     rowNo: metaRow3,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
@@ -596,7 +634,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
     // Alignments
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    rowObj.getCell(qtyColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
+    rowObj.getCell(qtyColIndex).alignment = { horizontal: 'center', vertical: 'middle' } // 数量列居中
     rowObj.getCell(unitPriceColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
     rowObj.getCell(amountColIndex).alignment = { horizontal: 'right', vertical: 'middle' }
     rowObj.getCell(qtyColIndex).numFmt = '#,##0'
@@ -736,7 +774,31 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     cell.fill = fillSolid(colorHeaderBg.argb)
   }
   sheet.mergeCells(`A${remarkBodyRow}:${lastCol}${remarkBodyRow}`)
-  const remarkText = String(row.remark || '').trim()
+
+  // 构建备注内容：固定条款 + 用户自定义备注
+  const deliveryTerms = String(row.deliveryTerms || '').trim() || '-'
+  const paymentTerms = String(row.paymentTerms || '').trim() || '-'
+  const validityDays = row.validityDays ? `${row.validityDays}天` : '15天'
+
+  const fixedTerms = [
+    '', // 第一条上方增加一行空行
+    '1. 以上报价为含税价（默认13%增值税专票），如税率/开票类型不同请提前说明。',
+    '2. 交期以双方确认图纸/样件及实际排产为准。',
+    '3. 若有特殊检测、包装、表面处理或材质要求，请在下单前明确。',
+    '4. 本报价单仅用于报价确认，不作为合同文本；如需合同请另行签署。',
+    `5. 交货方式：${deliveryTerms}`,
+    `6. 付款方式：${paymentTerms}`,
+    `7. 报价有效期：${validityDays}`
+  ]
+
+  const customRemark = String(row.remark || '').trim()
+  const remarkLines = [...fixedTerms]
+  if (customRemark) {
+    remarkLines.push('') // 空行分隔
+    remarkLines.push(customRemark)
+  }
+
+  const remarkText = remarkLines.join('\n')
   sheet.getCell(`A${remarkBodyRow}`).value = remarkText
   sheet.getCell(`A${remarkBodyRow}`).font = { size: 11 }
   sheet.getCell(`A${remarkBodyRow}`).alignment = {
@@ -744,19 +806,95 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     vertical: 'top',
     wrapText: true
   }
-  if (!remarkText) {
-    sheet.getRow(remarkBodyRow).height = 28
-  } else {
-    const approxCharsPerLine = 60
-    const approxLines = Math.max(1, Math.ceil(remarkText.length / approxCharsPerLine))
-    sheet.getRow(remarkBodyRow).height = Math.max(48, Math.min(120, approxLines * 18))
-  }
+
+  // 计算行高：固定条款7行 + 顶部空行1行 + 空行（如果有自定义备注）+ 自定义备注行数
+  const fixedTermsLines = 8 // 7条固定条款 + 1行顶部空行
+  const customRemarkLines = customRemark ? Math.max(1, Math.ceil(customRemark.length / 60)) : 0
+  const totalLines = fixedTermsLines + (customRemark ? 1 : 0) + customRemarkLines
+  sheet.getRow(remarkBodyRow).height = Math.max(48, Math.min(200, totalLines * 18))
+
   for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(remarkBodyRow).getCell(c))
+
+  // ===== Company Info & Signature =====
+  // 在备注框和公司信息之间添加空行，保持适当距离
+  const gapRows = 2 // 添加2行空行作为间距
+  const footerStartRow = remarkBodyRow + gapRows + 1
+  const footerRowHeight = 18
+  const companyInfoRowHeight = 14 // 公司信息行高（减小行间距）
+
+  // 左侧：公司信息（4行）
+  // 公司信息从 A 列开始，延伸到大部分列，留出右侧空间给签名区域
+  // 签名区域使用与"联系人"、"联系电话"相同的位置设置，确保对齐
+  const signatureLabelCol = rightLabelCol // 标签列：与联系人、联系电话对齐
+  const signatureValueStartCol = rightValueStartCol // 值区域开始列：与联系人、联系电话对齐
+  const signatureValueEndCol = rightValueEndCol // 值区域结束列：与联系人、联系电话对齐（表格最右侧）
+  // 公司信息结束列应该在签名标签列之前，留出1列作为分隔
+  const companyInfoEndCol = Math.max(1, signatureLabelCol - 1) // 公司信息结束列
+
+  const companyInfo = [
+    '合肥市久环模具设备制造有限公司',
+    '合肥市阜阳北路 966 号',
+    '电话:0551-65661406',
+    '邮箱:mail@jh-mold.com'
+  ]
+
+  companyInfo.forEach((line, idx) => {
+    const row = footerStartRow + idx
+    sheet.mergeCells(`A${row}:${colLetter(companyInfoEndCol)}${row}`)
+    const cell = sheet.getCell(`A${row}`)
+    cell.value = line
+    cell.font = { size: 11 }
+    cell.alignment = { horizontal: 'left', vertical: 'middle' }
+    sheet.getRow(row).height = companyInfoRowHeight // 使用较小的行高
+  })
+
+  // 右侧：签名区域（2行），向左移动100px（约2列）
+  // 签名区域分为标签列和值列，下划线只在值列（类似联系人、联系电话）
+  const signatures = [
+    { label: '经办人', value: row.operator || '' },
+    { label: '客户确认', value: '' }
+  ]
+
+  signatures.forEach((sig, idx) => {
+    const rowNo = footerStartRow + idx
+    // 标签列
+    const labelCell = sheet.getRow(rowNo).getCell(signatureLabelCol)
+    labelCell.value = `${sig.label}：`
+    labelCell.font = { size: 11, color: colorTextMuted }
+    labelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+    // 值列（带下划线）
+    if (signatureValueStartCol <= signatureValueEndCol) {
+      sheet.mergeCells(
+        `${colLetter(signatureValueStartCol)}${rowNo}:${colLetter(signatureValueEndCol)}${rowNo}`
+      )
+      const valueCell = sheet.getCell(`${colLetter(signatureValueStartCol)}${rowNo}`)
+      valueCell.value = sig.value // 使用传入的值（经办人）或留空（客户确认）
+      valueCell.font = { size: 11 }
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+      // 只在值区域添加下划线
+      applyBottomBorderForRange(rowNo, signatureValueStartCol, signatureValueEndCol)
+    }
+
+    if (!sheet.getRow(rowNo).height) {
+      sheet.getRow(rowNo).height = footerRowHeight
+    }
+  })
+
+  // 确保所有行都有相同高度
+  for (let i = 0; i < Math.max(companyInfo.length, signatures.length); i += 1) {
+    const row = footerStartRow + i
+    if (!sheet.getRow(row).height) {
+      sheet.getRow(row).height = footerRowHeight
+    }
+  }
+
+  const footerEndRow = footerStartRow + Math.max(companyInfo.length, signatures.length) - 1
 
   // ===== Print helpers =====
   sheet.views = [{ state: 'frozen', ySplit: headerRow }]
   sheet.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`
-  sheet.pageSetup.printArea = `A1:${lastCol}${remarkBodyRow}`
+  sheet.pageSetup.printArea = `A1:${lastCol}${footerEndRow}`
   sheet.headerFooter.oddFooter = `&L零件报价单&R第 &P 页 / 共 &N 页`
 
   return workbook
@@ -898,6 +1036,7 @@ router.get('/list', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
+    await ensureQuotationOperatorColumn()
     const { keyword, processingDate, page = 1, pageSize = 20 } = req.query
 
     // 构建查询条件
@@ -950,6 +1089,7 @@ router.get('/list', async (req, res) => {
         申请更改人 as applicant,
 	        联系人 as contactName,
 	        联系电话 as contactPhone,
+	        经办人 as operator,
 	        交货方式 as deliveryTerms,
 	        付款方式 as paymentTerms,
 	        报价有效期天数 as validityDays,
@@ -1109,6 +1249,7 @@ router.post('/create', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
+    await ensureQuotationOperatorColumn()
     console.log('收到创建报价单请求，请求体:', JSON.stringify(req.body, null, 2))
 
     const {
@@ -1125,6 +1266,7 @@ router.post('/create', async (req, res) => {
       applicant,
       contactName,
       contactPhone,
+      operator,
       remark,
       deliveryTerms,
       paymentTerms,
@@ -1296,6 +1438,7 @@ router.post('/create', async (req, res) => {
     request.input('applicant', sql.NVarChar(50), applicant || null)
     request.input('contactName', sql.NVarChar(50), contactName || null)
     request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
+    request.input('operator', sql.NVarChar(50), operator || null)
     request.input('remark', sql.NVarChar, remark || null)
     request.input('enableImage', sql.Bit, effectiveEnableImage)
     request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
@@ -1315,7 +1458,7 @@ router.post('/create', async (req, res) => {
 	        报价单号, 报价日期, 客户名称, 报价类型,
 	        加工日期, 更改通知单号,
 	        加工零件名称, 模具编号, 申请更改部门, 申请更改人,
-	        联系人, 联系电话, 备注, 交货方式, 付款方式, 报价有效期天数,
+	        联系人, 联系电话, 经办人, 备注, 交货方式, 付款方式, 报价有效期天数,
 	        启用图示,
 	        材料明细, 加工费用明细, 零件明细,
 	        其他费用, 运输费用, 加工数量, 含税价格
@@ -1323,7 +1466,7 @@ router.post('/create', async (req, res) => {
 	        @quotationNo, @quotationDate, @customerName, @quotationType,
 	        @processingDate, @changeOrderNo,
 	        @partName, @moldNo, @department, @applicant,
-	        @contactName, @contactPhone, @remark, @deliveryTerms, @paymentTerms, @validityDays,
+	        @contactName, @contactPhone, @operator, @remark, @deliveryTerms, @paymentTerms, @validityDays,
 	        @enableImage,
 	        @materialsJson, @processesJson, @partItemsJson,
 	        @otherFee, @transportFee, @quantity, @taxIncludedPrice
@@ -1363,6 +1506,7 @@ router.put('/:id', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
+    await ensureQuotationOperatorColumn()
     const { id } = req.params
     const {
       quotationNo,
@@ -1378,6 +1522,7 @@ router.put('/:id', async (req, res) => {
       applicant,
       contactName,
       contactPhone,
+      operator,
       remark,
       deliveryTerms,
       paymentTerms,
@@ -1526,6 +1671,7 @@ router.put('/:id', async (req, res) => {
     request.input('applicant', sql.NVarChar(50), applicant || null)
     request.input('contactName', sql.NVarChar(50), contactName || null)
     request.input('contactPhone', sql.NVarChar(50), contactPhone || null)
+    request.input('operator', sql.NVarChar(50), operator || null)
     request.input('remark', sql.NVarChar, remark || null)
     request.input('enableImage', sql.Bit, effectiveEnableImage)
     request.input('deliveryTerms', sql.NVarChar(100), deliveryTerms || null)
@@ -1554,6 +1700,7 @@ router.put('/:id', async (req, res) => {
 	        申请更改人 = @applicant,
 	        联系人 = @contactName,
 	        联系电话 = @contactPhone,
+	        经办人 = @operator,
 	        备注 = @remark,
 	        启用图示 = @enableImage,
 	        交货方式 = @deliveryTerms,
@@ -1626,6 +1773,7 @@ router.get('/:id/export-excel', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
+    await ensureQuotationOperatorColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -1645,6 +1793,7 @@ router.get('/:id/export-excel', async (req, res) => {
           申请更改人 as applicant,
 	          联系人 as contactName,
 	          联系电话 as contactPhone,
+	          经办人 as operator,
 	          备注 as remark,
 	          启用图示 as enableImage,
 	          交货方式 as deliveryTerms,
@@ -1841,6 +1990,7 @@ router.get('/:id/export-pdf', async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
+    await ensureQuotationOperatorColumn()
     const { id } = req.params
 
     // 查询报价单详情
@@ -1860,6 +2010,7 @@ router.get('/:id/export-pdf', async (req, res) => {
           申请更改人 as applicant,
 	          联系人 as contactName,
 	          联系电话 as contactPhone,
+	          经办人 as operator,
 	          备注 as remark,
 	          启用图示 as enableImage,
 	          交货方式 as deliveryTerms,

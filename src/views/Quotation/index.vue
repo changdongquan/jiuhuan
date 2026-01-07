@@ -373,6 +373,18 @@
                   />
                 </el-form-item>
               </div>
+
+              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">经办人：</span>
+                  <el-input
+                    v-model="quotationForm.operator"
+                    :disabled="isViewMode"
+                    placeholder="经办人"
+                    class="field-input-inline field-input-contact"
+                  />
+                </el-form-item>
+              </div>
             </div>
           </template>
 
@@ -1104,6 +1116,9 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
+import { useUserStore } from '@/store/modules/user'
+
+const userStore = useUserStore()
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
 import {
@@ -1149,6 +1164,7 @@ interface QuotationFormModel {
   applicant: string
   contactName: string
   contactPhone: string
+  operator: string
   remark: string
   deliveryTerms: string
   paymentTerms: string
@@ -1253,6 +1269,11 @@ const createEmptyForm = (): QuotationFormModel => ({
   applicant: '',
   contactName: '',
   contactPhone: '',
+  operator:
+    (userStore.getUserInfo as any)?.realName ||
+    (userStore.getUserInfo as any)?.displayName ||
+    userStore.getUserInfo?.username ||
+    '',
   remark: '',
   deliveryTerms: '',
   paymentTerms: '',
@@ -1749,6 +1770,7 @@ const handleEdit = async (row: QuotationRecord) => {
     applicant: row.applicant || '',
     contactName: (row as any).contactName || '',
     contactPhone: (row as any).contactPhone || '',
+    operator: (row as any).operator || '',
     remark: (row as any).remark || '',
     deliveryTerms: (row as any).deliveryTerms || '',
     paymentTerms: (row as any).paymentTerms || '',
@@ -1795,6 +1817,7 @@ const handleView = async (row: QuotationRecord) => {
     applicant: row.applicant || '',
     contactName: (row as any).contactName || '',
     contactPhone: (row as any).contactPhone || '',
+    operator: (row as any).operator || '',
     remark: (row as any).remark || '',
     deliveryTerms: (row as any).deliveryTerms || '',
     paymentTerms: (row as any).paymentTerms || '',
@@ -2181,6 +2204,7 @@ const handleSubmit = async () => {
       applicant: quotationForm.applicant?.trim() || '',
       contactName: quotationForm.contactName?.trim() || '',
       contactPhone: quotationForm.contactPhone?.trim() || '',
+      operator: quotationForm.operator?.trim() || '',
       remark: quotationForm.remark?.trim() || '',
       deliveryTerms: '',
       paymentTerms: '',

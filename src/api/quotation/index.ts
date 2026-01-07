@@ -43,6 +43,7 @@ export interface QuotationFormData {
   applicant: string
   contactName?: string
   contactPhone?: string
+  operator?: string
   remark?: string
   deliveryTerms?: string
   paymentTerms?: string
