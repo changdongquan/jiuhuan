@@ -891,6 +891,81 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
   const footerEndRow = footerStartRow + Math.max(companyInfo.length, signatures.length) - 1
 
+  // ===== 插入印章图片 =====
+  const sealImagePath = path.join(__dirname, '../templates/quotation/报价专用章.png')
+  console.log('印章图片路径:', sealImagePath)
+  console.log('文件是否存在:', fs.existsSync(sealImagePath))
+  if (fs.existsSync(sealImagePath)) {
+    try {
+      const sealBuffer = fs.readFileSync(sealImagePath)
+      const sealInfo = getImageDimensions(sealBuffer)
+      console.log('印章图片信息:', sealInfo)
+      if (sealInfo?.width && sealInfo?.height) {
+        const sealImageId = workbook.addImage({ buffer: sealBuffer, extension: 'png' })
+
+        // 4x4 厘米 = 151x151 像素（1 厘米 ≈ 37.8 像素）
+        const sealSizePx = 151 // 4 厘米对应的像素数
+
+        // 计算印章位置：覆盖在公司信息上方
+        // 公司信息从 A 列开始，到 companyInfoEndCol 列结束
+        // 印章放在公司信息区域的中心位置，覆盖在公司信息上方
+        const sealStartCol = 1 // A 列
+        const sealEndCol = companyInfoEndCol
+        const sealStartRow = footerStartRow
+
+        // 计算公司信息区域的总宽度（像素）
+        let totalColWidth = 0
+        for (let c = sealStartCol; c <= sealEndCol; c += 1) {
+          const colWidth = excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
+          totalColWidth += colWidth
+        }
+
+        // 计算公司信息区域的总高度（像素）
+        const sealRowHeight = companyInfoRowHeight * 4 // 4 行的高度
+
+        // 计算偏移量，使图片在区域中心，然后向左移动 130px（300px - 100px - 100px + 30px = 130px）
+        const centerOffsetX = (totalColWidth - sealSizePx) / 2
+        const offsetX = Math.max(0, centerOffsetX - 130) // 向左移动 130px（相对于中心）
+        const offsetY = Math.max(0, (sealRowHeight - sealSizePx) / 2)
+
+        // 计算第一列的宽度，用于计算起始列的小数偏移
+        const firstColWidth = excelColumnWidthToPixels(sheet.getColumn(sealStartCol).width || 64)
+
+        // 转换为 Excel 坐标（列和行都是 0-based，可以有小数值）
+        // 图片从 A 列开始，加上水平偏移（已减去 300px）
+        const tlCol = sealStartCol - 1 + offsetX / firstColWidth
+        const tlRow = sealStartRow - 1 + offsetY / sealRowHeight
+
+        console.log('插入印章图片:', {
+          sealStartCol,
+          sealEndCol,
+          sealStartRow,
+          tlCol,
+          tlRow,
+          sealSizePx,
+          totalColWidth,
+          sealRowHeight,
+          offsetX,
+          offsetY
+        })
+
+        sheet.addImage(sealImageId, {
+          tl: { col: tlCol, row: tlRow },
+          ext: { width: sealSizePx, height: sealSizePx },
+          editAs: 'absolute' // 使用绝对定位，避免被单元格限制
+        })
+        console.log('印章图片插入成功')
+      } else {
+        console.error('无法读取印章图片尺寸信息')
+      }
+    } catch (e) {
+      console.error('插入印章图片失败:', e)
+      console.error('错误堆栈:', e.stack)
+    }
+  } else {
+    console.error('印章图片文件不存在:', sealImagePath)
+  }
+
   // ===== Print helpers =====
   sheet.views = [{ state: 'frozen', ySplit: headerRow }]
   sheet.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`

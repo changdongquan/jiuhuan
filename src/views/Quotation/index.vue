@@ -1114,7 +1114,7 @@ import {
   ElTableColumn
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
 
@@ -2331,6 +2331,35 @@ watch(
   },
   { flush: 'post' }
 )
+
+// ESC 键处理：当弹窗打开时，按 ESC 键相当于按取消按钮
+const handleEscKey = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && dialogVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    handleCancelQuotationDialog()
+  }
+}
+
+// 监听弹窗打开/关闭，添加/移除 ESC 键监听器
+watch(
+  dialogVisible,
+  (isOpen) => {
+    if (isOpen) {
+      // 弹窗打开时，添加 ESC 键监听器
+      document.addEventListener('keydown', handleEscKey)
+    } else {
+      // 弹窗关闭时，移除 ESC 键监听器
+      document.removeEventListener('keydown', handleEscKey)
+    }
+  },
+  { immediate: true }
+)
+
+// 组件卸载时移除监听器
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleEscKey)
+})
 
 // 页面加载时获取数据
 onMounted(() => {
