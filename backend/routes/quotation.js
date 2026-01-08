@@ -864,7 +864,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle' }
 
   const operatorValueStartCol = 2 // B
-  const operatorValueEndCol = Math.max(2, companyInfoEndCol)
+  // 下划线缩短：与左侧基础信息（A-D）保持一致，不拉满整行
+  const operatorValueEndCol = Math.max(2, Math.min(leftEndCol, companyInfoEndCol))
   if (operatorValueStartCol <= operatorValueEndCol) {
     sheet.mergeCells(
       `${colLetter(operatorValueStartCol)}${operatorRowNo}:${colLetter(operatorValueEndCol)}${operatorRowNo}`
