@@ -1884,10 +1884,7 @@ const handleDownloadCompletionPdf = async () => {
   const missingFields: string[] = []
   if (!quotationForm.processingDate) missingFields.push('加工日期')
   if (!quotationForm.partName || !quotationForm.partName.trim()) missingFields.push('加工零件名称')
-  if (!quotationForm.moldNo || !quotationForm.moldNo.trim()) missingFields.push('模具编号')
-  if (!quotationForm.department || !quotationForm.department.trim())
-    missingFields.push('申请更改部门')
-  if (!quotationForm.applicant || !quotationForm.applicant.trim()) missingFields.push('申请更改人')
+  // 模具编号、申请更改部门、申请更改人改为非必填
 
   if (missingFields.length > 0) {
     ElMessage.error(`完工单下载前请先填写：${missingFields.join('、')}`)
@@ -2120,18 +2117,7 @@ const handleSubmit = async () => {
         ElMessage.error('请输入加工零件名称')
         return
       }
-      if (!quotationForm.moldNo || !quotationForm.moldNo.trim()) {
-        ElMessage.error('请输入模具编号')
-        return
-      }
-      if (!quotationForm.department || !quotationForm.department.trim()) {
-        ElMessage.error('请输入申请更改部门')
-        return
-      }
-      if (!quotationForm.applicant || !quotationForm.applicant.trim()) {
-        ElMessage.error('请输入申请更改人')
-        return
-      }
+      // 模具编号、申请更改部门、申请更改人改为非必填
     } else {
       const cleanedPartItems = quotationForm.partItems
         .map((item) => ({

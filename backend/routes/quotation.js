@@ -236,6 +236,31 @@ const ensureQuotationOperatorColumn = async () => {
   quotationOperatorColumnEnsured = true
 }
 
+let quotationProcessingDateNullableEnsured = false
+const ensureQuotationProcessingDateNullable = async () => {
+  if (quotationProcessingDateNullableEnsured) return
+
+  try {
+    // 检查"加工日期"列是否允许 NULL
+    const rows = await query(`
+      SELECT IS_NULLABLE 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_NAME = N'报价单' AND COLUMN_NAME = N'加工日期'
+    `)
+
+    if (rows && rows.length > 0 && rows[0].IS_NULLABLE === 'NO') {
+      // 如果当前不允许 NULL，则修改为允许 NULL
+      await query(`ALTER TABLE 报价单 ALTER COLUMN 加工日期 DATE NULL`)
+      console.log('已修改"加工日期"列为允许 NULL')
+    }
+  } catch (e) {
+    console.error('检查/修改"加工日期"列失败:', e)
+    // 不抛出错误，允许继续执行
+  }
+
+  quotationProcessingDateNullableEnsured = true
+}
+
 const toDateString = (value) => {
   if (!value) return ''
   try {
@@ -1268,6 +1293,7 @@ router.get('/list', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationProcessingDateNullable()
     const { keyword, processingDate, page = 1, pageSize = 20 } = req.query
 
     // 构建查询条件
@@ -1481,6 +1507,7 @@ router.post('/create', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationProcessingDateNullable()
     console.log('收到创建报价单请求，请求体:', JSON.stringify(req.body, null, 2))
 
     const {
@@ -1551,27 +1578,7 @@ router.post('/create', async (req, res) => {
           message: '加工零件名称不能为空'
         })
       }
-      if (!moldNo) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '模具编号不能为空'
-        })
-      }
-      if (!department) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '申请更改部门不能为空'
-        })
-      }
-      if (!applicant) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '申请更改人不能为空'
-        })
-      }
+      // 模具编号、申请更改部门、申请更改人改为非必填
     } else {
       const items = Array.isArray(partItems) ? partItems : []
       if (!items.length) {
@@ -1598,8 +1605,8 @@ router.post('/create', async (req, res) => {
       }
     }
 
-    // 加工日期如果未提供，则默认使用报价日期，确保数据库非空
-    const effectiveProcessingDate = processingDate || quotationDate
+    // 加工日期允许为空
+    const effectiveProcessingDate = processingDate && processingDate.trim() ? processingDate : null
 
     // 检查报价单号是否已存在
     const checkQuery = `
@@ -1738,6 +1745,7 @@ router.put('/:id', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationProcessingDateNullable()
     const { id } = req.params
     const {
       quotationNo,
@@ -1787,27 +1795,7 @@ router.put('/:id', async (req, res) => {
           message: '加工零件名称不能为空'
         })
       }
-      if (!moldNo) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '模具编号不能为空'
-        })
-      }
-      if (!department) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '申请更改部门不能为空'
-        })
-      }
-      if (!applicant) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '申请更改人不能为空'
-        })
-      }
+      // 模具编号、申请更改部门、申请更改人改为非必填
     } else {
       const items = Array.isArray(partItems) ? partItems : []
       if (!items.length) {
@@ -1849,8 +1837,8 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // 加工日期如果未提供，则默认使用报价日期，确保数据库非空
-    const effectiveProcessingDate = processingDate || quotationDate
+    // 加工日期允许为空
+    const effectiveProcessingDate = processingDate && processingDate.trim() ? processingDate : null
 
     // 计算含税价格
     const materialsTotal = (materials || []).reduce(
@@ -2005,6 +1993,7 @@ router.get('/:id/export-excel', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationProcessingDateNullable()
     const { id } = req.params
 
     // 查询报价单详情
@@ -2222,6 +2211,7 @@ router.get('/:id/export-pdf', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationProcessingDateNullable()
     const { id } = req.params
 
     // 查询报价单详情
