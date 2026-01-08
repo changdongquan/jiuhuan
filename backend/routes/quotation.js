@@ -864,21 +864,18 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle' }
 
   const operatorValueStartCol = 2 // B
-  // 下划线缩短：只占用 2 列宽（例如 B-C）
-  const operatorValueEndCol = Math.max(
-    operatorValueStartCol,
-    Math.min(operatorValueStartCol + 1, leftEndCol, companyInfoEndCol)
-  )
-  if (operatorValueStartCol <= operatorValueEndCol) {
+  // 下划线缩短：只占用 1 列宽（B 列）
+  const operatorValueEndCol = operatorValueStartCol
+  if (operatorValueStartCol < operatorValueEndCol) {
     sheet.mergeCells(
       `${colLetter(operatorValueStartCol)}${operatorRowNo}:${colLetter(operatorValueEndCol)}${operatorRowNo}`
     )
-    const operatorValueCell = sheet.getCell(`${colLetter(operatorValueStartCol)}${operatorRowNo}`)
-    operatorValueCell.value = row.operator || ''
-    operatorValueCell.font = { size: 11 }
-    operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-    applyBottomBorderForRange(operatorRowNo, operatorValueStartCol, operatorValueEndCol)
   }
+  const operatorValueCell = sheet.getCell(`${colLetter(operatorValueStartCol)}${operatorRowNo}`)
+  operatorValueCell.value = row.operator || ''
+  operatorValueCell.font = { size: 11 }
+  operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+  applyBottomBorderForRange(operatorRowNo, operatorValueStartCol, operatorValueEndCol)
 
   // 客户确认（保持原位置：公司信息第一行）
   const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
