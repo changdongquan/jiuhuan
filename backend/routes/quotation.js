@@ -852,10 +852,10 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   })
 
   // 右侧：签名区域
-  // - 客户确认：保持在公司信息第一行
+  // - 客户确认：移动到经办人同一行（右侧位置不变）
   // - 经办人：移动到邮箱下一行
-  const confirmRowNo = footerStartRow
   const operatorRowNo = footerStartRow + companyInfo.length
+  const confirmRowNo = operatorRowNo
 
   // 经办人（邮箱下方，左侧与邮箱左对齐）
   const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A
@@ -877,7 +877,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
   applyBottomBorderForRange(operatorRowNo, operatorValueStartCol, operatorValueEndCol)
 
-  // 客户确认（保持原位置：公司信息第一行）
+  // 客户确认（与经办人同一行，左右列位置不变）
   const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
   confirmLabelCell.value = '客户确认：'
   confirmLabelCell.font = { size: 11, color: colorTextMuted }
@@ -890,7 +890,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   applyBottomBorderForRange(confirmRowNo, confirmValueCol, confirmValueCol)
 
   if (!sheet.getRow(operatorRowNo).height) sheet.getRow(operatorRowNo).height = footerRowHeight
-  if (!sheet.getRow(confirmRowNo).height) sheet.getRow(confirmRowNo).height = footerRowHeight
 
   // 确保所有行都有相同高度
   const footerEndRow = Math.max(footerStartRow + companyInfo.length - 1, operatorRowNo)
