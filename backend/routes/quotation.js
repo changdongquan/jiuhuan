@@ -303,6 +303,103 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
   const fillSolid = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
 
+  const toCnMoneyUppercase = (input) => {
+    const raw = String(input ?? '')
+      .trim()
+      .replace(/,/g, '')
+    if (!raw) return ''
+
+    let sign = ''
+    let s = raw
+    if (s.startsWith('-')) {
+      sign = '负'
+      s = s.slice(1)
+    } else if (s.startsWith('+')) {
+      s = s.slice(1)
+    }
+    s = s.trim()
+    if (!s) return ''
+
+    const parts = s.split('.')
+    let intPart = (parts[0] || '').replace(/^0+(?=\d)/, '')
+    if (!intPart) intPart = '0'
+    const decPart = (parts[1] || '').replace(/[^\d]/g, '')
+    const dec2 = (decPart + '00').slice(0, 2) // 固定到2位小数（分），不四舍五入
+    const jiao = dec2[0] || '0'
+    const fen = dec2[1] || '0'
+
+    const digitMap = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖']
+    const unitMap = ['', '拾', '佰', '仟']
+    const sectionUnitMap = ['', '万', '亿', '兆']
+
+    const sectionToCn = (sectionStr) => {
+      let out = ''
+      let zeroPending = false
+      for (let i = 0; i < sectionStr.length; i += 1) {
+        const digitChar = sectionStr[sectionStr.length - 1 - i]
+        const n = digitChar ? Number(digitChar) : 0
+        if (!n) {
+          if (out && !zeroPending) zeroPending = true
+          continue
+        }
+        if (zeroPending) {
+          out = `零${out}`
+          zeroPending = false
+        }
+        out = `${digitMap[n]}${unitMap[i]}${out}`
+      }
+      return out
+    }
+
+    const intToCn = (numStr) => {
+      const digitsOnly = (numStr || '').replace(/[^\d]/g, '') || '0'
+      if (digitsOnly === '0') return '零'
+
+      const appendZero = (str) => (str && !str.endsWith('零') ? `${str}零` : str)
+
+      const sections = []
+      for (let end = digitsOnly.length; end > 0; end -= 4) {
+        const start = Math.max(0, end - 4)
+        sections.unshift(digitsOnly.slice(start, end).padStart(4, '0'))
+      }
+
+      let result = ''
+      let zeroPending = false
+      for (let i = 0; i < sections.length; i += 1) {
+        const section = sections[i]
+        const sectionNum = Number(section)
+        const sectionUnit = sectionUnitMap[sections.length - 1 - i] || ''
+
+        if (!sectionNum) {
+          if (result) zeroPending = true
+          continue
+        }
+
+        if (zeroPending) {
+          result = appendZero(result)
+          zeroPending = false
+        }
+
+        // 若该节不足千位（例如 0001、0012），且前面已有更高位内容，需要补一个“零”
+        if (result && sectionNum < 1000) result = appendZero(result)
+
+        result += `${sectionToCn(section)}${sectionUnit}`
+      }
+
+      return result.replace(/零+/g, '零').replace(/^零/, '')
+    }
+
+    const intCn = intToCn(intPart)
+    let out = `${intCn}元`
+
+    if (jiao === '0' && fen === '0') return `${sign}${out}整`
+
+    if (jiao !== '0') out += `${digitMap[Number(jiao)]}角`
+    if (jiao === '0' && fen !== '0') out += '零'
+    if (fen !== '0') out += `${digitMap[Number(fen)]}分`
+    return `${sign}${out}`
+  }
+
   // Column widths（近似像素 -> Excel 宽度），打印会按 fitToWidth 缩放
   // 注意：印章图片定位需要在“有图示列/无图示列”两种布局下保持一致，
   // 因此保留 enabled/disabled 两套列宽用于计算缩放补偿。
@@ -406,11 +503,12 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     label,
     value,
     mutedValue,
+    labelMuted = true,
     underline = true
   }) => {
     const labelCell = sheet.getRow(rowNo).getCell(labelCol)
     labelCell.value = label ? `${label}：` : ''
-    labelCell.font = metaLabelFont
+    labelCell.font = labelMuted ? metaLabelFont : metaValueFont
     labelCell.alignment = { horizontal: 'right', vertical: 'middle' }
 
     if (valueStartCol <= valueEndCol) {
@@ -436,21 +534,22 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     value: row.customerName || '',
     mutedValue: false
   })
+  // 左侧字段与“客户名称”保持一致的布局与起始位置
   setMetaField({
     rowNo: metaRow2,
     startCol: leftStartCol,
     endCol: leftEndCol,
-    label: '报价单号',
-    value: row.quotationNo || '',
-    mutedValue: true
+    label: '　联系人',
+    value: row.contactName || '-',
+    mutedValue: false
   })
   setMetaField({
     rowNo: metaRow3,
     startCol: leftStartCol,
     endCol: leftEndCol,
-    label: '报价日期',
-    value: toDateString(row.quotationDate) || '-',
-    mutedValue: true
+    label: '联系电话',
+    value: row.contactPhone || '-',
+    mutedValue: false
   })
 
   // 右侧：留空 / 联系人 / 联系电话（下移一行）
@@ -469,18 +568,20 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
     valueEndCol: rightValueEndCol,
-    label: '联系人',
-    value: row.contactName || '-',
-    mutedValue: false
+    label: '报价单号',
+    value: row.quotationNo || '',
+    mutedValue: false,
+    labelMuted: false
   })
   setMetaFieldRight({
     rowNo: metaRow3,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
     valueEndCol: rightValueEndCol,
-    label: '联系电话',
-    value: row.contactPhone || '-',
-    mutedValue: false
+    label: '报价日期',
+    value: toDateString(row.quotationDate) || '-',
+    mutedValue: false,
+    labelMuted: false
   })
 
   // ===== Table header =====
@@ -707,7 +808,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     0
   )
   sheet.mergeCells(`A${totalRow}:${colLetter(colCount - 1)}${totalRow}`)
-  sheet.getCell(`A${totalRow}`).value = '合计'
+  sheet.getCell(`A${totalRow}`).value = '小计'
   sheet.getCell(`A${totalRow}`).alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getCell(`${lastCol}${totalRow}`).value = totalAmount || ''
   sheet.getCell(`${lastCol}${totalRow}`).numFmt = '#,##0.00'
@@ -726,7 +827,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const sumLabelEndCol = Math.max(1, colCount - 1)
   const sumValueCol = colCount
 
-  const putSummaryRow = (r, label, value, isTotal = false) => {
+  const putSummaryRow = (r, label, value, isTotal = false, isText = false) => {
     sheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumLabelEndCol)}${r}`)
     const labelCell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
     labelCell.value = label
@@ -735,16 +836,39 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     labelCell.fill = fillSolid(colorHeaderBg.argb)
 
     const valueCell = sheet.getCell(`${colLetter(sumValueCol)}${r}`)
-    valueCell.value =
-      value === null || value === undefined || Number(value) === 0 ? '' : Number(value)
-    valueCell.numFmt = '#,##0.00'
-    valueCell.alignment = { horizontal: 'right', vertical: 'middle' }
-    valueCell.font = isTotal ? { bold: true, size: 13 } : { size: 11 }
-    if (isTotal) valueCell.fill = fillSolid(colorTotalBg.argb)
+    if (isText) {
+      valueCell.value = value ? String(value) : ''
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+      valueCell.font = { size: 11 }
+    } else {
+      valueCell.value =
+        value === null || value === undefined || Number(value) === 0 ? '' : Number(value)
+      valueCell.numFmt = '#,##0.00'
+      valueCell.alignment = { horizontal: 'right', vertical: 'middle' }
+      valueCell.font = isTotal ? { bold: true, size: 13 } : { size: 11 }
+      if (isTotal) valueCell.fill = fillSolid(colorTotalBg.argb)
+    }
 
     for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
       setBorderAll(sheet.getRow(r).getCell(c))
-    sheet.getRow(r).height = isTotal ? 24 : 20
+    sheet.getRow(r).height = isText ? 28 : isTotal ? 24 : 20
+  }
+
+  const putSummaryMergedTextRow = (r, text) => {
+    sheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumValueCol)}${r}`)
+    const cell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
+    const fullText = text ? String(text) : ''
+    cell.value = fullText
+    cell.font = { size: 11 }
+    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+    cell.fill = fillSolid(colorHeaderBg.argb)
+
+    for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
+      setBorderAll(sheet.getRow(r).getCell(c))
+
+    const threshold = 26
+    const lines = Math.min(3, Math.max(1, Math.ceil(fullText.length / threshold)))
+    sheet.getRow(r).height = lines * 20
   }
 
   const otherFee = Number(row.otherFee || 0)
@@ -758,10 +882,20 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   if (otherFee) summaryLines.push({ label: '其它费用', value: otherFee })
   if (transportFee) summaryLines.push({ label: '运输费用', value: transportFee })
   summaryLines.push({ label: '含税价格', value: computedTaxIncludedPrice, isTotal: true })
+  summaryLines.push({
+    label: '金额（大写）',
+    value: toCnMoneyUppercase(computedTaxIncludedPrice),
+    isMergedText: true
+  })
 
-  summaryLines.forEach((line, idx) =>
-    putSummaryRow(sumBoxStartRow + idx, line.label, line.value, !!line.isTotal)
-  )
+  summaryLines.forEach((line, idx) => {
+    const rowNo = sumBoxStartRow + idx
+    if (line.isMergedText) {
+      putSummaryMergedTextRow(rowNo, `${line.label}：${line.value || ''}`)
+      return
+    }
+    putSummaryRow(rowNo, line.label, line.value, !!line.isTotal, !!line.isText)
+  })
 
   // ===== Remark =====
   const remarkTitleRow = sumBoxStartRow + summaryLines.length + 1
@@ -770,6 +904,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.getCell(`A${remarkTitleRow}`).value = '备注'
   sheet.getCell(`A${remarkTitleRow}`).font = { bold: true, size: 11 }
   sheet.getCell(`A${remarkTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
+  sheet.getRow(remarkTitleRow).height = 24
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(remarkTitleRow).getCell(c)
     setBorderAll(cell)
@@ -830,15 +965,15 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   // 每个签名占用 2 列（标签列 + 值列），从表格最右侧往左占用 4 列
   const operatorLabelCol = Math.max(2, colCount - 3)
   const operatorValueCol = Math.min(colCount, operatorLabelCol + 1)
-  const confirmLabelCol = Math.max(3, colCount - 1)
-  const confirmValueCol = colCount
+  const confirmLabelCol = Math.max(3, colCount - 2)
+  const confirmValueCol = Math.max(3, colCount - 1)
 
   // 公司信息结束列应该在签名区域之前，留出1列作为分隔
   const companyInfoEndCol = Math.max(1, operatorLabelCol - 1) // 公司信息结束列
 
   const companyInfo = [
     '合肥市久环模具设备制造有限公司',
-    '合肥市阜阳北路 966 号',
+    '地址:合肥市阜阳北路 966 号',
     '电话:0551-65661406',
     '邮箱:mail@jh-mold.com'
   ]
@@ -889,7 +1024,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   confirmValueCell.value = ''
   confirmValueCell.font = { size: 11 }
   confirmValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(confirmRowNo, confirmValueCol, confirmValueCol)
+  applyBottomBorderForRange(confirmRowNo, confirmValueCol, colCount)
 
   if (!sheet.getRow(operatorRowNo).height) sheet.getRow(operatorRowNo).height = footerRowHeight
 
