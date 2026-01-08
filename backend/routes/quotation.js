@@ -929,9 +929,9 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         // 计算公司信息区域的总高度（像素）
         const sealRowHeight = companyInfoRowHeight * 4 // 4 行的高度
 
-        // 计算偏移量，使图片在区域中心，然后向右移动 100px（相对上次向左回退 50px）
+        // 计算偏移量，使图片在区域中心，然后向左移动 50px
         const centerOffsetX = (totalColWidth - sealSizePx) / 2
-        const offsetX = Math.max(0, centerOffsetX + 100) // 向右移动 100px（相对于中心）
+        const offsetX = Math.max(0, centerOffsetX - 50) // 向左移动 50px（相对于中心）
         const offsetY = Math.max(0, (sealRowHeight - sealSizePx) / 2)
 
         // 计算第一列的宽度，用于计算起始列的小数偏移
