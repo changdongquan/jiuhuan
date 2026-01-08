@@ -857,17 +857,24 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const confirmRowNo = footerStartRow
   const operatorRowNo = footerStartRow + companyInfo.length
 
-  // 经办人（邮箱下方）
-  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(operatorLabelCol)
+  // 经办人（邮箱下方，左侧与邮箱左对齐）
+  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A
   operatorLabelCell.value = '经办人：'
   operatorLabelCell.font = { size: 11, color: colorTextMuted }
-  operatorLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+  operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle' }
 
-  const operatorValueCell = sheet.getRow(operatorRowNo).getCell(operatorValueCol)
-  operatorValueCell.value = row.operator || ''
-  operatorValueCell.font = { size: 11 }
-  operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(operatorRowNo, operatorValueCol, operatorValueCol)
+  const operatorValueStartCol = 2 // B
+  const operatorValueEndCol = Math.max(2, companyInfoEndCol)
+  if (operatorValueStartCol <= operatorValueEndCol) {
+    sheet.mergeCells(
+      `${colLetter(operatorValueStartCol)}${operatorRowNo}:${colLetter(operatorValueEndCol)}${operatorRowNo}`
+    )
+    const operatorValueCell = sheet.getCell(`${colLetter(operatorValueStartCol)}${operatorRowNo}`)
+    operatorValueCell.value = row.operator || ''
+    operatorValueCell.font = { size: 11 }
+    operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    applyBottomBorderForRange(operatorRowNo, operatorValueStartCol, operatorValueEndCol)
+  }
 
   // 客户确认（保持原位置：公司信息第一行）
   const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
