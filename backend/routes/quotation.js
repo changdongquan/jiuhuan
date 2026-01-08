@@ -851,39 +851,41 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     sheet.getRow(row).height = companyInfoRowHeight // 使用较小的行高
   })
 
-  // 右侧：签名区域（同一行），放到邮箱下一行
-  const signatureRowNo = footerStartRow + companyInfo.length
+  // 右侧：签名区域
+  // - 客户确认：保持在公司信息第一行
+  // - 经办人：移动到邮箱下一行
+  const confirmRowNo = footerStartRow
+  const operatorRowNo = footerStartRow + companyInfo.length
 
-  // 经办人
-  const operatorLabelCell = sheet.getRow(signatureRowNo).getCell(operatorLabelCol)
+  // 经办人（邮箱下方）
+  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(operatorLabelCol)
   operatorLabelCell.value = '经办人：'
   operatorLabelCell.font = { size: 11, color: colorTextMuted }
   operatorLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
 
-  const operatorValueCell = sheet.getRow(signatureRowNo).getCell(operatorValueCol)
+  const operatorValueCell = sheet.getRow(operatorRowNo).getCell(operatorValueCol)
   operatorValueCell.value = row.operator || ''
   operatorValueCell.font = { size: 11 }
   operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(signatureRowNo, operatorValueCol, operatorValueCol)
+  applyBottomBorderForRange(operatorRowNo, operatorValueCol, operatorValueCol)
 
-  // 客户确认
-  const confirmLabelCell = sheet.getRow(signatureRowNo).getCell(confirmLabelCol)
+  // 客户确认（保持原位置：公司信息第一行）
+  const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
   confirmLabelCell.value = '客户确认：'
   confirmLabelCell.font = { size: 11, color: colorTextMuted }
   confirmLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
 
-  const confirmValueCell = sheet.getRow(signatureRowNo).getCell(confirmValueCol)
+  const confirmValueCell = sheet.getRow(confirmRowNo).getCell(confirmValueCol)
   confirmValueCell.value = ''
   confirmValueCell.font = { size: 11 }
   confirmValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(signatureRowNo, confirmValueCol, confirmValueCol)
+  applyBottomBorderForRange(confirmRowNo, confirmValueCol, confirmValueCol)
 
-  if (!sheet.getRow(signatureRowNo).height) {
-    sheet.getRow(signatureRowNo).height = footerRowHeight
-  }
+  if (!sheet.getRow(operatorRowNo).height) sheet.getRow(operatorRowNo).height = footerRowHeight
+  if (!sheet.getRow(confirmRowNo).height) sheet.getRow(confirmRowNo).height = footerRowHeight
 
   // 确保所有行都有相同高度
-  const footerEndRow = Math.max(footerStartRow + companyInfo.length - 1, signatureRowNo)
+  const footerEndRow = Math.max(footerStartRow + companyInfo.length - 1, operatorRowNo)
   for (let row = footerStartRow; row <= footerEndRow; row += 1) {
     if (!sheet.getRow(row).height) sheet.getRow(row).height = footerRowHeight
   }
