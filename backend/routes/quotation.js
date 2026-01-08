@@ -824,12 +824,15 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
   // 左侧：公司信息（4行）
   // 公司信息从 A 列开始，延伸到大部分列，留出右侧空间给签名区域
-  // 签名区域使用与"联系人"、"联系电话"相同的位置设置，确保对齐
-  const signatureLabelCol = rightLabelCol // 标签列：与联系人、联系电话对齐
-  const signatureValueStartCol = rightValueStartCol // 值区域开始列：与联系人、联系电话对齐
-  const signatureValueEndCol = rightValueEndCol // 值区域结束列：与联系人、联系电话对齐（表格最右侧）
-  // 公司信息结束列应该在签名标签列之前，留出1列作为分隔
-  const companyInfoEndCol = Math.max(1, signatureLabelCol - 1) // 公司信息结束列
+  // 签名区域放在右侧一行内：经办人 + 客户确认
+  // 每个签名占用 2 列（标签列 + 值列），从表格最右侧往左占用 4 列
+  const operatorLabelCol = Math.max(2, colCount - 3)
+  const operatorValueCol = Math.min(colCount, operatorLabelCol + 1)
+  const confirmLabelCol = Math.max(3, colCount - 1)
+  const confirmValueCol = colCount
+
+  // 公司信息结束列应该在签名区域之前，留出1列作为分隔
+  const companyInfoEndCol = Math.max(1, operatorLabelCol - 1) // 公司信息结束列
 
   const companyInfo = [
     '合肥市久环模具设备制造有限公司',
@@ -848,48 +851,46 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     sheet.getRow(row).height = companyInfoRowHeight // 使用较小的行高
   })
 
-  // 右侧：签名区域（2行），向左移动100px（约2列）
-  // 签名区域分为标签列和值列，下划线只在值列（类似联系人、联系电话）
-  const signatures = [
-    { label: '经办人', value: row.operator || '' },
-    { label: '客户确认', value: '' }
-  ]
+  // 右侧：签名区域（同一行）
+  const signatureRowNo = footerStartRow
 
-  signatures.forEach((sig, idx) => {
-    const rowNo = footerStartRow + idx
-    // 标签列
-    const labelCell = sheet.getRow(rowNo).getCell(signatureLabelCol)
-    labelCell.value = `${sig.label}：`
-    labelCell.font = { size: 11, color: colorTextMuted }
-    labelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+  // 经办人
+  const operatorLabelCell = sheet.getRow(signatureRowNo).getCell(operatorLabelCol)
+  operatorLabelCell.value = '经办人：'
+  operatorLabelCell.font = { size: 11, color: colorTextMuted }
+  operatorLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
 
-    // 值列（带下划线）
-    if (signatureValueStartCol <= signatureValueEndCol) {
-      sheet.mergeCells(
-        `${colLetter(signatureValueStartCol)}${rowNo}:${colLetter(signatureValueEndCol)}${rowNo}`
-      )
-      const valueCell = sheet.getCell(`${colLetter(signatureValueStartCol)}${rowNo}`)
-      valueCell.value = sig.value // 使用传入的值（经办人）或留空（客户确认）
-      valueCell.font = { size: 11 }
-      valueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-      // 只在值区域添加下划线
-      applyBottomBorderForRange(rowNo, signatureValueStartCol, signatureValueEndCol)
-    }
+  const operatorValueCell = sheet.getRow(signatureRowNo).getCell(operatorValueCol)
+  operatorValueCell.value = row.operator || ''
+  operatorValueCell.font = { size: 11 }
+  operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+  applyBottomBorderForRange(signatureRowNo, operatorValueCol, operatorValueCol)
 
-    if (!sheet.getRow(rowNo).height) {
-      sheet.getRow(rowNo).height = footerRowHeight
-    }
-  })
+  // 客户确认
+  const confirmLabelCell = sheet.getRow(signatureRowNo).getCell(confirmLabelCol)
+  confirmLabelCell.value = '客户确认：'
+  confirmLabelCell.font = { size: 11, color: colorTextMuted }
+  confirmLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+  const confirmValueCell = sheet.getRow(signatureRowNo).getCell(confirmValueCol)
+  confirmValueCell.value = ''
+  confirmValueCell.font = { size: 11 }
+  confirmValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+  applyBottomBorderForRange(signatureRowNo, confirmValueCol, confirmValueCol)
+
+  if (!sheet.getRow(signatureRowNo).height) {
+    sheet.getRow(signatureRowNo).height = footerRowHeight
+  }
 
   // 确保所有行都有相同高度
-  for (let i = 0; i < Math.max(companyInfo.length, signatures.length); i += 1) {
+  for (let i = 0; i < Math.max(companyInfo.length, 1); i += 1) {
     const row = footerStartRow + i
     if (!sheet.getRow(row).height) {
       sheet.getRow(row).height = footerRowHeight
     }
   }
 
-  const footerEndRow = footerStartRow + Math.max(companyInfo.length, signatures.length) - 1
+  const footerEndRow = footerStartRow + Math.max(companyInfo.length, 1) - 1
 
   // ===== 插入印章图片 =====
   const sealImagePath = path.join(__dirname, '../templates/quotation/报价专用章.png')
