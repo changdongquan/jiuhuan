@@ -851,8 +851,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     sheet.getRow(row).height = companyInfoRowHeight // 使用较小的行高
   })
 
-  // 右侧：签名区域（同一行）
-  const signatureRowNo = footerStartRow
+  // 右侧：签名区域（同一行），放到邮箱下一行
+  const signatureRowNo = footerStartRow + companyInfo.length
 
   // 经办人
   const operatorLabelCell = sheet.getRow(signatureRowNo).getCell(operatorLabelCol)
@@ -883,14 +883,10 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   }
 
   // 确保所有行都有相同高度
-  for (let i = 0; i < Math.max(companyInfo.length, 1); i += 1) {
-    const row = footerStartRow + i
-    if (!sheet.getRow(row).height) {
-      sheet.getRow(row).height = footerRowHeight
-    }
+  const footerEndRow = Math.max(footerStartRow + companyInfo.length - 1, signatureRowNo)
+  for (let row = footerStartRow; row <= footerEndRow; row += 1) {
+    if (!sheet.getRow(row).height) sheet.getRow(row).height = footerRowHeight
   }
-
-  const footerEndRow = footerStartRow + Math.max(companyInfo.length, 1) - 1
 
   // ===== 插入印章图片 =====
   const sealImagePath = path.join(__dirname, '../templates/quotation/报价专用章.png')
