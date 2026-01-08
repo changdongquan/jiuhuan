@@ -304,28 +304,30 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const fillSolid = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
 
   // Column widths（近似像素 -> Excel 宽度），打印会按 fitToWidth 缩放
-  const cols = isEnabled
-    ? [
-        { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
-        { header: '产品名称', key: 'name', width: pxToExcelWidth(140) },
-        { header: '产品图号', key: 'drawing', width: pxToExcelWidth(120) },
-        { header: '材质', key: 'material', width: pxToExcelWidth(100) },
-        { header: '加工内容', key: 'process', width: pxToExcelWidth(100) },
-        { header: '图示', key: 'image', width: pxToExcelWidth(140) },
-        { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
-        { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-        { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
-      ]
-    : [
-        { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
-        { header: '产品名称', key: 'name', width: pxToExcelWidth(160) },
-        { header: '产品图号', key: 'drawing', width: pxToExcelWidth(130) },
-        { header: '材质', key: 'material', width: pxToExcelWidth(110) },
-        { header: '加工内容', key: 'process', width: pxToExcelWidth(110) },
-        { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
-        { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-        { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
-      ]
+  // 注意：印章图片定位需要在“有图示列/无图示列”两种布局下保持一致，
+  // 因此保留 enabled/disabled 两套列宽用于计算缩放补偿。
+  const colsEnabled = [
+    { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
+    { header: '产品名称', key: 'name', width: pxToExcelWidth(140) },
+    { header: '产品图号', key: 'drawing', width: pxToExcelWidth(120) },
+    { header: '材质', key: 'material', width: pxToExcelWidth(100) },
+    { header: '加工内容', key: 'process', width: pxToExcelWidth(100) },
+    { header: '图示', key: 'image', width: pxToExcelWidth(140) },
+    { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
+    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+  ]
+  const colsDisabled = [
+    { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
+    { header: '产品名称', key: 'name', width: pxToExcelWidth(160) },
+    { header: '产品图号', key: 'drawing', width: pxToExcelWidth(130) },
+    { header: '材质', key: 'material', width: pxToExcelWidth(110) },
+    { header: '加工内容', key: 'process', width: pxToExcelWidth(110) },
+    { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
+    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+  ]
+  const cols = isEnabled ? colsEnabled : colsDisabled
   sheet.columns = cols
 
   const colCount = cols.length
@@ -919,19 +921,33 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         const sealEndCol = companyInfoEndCol
         const sealStartRow = footerStartRow
 
-        // 计算公司信息区域的总宽度（像素）
-        let totalColWidth = 0
-        for (let c = sealStartCol; c <= sealEndCol; c += 1) {
-          const colWidth = excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
-          totalColWidth += colWidth
-        }
-
         // 计算公司信息区域的总高度（像素）
         const sealRowHeight = companyInfoRowHeight * 4 // 4 行的高度
 
-        // 计算偏移量，使图片在区域中心，然后向左移动 50px
-        const centerOffsetX = (totalColWidth - sealSizePx) / 2
-        const offsetX = Math.max(0, centerOffsetX - 50) // 向左移动 50px（相对于中心）
+        // 计算偏移量：以“启用图示列”的布局为基准，补偿 fitToWidth 缩放差异，
+        // 避免关闭图示列时 PDF 中印章看起来向右漂移。
+        const sumColsPx = (colsDef) =>
+          (colsDef || []).reduce((sum, c) => sum + excelColumnWidthToPixels(c?.width || 64), 0)
+        const refColCount = colsEnabled.length
+        const refOperatorLabelCol = Math.max(2, refColCount - 3)
+        const refCompanyInfoEndCol = Math.max(1, refOperatorLabelCol - 1)
+        let refCompanyInfoWidthPx = 0
+        for (let c = 1; c <= refCompanyInfoEndCol; c += 1) {
+          refCompanyInfoWidthPx += excelColumnWidthToPixels(colsEnabled[c - 1]?.width || 64)
+        }
+        const refCenterOffsetX = (refCompanyInfoWidthPx - sealSizePx) / 2
+        const refOffsetX = Math.max(0, refCenterOffsetX - 50) // 向左移动 50px（相对于中心）
+
+        const currentTotalWidthPx = (() => {
+          let w = 0
+          for (let c = 1; c <= colCount; c += 1) {
+            w += excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
+          }
+          return w
+        })()
+        const refTotalWidthPx = sumColsPx(colsEnabled)
+        const scaleComp = refTotalWidthPx > 0 ? currentTotalWidthPx / refTotalWidthPx : 1
+        const offsetX = Math.max(0, refOffsetX * scaleComp)
         const offsetY = Math.max(0, (sealRowHeight - sealSizePx) / 2)
 
         // 计算第一列的宽度，用于计算起始列的小数偏移
@@ -949,7 +965,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
           tlCol,
           tlRow,
           sealSizePx,
-          totalColWidth,
           sealRowHeight,
           offsetX,
           offsetY
