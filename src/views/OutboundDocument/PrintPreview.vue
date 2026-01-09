@@ -53,6 +53,16 @@
                   <span class="value">{{ documentData.出库类型 || '-' }}</span>
                 </div>
               </div>
+              <div class="doc-info__row" v-if="documentData.收货方名称 || documentData.收货地址">
+                <div class="doc-info__item" v-if="documentData.收货方名称">
+                  <span class="label">收货方：</span>
+                  <span class="value">{{ documentData.收货方名称 || '-' }}</span>
+                </div>
+                <div class="doc-info__item doc-info__item--full" v-if="documentData.收货地址">
+                  <span class="label">收货地址：</span>
+                  <span class="value">{{ documentData.收货地址 || '-' }}</span>
+                </div>
+              </div>
             </div>
 
             <div class="doc-table">

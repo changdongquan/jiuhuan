@@ -24,8 +24,54 @@ const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   10
 )
 
+// 确保客户收货地址表存在
+const ensureDeliveryAddressTable = async () => {
+  const createSql = `
+    IF OBJECT_ID(N'客户收货地址', N'U') IS NULL
+    BEGIN
+      CREATE TABLE 客户收货地址 (
+        收货地址ID INT IDENTITY(1,1) PRIMARY KEY,
+        客户ID INT NOT NULL,
+        收货方名称 NVARCHAR(200) NOT NULL,
+        收货方简称 NVARCHAR(100) NULL,
+        收货地址 NVARCHAR(500) NOT NULL,
+        邮政编码 NVARCHAR(20) NULL,
+        所在地区 NVARCHAR(100) NULL,
+        所在城市 NVARCHAR(100) NULL,
+        所在省份 NVARCHAR(100) NULL,
+        所在国家 NVARCHAR(100) NULL DEFAULT '中国',
+        联系人 NVARCHAR(100) NULL,
+        联系电话 NVARCHAR(50) NULL,
+        联系手机 NVARCHAR(20) NULL,
+        电子邮箱 NVARCHAR(100) NULL,
+        地址用途 NVARCHAR(50) NOT NULL DEFAULT 'SHIP_TO',
+        是否默认 BIT NOT NULL DEFAULT 0,
+        排序号 INT NOT NULL DEFAULT 0,
+        是否启用 BIT NOT NULL DEFAULT 1,
+        备注 NVARCHAR(500) NULL,
+        创建时间 DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        更新时间 DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        创建人 NVARCHAR(100) NULL,
+        更新人 NVARCHAR(100) NULL,
+        CONSTRAINT FK_客户收货地址_客户ID 
+          FOREIGN KEY (客户ID) REFERENCES 客户信息(客户ID)
+          ON DELETE CASCADE
+      )
+
+      CREATE INDEX IX_客户收货地址_客户ID ON 客户收货地址(客户ID)
+      CREATE INDEX IX_客户收货地址_是否默认 ON 客户收货地址(客户ID, 是否默认)
+      CREATE INDEX IX_客户收货地址_地址用途 ON 客户收货地址(客户ID, 地址用途)
+      CREATE INDEX IX_客户收货地址_排序号 ON 客户收货地址(客户ID, 排序号)
+    END
+  `
+  await query(createSql)
+}
+
 const ensureTables = async () => {
   if (tablesReady) return
+
+  // 先确保客户收货地址表存在
+  await ensureDeliveryAddressTable()
 
   const createSql = `
     IF OBJECT_ID(N'出库单明细', N'U') IS NULL
@@ -62,6 +108,28 @@ const ensureTables = async () => {
   `
 
   await query(createSql)
+
+  // 检查并添加收货地址相关字段（如果表已存在但字段不存在）
+  const alterSql = `
+    IF OBJECT_ID(N'出库单明细', N'U') IS NOT NULL
+    BEGIN
+      IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'出库单明细') AND name = '收货地址ID')
+      BEGIN
+        ALTER TABLE 出库单明细 
+        ADD 收货地址ID INT NULL,
+            收货方名称 NVARCHAR(200) NULL,
+            收货地址 NVARCHAR(500) NULL,
+            收货联系人 NVARCHAR(100) NULL,
+            收货联系电话 NVARCHAR(50) NULL,
+            地址用途 NVARCHAR(50) NULL DEFAULT 'SHIP_TO'
+        
+        CREATE INDEX IX_出库单明细_收货地址ID ON 出库单明细(收货地址ID)
+        CREATE INDEX IX_出库单明细_收货方名称 ON 出库单明细(收货方名称)
+      END
+    END
+  `
+  await query(alterSql)
+
   tablesReady = true
 }
 
@@ -493,6 +561,12 @@ router.get('/list', async (req, res) => {
           更新人: row.更新人,
           创建时间: row.创建时间,
           更新时间: row.更新时间,
+          收货地址ID: row.收货地址ID || null,
+          收货方名称: row.收货方名称 || null,
+          收货地址: row.收货地址 || null,
+          收货联系人: row.收货联系人 || null,
+          收货联系电话: row.收货联系电话 || null,
+          地址用途: row.地址用途 || null,
           details: [],
           detailCount: 0,
           totalQuantity: 0,
@@ -924,6 +998,53 @@ router.post('/', async (req, res) => {
         }
       }
 
+      // 处理收货地址信息
+      let addressInfo = {
+        收货地址ID: null,
+        收货方名称: null,
+        收货地址: null,
+        收货联系人: null,
+        收货联系电话: null,
+        地址用途: 'SHIP_TO'
+      }
+
+      // 如果提供了收货地址ID，查询地址信息
+      if (body.收货地址ID) {
+        const addressReq = new sql.Request(tx)
+        addressReq.input('addressId', sql.Int, parseInt(body.收货地址ID))
+        addressReq.input('customerId', sql.Int, body.客户ID || null)
+        const addressRes = await addressReq.query(`
+          SELECT 
+            收货地址ID, 收货方名称, 收货地址, 联系人, 联系电话, 地址用途
+          FROM 客户收货地址
+          WHERE 收货地址ID = @addressId 
+            AND 是否启用 = 1
+            ${body.客户ID ? 'AND 客户ID = @customerId' : ''}
+        `)
+
+        if (addressRes.recordset.length > 0) {
+          const addr = addressRes.recordset[0]
+          addressInfo = {
+            收货地址ID: addr.收货地址ID,
+            收货方名称: addr.收货方名称,
+            收货地址: addr.收货地址,
+            收货联系人: addr.联系人 || null,
+            收货联系电话: addr.联系电话 || null,
+            地址用途: addr.地址用途 || 'SHIP_TO'
+          }
+        }
+      } else if (body.收货方名称 || body.收货地址) {
+        // 手动输入的地址信息
+        addressInfo = {
+          收货地址ID: null,
+          收货方名称: body.收货方名称 || null,
+          收货地址: body.收货地址 || null,
+          收货联系人: body.收货联系人 || null,
+          收货联系电话: body.收货联系电话 || null,
+          地址用途: body.地址用途 || 'SHIP_TO'
+        }
+      }
+
       for (const d of details) {
         const req1 = new sql.Request(tx)
         const params = {
@@ -946,7 +1067,13 @@ router.post('/', async (req, res) => {
           审核状态: null,
           备注: d.备注 || body.备注 || null,
           创建人: body.创建人 || null,
-          更新人: body.更新人 || null
+          更新人: body.更新人 || null,
+          收货地址ID: addressInfo.收货地址ID,
+          收货方名称: addressInfo.收货方名称,
+          收货地址: addressInfo.收货地址,
+          收货联系人: addressInfo.收货联系人,
+          收货联系电话: addressInfo.收货联系电话,
+          地址用途: addressInfo.地址用途
         }
         bindParams(req1, params)
         await req1.query(`
@@ -954,12 +1081,14 @@ router.post('/', async (req, res) => {
             出库单号, 出库日期, 客户ID, 客户名称,
             项目编号, 产品名称, 产品图号, 客户模号, 出库数量,
             单位, 单价, 金额, 出库类型, 仓库,
-            经办人, 审核人, 审核状态, 备注, 创建人, 更新人
+            经办人, 审核人, 审核状态, 备注, 创建人, 更新人,
+            收货地址ID, 收货方名称, 收货地址, 收货联系人, 收货联系电话, 地址用途
           ) VALUES (
             @出库单号, @出库日期, @客户ID, @客户名称,
             @项目编号, @产品名称, @产品图号, @客户模号, @出库数量,
             @单位, @单价, @金额, @出库类型, @仓库,
-            @经办人, @审核人, @审核状态, @备注, @创建人, @更新人
+            @经办人, @审核人, @审核状态, @备注, @创建人, @更新人,
+            @收货地址ID, @收货方名称, @收货地址, @收货联系人, @收货联系电话, @地址用途
           )
         `)
       }
@@ -1058,6 +1187,75 @@ router.put('/update', async (req, res) => {
           return
         }
 
+        // 处理收货地址信息
+        let addressInfo = {
+          收货地址ID: null,
+          收货方名称: null,
+          收货地址: null,
+          收货联系人: null,
+          收货联系电话: null,
+          地址用途: 'SHIP_TO'
+        }
+
+        // 如果提供了收货地址ID，查询地址信息
+        if (data.收货地址ID !== undefined) {
+          if (data.收货地址ID) {
+            const addressReq = new sql.Request(tx)
+            addressReq.input('addressId', sql.Int, parseInt(data.收货地址ID))
+            addressReq.input('customerId', sql.Int, data.客户ID ?? header.客户ID ?? null)
+            const addressRes = await addressReq.query(`
+              SELECT 
+                收货地址ID, 收货方名称, 收货地址, 联系人, 联系电话, 地址用途
+              FROM 客户收货地址
+              WHERE 收货地址ID = @addressId 
+                AND 是否启用 = 1
+                ${data.客户ID || header.客户ID ? 'AND 客户ID = @customerId' : ''}
+            `)
+
+            if (addressRes.recordset.length > 0) {
+              const addr = addressRes.recordset[0]
+              addressInfo = {
+                收货地址ID: addr.收货地址ID,
+                收货方名称: addr.收货方名称,
+                收货地址: addr.收货地址,
+                收货联系人: addr.联系人 || null,
+                收货联系电话: addr.联系电话 || null,
+                地址用途: addr.地址用途 || 'SHIP_TO'
+              }
+            }
+          } else {
+            // 收货地址ID为null，清空地址信息
+            addressInfo = {
+              收货地址ID: null,
+              收货方名称: null,
+              收货地址: null,
+              收货联系人: null,
+              收货联系电话: null,
+              地址用途: 'SHIP_TO'
+            }
+          }
+        } else if (data.收货方名称 !== undefined || data.收货地址 !== undefined) {
+          // 手动输入的地址信息
+          addressInfo = {
+            收货地址ID: null,
+            收货方名称: data.收货方名称 ?? null,
+            收货地址: data.收货地址 ?? null,
+            收货联系人: data.收货联系人 ?? null,
+            收货联系电话: data.收货联系电话 ?? null,
+            地址用途: data.地址用途 || 'SHIP_TO'
+          }
+        } else {
+          // 使用原有地址信息
+          addressInfo = {
+            收货地址ID: header.收货地址ID ?? null,
+            收货方名称: header.收货方名称 ?? null,
+            收货地址: header.收货地址 ?? null,
+            收货联系人: header.收货联系人 ?? null,
+            收货联系电话: header.收货联系电话 ?? null,
+            地址用途: header.地址用途 || 'SHIP_TO'
+          }
+        }
+
         const headerFields = {
           出库日期: outboundDate ?? header.出库日期 ?? null,
           客户ID: data.客户ID ?? header.客户ID ?? null,
@@ -1070,7 +1268,13 @@ router.put('/update', async (req, res) => {
           备注: data.备注 ?? header.备注 ?? null,
           更新人: data.更新人 ?? header.更新人 ?? null,
           创建人: header.创建人 ?? null,
-          创建时间: header.创建时间 ?? null
+          创建时间: header.创建时间 ?? null,
+          收货地址ID: addressInfo.收货地址ID,
+          收货方名称: addressInfo.收货方名称,
+          收货地址: addressInfo.收货地址,
+          收货联系人: addressInfo.收货联系人,
+          收货联系电话: addressInfo.收货联系电话,
+          地址用途: addressInfo.地址用途
         }
 
         const newQtyByProject = sumDocQuantityByProject(normalizedDetails)
@@ -1154,7 +1358,13 @@ router.put('/update', async (req, res) => {
             创建人: headerFields.创建人,
             更新人: headerFields.更新人,
             创建时间: headerFields.创建时间,
-            更新时间: new Date()
+            更新时间: new Date(),
+            收货地址ID: headerFields.收货地址ID,
+            收货方名称: headerFields.收货方名称,
+            收货地址: headerFields.收货地址,
+            收货联系人: headerFields.收货联系人,
+            收货联系电话: headerFields.收货联系电话,
+            地址用途: headerFields.地址用途
           }
           bindParams(insReq, params)
           await insReq.query(`
@@ -1163,13 +1373,15 @@ router.put('/update', async (req, res) => {
               项目编号, 产品名称, 产品图号, 客户模号, 出库数量,
               单位, 单价, 金额, 出库类型, 仓库,
               经办人, 审核人, 审核状态, 备注, 创建人, 更新人,
-              创建时间, 更新时间
+              创建时间, 更新时间,
+              收货地址ID, 收货方名称, 收货地址, 收货联系人, 收货联系电话, 地址用途
             ) VALUES (
               @出库单号, @出库日期, @客户ID, @客户名称,
               @项目编号, @产品名称, @产品图号, @客户模号, @出库数量,
               @单位, @单价, @金额, @出库类型, @仓库,
               @经办人, @审核人, @审核状态, @备注, @创建人, @更新人,
-              @创建时间, @更新时间
+              @创建时间, @更新时间,
+              @收货地址ID, @收货方名称, @收货地址, @收货联系人, @收货联系电话, @地址用途
             )
 	          `)
         }

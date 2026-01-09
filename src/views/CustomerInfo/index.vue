@@ -145,12 +145,121 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '100%' : '800px'"
+      :width="isMobile ? '100%' : '900px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
-      <el-form ref="dialogFormRef" :model="dialogForm" :rules="dialogRules" label-width="100px">
+      <el-tabs v-model="activeTab" v-if="currentCustomerId !== null || dialogTitle === '新增客户'">
+        <el-tab-pane label="基本信息" name="basic">
+          <el-form ref="dialogFormRef" :model="dialogForm" :rules="dialogRules" label-width="100px">
+            <el-row :gutter="16">
+              <el-col :xs="24" :md="12">
+                <el-form-item label="客户名称" prop="customerName">
+                  <el-input v-model="dialogForm.customerName" placeholder="请输入客户名称" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="客户状态" prop="status">
+                  <el-select v-model="dialogForm.status" placeholder="请选择客户状态">
+                    <el-option label="启用" value="active" />
+                    <el-option label="停用" value="inactive" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="联系人" prop="contact">
+                  <el-input v-model="dialogForm.contact" placeholder="请输入联系人" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="联系电话" prop="phone">
+                  <el-input v-model="dialogForm.phone" placeholder="请输入联系电话" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="电子邮箱" prop="email">
+                  <el-input v-model="dialogForm.email" placeholder="请输入邮箱" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="序号" prop="seqNumber">
+                  <el-input-number
+                    v-model="dialogForm.seqNumber"
+                    :min="0"
+                    placeholder="请输入序号"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24">
+                <el-form-item label="客户地址" prop="address">
+                  <el-input v-model="dialogForm.address" placeholder="请输入客户地址" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </el-tab-pane>
+        <el-tab-pane label="收货地址" name="delivery" v-if="currentCustomerId !== null">
+          <div style="margin-bottom: 12px">
+            <el-button type="primary" size="small" @click="handleAddDeliveryAddress"
+              >新增地址</el-button
+            >
+          </div>
+          <el-table :data="deliveryAddresses" border size="small" v-loading="addressLoading">
+            <el-table-column type="index" label="序号" width="60" />
+            <el-table-column prop="收货方名称" label="收货方名称" min-width="150" />
+            <el-table-column
+              prop="收货地址"
+              label="收货地址"
+              min-width="200"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="联系人" label="联系人" width="100" />
+            <el-table-column prop="联系电话" label="联系电话" width="120" />
+            <el-table-column label="是否默认" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.isDefault" type="success" size="small">默认</el-tag>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="handleEditDeliveryAddress(row)">
+                  编辑
+                </el-button>
+                <el-button
+                  v-if="!row.isDefault"
+                  type="success"
+                  link
+                  size="small"
+                  @click="handleSetDefaultAddress(row.id)"
+                >
+                  设为默认
+                </el-button>
+                <el-button
+                  type="danger"
+                  link
+                  size="small"
+                  @click="handleDeleteDeliveryAddress(row)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty
+            v-if="!addressLoading && deliveryAddresses.length === 0"
+            description="暂无收货地址"
+          />
+        </el-tab-pane>
+      </el-tabs>
+      <el-form
+        v-else
+        ref="dialogFormRef"
+        :model="dialogForm"
+        :rules="dialogRules"
+        label-width="100px"
+      >
         <el-row :gutter="16">
           <el-col :xs="24" :md="12">
             <el-form-item label="客户名称" prop="customerName">
@@ -195,7 +304,73 @@
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dialogSubmitting" @click="submitDialogForm"
+        <el-button
+          v-if="activeTab === 'basic' || currentCustomerId === null"
+          type="primary"
+          :loading="dialogSubmitting"
+          @click="submitDialogForm"
+        >
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 收货地址编辑对话框 -->
+    <el-dialog
+      v-model="addressDialogVisible"
+      :title="addressDialogTitle"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form ref="addressFormRef" :model="addressForm" :rules="addressRules" label-width="100px">
+        <el-form-item label="收货方名称" prop="收货方名称">
+          <el-input v-model="addressForm.收货方名称" placeholder="请输入收货方名称" />
+        </el-form-item>
+        <el-form-item label="收货方简称">
+          <el-input v-model="addressForm.收货方简称" placeholder="请输入收货方简称（可选）" />
+        </el-form-item>
+        <el-form-item label="收货地址" prop="收货地址">
+          <el-input
+            v-model="addressForm.收货地址"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入收货地址"
+          />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="邮政编码">
+              <el-input v-model="addressForm.邮政编码" placeholder="请输入邮政编码" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="所在城市">
+              <el-input v-model="addressForm.所在城市" placeholder="请输入所在城市" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="联系人">
+              <el-input v-model="addressForm.联系人" placeholder="请输入联系人" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系电话">
+              <el-input v-model="addressForm.联系电话" placeholder="请输入联系电话" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="是否默认">
+          <el-switch v-model="addressForm.isDefault" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="addressForm.备注" type="textarea" :rows="2" placeholder="请输入备注" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addressDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addressSubmitting" @click="submitAddressForm"
           >保存</el-button
         >
       </template>
@@ -220,7 +395,10 @@ import {
   ElSelect,
   ElTable,
   ElTableColumn,
-  ElTag
+  ElTag,
+  ElTabs,
+  ElTabPane,
+  ElSwitch
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick, reactive, ref, onMounted, computed, watch } from 'vue'
@@ -232,8 +410,14 @@ import {
   updateCustomerApi,
   deleteCustomerApi,
   getCustomerStatisticsApi,
+  getCustomerDeliveryAddressesApi,
+  createCustomerDeliveryAddressApi,
+  updateCustomerDeliveryAddressApi,
+  deleteCustomerDeliveryAddressApi,
+  setDefaultDeliveryAddressApi,
   type CustomerInfo,
-  type CustomerQueryParams
+  type CustomerQueryParams,
+  type CustomerDeliveryAddress
 } from '@/api/customer'
 import { useAppStore } from '@/store/modules/app'
 
@@ -294,6 +478,34 @@ const dialogTitle = ref('')
 const dialogSubmitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
 const currentCustomerId = ref<number | null>(null)
+const activeTab = ref('basic')
+
+// 收货地址相关
+const deliveryAddresses = ref<CustomerDeliveryAddress[]>([])
+const addressLoading = ref(false)
+const addressDialogVisible = ref(false)
+const addressDialogTitle = ref('新增收货地址')
+const addressSubmitting = ref(false)
+const addressFormRef = ref<FormInstance>()
+const currentAddressId = ref<number | null>(null)
+const addressForm = reactive<
+  Partial<CustomerDeliveryAddress> & { 收货方名称: string; 收货地址: string }
+>({
+  收货方名称: '',
+  收货方简称: '',
+  收货地址: '',
+  邮政编码: '',
+  所在城市: '',
+  联系人: '',
+  联系电话: '',
+  isDefault: false,
+  备注: '',
+  addressUsage: 'SHIP_TO'
+})
+const addressRules: FormRules = {
+  收货方名称: [{ required: true, message: '请输入收货方名称', trigger: 'blur' }],
+  收货地址: [{ required: true, message: '请输入收货地址', trigger: 'blur' }]
+}
 
 const dialogRules: FormRules<CustomerPayload> = {
   customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
@@ -409,8 +621,11 @@ const openEditDialog = async (id: number) => {
       currentCustomerId.value = id
       assignDialogForm(response.data)
       dialogVisible.value = true
+      activeTab.value = 'basic'
       await nextTick()
       dialogFormRef.value?.clearValidate()
+      // 加载收货地址列表
+      await loadDeliveryAddresses(id)
     } else {
       ElMessage.error('客户不存在')
     }
@@ -506,8 +721,155 @@ const handleDelete = async (row: CustomerTableRow) => {
 const handleDialogClosed = () => {
   assignDialogForm(createEmptyCustomer())
   currentCustomerId.value = null
+  activeTab.value = 'basic'
+  deliveryAddresses.value = []
   dialogFormRef.value?.clearValidate()
 }
+
+// 收货地址管理方法
+const loadDeliveryAddresses = async (customerId: number) => {
+  if (!customerId) return
+  addressLoading.value = true
+  try {
+    const response = await getCustomerDeliveryAddressesApi(customerId, 'SHIP_TO')
+    if (response.code === 0) {
+      deliveryAddresses.value = response.data || []
+    }
+  } catch (error) {
+    console.error('加载收货地址失败:', error)
+    ElMessage.error('加载收货地址失败')
+  } finally {
+    addressLoading.value = false
+  }
+}
+
+const handleAddDeliveryAddress = () => {
+  addressDialogTitle.value = '新增收货地址'
+  currentAddressId.value = null
+  Object.assign(addressForm, {
+    收货方名称: '',
+    收货方简称: '',
+    收货地址: '',
+    邮政编码: '',
+    所在城市: '',
+    联系人: '',
+    联系电话: '',
+    isDefault: false,
+    备注: '',
+    addressUsage: 'SHIP_TO'
+  })
+  addressDialogVisible.value = true
+  nextTick(() => {
+    addressFormRef.value?.clearValidate()
+  })
+}
+
+const handleEditDeliveryAddress = async (address: CustomerDeliveryAddress) => {
+  addressDialogTitle.value = '编辑收货地址'
+  currentAddressId.value = address.id
+  Object.assign(addressForm, {
+    收货方名称: address.收货方名称,
+    收货方简称: address.收货方简称 || '',
+    收货地址: address.收货地址,
+    邮政编码: address.邮政编码 || '',
+    所在城市: address.所在城市 || '',
+    联系人: address.联系人 || '',
+    联系电话: address.联系电话 || '',
+    isDefault: address.isDefault,
+    备注: address.备注 || '',
+    addressUsage: address.addressUsage || 'SHIP_TO'
+  })
+  addressDialogVisible.value = true
+  nextTick(() => {
+    addressFormRef.value?.clearValidate()
+  })
+}
+
+const submitAddressForm = async () => {
+  if (!addressFormRef.value) return
+  if (!currentCustomerId.value) {
+    ElMessage.error('请先保存客户信息')
+    return
+  }
+
+  try {
+    await addressFormRef.value.validate()
+  } catch {
+    return
+  }
+
+  addressSubmitting.value = true
+  try {
+    const payload: any = {
+      收货方名称: addressForm.收货方名称,
+      收货方简称: addressForm.收货方简称,
+      收货地址: addressForm.收货地址,
+      邮政编码: addressForm.邮政编码,
+      所在城市: addressForm.所在城市,
+      联系人: addressForm.联系人,
+      联系电话: addressForm.联系电话,
+      是否默认: addressForm.isDefault,
+      备注: addressForm.备注,
+      地址用途: addressForm.addressUsage || 'SHIP_TO'
+    }
+
+    if (currentAddressId.value === null) {
+      await createCustomerDeliveryAddressApi(currentCustomerId.value, payload)
+      ElMessage.success('新增收货地址成功')
+    } else {
+      await updateCustomerDeliveryAddressApi(currentAddressId.value, payload)
+      ElMessage.success('更新收货地址成功')
+    }
+
+    addressDialogVisible.value = false
+    await loadDeliveryAddresses(currentCustomerId.value)
+  } catch (error: any) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    addressSubmitting.value = false
+  }
+}
+
+const handleSetDefaultAddress = async (addressId: number) => {
+  try {
+    await setDefaultDeliveryAddressApi(addressId)
+    ElMessage.success('设置默认地址成功')
+    if (currentCustomerId.value) {
+      await loadDeliveryAddresses(currentCustomerId.value)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '设置失败')
+  }
+}
+
+const handleDeleteDeliveryAddress = async (address: CustomerDeliveryAddress) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除收货地址"${address.收货方名称}"吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    await deleteCustomerDeliveryAddressApi(address.id)
+    ElMessage.success('删除成功')
+    if (currentCustomerId.value) {
+      await loadDeliveryAddresses(currentCustomerId.value)
+    }
+  } catch (error: any) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error.message || '删除失败')
+  }
+}
+
+// 监听标签页切换，加载收货地址
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab === 'delivery' && currentCustomerId.value) {
+      loadDeliveryAddresses(currentCustomerId.value)
+    }
+  }
+)
 
 // 页面初始化
 onMounted(async () => {

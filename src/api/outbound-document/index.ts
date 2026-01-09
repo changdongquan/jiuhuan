@@ -34,6 +34,13 @@ export interface OutboundDocument {
   totalQuantity?: number
   totalAmount?: number
   details?: Array<Partial<OutboundDocument> & Record<string, any>>
+  // 收货地址相关字段
+  收货地址ID?: number
+  收货方名称?: string
+  收货地址?: string
+  收货联系人?: string
+  收货联系电话?: string
+  地址用途?: string
 }
 
 export interface OutboundDocumentAttachment {

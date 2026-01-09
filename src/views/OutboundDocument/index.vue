@@ -182,6 +182,18 @@
                       {{ timelineViewData.经办人 || '-' }}
                     </span>
                   </div>
+                  <div class="view-dialog-info-item" v-if="timelineViewData.收货方名称">
+                    <span class="view-dialog-info-label">收货方：</span>
+                    <span class="view-dialog-info-value">
+                      {{ timelineViewData.收货方名称 || '-' }}
+                    </span>
+                  </div>
+                  <div class="view-dialog-info-item" v-if="timelineViewData.收货地址">
+                    <span class="view-dialog-info-label">收货地址：</span>
+                    <span class="view-dialog-info-value">
+                      {{ timelineViewData.收货地址 || '-' }}
+                    </span>
+                  </div>
                   <div class="view-dialog-info-item">
                     <span class="view-dialog-info-label">总数量：</span>
                     <span class="view-dialog-info-value">
@@ -523,6 +535,17 @@
                 formatOperatorName(viewDocumentData.经办人) || '-'
               }}</span>
             </div>
+            <div class="view-dialog-info-item" v-if="viewDocumentData.收货方名称">
+              <span class="view-dialog-info-label">收货方：</span>
+              <span class="view-dialog-info-value">{{ viewDocumentData.收货方名称 || '-' }}</span>
+            </div>
+            <div
+              class="view-dialog-info-item view-dialog-info-item--col1"
+              v-if="viewDocumentData.收货地址"
+            >
+              <span class="view-dialog-info-label">收货地址：</span>
+              <span class="view-dialog-info-value">{{ viewDocumentData.收货地址 || '-' }}</span>
+            </div>
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">总数量：</span>
               <span class="view-dialog-info-value">{{
@@ -557,6 +580,14 @@
               <div class="view-dialog-info-item">
                 <span class="view-dialog-info-label">仓库</span>
                 <span class="view-dialog-info-value">{{ viewDocumentData.仓库 || '-' }}</span>
+              </div>
+              <div class="view-dialog-info-item" v-if="viewDocumentData.收货方名称">
+                <span class="view-dialog-info-label">收货方</span>
+                <span class="view-dialog-info-value">{{ viewDocumentData.收货方名称 || '-' }}</span>
+              </div>
+              <div class="view-dialog-info-item" v-if="viewDocumentData.收货地址">
+                <span class="view-dialog-info-label">收货地址</span>
+                <span class="view-dialog-info-value">{{ viewDocumentData.收货地址 || '-' }}</span>
               </div>
               <div class="view-dialog-info-item">
                 <span class="view-dialog-info-label">总数量</span>
@@ -724,7 +755,7 @@
         class="dialog-form-container"
       >
         <div class="dialog-form-columns">
-          <div class="dialog-form-column dialog-form-column--left">
+          <div class="dialog-form-column dialog-form-column--col1">
             <el-form-item label="出库单号" prop="出库单号">
               <el-input
                 v-model="createForm.出库单号"
@@ -743,7 +774,7 @@
               />
             </el-form-item>
           </div>
-          <div class="dialog-form-column dialog-form-column--middle">
+          <div class="dialog-form-column dialog-form-column--col2">
             <el-form-item label="客户名称" prop="客户ID">
               <el-select
                 v-model="createForm.客户ID"
@@ -761,11 +792,53 @@
                 />
               </el-select>
             </el-form-item>
+            <el-form-item label="收货方名称">
+              <el-select
+                v-model="createForm.收货方名称"
+                placeholder="请选择或输入收货方名称"
+                filterable
+                allow-create
+                clearable
+                :loading="addressLoading"
+                :disabled="!createForm.客户ID"
+                style="width: 200px"
+                @change="handleCreateConsigneeNameChange"
+              >
+                <el-option
+                  v-for="addr in deliveryAddressList"
+                  :key="addr.id"
+                  :label="getConsigneeNameOptionLabel(addr)"
+                  :value="addr.收货方名称"
+                >
+                  <div>
+                    <div>{{ addr.收货方名称 }}</div>
+                    <div style="font-size: 12px; color: #999">
+                      {{
+                        addr.收货地址?.length > 40
+                          ? addr.收货地址.substring(0, 40) + '...'
+                          : addr.收货地址
+                      }}
+                    </div>
+                  </div>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="dialog-form-column dialog-form-column--col3">
+            <el-form-item label="收货地址">
+              <el-input
+                v-model="createForm.收货地址"
+                type="textarea"
+                :rows="2"
+                placeholder="请选择收货方名称自动填充或手动输入完整地址"
+                style="width: 200px"
+              />
+            </el-form-item>
             <el-form-item label="经办人">
               <el-input v-model="createForm.经办人" disabled style="width: 200px" />
             </el-form-item>
           </div>
-          <div class="dialog-form-column dialog-form-column--right">
+          <div class="dialog-form-column dialog-form-column--col4">
             <el-form-item label="出库类型">
               <el-select
                 v-model="createForm.出库类型"
@@ -1044,7 +1117,7 @@
         class="dialog-form-container"
       >
         <div class="dialog-form-columns">
-          <div class="dialog-form-column dialog-form-column--left">
+          <div class="dialog-form-column dialog-form-column--col1">
             <el-form-item label="出库单号" prop="出库单号">
               <el-input v-model="editForm.出库单号" disabled style="width: 180px" />
             </el-form-item>
@@ -1058,7 +1131,7 @@
               />
             </el-form-item>
           </div>
-          <div class="dialog-form-column dialog-form-column--middle">
+          <div class="dialog-form-column dialog-form-column--col2">
             <el-form-item label="客户名称" prop="客户ID">
               <el-select
                 v-model="editForm.客户ID"
@@ -1076,11 +1149,53 @@
                 />
               </el-select>
             </el-form-item>
+            <el-form-item label="收货方名称">
+              <el-select
+                v-model="editForm.收货方名称"
+                placeholder="请选择或输入收货方名称"
+                filterable
+                allow-create
+                clearable
+                :loading="addressLoading"
+                :disabled="!editForm.客户ID"
+                style="width: 200px"
+                @change="handleEditConsigneeNameChange"
+              >
+                <el-option
+                  v-for="addr in deliveryAddressList"
+                  :key="addr.id"
+                  :label="getConsigneeNameOptionLabel(addr)"
+                  :value="addr.收货方名称"
+                >
+                  <div>
+                    <div>{{ addr.收货方名称 }}</div>
+                    <div style="font-size: 12px; color: #999">
+                      {{
+                        addr.收货地址?.length > 40
+                          ? addr.收货地址.substring(0, 40) + '...'
+                          : addr.收货地址
+                      }}
+                    </div>
+                  </div>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="dialog-form-column dialog-form-column--col3">
+            <el-form-item label="收货地址">
+              <el-input
+                v-model="editForm.收货地址"
+                type="textarea"
+                :rows="2"
+                placeholder="请选择收货方名称自动填充或手动输入完整地址"
+                style="width: 200px"
+              />
+            </el-form-item>
             <el-form-item label="经办人">
               <el-input v-model="editForm.经办人" disabled style="width: 200px" />
             </el-form-item>
           </div>
-          <div class="dialog-form-column dialog-form-column--right">
+          <div class="dialog-form-column dialog-form-column--col4">
             <el-form-item label="出库类型" prop="出库类型">
               <el-select
                 v-model="editForm.出库类型"
@@ -1610,6 +1725,11 @@ const createForm = reactive<{
   仓库: string
   客户ID: number | null
   客户名称: string
+  收货地址ID: number | null
+  收货方名称: string
+  收货地址: string
+  收货联系人: string
+  收货联系电话: string
   经办人: string
   details: CreateDetailRow[]
 }>({
@@ -1619,6 +1739,11 @@ const createForm = reactive<{
   仓库: '',
   客户ID: null,
   客户名称: '',
+  收货地址ID: null,
+  收货方名称: '',
+  收货地址: '',
+  收货联系人: '',
+  收货联系电话: '',
   经办人: '',
   details: []
 })
@@ -1650,12 +1775,97 @@ const makeCreateDetailRow = (): CreateDetailRow => ({
   remark: ''
 })
 
-const handleCreateCustomerChange = (customerId: number | null) => {
+// 生成收货方名称下拉选项的标签（用于区分重名）
+const getConsigneeNameOptionLabel = (addr: any) => {
+  // 如果地址库中有多个相同收货方名称，显示地址预览以区分
+  const sameNameCount = deliveryAddressList.value.filter(
+    (a) => a.收货方名称 === addr.收货方名称
+  ).length
+  if (sameNameCount > 1) {
+    const addressPreview =
+      addr.收货地址?.length > 30 ? addr.收货地址.substring(0, 30) + '...' : addr.收货地址
+    return `${addr.收货方名称} - ${addressPreview}`
+  }
+  return addr.收货方名称
+}
+
+const handleCreateCustomerChange = async (customerId: number | null) => {
   if (customerId) {
     const customer = customerList.value.find((c) => c.id === customerId)
     createForm.客户名称 = customer?.customerName || ''
+    // 加载收货地址列表
+    await loadDeliveryAddresses(customerId)
+    // 自动选择默认地址
+    const defaultAddr = deliveryAddressList.value.find((a) => a.isDefault)
+    if (defaultAddr) {
+      createForm.收货方名称 = defaultAddr.收货方名称
+      createForm.收货地址ID = defaultAddr.id
+      createForm.收货地址 = defaultAddr.收货地址
+      createForm.收货联系人 = defaultAddr.联系人 || ''
+      createForm.收货联系电话 = defaultAddr.联系电话 || ''
+    } else {
+      createForm.收货地址ID = null
+      createForm.收货方名称 = ''
+      createForm.收货地址 = ''
+      createForm.收货联系人 = ''
+      createForm.收货联系电话 = ''
+    }
   } else {
     createForm.客户名称 = ''
+    createForm.收货地址ID = null
+    createForm.收货方名称 = ''
+    createForm.收货地址 = ''
+    createForm.收货联系人 = ''
+    createForm.收货联系电话 = ''
+    deliveryAddressList.value = []
+  }
+}
+
+// 当收货方名称改变时，自动填充对应的地址信息
+const handleCreateConsigneeNameChange = (consigneeName: string | null) => {
+  if (!consigneeName) {
+    createForm.收货地址ID = null
+    createForm.收货地址 = ''
+    createForm.收货联系人 = ''
+    createForm.收货联系电话 = ''
+    return
+  }
+
+  // 查找地址库中是否有匹配的收货方名称
+  // 如果有多个匹配，优先选择默认地址，否则选择第一个
+  const matchedAddrs = deliveryAddressList.value.filter((a) => a.收货方名称 === consigneeName)
+
+  if (matchedAddrs.length > 0) {
+    // 找到匹配的地址，优先选择默认地址
+    const selectedAddr = matchedAddrs.find((a) => a.isDefault) || matchedAddrs[0]
+    createForm.收货地址ID = selectedAddr.id
+    createForm.收货地址 = selectedAddr.收货地址
+    createForm.收货联系人 = selectedAddr.联系人 || ''
+    createForm.收货联系电话 = selectedAddr.联系电话 || ''
+  } else {
+    // 手动输入的收货方名称，不在地址库中
+    createForm.收货地址ID = null
+    // 收货地址、联系人、联系电话保持用户输入的值，不清空
+  }
+}
+
+const loadDeliveryAddresses = async (customerId: number) => {
+  if (!customerId) {
+    deliveryAddressList.value = []
+    return
+  }
+  addressLoading.value = true
+  try {
+    const { getCustomerDeliveryAddressesApi } = await import('@/api/customer')
+    const response = await getCustomerDeliveryAddressesApi(customerId, 'SHIP_TO')
+    if (response.code === 0) {
+      deliveryAddressList.value = response.data || []
+    }
+  } catch (error) {
+    console.error('加载收货地址失败:', error)
+    deliveryAddressList.value = []
+  } finally {
+    addressLoading.value = false
   }
 }
 
@@ -2010,6 +2220,11 @@ const handleSubmitCreate = async () => {
     仓库: createForm.仓库 || undefined,
     客户ID: createForm.客户ID || undefined,
     客户名称: createForm.客户名称 || undefined,
+    收货地址ID: createForm.收货地址ID || undefined,
+    收货方名称: createForm.收货方名称 || undefined,
+    收货地址: createForm.收货地址 || undefined,
+    收货联系人: createForm.收货联系人 || undefined,
+    收货联系电话: createForm.收货联系电话 || undefined,
     经办人: createForm.经办人 || undefined,
     details: details.map((d) => ({
       项目编号: d.itemCode || undefined,
@@ -2049,6 +2264,11 @@ const editForm = reactive<{
   仓库: string
   客户ID: number | null
   客户名称: string
+  收货地址ID: number | null
+  收货方名称: string
+  收货地址: string
+  收货联系人: string
+  收货联系电话: string
   经办人: string
   备注: string
   details: CreateDetailRow[]
@@ -2059,6 +2279,11 @@ const editForm = reactive<{
   仓库: '',
   客户ID: null,
   客户名称: '',
+  收货地址ID: null,
+  收货方名称: '',
+  收货地址: '',
+  收货联系人: '',
+  收货联系电话: '',
   经办人: '',
   备注: '',
   details: []
@@ -2086,6 +2311,10 @@ const warehouseOptions = [
 // 客户列表
 const customerList = ref<Array<{ id: number; customerName: string }>>([])
 
+// 收货地址相关
+const deliveryAddressList = ref<any[]>([])
+const addressLoading = ref(false)
+
 // 表单验证规则
 const editRules: FormRules = {
   出库单号: [{ required: true, message: '请输入出库单号', trigger: 'blur' }],
@@ -2096,12 +2325,63 @@ const editRules: FormRules = {
 }
 
 // 客户选择变化
-const handleCustomerChange = (customerId: number | null) => {
+const handleCustomerChange = async (customerId: number | null) => {
   if (customerId) {
     const customer = customerList.value.find((c) => c.id === customerId)
     editForm.客户名称 = customer?.customerName || ''
+    // 加载收货地址列表
+    await loadDeliveryAddresses(customerId)
+    // 自动选择默认地址
+    const defaultAddr = deliveryAddressList.value.find((a) => a.isDefault)
+    if (defaultAddr) {
+      editForm.收货方名称 = defaultAddr.收货方名称
+      editForm.收货地址ID = defaultAddr.id
+      editForm.收货地址 = defaultAddr.收货地址
+      editForm.收货联系人 = defaultAddr.联系人 || ''
+      editForm.收货联系电话 = defaultAddr.联系电话 || ''
+    } else {
+      editForm.收货地址ID = null
+      editForm.收货方名称 = ''
+      editForm.收货地址 = ''
+      editForm.收货联系人 = ''
+      editForm.收货联系电话 = ''
+    }
   } else {
     editForm.客户名称 = ''
+    editForm.收货地址ID = null
+    editForm.收货方名称 = ''
+    editForm.收货地址 = ''
+    editForm.收货联系人 = ''
+    editForm.收货联系电话 = ''
+    deliveryAddressList.value = []
+  }
+}
+
+// 当收货方名称改变时，自动填充对应的地址信息
+const handleEditConsigneeNameChange = (consigneeName: string | null) => {
+  if (!consigneeName) {
+    editForm.收货地址ID = null
+    editForm.收货地址 = ''
+    editForm.收货联系人 = ''
+    editForm.收货联系电话 = ''
+    return
+  }
+
+  // 查找地址库中是否有匹配的收货方名称
+  // 如果有多个匹配，优先选择默认地址，否则选择第一个
+  const matchedAddrs = deliveryAddressList.value.filter((a) => a.收货方名称 === consigneeName)
+
+  if (matchedAddrs.length > 0) {
+    // 找到匹配的地址，优先选择默认地址
+    const selectedAddr = matchedAddrs.find((a) => a.isDefault) || matchedAddrs[0]
+    editForm.收货地址ID = selectedAddr.id
+    editForm.收货地址 = selectedAddr.收货地址
+    editForm.收货联系人 = selectedAddr.联系人 || ''
+    editForm.收货联系电话 = selectedAddr.联系电话 || ''
+  } else {
+    // 手动输入的收货方名称，不在地址库中
+    editForm.收货地址ID = null
+    // 收货地址、联系人、联系电话保持用户输入的值，不清空
   }
 }
 
@@ -2524,6 +2804,11 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
     editForm.仓库 = String(data.仓库 || '')
     editForm.客户ID = data.客户ID ? Number(data.客户ID) : null
     editForm.客户名称 = String(data.客户名称 || '')
+    editForm.收货地址ID = data.收货地址ID ? Number(data.收货地址ID) : null
+    editForm.收货方名称 = String(data.收货方名称 || '')
+    editForm.收货地址 = String(data.收货地址 || '')
+    editForm.收货联系人 = String(data.收货联系人 || '')
+    editForm.收货联系电话 = String(data.收货联系电话 || '')
     editForm.经办人 = String(
       data.经办人 ||
         (userStore.getUserInfo as any)?.realName ||
@@ -2532,6 +2817,19 @@ const handleEdit = async (row: Partial<OutboundDocument>) => {
         ''
     )
     editForm.备注 = String(data.备注 || '')
+
+    // 如果客户ID存在，加载收货地址列表
+    if (editForm.客户ID) {
+      await loadDeliveryAddresses(editForm.客户ID)
+      // 如果收货地址ID存在，验证是否在地址库中
+      if (editForm.收货地址ID) {
+        const addr = deliveryAddressList.value.find((a) => a.id === editForm.收货地址ID)
+        if (addr && addr.收货方名称 !== editForm.收货方名称) {
+          // 如果地址库中的收货方名称与表单中的不一致，更新为地址库中的名称
+          editForm.收货方名称 = addr.收货方名称
+        }
+      }
+    }
 
     const detailRows = Array.isArray(data.details) ? data.details : []
     editForm.details = detailRows.length
@@ -3300,6 +3598,11 @@ const handleSubmitEdit = async () => {
       仓库: editForm.仓库 || undefined,
       客户ID: editForm.客户ID || undefined,
       客户名称: editForm.客户名称 || undefined,
+      收货地址ID: editForm.收货地址ID || undefined,
+      收货方名称: editForm.收货方名称 || undefined,
+      收货地址: editForm.收货地址 || undefined,
+      收货联系人: editForm.收货联系人 || undefined,
+      收货联系电话: editForm.收货联系电话 || undefined,
       经办人: editForm.经办人 || undefined,
       备注: editForm.备注 || undefined,
       更新人: userStore.getUserInfo?.username || undefined,
@@ -3333,10 +3636,16 @@ const handleEditDialogClosed = () => {
   editForm.仓库 = ''
   editForm.客户ID = null
   editForm.客户名称 = ''
+  editForm.收货地址ID = null
+  editForm.收货方名称 = ''
+  editForm.收货地址 = ''
+  editForm.收货联系人 = ''
+  editForm.收货联系电话 = ''
   editForm.经办人 = ''
   editForm.备注 = ''
   editForm.details = []
   currentDocumentNo.value = ''
+  deliveryAddressList.value = []
 }
 
 onMounted(() => {
