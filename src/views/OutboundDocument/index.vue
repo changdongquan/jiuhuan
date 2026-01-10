@@ -2751,7 +2751,7 @@ const handleDelete = async (row: Partial<OutboundDocument>) => {
     // 显示确认对话框，要求输入 Y
     // 将提示信息分成两行，确保"请输入 Y 确认删除"始终在第二行
     const message = `<div style="line-height: 1.8;">
-      <div>确定删除出库单 ${documentNo} 吗？删除后将无法恢复，并会删除该出库单下所有明细！</div>
+      <div>确定删除出库单 ${documentNo} 吗？删除后将无法恢复，并会删除该出库单下所有明细和附件！</div>
       <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
     </div>`
 
@@ -2767,6 +2767,64 @@ const handleDelete = async (row: Partial<OutboundDocument>) => {
     // 如果用户输入了 Y（不区分大小写），执行删除
     if (value && value.toUpperCase() === 'Y') {
       try {
+        // 先删除所有附件
+        try {
+          // 获取附件汇总，知道哪些项目编号有附件
+          const summaryResp: any = await getOutboundDocumentAttachmentsSummaryApi(documentNo)
+          const summaryPayload: any = summaryResp?.data ?? summaryResp
+          const summaryList = summaryPayload?.data ?? summaryPayload
+          const summaryRows: OutboundDocumentAttachmentSummary[] = Array.isArray(summaryList)
+            ? summaryList
+            : []
+
+          // 收集所有需要删除的附件ID
+          const attachmentIdsToDelete: number[] = []
+
+          // 对每个有附件的项目编号，获取附件列表并收集附件ID
+          for (const summaryRow of summaryRows) {
+            const itemCode = String(summaryRow?.itemCode || '').trim()
+            if (!itemCode) continue
+
+            try {
+              const attachmentsResp: any = await getOutboundDocumentItemAttachmentsApi(
+                documentNo,
+                itemCode
+              )
+              const attachmentsPayload: any = attachmentsResp?.data ?? attachmentsResp
+              const attachmentsList = attachmentsPayload?.data ?? attachmentsPayload
+              const attachments: OutboundDocumentAttachment[] = Array.isArray(attachmentsList)
+                ? attachmentsList
+                : []
+
+              // 收集附件ID
+              attachments.forEach((att: any) => {
+                if (att?.id && Number.isInteger(att.id)) {
+                  attachmentIdsToDelete.push(att.id)
+                }
+              })
+            } catch (err) {
+              console.warn(`获取项目编号 ${itemCode} 的附件列表失败:`, err)
+              // 继续处理其他项目编号
+            }
+          }
+
+          // 删除所有附件
+          if (attachmentIdsToDelete.length > 0) {
+            const deletePromises = attachmentIdsToDelete.map((id) =>
+              deleteOutboundDocumentAttachmentApi(id).catch((err) => {
+                console.warn(`删除附件 ${id} 失败:`, err)
+                // 继续删除其他附件，不中断流程
+                return null
+              })
+            )
+            await Promise.all(deletePromises)
+          }
+        } catch (attachmentError) {
+          console.warn('删除附件时出错（继续删除出库单）:', attachmentError)
+          // 即使附件删除失败，也继续删除出库单
+        }
+
+        // 删除出库单
         await deleteOutboundDocumentApi(documentNo)
         ElMessage.success('删除成功')
 
