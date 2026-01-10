@@ -115,7 +115,7 @@
                   <tbody>
                     <template v-for="(row, index) in documentData.details" :key="row?.id || index">
                       <tr>
-                        <td class="cell-center">{{ index + 1 }}</td>
+                        <td class="cell-center">{{ Number(index) + 1 }}</td>
                         <td>{{ row?.项目编号 ?? '-' }}</td>
                         <td class="cell-ellipsis">{{ row?.产品名称 ?? '-' }}</td>
                         <td class="cell-ellipsis">{{ row?.产品图号 ?? '-' }}</td>
@@ -179,16 +179,28 @@
                 <el-table-column prop="出库数量" label="数量" width="60" align="right" />
                 <el-table-column prop="备注" label="备注" width="100" />
               </el-table>
-            </div>
 
-            <div class="doc-footer">
-              <div class="doc-total">
+              <!-- 合计数量显示 -->
+              <div class="doc-table-total">
                 <span class="label">合计数量：</span>
                 <span class="value">{{ totalQuantity }}</span>
               </div>
-              <div class="doc-sign">
-                <div class="doc-sign__item">经办人：{{ documentData.经办人 || '' }}</div>
-                <div class="doc-sign__item">签收：</div>
+            </div>
+
+            <div class="doc-footer">
+              <div class="doc-sign doc-sign--operator">
+                <div class="doc-sign__item">
+                  <span class="doc-sign__label">经办人：</span>
+                  <span class="doc-sign__line">{{ documentData.经办人 || '' }}</span>
+                </div>
+              </div>
+              <div class="doc-sign doc-sign--receiver">
+                <div class="doc-sign__item">
+                  <span class="doc-sign__label">签收：</span>
+                  <span class="doc-sign__line doc-sign__line--underline"
+                    >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span
+                  >
+                </div>
               </div>
             </div>
           </div>
@@ -199,7 +211,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getOutboundDocumentDetailApi } from '@/api/outbound-document'
@@ -252,6 +264,13 @@ const handlePrint = () => {
   window.print()
 }
 
+// 键盘事件处理
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    handleBack()
+  }
+}
+
 const loadData = async () => {
   const documentNo = String(route.params.documentNo || '').trim()
   if (!documentNo) {
@@ -276,6 +295,13 @@ const loadData = async () => {
 
 onMounted(() => {
   void loadData()
+  // 添加键盘事件监听
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  // 移除键盘事件监听
+  window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
@@ -527,31 +553,75 @@ onMounted(() => {
   margin-top: 14px;
 }
 
+.doc-table-total {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #303133;
+  text-align: right;
+}
+
+.doc-table-total .label {
+  margin-right: 8px;
+  color: #606266;
+}
+
+.doc-table-total .value {
+  color: #303133;
+}
+
 .doc-footer {
-  display: flex;
-  margin-top: 64px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 32px;
   font-size: 13px;
   color: #303133;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
 }
 
-.doc-total .label {
-  color: #606266;
+.doc-footer > :last-child {
+  /* 签收在右侧，对齐到 grid 第二列（与收货方对齐） */
+  margin-left: 50px;
 }
 
 .doc-sign {
   display: flex;
   gap: 26px;
   color: #606266;
-  transform: translateX(-80px);
 }
 
 .doc-sign__item {
+  display: flex;
+  align-items: center;
   min-width: 70px;
-  padding-top: 8px;
-  text-align: center;
-  border-top: 1px solid #000;
+  text-align: left;
+}
+
+.doc-sign__label {
+  margin-right: 4px;
+  text-align: right;
+  white-space: nowrap;
+  flex: 0 0 72px;
+}
+
+.doc-sign__line {
+  display: inline-block;
+  min-width: 120px;
+  margin-bottom: 2px;
+  line-height: 1.5;
+  border-bottom: 1px solid #000;
+  flex: 1;
+}
+
+.doc-sign__line--underline {
+  display: inline-block;
+  min-width: 120px;
+  padding-bottom: 2px;
+  letter-spacing: 0.05em;
+  text-decoration: underline;
+  border-bottom: none;
+  text-decoration-color: #000;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
 }
 </style>
