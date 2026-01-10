@@ -206,23 +206,23 @@
             >
           </div>
           <el-table :data="deliveryAddresses" border size="small" v-loading="addressLoading">
-            <el-table-column type="index" label="序号" width="60" />
-            <el-table-column prop="收货方名称" label="收货方名称" min-width="150" />
+            <el-table-column type="index" label="序号" width="50" />
+            <el-table-column prop="收货方名称" label="收货方名称" min-width="180" />
             <el-table-column
               prop="收货地址"
               label="收货地址"
-              min-width="200"
+              min-width="180"
               show-overflow-tooltip
             />
-            <el-table-column prop="联系人" label="联系人" width="100" />
-            <el-table-column prop="联系电话" label="联系电话" width="120" />
-            <el-table-column label="是否默认" width="100" align="center">
+            <el-table-column prop="联系人" label="联系人" width="80" />
+            <el-table-column prop="联系电话" label="联系电话" width="100" />
+            <el-table-column label="是否默认" width="80" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.isDefault" type="success" size="small">默认</el-tag>
                 <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
+            <el-table-column label="操作" width="155" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleEditDeliveryAddress(row)">
                   编辑

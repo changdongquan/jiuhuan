@@ -33,34 +33,58 @@
             </div>
 
             <div class="doc-info">
-              <div class="doc-info__row">
-                <div class="doc-info__item">
-                  <span class="label">出库单号：</span>
-                  <span class="value">{{ documentData.出库单号 || '-' }}</span>
+              <div class="doc-info__container">
+                <div class="doc-info__left">
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库单号：</span>
+                      <span class="value">{{ documentData.出库单号 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库日期：</span>
+                      <span class="value">{{ formatDate(documentData.出库日期) || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">仓库：</span>
+                      <span class="value">{{ documentData.仓库 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库类型：</span>
+                      <span class="value">{{ documentData.出库类型 || '-' }}</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="doc-info__item">
-                  <span class="label">仓库：</span>
-                  <span class="value">{{ documentData.仓库 || '-' }}</span>
-                </div>
-              </div>
-              <div class="doc-info__row">
-                <div class="doc-info__item">
-                  <span class="label">出库日期：</span>
-                  <span class="value">{{ formatDate(documentData.出库日期) || '-' }}</span>
-                </div>
-                <div class="doc-info__item">
-                  <span class="label">出库类型：</span>
-                  <span class="value">{{ documentData.出库类型 || '-' }}</span>
-                </div>
-              </div>
-              <div class="doc-info__row" v-if="documentData.收货方名称 || documentData.收货地址">
-                <div class="doc-info__item" v-if="documentData.收货方名称">
-                  <span class="label">收货方：</span>
-                  <span class="value">{{ documentData.收货方名称 || '-' }}</span>
-                </div>
-                <div class="doc-info__item doc-info__item--full" v-if="documentData.收货地址">
-                  <span class="label">收货地址：</span>
-                  <span class="value">{{ documentData.收货地址 || '-' }}</span>
+                <div class="doc-info__right">
+                  <div class="doc-info__row" v-if="documentData.收货方名称">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">收货方：</span>
+                      <span class="value">{{ documentData.收货方名称 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row" v-if="documentData.收货地址">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">收货地址：</span>
+                      <span class="value">{{ documentData.收货地址 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row" v-if="documentData.收货联系人">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">联系人：</span>
+                      <span class="value">{{ documentData.收货联系人 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row" v-if="documentData.收货联系电话">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">联系电话：</span>
+                      <span class="value">{{ documentData.收货联系电话 || '-' }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -448,27 +472,42 @@ onMounted(() => {
 }
 
 .doc-info {
-  display: grid;
   margin-top: 12px;
   font-size: 13px;
   color: #303133;
+}
+
+.doc-info__container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.doc-info__left {
+  display: grid;
   gap: 8px;
+}
+
+.doc-info__right {
+  display: grid;
+  gap: 8px;
+  margin-left: 50px;
 }
 
 .doc-info__row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
-}
-
-.doc-info__row .doc-info__item:last-child:nth-child(2) {
-  grid-column: 3;
 }
 
 .doc-info__item {
   display: flex;
   align-items: baseline;
   gap: 4px;
+}
+
+.doc-info__item--full {
+  grid-column: 1;
 }
 
 .doc-info__item .label {

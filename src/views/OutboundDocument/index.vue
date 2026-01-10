@@ -2748,33 +2748,44 @@ const handleDelete = async (row: Partial<OutboundDocument>) => {
   }
 
   try {
-    await ElMessageBox.confirm(
-      `确定删除出库单：${documentNo}？（将删除该出库单下所有明细）`,
-      '提示',
-      {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-        closeOnClickModal: false
+    // 显示确认对话框，要求输入 Y
+    // 将提示信息分成两行，确保"请输入 Y 确认删除"始终在第二行
+    const message = `<div style="line-height: 1.8;">
+      <div>确定删除出库单 ${documentNo} 吗？删除后将无法恢复，并会删除该出库单下所有明细！</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
+    })
+
+    // 如果用户输入了 Y（不区分大小写），执行删除
+    if (value && value.toUpperCase() === 'Y') {
+      try {
+        await deleteOutboundDocumentApi(documentNo)
+        ElMessage.success('删除成功')
+
+        // 若删除后当前页可能为空，先回退一页再刷新
+        if (pagination.page > 1 && tableData.value.length <= 1) {
+          pagination.page -= 1
+        }
+        await loadData()
+        await loadStatistics()
+      } catch (error: any) {
+        console.error('删除出库单失败:', error)
+        ElMessage.error('删除失败: ' + (error?.message || '未知错误'))
       }
-    )
-  } catch {
-    return
-  }
-
-  try {
-    await deleteOutboundDocumentApi(documentNo)
-    ElMessage.success('删除成功')
-
-    // 若删除后当前页可能为空，先回退一页再刷新
-    if (pagination.page > 1 && tableData.value.length <= 1) {
-      pagination.page -= 1
     }
-    await loadData()
-    await loadStatistics()
-  } catch (error: any) {
-    console.error('删除出库单失败:', error)
-    ElMessage.error('删除失败: ' + (error?.message || '未知错误'))
+  } catch (err: any) {
+    // 用户取消或发生错误
+    if (err !== 'cancel') {
+      console.error('删除出库单失败:', err)
+    }
   }
 }
 
