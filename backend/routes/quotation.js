@@ -437,7 +437,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     { header: '图示', key: 'image', width: pxToExcelWidth(140) },
     { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
     { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(110) }
   ]
   const colsDisabled = [
     { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
@@ -447,7 +447,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     { header: '加工内容', key: 'process', width: pxToExcelWidth(110) },
     { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
     { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(105) }
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(110) }
   ]
   const cols = isEnabled ? colsEnabled : colsDisabled
   sheet.columns = cols
@@ -459,38 +459,62 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   // A 列宽度由表格列定义自动设置（序号列宽度）
 
   // ===== Title =====
+  // 标题和副标题在同一个 header 区域内（参照出库单打印预览样式）
   sheet.mergeCells(`A1:${lastCol}1`)
   sheet.getCell('A1').value = '零件报价单'
-  sheet.getCell('A1').font = { bold: true, size: 18 }
+  sheet.getCell('A1').font = { bold: true, size: 20, color: { argb: 'FF303133' } }
   sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getRow(1).height = 28
+  // 标题行无底部边框（底部边框在副标题行）
+
+  // ===== Subtitle (客户名称) =====
+  // 客户名称放在标题下方，在同一 header 区域内（参照出库单打印预览样式）
+  // doc-subtitle: margin-top: 6px, font-size: 13px, color: #606266
+  sheet.mergeCells(`A2:${lastCol}2`)
+  const subtitleValue = row.customerName || '-'
+  sheet.getCell('A2').value = `客户名称：${subtitleValue}`
+  sheet.getCell('A2').font = { size: 13, color: { argb: 'FF606266' } } // 参照出库单的 doc-subtitle 样式
+  sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getRow(2).height = 26 // 包含6px上边距（margin-top）+ 内容高度（约20px）
+  // 在副标题行添加底部边框（分隔标题区域和基本信息区域，参照出库单 doc-header 的 border-bottom）
+  for (let c = 1; c <= colCount; c += 1) {
+    sheet.getRow(2).getCell(c).border = { bottom: borderThin }
+  }
 
   // ===== Meta (manufacturing standard) =====
-  // 增加标题与客户名称之间的垂直间距：插入一行空行
-  const gapRow = 2
-  sheet.getRow(gapRow).height = 14
+  // 基本信息区域上边距（参照出库单的 margin-top: 12px）
+  const gapRow = 3
+  sheet.getRow(gapRow).height = 12
 
-  // 头部信息使用"标签 + 值"布局：
-  // - 冒号对齐（标签右对齐）
-  // - 下划线缩短（仅值区域带下划线）
-  // - 联系人/联系电话整体下移一行
-  const metaRow1 = 3
-  const metaRow2 = 4
-  const metaRow3 = 5
-  const metaLabelFont = { size: 11, color: colorTextMuted }
-  const metaValueFont = { size: 11 }
-  const metaValueMutedFont = { size: 11, color: colorTextMuted }
+  // 基本信息布局（参照出库单样式）：
+  // - 两列布局（左右），间距40px
+  // - 左侧列：标签右对齐（固定宽度91px），值左对齐
+  // - 右侧列：标签右对齐，值左对齐
+  // - 行间距：8px（gap: 8px）
+  // - 字体大小：13px
+  // - 标签颜色：#606266，值颜色：#303133
+  const metaRow1 = 4 // 从第4行开始（恢复初始位置）
+  const metaRow2 = 5 // 从第5行开始（恢复初始位置）
+  const colorPrimary = { argb: 'FF303133' } // 主要文字颜色（参照出库单）
+  const metaLabelFont = { size: 13, color: colorTextMuted } // 标签字体：13px, #606266
+  const metaValueFont = { size: 13, color: colorPrimary } // 值字体：13px, #303133
+  const metaValueMutedFont = { size: 13, color: colorTextMuted }
 
-  // 左侧字段从 A 列开始，与表格第一列对齐
-  const leftStartCol = 1 // A
-  const leftEndCol = Math.min(4, colCount) // D（客户名称、报价单号、报价日期共用 A-D 列）
+  // 左侧字段布局（标签右对齐，值左对齐）：
+  // - 标签列：固定宽度（相当于91px，在Excel中约为13个字符宽度）
+  // - 值列：占据剩余空间
+  // - 标签右对齐，值左对齐，标签和值分离显示
+  const leftLabelCol = 1 // A列：标签列（右对齐）
+  const leftValueStartCol = 2 // B列开始：值列（左对齐）
+  const leftValueEndCol = Math.min(4, colCount) // 值列结束：D列或更少
 
-  // 右侧字段：横线最右侧对齐表格最右侧
-  // 表格最右侧列是 colCount（lastCol）
-  // 标签列放在倒数第3列，值区域从倒数第2列开始，延伸到最右侧列
-  const rightValueEndCol = colCount // 值区域结束列 = 表格最右侧列
-  const rightLabelCol = Math.max(5, colCount - 2) // 标签列：至少是 E 列，或倒数第3列
-  const rightValueStartCol = Math.min(rightLabelCol + 1, colCount) // 值区域开始列 = 标签列 + 1
+  // 右侧字段布局（参照出库单 .doc-info__right，margin-left: 50px）：
+  // - 表格最右侧列是 colCount（lastCol）
+  // - 标签列放在倒数第3列（固定宽度）
+  // - 值列合并倒数第1列和第2列（colCount-1 到 colCount），值放在合并后的单元格中
+  const rightLabelCol = Math.max(1, colCount - 2) // 标签列：倒数第3列
+  const rightValueStartCol = colCount - 1 // 值列开始位置：倒数第2列
+  const rightValueEndCol = colCount // 值列结束位置：倒数第1列（最右边），合并倒数第1和第2列
 
   const applyBottomBorderForRange = (rowNo, startCol, endCol) => {
     for (let c = startCol; c <= endCol; c += 1) {
@@ -498,28 +522,37 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     }
   }
 
-  const setMetaField = ({
+  // 设置左侧字段（标签右对齐，值左对齐）
+  // 标签和值分离，标签右对齐，值左对齐
+  const setMetaFieldLeft = ({
     rowNo,
-    startCol,
-    endCol,
+    labelCol,
+    valueStartCol,
+    valueEndCol,
     label,
     value,
-    mutedValue,
-    underline = true
+    mutedValue = false
   }) => {
-    // 将标签和值合并为一个字符串，放在同一单元格中
-    const fullText = label ? `${label}：${value || ''}` : value || ''
-    if (startCol <= endCol) {
-      sheet.mergeCells(`${colLetter(startCol)}${rowNo}:${colLetter(endCol)}${rowNo}`)
-      const cell = sheet.getCell(`${colLetter(startCol)}${rowNo}`)
-      cell.value = fullText
-      // 标签部分使用 muted 字体，值部分使用正常字体（通过整体设置，实际显示时会有差异）
-      cell.font = mutedValue ? metaValueMutedFont : metaValueFont
-      cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-      if (underline) applyBottomBorderForRange(rowNo, startCol, endCol)
+    // 标签单元格：右对齐，固定宽度（约91px，相当于13个字符宽度）
+    const labelCell = sheet.getRow(rowNo).getCell(labelCol)
+    labelCell.value = label ? `${label}：` : ''
+    labelCell.font = metaLabelFont // 标签字体：13px, #606266
+    labelCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: false }
+
+    // 值单元格：左对齐，占据剩余空间
+    if (valueStartCol <= valueEndCol) {
+      if (valueStartCol < valueEndCol) {
+        sheet.mergeCells(`${colLetter(valueStartCol)}${rowNo}:${colLetter(valueEndCol)}${rowNo}`)
+      }
+      const valueCell = sheet.getCell(`${colLetter(valueStartCol)}${rowNo}`)
+      valueCell.value = value || ''
+      valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont // 值字体：13px, #303133
+      valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
     }
   }
 
+  // 设置右侧字段（参照出库单 .doc-info__item 样式）
+  // 标签和值分离，标签右对齐，值左对齐
   const setMetaFieldRight = ({
     rowNo,
     labelCol,
@@ -527,94 +560,92 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     valueEndCol,
     label,
     value,
-    mutedValue,
-    labelMuted = true,
-    underline = true
+    mutedValue = false
   }) => {
+    // 标签单元格：右对齐
     const labelCell = sheet.getRow(rowNo).getCell(labelCol)
     labelCell.value = label ? `${label}：` : ''
-    labelCell.font = labelMuted ? metaLabelFont : metaValueFont
-    labelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+    labelCell.font = metaLabelFont // 标签字体：13px, #606266
+    labelCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: false }
 
+    // 值单元格：左对齐，可以占据多列空间
     if (valueStartCol <= valueEndCol) {
-      sheet.mergeCells(`${colLetter(valueStartCol)}${rowNo}:${colLetter(valueEndCol)}${rowNo}`)
+      if (valueStartCol < valueEndCol) {
+        sheet.mergeCells(`${colLetter(valueStartCol)}${rowNo}:${colLetter(valueEndCol)}${rowNo}`)
+      }
       const valueCell = sheet.getCell(`${colLetter(valueStartCol)}${rowNo}`)
-      valueCell.value = value
-      valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont
+      valueCell.value = value || ''
+      valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont // 值字体：13px, #303133
       valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-      if (underline) applyBottomBorderForRange(rowNo, valueStartCol, valueEndCol)
     }
   }
 
-  ;[metaRow1, metaRow2, metaRow3].forEach((r) => {
-    sheet.getRow(r).height = 18
+  // 设置行高（参照出库单的行间距 8px，每行行高约为20px）
+  ;[metaRow1, metaRow2].forEach((r) => {
+    sheet.getRow(r).height = 20 // 行高20px（行间距约8px的效果）
   })
 
-  // 左侧：客户名称 / 报价单号 / 报价日期（从 A 列开始，与表格对齐）
-  setMetaField({
-    rowNo: metaRow1,
-    startCol: leftStartCol,
-    endCol: leftEndCol,
-    label: '客户名称',
-    value: row.customerName || '',
-    mutedValue: false
-  })
-  // 左侧字段与“客户名称”保持一致的布局与起始位置
-  setMetaField({
-    rowNo: metaRow2,
-    startCol: leftStartCol,
-    endCol: leftEndCol,
-    label: '　联系人',
-    value: row.contactName || '-',
-    mutedValue: false
-  })
-  setMetaField({
-    rowNo: metaRow3,
-    startCol: leftStartCol,
-    endCol: leftEndCol,
-    label: '联系电话',
-    value: row.contactPhone || '-',
-    mutedValue: false
-  })
+  // 设置列的宽度（参照出库单样式）
+  // 在Excel中，1个字符宽度约为7像素，72px约为10个字符宽度
+  // "联系电话："需要更宽的列宽（5个中文字符+1个冒号，约需12-13个字符宽度）
+  sheet.getColumn(leftLabelCol).width = 13 // 左侧标签列固定宽度（约91px，确保"联系电话："完整显示）
 
-  // 右侧：留空 / 联系人 / 联系电话（下移一行）
+  // 设置右侧标签列的宽度（约72px，与左侧标签列一致）
+  if (rightLabelCol > 0 && rightLabelCol <= colCount) {
+    sheet.getColumn(rightLabelCol).width = 10 // 右侧标签列固定宽度（约72px）
+  }
+
+  // 左侧：联系人 / 联系电话（合并第1、2列）
+  // 客户名称已移到标题下方，不再显示在此处
+  // 联系人：合并A列和B列
+  sheet.mergeCells(`A${metaRow1}:B${metaRow1}`)
+  const contactNameCell = sheet.getCell(`A${metaRow1}`)
+  contactNameCell.value = `联系人：${row.contactName || '-'}`
+  contactNameCell.font = metaValueMutedFont // 值字体：13px, #606266（灰色）
+  contactNameCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+
+  // 联系电话：合并A列和B列
+  sheet.mergeCells(`A${metaRow2}:B${metaRow2}`)
+  const contactPhoneCell = sheet.getCell(`A${metaRow2}`)
+  contactPhoneCell.value = `联系电话：${row.contactPhone || '-'}`
+  contactPhoneCell.font = metaValueMutedFont // 值字体：13px, #606266（灰色）
+  contactPhoneCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+
+  // 右侧：报价单号 / 报价日期（参照出库单 .doc-info__right 样式）
   setMetaFieldRight({
     rowNo: metaRow1,
-    labelCol: rightLabelCol,
-    valueStartCol: rightValueStartCol,
-    valueEndCol: rightValueEndCol,
-    label: '',
-    value: '',
-    mutedValue: true,
-    underline: false
-  })
-  setMetaFieldRight({
-    rowNo: metaRow2,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
     valueEndCol: rightValueEndCol,
     label: '报价单号',
     value: row.quotationNo || '',
-    mutedValue: false,
-    labelMuted: false
+    mutedValue: false
   })
   setMetaFieldRight({
-    rowNo: metaRow3,
+    rowNo: metaRow2,
     labelCol: rightLabelCol,
     valueStartCol: rightValueStartCol,
     valueEndCol: rightValueEndCol,
     label: '报价日期',
     value: toDateString(row.quotationDate) || '-',
-    mutedValue: false,
-    labelMuted: false
+    mutedValue: false
   })
 
+  // 恢复序号列（A列）的原始宽度：基本信息区域使用A列显示标签后，需要恢复序号列的60px宽度
+  // 序号列的原始宽度：pxToExcelWidth(60) ≈ 7.86
+  const seqColOriginalWidth = pxToExcelWidth(60)
+  sheet.getColumn(1).width = seqColOriginalWidth // 恢复序号列（A列）的原始宽度
+
+  // ===== 基本信息到数据表的间距（参照出库单 .doc-table 的 margin-top: 14px）=====
+  const gapBetweenMetaAndTable = 6 // 间隔行：第6行
+  sheet.getRow(gapBetweenMetaAndTable).height = 14 // 14px间距，参照出库单
+
   // ===== Table header =====
-  const headerRow = 7
+  const headerRow = 7 // 表格表头从第7行开始（基本信息区域到数据表的间距为14px）
   const headerTitles = cols.map((c) => c.header)
   sheet.getRow(headerRow).values = headerTitles
   sheet.getRow(headerRow).height = 24
-  sheet.getRow(headerRow).font = { bold: true, size: 11 }
+  sheet.getRow(headerRow).font = { size: 11 }
   sheet.getRow(headerRow).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(headerRow).getCell(c)
@@ -785,18 +816,24 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
             const buffer = fs.readFileSync(imagePath)
             const info = getImageDimensions(buffer)
             if (info?.width && info?.height) {
-              if (info.extension === 'webp') return
+              if (info.extension === 'webp') {
+                return
+              }
               const imageId = workbook.addImage({ buffer, extension: info.extension })
               const cellPxW = excelColumnWidthToPixels(sheet.getColumn(imageColIndex).width)
               const cellPxH = excelRowHeightPointsToPixels(rowObj.height)
+              // 为边框预留空间（上下左右各1px，共2px；额外预留2px作为内边距）
+              const borderPadding = 2
+              const cellPadding = 2 // 额外的内边距，确保边框不被遮挡
+              const availableWidth = Math.max(1, cellPxW - borderPadding - cellPadding)
+              const availableHeight = Math.max(1, cellPxH - borderPadding - cellPadding)
               const scalePref = Number(item?.imageScale)
               const userScale =
                 Number.isFinite(scalePref) && scalePref > 0
                   ? Math.max(0.25, Math.min(scalePref, 2))
                   : 1
-              // 允许图片按单元格宽高分别自适应（contain），避免被 min(w,h) 过度限制导致“图示很小”
-              const maxW = Math.max(1, Math.floor(cellPxW * userScale))
-              const maxH = Math.max(1, Math.floor(cellPxH * userScale))
+              const maxW = Math.max(1, Math.floor(availableWidth * userScale))
+              const maxH = Math.max(1, Math.floor(availableHeight * userScale))
               const rotated =
                 info.orientation === 5 ||
                 info.orientation === 6 ||
@@ -804,17 +841,15 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
                 info.orientation === 8
               const displayW = rotated ? info.height : info.width
               const displayH = rotated ? info.width : info.height
-              // 允许放大到单元格大小（之前 cap=1 会导致“小图永远很小”）
               const fitScale = Math.min(maxW / displayW, maxH / displayH)
               const imgW = Math.max(1, Math.round(displayW * fitScale))
               const imgH = Math.max(1, Math.round(displayH * fitScale))
-              const offsetX = (cellPxW - imgW) / 2
-              const offsetY = (cellPxH - imgH) / 2
-              const tlCol = imageColIndex - 1 + offsetX / cellPxW
-              const tlRow = r - 1 + offsetY / cellPxH
+              // 确保图片尺寸不超过可用空间（留出边框和内边距）
+              const finalImgW = Math.min(imgW, availableWidth)
+              const finalImgH = Math.min(imgH, availableHeight)
               sheet.addImage(imageId, {
-                tl: { col: tlCol, row: tlRow },
-                ext: { width: imgW, height: imgH },
+                tl: { col: imageColIndex - 1, row: r - 1 },
+                ext: { width: finalImgW, height: finalImgH },
                 editAs: 'oneCell'
               })
             }
@@ -834,12 +869,13 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   )
   sheet.mergeCells(`A${totalRow}:${colLetter(colCount - 1)}${totalRow}`)
   sheet.getCell(`A${totalRow}`).value = '小计'
+  sheet.getCell(`A${totalRow}`).font = { size: 11, color: colorTextMuted }
   sheet.getCell(`A${totalRow}`).alignment = { horizontal: 'center', vertical: 'middle' }
   sheet.getCell(`${lastCol}${totalRow}`).value = totalAmount || ''
   sheet.getCell(`${lastCol}${totalRow}`).numFmt = '#,##0.00'
   sheet.getCell(`${lastCol}${totalRow}`).alignment = { horizontal: 'right', vertical: 'middle' }
   sheet.getRow(totalRow).height = 24
-  sheet.getRow(totalRow).font = { bold: true, size: 11 }
+  sheet.getRow(totalRow).font = { size: 11, color: colorTextMuted }
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(totalRow).getCell(c)
     setBorderAll(cell)
@@ -884,8 +920,9 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     const cell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
     const fullText = text ? String(text) : ''
     cell.value = fullText
-    cell.font = { size: 11 }
-    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+    // 使用与"含税价格"标签相同的字体颜色（colorTextMuted = #606266）
+    cell.font = { bold: false, size: 11, color: colorTextMuted }
+    cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
     cell.fill = fillSolid(colorHeaderBg.argb)
 
     for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
@@ -894,6 +931,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     const threshold = 26
     const lines = Math.min(3, Math.max(1, Math.ceil(fullText.length / threshold)))
     sheet.getRow(r).height = lines * 20
+    sheet.getRow(r).font = { bold: false, size: 11, color: colorTextMuted }
   }
 
   const otherFee = Number(row.otherFee || 0)
@@ -908,7 +946,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   if (transportFee) summaryLines.push({ label: '运输费用', value: transportFee })
   summaryLines.push({ label: '含税价格', value: computedTaxIncludedPrice, isTotal: true })
   summaryLines.push({
-    label: '金额（大写）',
+    label: '大写',
     value: toCnMoneyUppercase(computedTaxIncludedPrice),
     isMergedText: true
   })
@@ -925,16 +963,32 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   // ===== Remark =====
   const remarkTitleRow = sumBoxStartRow + summaryLines.length + 1
   const remarkBodyRow = remarkTitleRow + 1
-  sheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
-  sheet.getCell(`A${remarkTitleRow}`).value = '备注'
-  sheet.getCell(`A${remarkTitleRow}`).font = { bold: true, size: 11 }
-  sheet.getCell(`A${remarkTitleRow}`).alignment = { horizontal: 'left', vertical: 'middle' }
-  sheet.getRow(remarkTitleRow).height = 24
+  // 先设置所有单元格的边框（上、左、右），明确移除下边框
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(remarkTitleRow).getCell(c)
-    setBorderAll(cell)
-    cell.fill = fillSolid(colorHeaderBg.argb)
+    cell.border = {
+      top: borderThin,
+      left: borderThin,
+      right: borderThin,
+      bottom: { style: 'none', color: { argb: 'FFFFFFFF' } }
+    }
+    // 取消背景色
   }
+  // 然后合并单元格
+  sheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
+  const remarkTitleCell = sheet.getCell(`A${remarkTitleRow}`)
+  remarkTitleCell.value = '备注'
+  remarkTitleCell.font = { size: 11 }
+  remarkTitleCell.alignment = { horizontal: 'left', vertical: 'middle' }
+  // 再次明确设置合并后的单元格边框，确保没有下边框，并移除背景色
+  remarkTitleCell.border = {
+    top: borderThin,
+    left: borderThin,
+    right: borderThin,
+    bottom: { style: 'none', color: { argb: 'FFFFFFFF' } }
+  }
+  remarkTitleCell.fill = undefined
+  sheet.getRow(remarkTitleRow).height = 24
   sheet.mergeCells(`A${remarkBodyRow}:${lastCol}${remarkBodyRow}`)
 
   // 构建备注内容：固定条款 + 用户自定义备注
@@ -975,7 +1029,16 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const totalLines = fixedTermsLines + (customRemark ? 1 : 0) + customRemarkLines
   sheet.getRow(remarkBodyRow).height = Math.max(48, Math.min(200, totalLines * 18))
 
-  for (let c = 1; c <= colCount; c += 1) setBorderAll(sheet.getRow(remarkBodyRow).getCell(c))
+  // 设置备注内容行的边框（左、右、下），去除上边框（避免与表头行下边框重叠）
+  for (let c = 1; c <= colCount; c += 1) {
+    const cell = sheet.getRow(remarkBodyRow).getCell(c)
+    cell.border = {
+      top: { style: 'none' },
+      left: borderThin,
+      right: borderThin,
+      bottom: borderThin
+    }
+  }
 
   // ===== Company Info & Signature =====
   // 在备注框和公司信息之间添加空行，保持适当距离
@@ -1015,8 +1078,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
 
   // 右侧：签名区域
   // - 客户确认：移动到经办人同一行（右侧位置不变）
-  // - 经办人：移动到邮箱下一行
-  const operatorRowNo = footerStartRow + companyInfo.length
+  // - 经办人：移动到邮箱下一行，再向下移动一行
+  const operatorRowNo = footerStartRow + companyInfo.length + 1
   const confirmRowNo = operatorRowNo
 
   // 经办人（邮箱下方，左侧与邮箱左对齐）
@@ -1096,7 +1159,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
           refCompanyInfoWidthPx += excelColumnWidthToPixels(colsEnabled[c - 1]?.width || 64)
         }
         const refCenterOffsetX = (refCompanyInfoWidthPx - sealSizePx) / 2
-        const refOffsetX = Math.max(0, refCenterOffsetX - 50) // 向左移动 50px（相对于中心）
+        // 向右移动印章：从向左移动50px改为向右移动100px，避免遮挡公司信息
+        const refOffsetX = refCenterOffsetX + 100 // 向右移动 100px（相对于中心）
 
         const currentTotalWidthPx = (() => {
           let w = 0
@@ -1114,8 +1178,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         const firstColWidth = excelColumnWidthToPixels(sheet.getColumn(sealStartCol).width || 64)
 
         // 转换为 Excel 坐标（列和行都是 0-based，可以有小数值）
-        // 图片从 A 列开始，加上水平偏移（已减去 300px）
-        const tlCol = sealStartCol - 1 + offsetX / firstColWidth
+        // 图片从 A 列开始，加上水平偏移，然后向左移动两个单元格（减去2）
+        const tlCol = Math.max(0, sealStartCol - 1 + offsetX / firstColWidth - 2)
         const tlRow = sealStartRow - 1 + offsetY / sealRowHeight
 
         console.log('插入印章图片:', {
@@ -1151,7 +1215,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.views = [{ state: 'frozen', ySplit: headerRow }]
   sheet.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`
   sheet.pageSetup.printArea = `A1:${lastCol}${footerEndRow}`
-  sheet.headerFooter.oddFooter = `&L零件报价单&R第 &P 页 / 共 &N 页`
+  sheet.headerFooter.oddHeader = `&R第 &P 页 / 共 &N 页`
+  sheet.headerFooter.oddFooter = ''
 
   return workbook
 }
