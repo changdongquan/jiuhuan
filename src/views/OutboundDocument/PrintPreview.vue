@@ -35,32 +35,6 @@
             <div class="doc-info">
               <div class="doc-info__container">
                 <div class="doc-info__left">
-                  <div class="doc-info__row">
-                    <div class="doc-info__item doc-info__item--full">
-                      <span class="label">出库单号：</span>
-                      <span class="value">{{ documentData.出库单号 || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="doc-info__row">
-                    <div class="doc-info__item doc-info__item--full">
-                      <span class="label">出库日期：</span>
-                      <span class="value">{{ formatDate(documentData.出库日期) || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="doc-info__row">
-                    <div class="doc-info__item doc-info__item--full">
-                      <span class="label">仓库：</span>
-                      <span class="value">{{ documentData.仓库 || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="doc-info__row">
-                    <div class="doc-info__item doc-info__item--full">
-                      <span class="label">出库类型：</span>
-                      <span class="value">{{ documentData.出库类型 || '-' }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="doc-info__right">
                   <div class="doc-info__row" v-if="documentData.收货方名称">
                     <div class="doc-info__item doc-info__item--full">
                       <span class="label">收货方：</span>
@@ -83,6 +57,32 @@
                     <div class="doc-info__item doc-info__item--full">
                       <span class="label">联系电话：</span>
                       <span class="value">{{ documentData.收货联系电话 || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="doc-info__right">
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库单号：</span>
+                      <span class="value">{{ documentData.出库单号 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库日期：</span>
+                      <span class="value">{{ formatDate(documentData.出库日期) || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">仓库：</span>
+                      <span class="value">{{ documentData.仓库 || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="doc-info__row">
+                    <div class="doc-info__item doc-info__item--full">
+                      <span class="label">出库类型：</span>
+                      <span class="value">{{ documentData.出库类型 || '-' }}</span>
                     </div>
                   </div>
                 </div>
