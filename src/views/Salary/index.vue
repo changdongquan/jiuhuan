@@ -99,6 +99,16 @@
           <el-table-column type="index" label="序号" width="55" align="center" />
           <el-table-column prop="month" label="月份" width="85" />
           <el-table-column prop="employeeCount" label="人数" width="55" align="right" />
+          <el-table-column
+            prop="baseSalaryTotal"
+            label="基本工资合计"
+            min-width="100"
+            align="right"
+          >
+            <template #default="{ row }">{{
+              formatMoneyWithThousands(row.baseSalaryTotal)
+            }}</template>
+          </el-table-column>
           <el-table-column prop="overtimePayTotal" label="加班费合计" min-width="90" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.overtimePayTotal)

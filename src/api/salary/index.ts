@@ -6,6 +6,7 @@ export interface SalarySummaryRow {
   step: number
   status: string
   employeeCount: number
+  baseSalaryTotal?: number | null
   overtimePayTotal: number | null
   doubleOvertimePayTotal: number | null
   tripleOvertimePayTotal: number | null

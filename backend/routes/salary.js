@@ -318,6 +318,7 @@ router.get('/list', async (req, res) => {
         h.步骤 as step,
         h.状态 as status,
         h.人数 as employeeCount,
+        t.基本工资合计 as baseSalaryTotal,
         h.加班费合计 as overtimePayTotal,
         h.两倍加班费合计 as doubleOvertimePayTotal,
         h.三倍加班费合计 as tripleOvertimePayTotal,
@@ -334,6 +335,7 @@ router.get('/list', async (req, res) => {
       FROM ${TABLE_SUMMARY} h
       OUTER APPLY (
         SELECT
+          SUM(ISNULL(d.基本工资, 0)) as 基本工资合计,
           SUM(ISNULL(d.基本养老保险费, 0)) as 基本养老保险费合计,
           SUM(ISNULL(d.基本医疗保险费, 0)) as 基本医疗保险费合计,
           SUM(ISNULL(d.失业保险费, 0)) as 失业保险费合计,
@@ -1290,10 +1292,12 @@ router.post('/tax-import/export', async (req, res) => {
       // E 列：第一批/第二批工资
       worksheet.getCell(`E${rowIndex}`).value = toNumberOrZero(item?.firstPay)
 
-      // 第二批：三项保险费固定填 0；第一批：填实际值
-      worksheet.getCell(`G${rowIndex}`).value = isSecondBatch ? 0 : pensionInsuranceFee
-      worksheet.getCell(`H${rowIndex}`).value = isSecondBatch ? 0 : medicalInsuranceFee
-      worksheet.getCell(`I${rowIndex}`).value = isSecondBatch ? 0 : unemploymentInsuranceFee
+      // 第二批：三项保险费固定填 0；第一批：填实际值（如果为负数则转换为正数）
+      worksheet.getCell(`G${rowIndex}`).value = isSecondBatch ? 0 : Math.abs(pensionInsuranceFee)
+      worksheet.getCell(`H${rowIndex}`).value = isSecondBatch ? 0 : Math.abs(medicalInsuranceFee)
+      worksheet.getCell(`I${rowIndex}`).value = isSecondBatch
+        ? 0
+        : Math.abs(unemploymentInsuranceFee)
 
       rowIndex += 1
     }
@@ -1395,12 +1399,31 @@ router.post('/payroll/export', async (req, res) => {
     worksheet.getColumn(2).width = 20
     worksheet.getColumn(3).width = 20
     worksheet.getColumn(4).width = 20
+    worksheet.getColumn(5).width = 20
+
+    // 在第一行添加批注
+    worksheet.getCell('A1').note = {
+      texts: [{ text: '收款卡号(12-32位)' }]
+    }
+    worksheet.getCell('B1').note = {
+      texts: [{ text: '收款户名' }]
+    }
+    worksheet.getCell('C1').note = {
+      texts: [{ text: '收款金额(以元为单位)' }]
+    }
+    worksheet.getCell('D1').note = {
+      texts: [{ text: '交行卡标志(A：交行卡 B：非交行卡)' }]
+    }
+    worksheet.getCell('E1').note = {
+      texts: [{ text: '证件号码（可选）' }]
+    }
 
     const round2 = (num) => Math.round(Number(num) * 100) / 100
     let rowIndex = 2
     for (const item of detailRows) {
       const bankAccount = String(item?.bankAccount ?? '').trim()
       const employeeName = String(item?.employeeName ?? '').trim()
+      const idCard = String(item?.idCard ?? '').trim()
       const actual = batchNo === 2 ? item?.secondActual : item?.firstActual
       const amount = round2(toNumberOrNull(actual) ?? 0)
 
@@ -1408,6 +1431,7 @@ router.post('/payroll/export', async (req, res) => {
       worksheet.getCell(`B${rowIndex}`).value = employeeName
       worksheet.getCell(`C${rowIndex}`).value = amount
       worksheet.getCell(`D${rowIndex}`).value = 'B'
+      worksheet.getCell(`E${rowIndex}`).value = idCard
       rowIndex += 1
     }
 
