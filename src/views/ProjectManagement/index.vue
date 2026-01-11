@@ -582,65 +582,147 @@
                   零件信息
                   <span v-if="partTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
-                <div class="pm-edit-section">
-                  <div class="pm-edit-section-title">零件信息</div>
-                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="产品名称">
-                        <el-input
-                          v-model="editForm.productName"
-                          placeholder="产品名称（自动填充）"
-                          readonly
-                        />
-                      </el-form-item>
-                      <el-form-item label="产品图号">
-                        <el-input
-                          v-model="editForm.productDrawing"
-                          placeholder="产品图号（自动填充）"
-                          readonly
-                        />
-                      </el-form-item>
-                      <el-form-item label="产品尺寸">
-                        <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
-                      </el-form-item>
-                      <el-form-item label="产品重量（克）" prop="产品重量">
-                        <el-input-number
-                          v-model="editForm.产品重量"
-                          :min="0"
-                          :precision="2"
-                          :controls="false"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="产品材质" prop="产品材质">
-                        <el-input v-model="editForm.产品材质" placeholder="产品材质" />
-                      </el-form-item>
-                      <el-form-item label="产品颜色">
-                        <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
-                      </el-form-item>
-                      <el-form-item label="收缩率">
-                        <el-input-number
-                          v-model="editForm.收缩率"
-                          :min="0"
-                          :precision="4"
-                          :controls="false"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="料柄重量">
-                        <el-input-number
-                          v-model="editForm.料柄重量"
-                          :min="0"
-                          :precision="2"
-                          :controls="false"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
-                </div>
+                <!-- 左右并排布局 -->
+                <el-row :gutter="isMobile ? 8 : 12">
+                  <!-- 左侧：零件信息区块 -->
+                  <el-col :xs="24" :sm="24" :lg="16">
+                    <div class="pm-edit-section">
+                      <div class="pm-edit-section-title">零件信息</div>
+                      <el-row :gutter="isMobile ? 8 : 12" justify="center">
+                        <el-col :xs="24" :sm="12" :lg="12">
+                          <el-form-item label="产品名称">
+                            <el-input
+                              v-model="editForm.productName"
+                              placeholder="产品名称（自动填充）"
+                              readonly
+                            />
+                          </el-form-item>
+                          <el-form-item label="产品图号">
+                            <el-input
+                              v-model="editForm.productDrawing"
+                              placeholder="产品图号（自动填充）"
+                              readonly
+                            />
+                          </el-form-item>
+                          <el-form-item label="产品尺寸">
+                            <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
+                          </el-form-item>
+                          <el-form-item label="产品重量（克）" prop="产品重量">
+                            <el-input-number
+                              v-model="editForm.产品重量"
+                              :min="0"
+                              :precision="2"
+                              :controls="false"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :lg="12">
+                          <el-form-item label="产品材质" prop="产品材质">
+                            <el-input v-model="editForm.产品材质" placeholder="产品材质" />
+                          </el-form-item>
+                          <el-form-item label="产品颜色">
+                            <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
+                          </el-form-item>
+                          <el-form-item label="收缩率">
+                            <el-input-number
+                              v-model="editForm.收缩率"
+                              :min="0"
+                              :precision="4"
+                              :controls="false"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="料柄重量">
+                            <el-input-number
+                              v-model="editForm.料柄重量"
+                              :min="0"
+                              :precision="2"
+                              :controls="false"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </div>
+                  </el-col>
+                  <!-- 右侧：图示区块 -->
+                  <el-col :xs="24" :sm="24" :lg="8">
+                    <div class="pm-edit-section">
+                      <div class="pm-edit-section-title">图示</div>
+                      <div
+                        class="pm-part-image-container"
+                        tabindex="0"
+                        @mousedown="handleFocusPartImageCell"
+                        @paste="handlePartImagePaste"
+                        @dragover="handlePartImageDragOver"
+                        @drop="handlePartImageDrop"
+                      >
+                        <div v-if="partImageUploading" class="pm-part-image-cell__loading">
+                          上传中...
+                        </div>
+                        <template v-else>
+                          <template v-if="editForm.零件图示URL">
+                            <el-image
+                              class="pm-part-image-thumb"
+                              :src="toPartImageDisplayUrl(editForm.零件图示URL)"
+                              :preview-src-list="[toPartImageDisplayUrl(editForm.零件图示URL)]"
+                              :preview-teleported="true"
+                              fit="contain"
+                              @error="
+                                (e) => {
+                                  console.error('[图示预览] 图片加载失败:', e)
+                                  console.error('[图示预览] 原始URL:', editForm.零件图示URL)
+                                  console.error(
+                                    '[图示预览] 显示URL:',
+                                    toPartImageDisplayUrl(editForm.零件图示URL)
+                                  )
+                                }
+                              "
+                              @load="() => console.log('[图示预览] 图片加载成功')"
+                            />
+                            <button
+                              type="button"
+                              class="pm-part-image-remove"
+                              @click.stop="handleRemovePartImage"
+                            >
+                              ×
+                            </button>
+                            <button
+                              type="button"
+                              class="pm-part-image-pick"
+                              title="选择文件"
+                              @click.stop="handlePickPartImage"
+                            >
+                              ⤒
+                            </button>
+                          </template>
+                          <template v-else>
+                            <div class="pm-part-image-empty">
+                              <div class="pm-part-image-empty__text">粘贴/拖拽图片</div>
+                            </div>
+                            <button
+                              type="button"
+                              class="pm-part-image-pick"
+                              title="选择文件"
+                              @click.stop="handlePickPartImage"
+                            >
+                              ⤒
+                            </button>
+                          </template>
+                        </template>
+                      </div>
+                      <!-- 隐藏的文件输入 -->
+                      <input
+                        ref="partImageFileInputRef"
+                        type="file"
+                        accept="image/*"
+                        class="pm-part-image-file-input"
+                        @change="handlePartImageFileChange"
+                      />
+                    </div>
+                  </el-col>
+                </el-row>
               </el-tab-pane>
 
               <el-tab-pane name="mould">
@@ -1474,6 +1556,8 @@ import {
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
   generateTripartiteAgreementPdfApi,
+  uploadProjectPartImageApi,
+  deleteProjectTempPartImageApi,
   type ProjectInfo,
   type ProjectAttachment,
   type ProjectAttachmentType
@@ -2446,6 +2530,7 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
       const detail = response?.data?.data || response?.data || null
       if (detail) {
         Object.assign(editForm, detail)
+        console.log('[编辑项目] 加载详情，零件图示URL:', detail.零件图示URL)
       }
     } catch {
       // ignore：详情失败时回退到列表行数据
@@ -2485,6 +2570,137 @@ const tripartiteAgreementAttachments = computed(() =>
 const trialFormAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'trial-form')
 )
+
+// 零件图示相关状态
+const partImageUploading = ref(false)
+const partImageFileInputRef = ref<HTMLInputElement>()
+const TEMP_PART_IMAGE_PREFIX = '/uploads/_temp/project-images/'
+
+const isTempPartImageUrl = (url: any) => String(url || '').startsWith(TEMP_PART_IMAGE_PREFIX)
+
+const toPartImageDisplayUrl = (imageUrl: any) => {
+  const url = String(imageUrl || '').trim()
+  if (!url) {
+    console.log('[图示预览] URL为空')
+    return ''
+  }
+  // 所有图片都通过API预览接口访问（兼容临时和正式路径）
+  const displayUrl = `/api/project/part-image?url=${encodeURIComponent(url)}`
+  console.log('[图示预览] 原始URL:', url)
+  console.log('[图示预览] 显示URL:', displayUrl)
+  return displayUrl
+}
+
+const deleteTempPartImageIfNeeded = async (imageUrl: any) => {
+  const url = String(imageUrl || '').trim()
+  if (!isTempPartImageUrl(url)) return
+  try {
+    await deleteProjectTempPartImageApi(url)
+  } catch (e) {
+    console.warn('删除临时图示失败（忽略）:', e)
+  }
+}
+
+// 上传零件图示
+const uploadPartImage = async (file: File) => {
+  if (!file) return
+  const projectCode = editForm.项目编号 || currentProjectCode.value
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号后再上传图示')
+    return
+  }
+
+  partImageUploading.value = true
+
+  try {
+    if (editForm.零件图示URL) {
+      await deleteTempPartImageIfNeeded(editForm.零件图示URL)
+    }
+    const resp: any = await uploadProjectPartImageApi(projectCode, file)
+    const pr: any = resp
+    const url = pr?.data?.url || pr?.data?.data?.url || ''
+    if (!url) {
+      ElMessage.error(pr?.message || '上传失败')
+      return
+    }
+    editForm.零件图示URL = url
+  } catch (error) {
+    console.error('上传图示失败:', error)
+    ElMessage.error('上传图示失败')
+  } finally {
+    partImageUploading.value = false
+  }
+}
+
+// 点击选择文件
+const handlePickPartImage = () => {
+  partImageFileInputRef.value?.click()
+}
+
+// 聚焦图片容器（用于粘贴）
+const handleFocusPartImageCell = (e: MouseEvent) => {
+  const el = e.currentTarget as HTMLElement | null
+  el?.focus?.()
+}
+
+// 文件选择变化
+const handlePartImageFileChange = async (e: Event) => {
+  const input = e.target as HTMLInputElement | null
+  const file = input?.files?.[0]
+  if (input) input.value = ''
+  if (!file) return
+  await uploadPartImage(file)
+}
+
+// 粘贴图片
+const handlePartImagePaste = async (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : []
+  const imageItem = items.find((it) => String(it.type || '').startsWith('image/'))
+  if (!imageItem) return
+  const file = imageItem.getAsFile()
+  if (!file) return
+  e.preventDefault()
+  await uploadPartImage(file)
+}
+
+// 拖拽悬停
+const handlePartImageDragOver = (e: DragEvent) => {
+  e.preventDefault()
+}
+
+// 拖拽放下
+const handlePartImageDrop = async (e: DragEvent) => {
+  e.preventDefault()
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  if (!String(file.type || '').startsWith('image/')) {
+    ElMessage.warning('仅支持拖拽图片文件')
+    return
+  }
+  await uploadPartImage(file)
+}
+
+// 清除图片
+const handleRemovePartImage = async () => {
+  try {
+    await ElMessageBox.confirm('确定清除图示吗？', '提示', {
+      confirmButtonText: '清除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  await deleteTempPartImageIfNeeded(editForm.零件图示URL)
+  editForm.零件图示URL = ''
+}
+
+// 清理临时图片
+const cleanupTempPartImage = async () => {
+  const url = String(editForm.零件图示URL || '').trim()
+  if (!url) return
+  await deleteTempPartImageIfNeeded(url)
+}
 
 // 生产任务附件相关状态
 const productionTaskAttachmentLoading = ref(false)
@@ -2820,7 +3036,9 @@ const handleGenerateTripartiteAgreement = async () => {
         }
         ElMessage.error(msg)
         return
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
     ElMessage.error(resp?.data?.message || error?.message || '生成三方协议失败')
   } finally {
@@ -3219,7 +3437,10 @@ const handleProjectCodeBlur = async () => {
   }
 }
 
-const handleEditDialogClosed = () => {
+const handleEditDialogClosed = async () => {
+  // 清理临时图片
+  await cleanupTempPartImage()
+
   editFormRef.value?.resetFields()
   Object.keys(editForm).forEach((key) => delete (editForm as any)[key])
   currentProjectCode.value = ''
@@ -3227,6 +3448,7 @@ const handleEditDialogClosed = () => {
   corePullMethodOptions.forEach((k) => {
     corePullQty[k] = undefined
   })
+  partImageUploading.value = false
 }
 
 watch(
@@ -4246,6 +4468,133 @@ onMounted(() => {
 
 .pm-mould-grid-row {
   align-items: stretch;
+}
+
+/* 零件图示相关样式 */
+.pm-part-image-file-input {
+  display: none;
+}
+
+.pm-part-image-container {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-height: 400px;
+  min-height: 200px;
+  cursor: pointer;
+  background: #fafafa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-part-image-container--readonly {
+  cursor: default;
+}
+
+.pm-part-image-container:focus {
+  border-color: #409eff;
+}
+
+.pm-part-image-cell__loading {
+  display: flex;
+  width: 100%;
+  min-height: 200px;
+  font-size: 12px;
+  color: #909399;
+  background: #f5f7fa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-part-image-empty {
+  display: flex;
+  width: 100%;
+  min-height: 200px;
+  font-size: 12px;
+  color: #909399;
+  background: #fafafa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-part-image-empty__text {
+  line-height: 1.1;
+  text-align: center;
+  user-select: none;
+}
+
+.pm-part-image-thumb {
+  width: 100%;
+  max-height: 300px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.pm-part-image-thumb :deep(.el-image__inner) {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+.pm-part-image-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 18px;
+  color: #606266;
+  text-align: center;
+  cursor: pointer;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.pm-part-image-remove:hover {
+  color: #f56c6c;
+  background: rgb(255 255 255 / 100%);
+  border-color: #f56c6c;
+}
+
+.pm-part-image-pick {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 18px;
+  color: #606266;
+  text-align: center;
+  cursor: pointer;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.pm-part-image-pick:hover {
+  color: #409eff;
+  background: rgb(255 255 255 / 100%);
+  border-color: #409eff;
 }
 
 /* 响应式优化 */

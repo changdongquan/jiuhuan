@@ -153,7 +153,8 @@ const finalizePartItemImages = async (quotationNo, partItems) => {
 
 ensureDirSync(QUOTATION_BASE_DIR)
 ensureDirSync(QUOTATION_TEMP_DIR_ROOT)
-ensureDirSync(QUOTATION_IMAGES_DIR)
+// 兼容旧版路径：quotation-images 目录不再自动创建，但保留解析逻辑用于访问旧数据
+// ensureDirSync(QUOTATION_IMAGES_DIR)
 
 const uploadPartItemImage = multer({
   storage: multer.diskStorage({

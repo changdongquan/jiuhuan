@@ -367,6 +367,117 @@ const safeProjectCodeForPath = (projectCode) => {
     .replace(/[/\\?%*:|"<>]/g, '_')
 }
 
+// 零件图示存储配置
+const PROJECT_PART_IMAGE_TEMP_DIR_ROOT = path.join(FILE_ROOT, '_temp', 'project-images')
+const PROJECT_PART_IMAGE_TEMP_URL_PREFIX = '/uploads/_temp/project-images/'
+const PROJECT_PART_IMAGE_SUBDIR = '零件图示'
+const PROJECT_PART_IMAGE_MAX_SIZE_BYTES = parseInt(
+  process.env.PROJECT_PART_IMAGE_MAX_SIZE || String(5 * 1024 * 1024),
+  10
+)
+
+// 解析临时图片路径
+const resolveTempPartImagePath = (imageUrl) => {
+  const url = String(imageUrl || '')
+  if (!url.startsWith(PROJECT_PART_IMAGE_TEMP_URL_PREFIX)) return null
+  const rel = url.slice(PROJECT_PART_IMAGE_TEMP_URL_PREFIX.length)
+  const parts = rel
+    .split('/')
+    .filter(Boolean)
+    .map((p) => decodeURIComponent(p))
+  if (!parts.length) return null
+  const resolved = path.resolve(PROJECT_PART_IMAGE_TEMP_DIR_ROOT, ...parts)
+  const rootResolved = path.resolve(PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
+  if (!resolved.startsWith(rootResolved + path.sep) && resolved !== rootResolved) return null
+  return resolved
+}
+
+// 解析正式图片路径
+const resolveStoredPartImagePath = (imageUrl) => {
+  const url = String(imageUrl || '').trim()
+  if (!url) return null
+
+  // 相对路径格式：{分类}/{项目编号}/项目管理/零件图示/{文件名}
+  const parts = url.split('/').filter(Boolean)
+  if (parts.length < 4) return null
+  if (parts[2] !== '项目管理' || parts[3] !== PROJECT_PART_IMAGE_SUBDIR) return null
+
+  return path.join(FILE_ROOT, ...parts)
+}
+
+// 解析任意图片路径（临时或正式）
+const resolveAnyPartImagePath = (imageUrl) => {
+  const url = String(imageUrl || '')
+  if (url.startsWith(PROJECT_PART_IMAGE_TEMP_URL_PREFIX)) {
+    return resolveTempPartImagePath(url)
+  }
+  return resolveStoredPartImagePath(url)
+}
+
+// 清理空目录
+const cleanupEmptyParents = async (startPath, stopDir) => {
+  const stop = path.resolve(stopDir)
+  let current = path.dirname(path.resolve(startPath))
+  while (current.startsWith(stop + path.sep) && current !== stop) {
+    try {
+      const entries = await fs.promises.readdir(current)
+      if (entries.length > 0) break
+      await fs.promises.rmdir(current)
+    } catch {
+      break
+    }
+    current = path.dirname(current)
+  }
+}
+
+// 移动临时图片到正式目录
+const finalizePartImage = async (projectCode, imageUrl) => {
+  const url = String(imageUrl || '').trim()
+  if (!url) return null
+  if (!url.startsWith(PROJECT_PART_IMAGE_TEMP_URL_PREFIX)) {
+    // 已经是正式路径，直接返回
+    return url
+  }
+
+  const fromPath = resolveTempPartImagePath(url)
+  if (!fromPath || !fs.existsSync(fromPath)) {
+    return null
+  }
+
+  const category = getCategoryFromProjectCode(projectCode)
+  const safeProjectCode = safeProjectCodeForPath(projectCode)
+  const finalRelativeDir = path.posix.join(
+    category,
+    safeProjectCode,
+    '项目管理',
+    PROJECT_PART_IMAGE_SUBDIR
+  )
+  const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+  ensureDirSync(finalFullDir)
+
+  // 生成文件名：{项目编号}_图示.{扩展名}
+  const originalExt = path.extname(fromPath) || '.jpg'
+  const storedFileName = `${projectCode}_图示${originalExt}`
+  const safeStoredFileName = safeFileName(storedFileName)
+  const toPath = path.join(finalFullDir, safeStoredFileName)
+
+  try {
+    // 如果目标文件已存在，先删除
+    if (fs.existsSync(toPath)) {
+      await fsp.unlink(toPath)
+    }
+    // 移动文件
+    await fsp.rename(fromPath, toPath)
+    // 清理空目录
+    await cleanupEmptyParents(fromPath, PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
+    // 返回相对路径
+    return path.posix.join(finalRelativeDir, safeStoredFileName)
+  } catch (e) {
+    console.error('归档零件图示失败:', e)
+    return null
+  }
+}
+
 // 安全化文件名
 const safeFileName = (fileName) => {
   if (!fileName) return fileName
@@ -378,6 +489,9 @@ const ensureDirSync = (dirPath) => {
     fs.mkdirSync(dirPath, { recursive: true })
   }
 }
+
+// 确保零件图示临时目录存在（必须在ensureDirSync定义之后调用）
+ensureDirSync(PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
 
 const moveFileWithFallback = async (fromPath, toPath) => {
   try {
@@ -447,6 +561,34 @@ const uploadSingleAttachment = (req, res, next) => {
     res.status(400).json({ code: 400, success: false, message })
   })
 }
+
+// 零件图示上传配置
+const uploadPartImage = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      try {
+        const tempDir = path.join(
+          PROJECT_PART_IMAGE_TEMP_DIR_ROOT,
+          String(Date.now()),
+          String(Math.random().toString(36).slice(2, 8))
+        )
+        ensureDirSync(tempDir)
+        req._partImageTempDir = tempDir
+        cb(null, tempDir)
+      } catch (err) {
+        cb(err, '')
+      }
+    },
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname) || '.jpg'
+      const safeName = safeFileName(path.basename(file.originalname, ext))
+      const storedFileName = `${safeName}_${Date.now()}${ext}`
+      req._partImageStoredFileName = storedFileName
+      cb(null, storedFileName)
+    }
+  }),
+  limits: { fileSize: PROJECT_PART_IMAGE_MAX_SIZE_BYTES }
+})
 
 const getFileFullPath = (relativePath, storedFileName) => {
   return path.join(FILE_ROOT, relativePath, storedFileName)
@@ -554,6 +696,7 @@ const ensureProjectAttachmentsTable = async () => {
 // 获取项目统计信息（需要在其他路由之前定义）
 router.get('/statistics', async (req, res) => {
   try {
+    console.log('[项目统计] 开始查询')
     const queryString = `
       SELECT 
         COUNT(*) as totalProjects,
@@ -565,7 +708,9 @@ router.get('/statistics', async (req, res) => {
       FROM 项目管理
     `
 
+    console.log('[项目统计] 执行查询:', queryString)
     const result = await query(queryString)
+    console.log('[项目统计] 查询成功，结果:', result?.[0])
 
     res.json({
       code: 0,
@@ -574,6 +719,7 @@ router.get('/statistics', async (req, res) => {
     })
   } catch (error) {
     console.error('获取项目统计信息失败:', error)
+    console.error('错误堆栈:', error.stack)
     res.status(500).json({
       success: false,
       message: '获取项目统计信息失败',
@@ -585,6 +731,7 @@ router.get('/statistics', async (req, res) => {
 // 获取项目信息列表
 router.get('/list', async (req, res) => {
   try {
+    console.log('[项目列表] 开始查询，参数:', req.query)
     const { keyword, status, category, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
     let whereConditions = []
@@ -723,7 +870,9 @@ router.get('/list', async (req, res) => {
       FETCH NEXT ${pageSizeNum} ROWS ONLY
     `
 
+    console.log('[项目列表] 执行查询:', dataQuery.substring(0, 200))
     const data = await query(dataQuery, params)
+    console.log('[项目列表] 查询成功，返回', data?.length || 0, '条记录')
     // 解决 p.* 与格式化列重名导致的数组问题：用格式化后的值覆盖
     const mapped = (data || []).map((row) => {
       if (row && row['图纸下发日期_fmt'] !== undefined) {
@@ -745,6 +894,7 @@ router.get('/list', async (req, res) => {
     })
   } catch (error) {
     console.error('获取项目信息列表失败:', error)
+    console.error('错误堆栈:', error.stack)
     res.status(500).json({
       success: false,
       message: '获取项目信息列表失败',
@@ -847,10 +997,15 @@ router.get('/detail', async (req, res) => {
       })
     }
 
+    const detail = result[0]
+    console.log('[项目详情] 项目编号:', projectCode)
+    console.log('[项目详情] 零件图示URL:', detail.零件图示URL)
+    console.log('[项目详情] 所有字段:', Object.keys(detail))
+
     res.json({
       code: 0,
       success: true,
-      data: result[0]
+      data: detail
     })
   } catch (error) {
     console.error('获取项目信息失败:', error)
@@ -1227,6 +1382,21 @@ router.post('/', async (req, res) => {
     const values = []
     const params = {}
 
+    // 处理零件图示：如果是临时图片，移动到正式目录
+    // 注意：如果数据库表中还没有此字段，需要先执行迁移脚本
+    if (data.零件图示URL && data.项目编号) {
+      try {
+        const finalUrl = await finalizePartImage(data.项目编号, data.零件图示URL)
+        if (finalUrl) {
+          data.零件图示URL = finalUrl
+        }
+      } catch (e) {
+        console.warn('处理零件图示失败（可能字段不存在）:', e)
+        // 如果字段不存在，忽略此字段，不阻止其他字段的插入
+        delete data.零件图示URL
+      }
+    }
+
     Object.keys(data).forEach((key) => {
       // 过滤掉 SSMA_TimeStamp 字段（这是数据库迁移字段，不应通过API修改）
       if (
@@ -1282,6 +1452,37 @@ router.put('/update', async (req, res) => {
       })
     }
 
+    // 处理零件图示：如果是临时图片，移动到正式目录
+    // 注意：如果数据库表中还没有此字段，需要先执行迁移脚本
+    if (data.零件图示URL) {
+      try {
+        // 先检查字段是否存在
+        const checkFieldQuery = `
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_NAME = '项目管理' AND COLUMN_NAME = '零件图示URL'
+        `
+        const fieldCheck = await query(checkFieldQuery)
+        if (!fieldCheck || fieldCheck.length === 0) {
+          console.warn(
+            '数据库表中没有"零件图示URL"字段，跳过此字段的更新。请执行迁移脚本：backend/migrations/add_part_image_url.sql'
+          )
+          // 字段不存在，移除该字段，不阻止其他字段的更新
+          delete data.零件图示URL
+        } else {
+          // 字段存在，处理图片移动
+          const finalUrl = await finalizePartImage(projectCode, data.零件图示URL)
+          if (finalUrl) {
+            data.零件图示URL = finalUrl
+          }
+        }
+      } catch (e) {
+        console.warn('处理零件图示失败:', e)
+        // 如果处理失败，移除该字段，不阻止其他字段的更新
+        delete data.零件图示URL
+      }
+    }
+
     // 构建动态更新字段
     const updates = []
     const params = { projectCode }
@@ -1308,6 +1509,8 @@ router.put('/update', async (req, res) => {
       WHERE 项目编号 = @projectCode
     `
 
+    console.log('[更新项目] 执行SQL:', queryString.substring(0, 200))
+    console.log('[更新项目] 参数:', Object.keys(params))
     await query(queryString, params)
 
     res.json({
@@ -1317,10 +1520,25 @@ router.put('/update', async (req, res) => {
     })
   } catch (error) {
     console.error('更新项目信息失败:', error)
+    console.error('错误堆栈:', error.stack)
+    console.error('错误详情:', {
+      message: error.message,
+      code: error.code,
+      number: error.number,
+      state: error.state
+    })
     res.status(500).json({
       success: false,
       message: '更新项目信息失败',
-      error: error.message
+      error: error.message,
+      details:
+        process.env.NODE_ENV === 'development'
+          ? {
+              code: error.code,
+              number: error.number,
+              state: error.state
+            }
+          : undefined
     })
   }
 })
@@ -1699,6 +1917,129 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
       message: '删除项目管理附件失败',
       error: error.message
     })
+  }
+})
+
+// === 零件图示相关接口 ===
+
+// 上传零件图示
+router.post('/upload-part-image', (req, res) => {
+  uploadPartImage.single('file')(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `上传失败：图片不能超过 ${Math.round(PROJECT_PART_IMAGE_MAX_SIZE_BYTES / 1024 / 1024)}MB`
+          : err?.message || '上传失败'
+      return res.status(400).json({ code: 400, success: false, message })
+    }
+
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+    }
+
+    const mime = String(file.mimetype || '').toLowerCase()
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp']
+    if (!allowed.includes(mime)) {
+      try {
+        fs.unlinkSync(file.path)
+      } catch {}
+      return res
+        .status(400)
+        .json({ code: 400, success: false, message: '仅支持 png/jpg/gif/webp 图片' })
+    }
+
+    try {
+      const rel = path.relative(PROJECT_PART_IMAGE_TEMP_DIR_ROOT, file.path)
+      const safeRel = String(rel || '').replace(/\\/g, '/')
+      if (!safeRel || safeRel.startsWith('..')) {
+        try {
+          fs.unlinkSync(file.path)
+        } catch {}
+        return res.status(500).json({ code: 500, success: false, message: '生成临时预览地址失败' })
+      }
+      const parts = safeRel.split('/').filter(Boolean)
+      const urlPath = `${PROJECT_PART_IMAGE_TEMP_URL_PREFIX}${parts.map((p) => encodeURIComponent(p)).join('/')}`
+      return res.json({ code: 0, success: true, data: { url: urlPath } })
+    } catch (e) {
+      try {
+        fs.unlinkSync(file.path)
+      } catch {}
+      console.error('生成临时图示URL失败:', e)
+      return res.status(500).json({ code: 500, success: false, message: '保存图片失败' })
+    }
+  })
+})
+
+// 删除临时零件图示
+router.post('/delete-temp-part-image', async (req, res) => {
+  try {
+    const url = String(req.body?.url || '').trim()
+    if (!url) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 url' })
+    }
+    const filePath = resolveTempPartImagePath(url)
+    if (!filePath) {
+      return res.status(400).json({ code: 400, success: false, message: '不是合法的临时图示地址' })
+    }
+
+    try {
+      await fs.promises.unlink(filePath)
+    } catch (e) {
+      // 文件不存在也视为成功，避免重复清理导致报错
+      if (e && e.code !== 'ENOENT') throw e
+    }
+    await cleanupEmptyParents(filePath, PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
+    return res.json({ code: 0, success: true })
+  } catch (e) {
+    console.error('删除临时图示失败:', e)
+    return res.status(500).json({ code: 500, success: false, message: '删除临时图示失败' })
+  }
+})
+
+// 通过 API 预览零件图示（兼容临时/最终路径）
+router.get('/part-image', async (req, res) => {
+  try {
+    const url = String(req.query?.url || '').trim()
+    if (!url) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 url' })
+    }
+
+    console.log('[预览零件图示] URL:', url)
+    const filePath = resolveAnyPartImagePath(url)
+    console.log('[预览零件图示] 解析后的文件路径:', filePath)
+
+    if (!filePath) {
+      console.warn('[预览零件图示] 无法解析路径:', url)
+      return res.status(400).json({ code: 400, success: false, message: '不是合法的图示地址' })
+    }
+
+    if (!fs.existsSync(filePath)) {
+      console.warn('[预览零件图示] 文件不存在:', filePath)
+      return res.status(404).json({ code: 404, success: false, message: '图示文件不存在' })
+    }
+
+    console.log('[预览零件图示] 文件存在，开始返回:', filePath)
+
+    const stat = await fs.promises.stat(filePath)
+    const stream = fs.createReadStream(filePath)
+    const ext = path.extname(filePath).toLowerCase()
+    const contentTypeMap = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+    const contentType = contentTypeMap[ext] || 'image/jpeg'
+
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Length', stat.size)
+    res.setHeader('Cache-Control', 'public, max-age=31536000')
+    stream.pipe(res)
+  } catch (e) {
+    console.error('预览零件图示失败:', e)
+    return res.status(500).json({ code: 500, success: false, message: '预览零件图示失败' })
   }
 })
 

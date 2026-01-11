@@ -40,13 +40,17 @@ const QUOTATION_BASE_DIR = path.join(UPLOADS_ROOT, '报价单')
 const QUOTATION_IMAGES_DIR = path.join(UPLOADS_ROOT, 'quotation-images')
 // 零件报价单图示：临时目录（粘贴后用于预览，保存报价单时再搬运到最终目录）
 const QUOTATION_TEMP_IMAGES_DIR = path.join(UPLOADS_ROOT, '_temp', 'quotation-images')
+// 项目图示：临时图片目录
+const PROJECT_TEMP_IMAGES_DIR = path.join(UPLOADS_ROOT, '_temp', 'project-images')
 
 try {
   fs.mkdirSync(QUOTATION_BASE_DIR, { recursive: true })
-  fs.mkdirSync(QUOTATION_IMAGES_DIR, { recursive: true })
+  // 兼容旧版路径：quotation-images 目录不再自动创建，但保留解析逻辑用于访问旧数据
+  // fs.mkdirSync(QUOTATION_IMAGES_DIR, { recursive: true })
   fs.mkdirSync(QUOTATION_TEMP_IMAGES_DIR, { recursive: true })
+  fs.mkdirSync(PROJECT_TEMP_IMAGES_DIR, { recursive: true })
 } catch (e) {
-  console.error('创建报价单上传目录失败:', e)
+  console.error('创建上传目录失败:', e)
 }
 
 // CORS 设置：允许域内站点和浏览器携带 Kerberos 凭据
@@ -133,6 +137,14 @@ app.use('/uploads', (req, res, next) => {
 })
 // 兼容旧版：报价单截图（仅暴露该目录，避免泄露其他附件）
 app.use('/uploads/quotation-images', express.static(QUOTATION_IMAGES_DIR))
+
+// 项目图示：临时图片静态资源
+app.use('/uploads/_temp/project-images', express.static(PROJECT_TEMP_IMAGES_DIR))
+
+// 项目图示：正式图片静态资源（通过通用uploads路由处理，支持中文路径）
+// 路径格式：/uploads/{分类}/{项目编号}/项目管理/零件图示/{文件名}
+// 例如：/uploads/塑胶模具/JH01-01/项目管理/零件图示/JH01-01_图示.jpg
+// 由于路径包含中文，通过API预览接口（/api/project/part-image）访问更可靠
 
 // 路由
 app.use('/api/goods', goodsRoutes)

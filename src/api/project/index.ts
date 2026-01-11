@@ -54,6 +54,7 @@ export interface ProjectInfo {
   成型周期?: number
   流道数量?: number | null
   费用出处?: string
+  零件图示URL?: string // 零件图示URL（相对路径）
 }
 
 // 项目查询参数
@@ -188,5 +189,43 @@ export const generateTripartiteAgreementPdfApi = (projectCode: string) => {
   }>({
     url: `/api/project/tripartite-agreement-generate-pdf`,
     data: { projectCode }
+  })
+}
+
+// 上传零件图示（匿名静态资源 URL）
+export const uploadProjectPartImageApi = (projectCode: string, file: File) => {
+  const formData = new FormData()
+  formData.append('projectCode', projectCode)
+  formData.append('file', file)
+  return request.post<{
+    code: number
+    success: boolean
+    data: { url: string }
+    message?: string
+  }>({
+    url: '/api/project/upload-part-image',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 删除临时零件图示（取消/关闭弹窗时调用）
+export const deleteProjectTempPartImageApi = (url: string) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: '/api/project/delete-temp-part-image',
+    data: { url }
+  })
+}
+
+// 通过 API 预览零件图示（兼容临时/最终路径）
+export const getProjectPartImageApi = (url: string) => {
+  return request.get<Blob>({
+    url: '/api/project/part-image',
+    params: { url },
+    responseType: 'blob'
   })
 }

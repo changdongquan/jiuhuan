@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "NODE_ENV=development nodemon server.js"
+    "dev": "NODE_ENV=development nodemon server.js",
+    "migrate:add-part-image-url": "node run-migration-add-part-image-url.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
