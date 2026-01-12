@@ -3327,6 +3327,13 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.so-view-mode-bar {
+  display: flex;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  justify-content: flex-end;
+}
+
 .view-mode-switch {
   display: inline-flex;
   align-items: center;

@@ -14,6 +14,7 @@
         <el-radio-group v-model="viewMode" size="small">
           <el-radio-button value="card">卡片</el-radio-button>
           <el-radio-button value="table">表格</el-radio-button>
+          <el-radio-button v-if="!isMobile" value="timeline">时间轴</el-radio-button>
         </el-radio-group>
       </div>
     </div>
@@ -103,8 +104,203 @@
       </el-col>
     </el-row>
 
+    <!-- PC 时间轴视图 -->
+    <div v-if="!isMobile && viewMode === 'timeline'" class="pm-timeline-layout">
+      <div class="pm-timeline-left">
+        <div v-for="group in projectGroups" :key="group.prefix" class="pm-group-block">
+          <div class="pm-group-header">
+            <span class="pm-group-label">{{ group.prefix }}</span>
+            <span class="pm-group-count">({{ group.projects.length }}个项目)</span>
+          </div>
+          <div class="pm-project-list">
+            <div
+              v-for="project in group.projects"
+              :key="project.项目编号"
+              class="pm-project-card"
+              :class="{ 'is-active': timelineActiveProjectCode === project.项目编号 }"
+              @click="handleTimelineProjectClick(project)"
+            >
+              <div class="pm-project-grid">
+                <div class="pm-project-field">
+                  <span class="pm-field-label">项目编号：</span>
+                  <span class="pm-field-value">{{ project.项目编号 || '-' }}</span>
+                </div>
+                <div class="pm-project-field">
+                  <span class="pm-field-label">产品名称：</span>
+                  <span class="pm-field-value">{{ project.productName || '-' }}</span>
+                </div>
+                <div class="pm-project-field">
+                  <span class="pm-field-label">产品图号：</span>
+                  <span class="pm-field-value">{{ project.productDrawing || '-' }}</span>
+                </div>
+                <div class="pm-project-field">
+                  <span class="pm-field-label">客户模号：</span>
+                  <span class="pm-field-value">{{ project.客户模号 || '-' }}</span>
+                </div>
+                <div class="pm-project-field">
+                  <span class="pm-field-label">计划首样：</span>
+                  <span class="pm-field-value">
+                    {{ formatDate(project.计划首样日期) || '-' }}
+                    <el-tag
+                      v-if="isDueSoon(project.计划首样日期)"
+                      type="warning"
+                      size="small"
+                      effect="light"
+                      class="pm-due-tag"
+                    >
+                      {{ daysUntil(project.计划首样日期) }}天
+                    </el-tag>
+                    <el-tag
+                      v-else-if="isOverdue(project.计划首样日期, project.首次送样日期)"
+                      type="danger"
+                      size="small"
+                      effect="dark"
+                      class="pm-due-tag"
+                    >
+                      -{{ overdueDays(project.计划首样日期, project.首次送样日期) }}天
+                    </el-tag>
+                  </span>
+                </div>
+                <div class="pm-project-field">
+                  <span class="pm-field-label">项目状态：</span>
+                  <span class="pm-field-value">
+                    <el-tag
+                      :type="getStatusTagType(project.项目状态)"
+                      size="small"
+                      class="pm-status-tag"
+                      :class="getStatusTagClass(project.项目状态)"
+                    >
+                      {{ project.项目状态 || '-' }}
+                    </el-tag>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="!projectGroups.length" class="pm-timeline-empty">
+          <el-empty>
+            <template #description>
+              <div>
+                <p>当前条件下暂无项目数据</p>
+                <p style=" margin-top: 8px;font-size: 12px; color: #999">
+                  提示：时间轴视图需要产品图号字段有值才能进行分组
+                </p>
+                <p style="font-size: 12px; color: #999">
+                  当前筛选结果：{{ tableData.length }} 条数据，分组数：{{ projectGroups.length }}
+                </p>
+              </div>
+            </template>
+          </el-empty>
+        </div>
+      </div>
+      <div class="pm-timeline-right">
+        <div v-if="viewProjectData && timelineActiveProjectCode" class="pm-timeline-detail-panel">
+          <div class="view-dialog-section">
+            <div class="view-dialog-section-header view-dialog-section-header--timeline">
+              <div class="view-dialog-section-main">
+                <h3 class="view-dialog-section-title">项目基本信息</h3>
+                <div class="view-dialog-info-grid">
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">项目编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.项目编号 || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">产品名称：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.productName || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">产品图号：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.productDrawing || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">客户模号：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.客户模号 || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">项目状态：</span>
+                    <span class="view-dialog-info-value">
+                      <el-tag
+                        :type="getStatusTagType(viewProjectData.项目状态)"
+                        size="small"
+                        class="pm-status-tag"
+                        :class="getStatusTagClass(viewProjectData.项目状态)"
+                      >
+                        {{ viewProjectData.项目状态 || '-' }}
+                      </el-tag>
+                    </span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">计划首样日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      formatDate(viewProjectData.计划首样日期) || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">中标日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      formatDate(viewProjectData.中标日期) || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">移模日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      formatDate(viewProjectData.移模日期) || '-'
+                    }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="pm-timeline-header-actions">
+                <el-button type="success" size="small" @click="handleTimelineView">查看</el-button>
+                <el-button type="primary" size="small" @click="handleTimelineEdit">编辑</el-button>
+              </div>
+            </div>
+          </div>
+          <div v-if="timelineDetailSections.length" class="pm-timeline-detail-content">
+            <div
+              v-for="section in timelineDetailSections"
+              :key="section.title"
+              class="detail-section"
+            >
+              <div class="detail-section-header">{{ section.title }}</div>
+              <div class="detail-grid">
+                <div v-for="item in section.items" :key="item.label" class="detail-cell">
+                  <span class="detail-label">{{ item.label }}</span>
+                  <span class="detail-value">
+                    <template v-if="item.tag">
+                      <el-tag
+                        :type="getStatusTagType(item.value as string)"
+                        class="pm-status-tag"
+                        :class="getStatusTagClass(item.value as string)"
+                      >
+                        {{ item.value || '-' }}
+                      </el-tag>
+                    </template>
+                    <template v-else>
+                      {{ item.value || '-' }}
+                    </template>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="pm-timeline-detail-panel-empty">
+          <el-empty description="请选择左侧分组中的项目" />
+        </div>
+      </div>
+    </div>
+
     <div
-      v-if="viewMode === 'table' || !isMobile"
+      v-if="viewMode === 'table'"
       class="pm-table-wrapper"
       :class="{ 'pm-table-wrapper--mobile': isMobile }"
     >
@@ -256,7 +452,7 @@
       </el-table>
     </div>
 
-    <div v-else class="pm-mobile-list" v-loading="loading">
+    <div v-if="isMobile && viewMode === 'card'" class="pm-mobile-list" v-loading="loading">
       <el-empty v-if="!tableData.length && !loading" description="暂无项目" />
       <template v-else>
         <el-card v-for="row in tableData" :key="row.项目编号" class="pm-mobile-card" shadow="hover">
@@ -1543,8 +1739,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty } from 'element-plus'
+import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
 import {
   getProjectListApi,
   getProjectDetailApi,
@@ -1592,11 +1789,25 @@ const summary = reactive({
   completedProjects: 0
 })
 
-type ViewMode = 'table' | 'card'
+type ViewMode = 'table' | 'card' | 'timeline'
+
+interface ProjectGroup {
+  prefix: string
+  projects: Partial<ProjectInfo>[]
+}
 
 const appStore = useAppStore()
+const route = useRoute()
+const router = useRouter()
 const isMobile = computed(() => appStore.getMobile)
-const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
+
+const resolvePcViewModeFromRoute = (): ViewMode => {
+  const v = route.query.view
+  if (v === 'table' || v === 'timeline') return v as ViewMode
+  return 'table'
+}
+
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
 const showMobileFilters = ref(false)
 const showMobileSummary = ref(false)
 const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
@@ -1628,6 +1839,165 @@ const projectStatusOptions = [
   { label: '待移模', value: '待移模' },
   { label: '已经移模', value: '已经移模' }
 ]
+
+const updateViewQuery = (mode: 'table' | 'timeline') => {
+  const query = { ...route.query, view: mode }
+  router.replace({ path: route.path, query })
+}
+
+// PC 端监听路由 query.view，同步到本地 viewMode
+watch(
+  () => route.query.view,
+  (val) => {
+    if (isMobile.value) return
+    const mode = val === 'table' || val === 'timeline' ? (val as ViewMode) : 'table'
+    if (viewMode.value !== mode) {
+      viewMode.value = mode
+    }
+  }
+)
+
+watch(isMobile, (mobile) => {
+  if (mobile) {
+    viewMode.value = 'card'
+  } else {
+    const next = resolvePcViewModeFromRoute()
+    viewMode.value = next
+    if (!route.query.view) {
+      updateViewQuery(next === 'card' ? 'table' : (next as 'table' | 'timeline'))
+    }
+    showMobileFilters.value = true
+  }
+})
+
+watch(viewMode, (val) => {
+  if (isMobile.value) return
+  if (val === 'table' || val === 'timeline') {
+    updateViewQuery(val)
+  }
+})
+
+// 时间轴相关状态
+const timelineActiveProjectCode = ref<string | null>(null)
+const viewProjectData = ref<Partial<ProjectInfo> | null>(null)
+
+// 提取产品图号前缀
+const extractDrawingPrefix = (productDrawing?: string): string => {
+  if (!productDrawing || !productDrawing.trim()) {
+    return '未分类'
+  }
+
+  const dotIndex = productDrawing.indexOf('.')
+  if (dotIndex === -1) {
+    return productDrawing.trim()
+  }
+
+  return productDrawing.substring(0, dotIndex).trim() || '未分类'
+}
+
+// 分组计算（所有分类）
+const projectGroups = computed<ProjectGroup[]>(() => {
+  const map = new Map<string, Partial<ProjectInfo>[]>()
+
+  console.log('[时间轴分组] 总数据量:', tableData.value.length)
+  let processedCount = 0
+  const categoryStats = new Map<string, number>()
+
+  // 先统计所有分类
+  for (const project of tableData.value) {
+    const category = project.分类 || '未分类'
+    categoryStats.set(category, (categoryStats.get(category) || 0) + 1)
+  }
+  console.log('[时间轴分组] 分类统计:', Array.from(categoryStats.entries()))
+
+  // 检查前几条数据的详细信息
+  if (tableData.value.length > 0) {
+    console.log('[时间轴分组] 前3条数据示例:')
+    tableData.value.slice(0, 3).forEach((project, idx) => {
+      console.log(`  数据${idx + 1}:`, {
+        项目编号: project.项目编号,
+        分类: project.分类,
+        产品图号: project.productDrawing,
+        产品图号2: project.产品图号
+      })
+    })
+  }
+
+  for (const project of tableData.value) {
+    // 尝试多个字段名：productDrawing 和 产品图号
+    const drawing = project.productDrawing || project.产品图号 || ''
+    if (!drawing || !drawing.trim()) {
+      console.log('[时间轴分组] 跳过无产品图号的项目:', project.项目编号)
+      continue
+    }
+
+    processedCount++
+    const prefix = extractDrawingPrefix(drawing)
+    console.log(
+      '[时间轴分组] 项目:',
+      project.项目编号,
+      '分类:',
+      project.分类,
+      '产品图号:',
+      drawing,
+      '前缀:',
+      prefix
+    )
+
+    if (!map.has(prefix)) {
+      map.set(prefix, [])
+    }
+    map.get(prefix)!.push(project)
+  }
+
+  console.log('[时间轴分组] 已处理项目数:', processedCount, '分组数:', map.size)
+
+  // 排序：前缀按字母数字混合排序
+  const result = Array.from(map.entries())
+    .sort((a, b) =>
+      a[0].localeCompare(b[0], undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      })
+    )
+    .map(([prefix, projects]) => ({
+      prefix,
+      projects: projects.sort((a, b) => (a.项目编号 || '').localeCompare(b.项目编号 || ''))
+    }))
+
+  console.log('[时间轴分组] 最终分组结果:', result)
+  return result
+})
+
+// 时间轴交互函数
+const loadProjectForTimeline = async (projectCode: string) => {
+  if (!projectCode) return
+
+  try {
+    const response: any = await getProjectDetailApi(projectCode)
+    const data = response.data?.data || response.data || response
+    viewProjectData.value = data
+  } catch (error) {
+    console.error('加载项目详情失败:', error)
+    ElMessage.error('加载项目详情失败')
+  }
+}
+
+const handleTimelineProjectClick = async (project: Partial<ProjectInfo>) => {
+  timelineActiveProjectCode.value = project.项目编号 || null
+  await loadProjectForTimeline(project.项目编号 || '')
+}
+
+const handleTimelineView = () => {
+  if (!viewProjectData.value) return
+  viewData.value = viewProjectData.value
+  viewDialogVisible.value = true
+}
+
+const handleTimelineEdit = () => {
+  if (!viewProjectData.value) return
+  handleEdit(viewProjectData.value)
+}
 
 const viewDialogVisible = ref(false)
 const viewData = ref<Partial<ProjectInfo>>({})
@@ -2208,13 +2578,6 @@ const editRules: FormRules = {
   ]
 }
 
-watch(isMobile, (mobile) => {
-  viewMode.value = mobile ? 'card' : 'table'
-  if (!mobile) {
-    showMobileFilters.value = true
-  }
-})
-
 const loadData = async () => {
   loading.value = true
   try {
@@ -2240,6 +2603,19 @@ const loadData = async () => {
     } else if (response?.data) {
       tableData.value = response.data.list || []
       total.value = response.data.total || 0
+    }
+
+    // 时间轴视图：数据加载后，如果有数据且没有选中项目，自动选中第一个
+    if (!isMobile.value && viewMode.value === 'timeline') {
+      await nextTick()
+      if (projectGroups.value.length > 0 && !timelineActiveProjectCode.value) {
+        const firstGroup = projectGroups.value[0]
+        if (firstGroup.projects.length > 0) {
+          const firstProject = firstGroup.projects[0]
+          timelineActiveProjectCode.value = firstProject.项目编号 || null
+          void loadProjectForTimeline(firstProject.项目编号 || '')
+        }
+      }
     }
   } catch (error: any) {
     console.error('获取数据失败:', error)
@@ -2372,6 +2748,88 @@ type DetailSection = {
   title: string
   items: DetailItem[]
 }
+
+// 时间轴视图的详情部分
+const timelineDetailSections = computed<DetailSection[]>(() => {
+  const data = viewProjectData.value || {}
+
+  const v = (val?: string | number | null) => {
+    const res = formatValue(val)
+    return typeof res === 'number' ? String(res) : (res ?? '-')
+  }
+
+  const baseInfo: DetailItem[] = [
+    { label: '项目编号', value: v(data.项目编号 ?? '') },
+    { label: '项目状态', value: v(data.项目状态 ?? ''), tag: true },
+    { label: '项目名称', value: v(data.项目名称 ?? '') },
+    { label: '产品名称', value: v(data.productName ?? '') },
+    { label: '产品图号', value: v(data.productDrawing ?? '') },
+    { label: '客户模号', value: v(data.客户模号 ?? '') },
+    { label: '制件厂家', value: v(data.制件厂家 ?? '') },
+    { label: '进度影响原因', value: v(data.进度影响原因 ?? '') },
+    { label: '备注', value: v(data.备注 ?? '') }
+  ]
+
+  const productInfo: DetailItem[] = [
+    { label: '产品尺寸', value: v(data.产品尺寸 ?? '') },
+    { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
+    { label: '产品材质', value: v(data.产品材质 ?? '') },
+    { label: '产品颜色', value: v(data.产品颜色 ?? '') },
+    { label: '收缩率', value: v(data.收缩率 ?? '') },
+    { label: '料柄重量', value: v(data.料柄重量 ?? '') }
+  ]
+
+  const mouldInfo: DetailItem[] = [
+    { label: '模具穴数', value: v(data.模具穴数 ?? '') },
+    { label: '模具尺寸', value: v(data.模具尺寸 ?? '') },
+    { label: '模具重量（吨）', value: v(data.模具重量 ?? '') },
+    { label: '前模材质', value: v(data.前模材质 ?? '') },
+    { label: '后模材质', value: v(data.后模材质 ?? '') },
+    { label: '滑块材质', value: v(data.滑块材质 ?? '') },
+    { label: '流道类型', value: v(data.流道类型 ?? '') },
+    { label: '流道数量', value: v(data.流道数量 ?? '') },
+    { label: '浇口类型', value: v(data.浇口类型 ?? '') },
+    { label: '浇口数量', value: v(data.浇口数量 ?? '') }
+  ]
+
+  const equipmentInfo: DetailItem[] = [
+    { label: '机台吨位（吨）', value: v(data.机台吨位 ?? '') },
+    { label: '锁模力', value: v(data.锁模力 ?? '') },
+    { label: '定位圈', value: v(data.定位圈 ?? '') },
+    { label: '容模量', value: v(data.容模量 ?? '') },
+    { label: '拉杆间距', value: v(data.拉杆间距 ?? '') },
+    { label: '成型周期', value: v(data.成型周期 ?? '') }
+  ]
+
+  const dateInfo: DetailItem[] = [
+    { label: '中标日期', value: formatDate(data.中标日期 ?? '') },
+    { label: '产品3D确认', value: formatDate(data.产品3D确认 ?? '') },
+    { label: '图纸下发日期', value: formatDate(data.图纸下发日期 ?? '') },
+    { label: '计划首样日期', value: formatDate(data.计划首样日期 ?? '') },
+    { label: '首次送样日期', value: formatDate(data.首次送样日期 ?? '') },
+    { label: '封样时间', value: formatDate(data.封样时间 ?? '') },
+    { label: '移模日期', value: formatDate(data.移模日期 ?? '') }
+  ]
+
+  const sections: DetailSection[] = []
+  if (baseInfo.some((item) => item.value !== '-')) {
+    sections.push({ title: '基本信息', items: baseInfo })
+  }
+  if (productInfo.some((item) => item.value !== '-')) {
+    sections.push({ title: '零件信息', items: productInfo })
+  }
+  if (mouldInfo.some((item) => item.value !== '-')) {
+    sections.push({ title: '模具信息', items: mouldInfo })
+  }
+  if (equipmentInfo.some((item) => item.value !== '-')) {
+    sections.push({ title: '设备信息', items: equipmentInfo })
+  }
+  if (dateInfo.some((item) => item.value !== '-')) {
+    sections.push({ title: '日期信息', items: dateInfo })
+  }
+
+  return sections
+})
 
 const viewDetailSections = computed<DetailSection[]>(() => {
   const data = viewData.value || {}
@@ -3509,6 +3967,14 @@ onMounted(() => {
   loadData()
   loadStatistics()
 })
+
+// 监听视图模式切换，重置选中状态
+watch(viewMode, (val) => {
+  if (val !== 'timeline') {
+    timelineActiveProjectCode.value = null
+    viewProjectData.value = null
+  }
+})
 </script>
 
 <style scoped>
@@ -3913,6 +4379,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.pm-view-mode-bar {
+  display: flex;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  justify-content: flex-end;
 }
 
 .view-mode-switch {
@@ -4615,6 +5088,230 @@ onMounted(() => {
   color: #409eff;
   background: rgb(255 255 255 / 100%);
   border-color: #409eff;
+}
+
+/* 时间轴视图样式 */
+.pm-timeline-layout {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.pm-timeline-left {
+  flex: 0 0 450px;
+  max-height: calc(100vh - 300px);
+  padding: 8px;
+  overflow: auto;
+  background-color: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.pm-timeline-right {
+  flex: 1;
+  max-height: calc(100vh - 300px);
+  padding: 8px 12px;
+  overflow: auto;
+  background-color: var(--el-bg-color);
+  border-radius: 8px;
+}
+
+.pm-group-block + .pm-group-block {
+  margin-top: 16px;
+}
+
+.pm-group-header {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--el-color-primary-light-9);
+  border-left: 3px solid var(--el-color-primary);
+  border-radius: 4px;
+}
+
+.pm-group-label {
+  color: var(--el-color-primary);
+}
+
+.pm-group-count {
+  margin-left: 4px;
+  font-weight: normal;
+  color: var(--el-text-color-secondary);
+}
+
+.pm-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pm-project-card {
+  padding: 12px;
+  cursor: pointer;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.pm-project-card:hover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+}
+
+.pm-project-card.is-active {
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary);
+}
+
+.pm-project-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.pm-project-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.pm-field-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pm-field-value {
+  display: flex;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pm-due-tag {
+  margin-left: 4px;
+}
+
+.pm-timeline-empty {
+  margin-top: 16px;
+}
+
+.pm-timeline-detail-panel {
+  width: 100%;
+}
+
+.pm-timeline-detail-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+}
+
+.view-dialog-section-header--timeline {
+  display: flex;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--el-border-color-light);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.view-dialog-section-header--timeline .view-dialog-section-main {
+  flex: 1;
+}
+
+.view-dialog-section-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.view-dialog-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 16px;
+}
+
+.view-dialog-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.view-dialog-info-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.view-dialog-info-value {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+  flex: 1;
+}
+
+.pm-timeline-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pm-timeline-detail-content {
+  margin-top: 16px;
+}
+
+.pm-timeline-detail-content .detail-section {
+  margin-bottom: 20px;
+}
+
+.pm-timeline-detail-content .detail-section-header {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.pm-timeline-detail-content .detail-grid {
+  display: grid;
+  padding: 8px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+}
+
+.pm-timeline-detail-content .detail-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px;
+}
+
+.pm-timeline-detail-content .detail-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pm-timeline-detail-content .detail-value {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+  flex: 1;
 }
 
 /* 响应式优化 */

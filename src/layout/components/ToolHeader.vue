@@ -56,11 +56,13 @@ export default defineComponent({
     const isSalesOrdersPage = computed(() => route.name === 'SalesOrdersIndex')
     const isOutboundDocumentPage = computed(() => route.name === 'OutboundDocumentIndex')
     const isSalaryPage = computed(() => route.name === 'Salary')
+    const isProjectManagementPage = computed(() => route.name === 'ProjectManagementIndex')
     const salesSummary = computed(() => appStore.getSalesOrdersSummary)
 
     type SalesOrdersViewMode = 'table' | 'timeline'
     type OutboundDocumentViewMode = 'table' | 'timeline'
     type SalaryViewMode = 'table' | 'timeline'
+    type ProjectManagementViewMode = 'table' | 'timeline'
 
     const salesOrdersViewMode = computed<SalesOrdersViewMode>({
       get() {
@@ -96,6 +98,19 @@ export default defineComponent({
       },
       set(val) {
         if (route.name !== 'Salary') return
+        const query = { ...route.query, view: val }
+        router.replace({ path: route.path, query })
+      }
+    })
+
+    const projectManagementViewMode = computed<ProjectManagementViewMode>({
+      get() {
+        const v = route.query.view
+        if (v === 'table' || v === 'timeline') return v as ProjectManagementViewMode
+        return 'table'
+      },
+      set(val) {
+        if (route.name !== 'ProjectManagementIndex') return
         const query = { ...route.query, view: val }
         router.replace({ path: route.path, query })
       }
@@ -190,6 +205,23 @@ export default defineComponent({
                 size="small"
                 modelValue={salaryViewMode.value}
                 onUpdate:modelValue={(val) => (salaryViewMode.value = val as SalaryViewMode)}
+              >
+                <ElRadioButton value="table">表格</ElRadioButton>
+                <ElRadioButton value="timeline">时间轴</ElRadioButton>
+              </ElRadioGroup>
+            </div>
+          ) : null}
+          {isProjectManagementPage.value && !isMobile.value ? (
+            <div class="flex items-center mr-3">
+              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
+                视图
+              </span>
+              <ElRadioGroup
+                size="small"
+                modelValue={projectManagementViewMode.value}
+                onUpdate:modelValue={(val) =>
+                  (projectManagementViewMode.value = val as ProjectManagementViewMode)
+                }
               >
                 <ElRadioButton value="table">表格</ElRadioButton>
                 <ElRadioButton value="timeline">时间轴</ElRadioButton>
