@@ -583,7 +583,7 @@
                   <span v-if="partTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
                 <!-- 左右并排布局 -->
-                <el-row :gutter="isMobile ? 8 : 12">
+                <el-row :gutter="isMobile ? 8 : 12" style="align-items: stretch">
                   <!-- 左侧：零件信息区块 -->
                   <el-col :xs="24" :sm="24" :lg="16">
                     <div class="pm-edit-section">
@@ -3869,11 +3869,14 @@ onMounted(() => {
 }
 
 .pm-edit-section {
+  display: flex;
+  height: 100%;
   padding: 12px 14px 4px;
   margin-bottom: 12px;
   background-color: #fff;
   border: 1px solid #ebeef5;
   border-radius: 8px;
+  flex-direction: column;
 }
 
 .pm-edit-section-title {
