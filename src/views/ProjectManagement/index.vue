@@ -2612,10 +2612,11 @@ const uploadPartImage = async (file: File) => {
 
   partImageUploading.value = true
 
+  // 保存旧的图片URL，如果上传失败则恢复
+  const oldImageUrl = editForm.零件图示URL
+
   try {
-    if (editForm.零件图示URL) {
-      await deleteTempPartImageIfNeeded(editForm.零件图示URL)
-    }
+    // 先上传新图片，成功后再删除旧图片
     const resp: any = await uploadProjectPartImageApi(projectCode, file)
     const pr: any = resp
     const url = pr?.data?.url || pr?.data?.data?.url || ''
@@ -2623,10 +2624,16 @@ const uploadPartImage = async (file: File) => {
       ElMessage.error(pr?.message || '上传失败')
       return
     }
+
+    // 上传成功后才删除旧图片
+    if (oldImageUrl) {
+      await deleteTempPartImageIfNeeded(oldImageUrl)
+    }
     editForm.零件图示URL = url
   } catch (error) {
     console.error('上传图示失败:', error)
     ElMessage.error('上传图示失败')
+    // 上传失败时保持旧图片URL不变
   } finally {
     partImageUploading.value = false
   }
@@ -3355,10 +3362,12 @@ const handleSubmitEdit = async () => {
   }
 
   editSubmitting.value = true
+  // 保存前记录当前图片URL，如果保存失败则清理临时图片
+  const currentImageUrl = editForm.零件图示URL
   try {
     if (currentProjectCode.value) {
       // 过滤掉 productName 和 productDrawing，这两个字段不属于项目管理表
-      // 同时过滤掉“分类”，它属于货物信息表，不应回写到项目管理表
+      // 同时过滤掉"分类"，它属于货物信息表，不应回写到项目管理表
       const { productName, productDrawing, 分类, ...updateData } = editForm as any
       await updateProjectApi(currentProjectCode.value, updateData)
       ElMessage.success('更新成功')
@@ -3378,6 +3387,14 @@ const handleSubmitEdit = async () => {
     loadStatistics()
   } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    // 保存失败时，如果当前图片是临时图片，清理它
+    if (currentImageUrl) {
+      await deleteTempPartImageIfNeeded(currentImageUrl)
+      // 如果清理的是当前显示的图片，清空URL
+      if (editForm.零件图示URL === currentImageUrl && isTempPartImageUrl(currentImageUrl)) {
+        editForm.零件图示URL = ''
+      }
+    }
   } finally {
     editSubmitting.value = false
   }

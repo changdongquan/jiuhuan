@@ -431,7 +431,7 @@ const cleanupEmptyParents = async (startPath, stopDir) => {
 }
 
 // 移动临时图片到正式目录
-const finalizePartImage = async (projectCode, imageUrl) => {
+const finalizePartImage = async (projectCode, imageUrl, isUpdate = false) => {
   const url = String(imageUrl || '').trim()
   if (!url) return null
   if (!url.startsWith(PROJECT_PART_IMAGE_TEMP_URL_PREFIX)) {
@@ -462,7 +462,34 @@ const finalizePartImage = async (projectCode, imageUrl) => {
   const toPath = path.join(finalFullDir, safeStoredFileName)
 
   try {
-    // 如果目标文件已存在，先删除
+    // 如果是更新操作，先查询并删除旧的正式图片文件（可能扩展名不同）
+    if (isUpdate) {
+      try {
+        const oldImageQuery = `SELECT TOP 1 [零件图示URL] FROM 项目管理 WHERE 项目编号 = @projectCode`
+        const oldImageResult = await query(oldImageQuery, { projectCode })
+        if (oldImageResult && oldImageResult.length > 0 && oldImageResult[0].零件图示URL) {
+          const oldImageUrl = String(oldImageResult[0].零件图示URL || '').trim()
+          // 如果旧图片是正式路径（不是临时路径），删除旧文件
+          if (oldImageUrl && !oldImageUrl.startsWith(PROJECT_PART_IMAGE_TEMP_URL_PREFIX)) {
+            const oldImagePath = resolveStoredPartImagePath(oldImageUrl)
+            if (oldImagePath && fs.existsSync(oldImagePath)) {
+              try {
+                await fsp.unlink(oldImagePath)
+                console.log('[归档零件图示] 已删除旧正式图片:', oldImagePath)
+                // 清理空目录
+                await cleanupEmptyParents(oldImagePath, FILE_ROOT)
+              } catch (e) {
+                console.warn('[归档零件图示] 删除旧正式图片失败（忽略）:', e)
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[归档零件图示] 查询旧图片失败（忽略）:', e)
+      }
+    }
+
+    // 如果目标文件已存在，先删除（同名文件）
     if (fs.existsSync(toPath)) {
       await fsp.unlink(toPath)
     }
@@ -1470,8 +1497,8 @@ router.put('/update', async (req, res) => {
           // 字段不存在，移除该字段，不阻止其他字段的更新
           delete data.零件图示URL
         } else {
-          // 字段存在，处理图片移动
-          const finalUrl = await finalizePartImage(projectCode, data.零件图示URL)
+          // 字段存在，处理图片移动（更新操作，需要删除旧文件）
+          const finalUrl = await finalizePartImage(projectCode, data.零件图示URL, true)
           if (finalUrl) {
             data.零件图示URL = finalUrl
           }
