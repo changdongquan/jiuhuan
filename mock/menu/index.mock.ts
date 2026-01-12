@@ -432,7 +432,7 @@ const businessMenus: MenuNode[] = [
     title: '供方信息',
     meta: {
       title: '供方信息',
-      icon: 'vi-ep:user-filled'
+      icon: 'vi-ep:shop'
     },
     children: [
       {
@@ -446,7 +446,7 @@ const businessMenus: MenuNode[] = [
         title: '供方信息',
         meta: {
           title: '供方信息',
-          icon: 'vi-ep:user-filled'
+          icon: 'vi-ep:shop'
         }
       }
     ]

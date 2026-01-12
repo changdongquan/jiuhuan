@@ -301,7 +301,7 @@ const adminList = [
     name: 'SupplierInfo',
     meta: {
       title: '供方信息',
-      icon: 'vi-ep:user-filled'
+      icon: 'vi-ep:shop'
     },
     children: [
       {
@@ -310,7 +310,7 @@ const adminList = [
         name: 'SupplierInfoIndex',
         meta: {
           title: '供方信息',
-          icon: 'vi-ep:user-filled',
+          icon: 'vi-ep:shop',
           noCache: true
         }
       }

@@ -427,7 +427,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     name: 'SupplierInfo',
     meta: {
       title: '供方信息',
-      icon: 'vi-ep:user-filled'
+      icon: 'vi-ep:shop'
     },
     children: [
       {
@@ -436,7 +436,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         component: () => import('@/views/SupplierInfo/index.vue'),
         meta: {
           title: '供方信息',
-          icon: 'vi-ep:user-filled',
+          icon: 'vi-ep:shop',
           roles: ['*'],
           noCache: true
         }
