@@ -645,7 +645,8 @@ router.get('/detail', async (req, res) => {
           p.模具尺寸,
           p.模具重量,
           p.流道类型,
-          p.流道数量
+          p.流道数量,
+          p.零件图示URL
         FROM 出库单明细 od
         LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号
         WHERE od.出库单号 = @documentNo

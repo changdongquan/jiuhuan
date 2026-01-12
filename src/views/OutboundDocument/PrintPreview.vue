@@ -308,7 +308,7 @@ onUnmounted(() => {
 <style scoped>
 @media print {
   @page {
-    margin: 12mm;
+    margin: 0;
     size: a4;
   }
 
