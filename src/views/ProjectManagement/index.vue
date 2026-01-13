@@ -638,6 +638,15 @@
       </template>
     </el-dialog>
 
+    <!-- 初始化对话框（编辑前，仅需一次） -->
+    <ProjectInitDialog
+      v-model="initDialogVisible"
+      :project="editForm"
+      :initial-groups="initDialogInitialGroups"
+      :is-mobile="isMobile"
+      @complete="handleInitComplete"
+    />
+
     <!-- 编辑对话框 -->
     <el-dialog
       v-model="editDialogVisible"
@@ -1776,10 +1785,23 @@
         </el-form>
       </div>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
-          >保存</el-button
-        >
+        <div class="pm-edit-footer">
+          <el-button
+            v-if="currentProjectCode"
+            type="warning"
+            plain
+            :disabled="editSubmitting"
+            @click="handleResetInit"
+          >
+            重置初始化
+          </el-button>
+          <div class="pm-edit-footer__right">
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
+              >保存</el-button
+            >
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -1790,6 +1812,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
+import ProjectInitDialog from './components/ProjectInitDialog.vue'
 import {
   getProjectListApi,
   getProjectDetailApi,
@@ -2063,6 +2086,44 @@ const tripartiteAgreementDownloading = ref(false)
 const currentProjectCode = ref('')
 const editDialogBodyRef = ref<HTMLElement>()
 const editDialogBaseHeight = ref<number>()
+
+type InitProductGroupPersisted = {
+  id: string
+  name: string
+  cavityCount: number
+}
+
+const initDialogVisible = ref(false)
+const initDialogInitialGroups = ref<InitProductGroupPersisted[] | null>(null)
+
+const isInitDone = (val: unknown) => {
+  if (val === true) return true
+  if (val === false) return false
+  const n = Number(val)
+  return Number.isFinite(n) ? n === 1 : false
+}
+
+const shouldShowInitDialog = (projectCode: string) => {
+  if (!projectCode) return false
+  return !isInitDone((editForm as any).init_done)
+}
+
+const toSafeCavity = (value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 1
+  return Math.min(64, Math.max(1, Math.round(n)))
+}
+
+const buildDefaultInitGroups = (
+  projectCode: string,
+  fallbackCavity: unknown
+): InitProductGroupPersisted[] => [
+  {
+    id: `g_${projectCode || 'tmp'}_0`,
+    name: '产品组 1',
+    cavityCount: toSafeCavity(fallbackCavity)
+  }
+]
 
 const runnerTypeOptions = [
   { label: '开放式热流道', value: '开放式热流道' },
@@ -3006,6 +3067,73 @@ const handleEditFromView = () => {
   setTimeout(() => handleEdit(viewData.value), 100)
 }
 
+const handleResetInit = async () => {
+  const projectCode = currentProjectCode.value
+  if (!projectCode) return
+
+  try {
+    await ElMessageBox.confirm(
+      '将重置该项目的初始化标记，并在关闭编辑后重新进入初始化流程。是否继续？',
+      '重置初始化',
+      {
+        type: 'warning',
+        confirmButtonText: '继续',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
+  // 方案 A：重置数据库标记（允许再次初始化）
+  try {
+    await updateProjectApi(projectCode, { init_done: 0 })
+    ;(editForm as any).init_done = 0
+  } catch {
+    ElMessage.error('重置初始化失败')
+    return
+  }
+
+  initDialogInitialGroups.value = buildDefaultInitGroups(projectCode, (editForm as any).模具穴数)
+
+  editDialogVisible.value = false
+  nextTick(() => {
+    initDialogVisible.value = true
+  })
+}
+
+const openEditDialog = async () => {
+  editDialogVisible.value = true
+
+  const projectCode = currentProjectCode.value
+  if (projectCode) {
+    loadAttachments()
+    loadProductionTaskAttachments()
+  }
+}
+
+const handleInitComplete = async (groups: InitProductGroupPersisted[]) => {
+  const projectCode = currentProjectCode.value
+  if (!projectCode) return
+
+  const safeGroups = (groups || []).map((g) => ({
+    cavityCount: toSafeCavity(g?.cavityCount)
+  }))
+
+  const total = safeGroups.reduce((sum, g) => sum + toSafeCavity(g.cavityCount), 0)
+  ;(editForm as any).模具穴数 = String(total)
+
+  try {
+    // 方案 A：初始化完成立即写回数据库，确保之后不再弹窗
+    await updateProjectApi(projectCode, { 模具穴数: String(total), init_done: 1 })
+    ;(editForm as any).init_done = 1
+  } catch {
+    ElMessage.error('初始化写入失败（下次仍可能提示初始化）')
+  }
+
+  nextTick(() => openEditDialog())
+}
+
 const handleEdit = async (row: Partial<ProjectInfo>) => {
   editTitle.value = '编辑项目'
   const projectCode = row.项目编号 || ''
@@ -3036,13 +3164,13 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
     handleMachineTonnageChange(machineTonnageModel.value)
   }
 
-  editDialogVisible.value = true
-
-  // 加载附件列表
-  if (projectCode) {
-    loadAttachments()
-    loadProductionTaskAttachments()
+  if (shouldShowInitDialog(projectCode)) {
+    initDialogInitialGroups.value = buildDefaultInitGroups(projectCode, (editForm as any).模具穴数)
+    initDialogVisible.value = true
+    return
   }
+
+  openEditDialog()
 }
 
 // 附件相关状态
@@ -4020,6 +4148,8 @@ watch(viewMode, (val) => {
 </script>
 
 <style scoped>
+
+
 @media (width <= 1200px) {
   .detail-grid {
     flex-wrap: wrap;
@@ -4250,6 +4380,19 @@ watch(viewMode, (val) => {
   .pm-timeline-detail-table {
     min-width: 600px;
   }
+}
+
+.pm-edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pm-edit-footer__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .query-form {

@@ -55,6 +55,11 @@ export interface ProjectInfo {
   流道数量?: number | null
   费用出处?: string
   零件图示URL?: string // 零件图示URL（相对路径）
+
+  // 初始化标记（方案 A）
+  init_done?: number | boolean
+  init_done_at?: string
+  init_done_by?: number
 }
 
 // 项目查询参数
