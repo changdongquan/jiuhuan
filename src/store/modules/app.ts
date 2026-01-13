@@ -39,6 +39,12 @@ interface AppState {
     pendingInStock: number
     pendingShipped: number
   }
+  projectManagementSummary: {
+    totalProjects: number
+    designingProjects: number
+    processingProjects: number
+    completedProjects: number
+  }
 }
 
 export const useAppStore = defineStore('app', {
@@ -105,6 +111,13 @@ export const useAppStore = defineStore('app', {
         monthTotalAmount: 0,
         pendingInStock: 0,
         pendingShipped: 0
+      },
+      // 项目管理顶部统计信息
+      projectManagementSummary: {
+        totalProjects: 0,
+        designingProjects: 0,
+        processingProjects: 0,
+        completedProjects: 0
       }
     }
   },
@@ -186,6 +199,9 @@ export const useAppStore = defineStore('app', {
     },
     getSalesOrdersSummary(): AppState['salesOrdersSummary'] {
       return this.salesOrdersSummary
+    },
+    getProjectManagementSummary(): AppState['projectManagementSummary'] {
+      return this.projectManagementSummary
     }
   },
   actions: {
@@ -281,6 +297,9 @@ export const useAppStore = defineStore('app', {
     },
     setSalesOrdersSummary(payload: Partial<AppState['salesOrdersSummary']>) {
       this.salesOrdersSummary = Object.assign({}, this.salesOrdersSummary, payload)
+    },
+    setProjectManagementSummary(payload: Partial<AppState['projectManagementSummary']>) {
+      this.projectManagementSummary = Object.assign({}, this.projectManagementSummary, payload)
     },
     setPrimaryLight() {
       if (this.theme.elColorPrimary) {

@@ -58,6 +58,7 @@ export default defineComponent({
     const isSalaryPage = computed(() => route.name === 'Salary')
     const isProjectManagementPage = computed(() => route.name === 'ProjectManagementIndex')
     const salesSummary = computed(() => appStore.getSalesOrdersSummary)
+    const projectManagementSummary = computed(() => appStore.getProjectManagementSummary)
 
     type SalesOrdersViewMode = 'table' | 'timeline'
     type OutboundDocumentViewMode = 'table' | 'timeline'
@@ -156,6 +157,36 @@ export default defineComponent({
               <div class="tool-header-summary-card tool-header-summary-card--pending-out">
                 <div class="title">待出运</div>
                 <div class="value">{salesSummary.value.pendingShipped ?? 0}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 顶部居中的项目管理统计卡片 */}
+        {isProjectManagementPage.value && !isMobile.value ? (
+          <div class="tool-header-summary-center">
+            <div class="tool-header-summary-cards">
+              <div class="tool-header-summary-card tool-header-summary-card--blue">
+                <div class="title">项目总数</div>
+                <div class="value">
+                  {Math.max(
+                    0,
+                    (projectManagementSummary.value.totalProjects || 0) -
+                      (projectManagementSummary.value.completedProjects || 0)
+                  )}
+                </div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--green">
+                <div class="title">设计中</div>
+                <div class="value">{projectManagementSummary.value.designingProjects ?? 0}</div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--orange">
+                <div class="title">加工中</div>
+                <div class="value">{projectManagementSummary.value.processingProjects ?? 0}</div>
+              </div>
+              <div class="tool-header-summary-card tool-header-summary-card--purple">
+                <div class="title">已经移模</div>
+                <div class="value">{projectManagementSummary.value.completedProjects ?? 0}</div>
               </div>
             </div>
           </div>
@@ -333,6 +364,43 @@ export default defineComponent({
 
   .tool-header-summary-card--pending-out .title,
   .tool-header-summary-card--pending-out .value {
+    color: #909399;
+  }
+
+  /* 项目管理页面卡片颜色 */
+  .tool-header-summary-card--blue {
+    background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+  }
+
+  .tool-header-summary-card--blue .title,
+  .tool-header-summary-card--blue .value {
+    color: #409eff;
+  }
+
+  .tool-header-summary-card--green {
+    background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+  }
+
+  .tool-header-summary-card--green .title,
+  .tool-header-summary-card--green .value {
+    color: #67c23a;
+  }
+
+  .tool-header-summary-card--orange {
+    background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+  }
+
+  .tool-header-summary-card--orange .title,
+  .tool-header-summary-card--orange .value {
+    color: #e6a23c;
+  }
+
+  .tool-header-summary-card--purple {
+    background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+  }
+
+  .tool-header-summary-card--purple .title,
+  .tool-header-summary-card--purple .value {
     color: #909399;
   }
 }
