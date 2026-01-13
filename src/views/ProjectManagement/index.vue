@@ -202,6 +202,24 @@
               <div class="view-dialog-section-main">
                 <h3 class="view-dialog-section-title">项目基本信息</h3>
                 <div class="view-dialog-info-grid">
+                  <div class="pm-timeline-basic-image">
+                    <template v-if="viewProjectData.零件图示URL">
+                      <el-image
+                        class="pm-timeline-basic-image__img"
+                        :src="toPartImageDisplayUrl(viewProjectData.零件图示URL)"
+                        :preview-src-list="[toPartImageDisplayUrl(viewProjectData.零件图示URL)]"
+                        :preview-teleported="true"
+                        fit="contain"
+                      />
+                    </template>
+                    <div v-else class="pm-timeline-basic-image__empty">暂无图示</div>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">项目名称：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.项目名称 || '-'
+                    }}</span>
+                  </div>
                   <div class="view-dialog-info-item">
                     <span class="view-dialog-info-label">项目编号：</span>
                     <span class="view-dialog-info-value">{{
@@ -233,6 +251,12 @@
                     }}</span>
                   </div>
                   <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">制件厂家：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.制件厂家 || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
                     <span class="view-dialog-info-label">计划首样：</span>
                     <span class="view-dialog-info-value">{{
                       formatDate(viewProjectData.计划首样日期) || '-'
@@ -249,6 +273,16 @@
                     <span class="view-dialog-info-value">{{
                       formatDate(viewProjectData.移模日期) || '-'
                     }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">进度影响原因：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.进度影响原因 || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">备注：</span>
+                    <span class="view-dialog-info-value">{{ viewProjectData.备注 || '-' }}</span>
                   </div>
                 </div>
               </div>
@@ -2781,18 +2815,6 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
     return typeof res === 'number' ? String(res) : (res ?? '-')
   }
 
-  const baseInfo: DetailItem[] = [
-    { label: '项目编号', value: v(data.项目编号 ?? '') },
-    { label: '项目状态', value: v(data.项目状态 ?? ''), tag: true },
-    { label: '项目名称', value: v(data.项目名称 ?? '') },
-    { label: '产品名称', value: v(data.productName ?? '') },
-    { label: '产品图号', value: v(data.productDrawing ?? '') },
-    { label: '客户模号', value: v(data.客户模号 ?? '') },
-    { label: '制件厂家', value: v(data.制件厂家 ?? '') },
-    { label: '进度影响原因', value: v(data.进度影响原因 ?? '') },
-    { label: '备注', value: v(data.备注 ?? '') }
-  ]
-
   const productInfo: DetailItem[] = [
     { label: '产品尺寸', value: v(data.产品尺寸 ?? '') },
     { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
@@ -2835,7 +2857,6 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
   ]
 
   return [
-    { title: '基本信息', items: baseInfo },
     { title: '零件信息', items: productInfo },
     { title: '模具信息', items: mouldInfo },
     { title: '设备信息', items: equipmentInfo },
@@ -3774,6 +3795,8 @@ const handleSubmitEdit = async () => {
   // 兜底：避免“勾选/输入后立刻保存”导致 watcher 未及时同步到 editForm
   syncCorePullToForm()
 
+  const savedProjectCode = currentProjectCode.value || editForm.项目编号 || ''
+
   try {
     await editFormRef.value.validate()
   } catch {
@@ -3853,8 +3876,15 @@ const handleSubmitEdit = async () => {
       ElMessage.success('创建成功')
     }
     editDialogVisible.value = false
-    loadData()
-    loadStatistics()
+    await Promise.all([loadData(), loadStatistics()])
+    if (
+      !isMobile.value &&
+      viewMode.value === 'timeline' &&
+      savedProjectCode &&
+      timelineActiveProjectCode.value === savedProjectCode
+    ) {
+      await loadProjectForTimeline(savedProjectCode)
+    }
   } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
     // 保存失败时，如果当前图片是临时图片，清理它
@@ -5264,12 +5294,35 @@ watch(viewMode, (val) => {
 
 .view-dialog-info-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 220px;
   gap: 8px 16px;
 }
 
 .view-dialog-info-label {
   color: #666;
+}
+
+.pm-timeline-basic-image {
+  display: flex;
+  min-height: 120px;
+  overflow: hidden;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  grid-column: 4;
+  grid-row: 1 / span 4;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-timeline-basic-image__img {
+  width: 100%;
+  height: 100%;
+}
+
+.pm-timeline-basic-image__empty {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .view-dialog-section-title {
