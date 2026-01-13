@@ -1,49 +1,37 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="初始化"
     :width="isMobile ? '100%' : '980px'"
     :fullscreen="isMobile"
     :close-on-click-modal="false"
     class="pm-init-dialog"
     @closed="handleClosed"
   >
-    <el-steps :active="step" align-center class="pm-init-steps">
-      <el-step title="项目信息" description="确认项目编号与基础信息" />
-      <el-step title="模具穴数" description="按产品组初始化穴数" />
-    </el-steps>
-
-    <div class="pm-init-body">
-      <div v-show="step === 0" class="pm-init-step">
-        <el-alert
-          type="info"
-          :closable="false"
-          title="初始化仅需完成一次，完成后将不再弹出。"
-          class="pm-init-alert"
-        />
-        <el-descriptions :column="isMobile ? 1 : 2" border class="pm-init-desc">
-          <el-descriptions-item label="项目编号">
-            {{ project?.项目编号 || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="项目名称">
-            {{ project?.项目名称 || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="产品名称">
-            {{ project?.productName || project?.产品名称 || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="产品图号">
-            {{ project?.productDrawing || project?.产品图号 || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="客户模号">
-            {{ project?.客户模号 || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="当前模具穴数">
-            {{ project?.模具穴数 || '-' }}
-          </el-descriptions-item>
-        </el-descriptions>
+    <template #title>
+      <div class="pm-init-dialog-title">
+        <span>初始化</span>
+        <el-text type="info" size="small" class="pm-init-title-tip">
+          初始化仅需完成一次，完成后将不再弹出。
+        </el-text>
       </div>
+    </template>
+    <div class="pm-init-body">
+      <el-descriptions :column="isMobile ? 1 : 3" border class="pm-init-desc">
+        <el-descriptions-item label="项目编号">
+          {{ project?.项目编号 || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="产品名称">
+          {{ project?.productName || project?.产品名称 || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="产品图号">
+          {{ project?.productDrawing || project?.产品图号 || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="客户模号">
+          {{ project?.客户模号 || '-' }}
+        </el-descriptions-item>
+      </el-descriptions>
 
-      <div v-show="step === 1" class="pm-init-step">
+      <div class="pm-init-groups-section">
         <div class="pm-init-groups-header">
           <div class="pm-init-groups-title">
             <div class="pm-init-groups-title__main">产品组</div>
@@ -52,7 +40,12 @@
           <el-button type="primary" plain @click="handleAddGroup">+ 添加产品组</el-button>
         </div>
 
-        <VueDraggable v-model="groups" handle=".pm-init-group__drag" :animation="150">
+        <VueDraggable
+          v-model="groups"
+          handle=".pm-init-group__drag"
+          :animation="150"
+          class="pm-init-groups-grid"
+        >
           <div v-for="(group, index) in groups" :key="group.id" class="pm-init-group-wrap">
             <el-card
               shadow="hover"
@@ -70,32 +63,6 @@
                   </div>
                 </div>
                 <div class="pm-init-group__right" @click.stop>
-                  <div class="pm-init-group__cavity">
-                    <el-button
-                      size="small"
-                      :disabled="group.cavityCount <= 1"
-                      @click="decCavity(group.id)"
-                    >
-                      -
-                    </el-button>
-                    <el-input-number
-                      v-model="group.cavityCount"
-                      :min="1"
-                      :max="64"
-                      :controls="false"
-                      size="small"
-                      class="pm-init-group__cavity-input"
-                      @change="normalizeCavity(group.id)"
-                      @click.stop
-                    />
-                    <el-button
-                      size="small"
-                      :disabled="group.cavityCount >= 64"
-                      @click="incCavity(group.id)"
-                    >
-                      +
-                    </el-button>
-                  </div>
                   <el-button
                     text
                     type="danger"
@@ -136,8 +103,7 @@
     <template #footer>
       <div class="pm-init-footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button v-if="step === 0" type="primary" @click="step = 1">下一步</el-button>
-        <el-button v-else type="primary" @click="handleComplete">完成并进入编辑</el-button>
+        <el-button type="primary" @click="handleComplete">完成并进入编辑</el-button>
       </div>
     </template>
   </el-dialog>
@@ -173,7 +139,6 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v)
 })
 
-const step = ref(0)
 const groups = ref<InitProductGroup[]>([])
 
 const toSafeCavity = (value: unknown) => {
@@ -182,28 +147,54 @@ const toSafeCavity = (value: unknown) => {
   return Math.min(64, Math.max(1, Math.round(n)))
 }
 
-const makeDefaultGroup = (index: number, cavityCount: number): InitProductGroup => ({
-  id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_${index}`,
-  name: `产品组 ${index + 1}`,
-  cavityCount: toSafeCavity(cavityCount),
-  expanded: false
-})
+const getProductDrawing = () => {
+  return props.project?.productDrawing || props.project?.产品图号 || ''
+}
+
+const makeDefaultGroup = (
+  index: number,
+  cavityCount: number,
+  defaultName?: string
+): InitProductGroup => {
+  // 如果传入了 defaultName，优先使用；否则尝试获取产品图号；最后使用默认名称
+  let name = defaultName
+  if (!name) {
+    const productDrawing = getProductDrawing()
+    name = productDrawing || `产品组 ${index + 1}`
+  }
+  return {
+    id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_${index}`,
+    name,
+    cavityCount: toSafeCavity(cavityCount),
+    expanded: true
+  }
+}
 
 const resetFromProps = () => {
-  step.value = 0
   const initial = props.initialGroups || []
+  const productDrawing = getProductDrawing()
+
   if (initial.length) {
     groups.value = initial.map((g, idx) => ({
       id: g.id || makeDefaultGroup(idx, g.cavityCount).id,
-      name: g.name || `产品组 ${idx + 1}`,
+      name: g.name || productDrawing || `产品组 ${idx + 1}`,
       cavityCount: toSafeCavity(g.cavityCount),
-      expanded: false
+      expanded: true
     }))
     return
   }
 
+  // 没有初始数据时，创建默认产品组1，使用产品图号作为名称
   const fallback = toSafeCavity((props.project as any)?.模具穴数)
-  groups.value = [makeDefaultGroup(0, fallback)]
+  const defaultName = productDrawing || `产品组 1`
+  groups.value = [
+    {
+      id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_0`,
+      name: defaultName,
+      cavityCount: fallback,
+      expanded: true
+    }
+  ]
 }
 
 watch(
@@ -212,6 +203,24 @@ watch(
     if (!v) return
     resetFromProps()
   }
+)
+
+// 监听项目数据变化，如果产品组名称是默认的，且有产品图号，则更新名称
+watch(
+  () => props.project,
+  () => {
+    if (!props.modelValue) return
+    const productDrawing = getProductDrawing()
+    if (productDrawing && groups.value.length > 0) {
+      groups.value.forEach((group) => {
+        // 如果名称是默认格式（产品组 X），且有产品图号，则使用产品图号
+        if (/^产品组 \d+$/.test(group.name)) {
+          group.name = productDrawing
+        }
+      })
+    }
+  },
+  { deep: true, immediate: true }
 )
 
 const totalCavityCount = computed(() =>
@@ -230,18 +239,6 @@ const normalizeCavity = (id: string) => {
   group.cavityCount = toSafeCavity(group.cavityCount)
 }
 
-const decCavity = (id: string) => {
-  const group = groups.value.find((g) => g.id === id)
-  if (!group) return
-  group.cavityCount = toSafeCavity(group.cavityCount - 1)
-}
-
-const incCavity = (id: string) => {
-  const group = groups.value.find((g) => g.id === id)
-  if (!group) return
-  group.cavityCount = toSafeCavity(group.cavityCount + 1)
-}
-
 const handleAddGroup = () => {
   groups.value.push(makeDefaultGroup(groups.value.length, 1))
 }
@@ -249,6 +246,16 @@ const handleAddGroup = () => {
 const handleDeleteGroup = (id: string) => {
   if (groups.value.length <= 1) return
   groups.value = groups.value.filter((g) => g.id !== id)
+
+  // 重新编号使用默认名称的产品组
+  let defaultIndex = 1
+  groups.value.forEach((group) => {
+    // 如果名称是默认格式（产品组 X），则重新编号
+    if (/^产品组 \d+$/.test(group.name)) {
+      group.name = `产品组 ${defaultIndex}`
+      defaultIndex++
+    }
+  })
 }
 
 const handleComplete = () => {
@@ -267,17 +274,27 @@ const handleComplete = () => {
 }
 
 const handleClosed = () => {
-  step.value = 0
+  // 弹窗关闭时的清理逻辑（如需要）
 }
 </script>
 
 <style scoped>
-.pm-init-steps {
-  margin-bottom: 12px;
+.pm-init-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.pm-init-alert {
-  margin-bottom: 12px;
+.pm-init-title-tip {
+  font-weight: normal;
+}
+
+.pm-init-desc {
+  margin-bottom: 20px;
+}
+
+.pm-init-groups-section {
+  margin-top: 20px;
 }
 
 .pm-init-groups-header {
@@ -297,8 +314,16 @@ const handleClosed = () => {
   color: var(--el-text-color-secondary);
 }
 
-.pm-init-group-wrap + .pm-init-group-wrap {
-  margin-top: 10px;
+.pm-init-groups-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (width <= 768px) {
+  .pm-init-groups-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .pm-init-group {
@@ -336,16 +361,6 @@ const handleClosed = () => {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-}
-
-.pm-init-group__cavity {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pm-init-group__cavity-input {
-  width: 110px;
 }
 
 .pm-init-group__detail {
