@@ -18,6 +18,36 @@
         </el-radio-group>
       </div>
     </div>
+    <!-- 统计卡片：手机端在内容区显示，PC端在顶部工具栏显示 -->
+    <el-row :gutter="12" class="pm-summary-row" v-if="isMobile && showMobileSummary">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--blue">
+          <div class="summary-title">项目总数</div>
+          <div class="summary-value">{{
+            Math.max(0, (summary.totalProjects || 0) - (summary.completedProjects || 0))
+          }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--green">
+          <div class="summary-title">设计中</div>
+          <div class="summary-value">{{ summary.designingProjects }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--orange">
+          <div class="summary-title">加工中</div>
+          <div class="summary-value">{{ summary.processingProjects }}</div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover" class="summary-card summary-card--purple">
+          <div class="summary-title">已经移模</div>
+          <div class="summary-value">{{ summary.completedProjects }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-form
       ref="queryFormRef"
       :model="queryForm"
@@ -74,35 +104,6 @@
         </div>
       </el-form-item>
     </el-form>
-
-    <el-row :gutter="16" v-show="!isMobile || showMobileSummary">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
-          <div class="summary-title">项目总数</div>
-          <div class="summary-value">{{
-            Math.max(0, (summary.totalProjects || 0) - (summary.completedProjects || 0))
-          }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--green">
-          <div class="summary-title">设计中</div>
-          <div class="summary-value">{{ summary.designingProjects }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
-          <div class="summary-title">加工中</div>
-          <div class="summary-value">{{ summary.processingProjects }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--purple">
-          <div class="summary-title">已经移模</div>
-          <div class="summary-value">{{ summary.completedProjects }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
 
     <!-- PC 时间轴视图 -->
     <div v-if="!isMobile && viewMode === 'timeline'" class="pm-timeline-layout">
@@ -183,7 +184,7 @@
             <template #description>
               <div>
                 <p>当前条件下暂无项目数据</p>
-                <p style=" margin-top: 8px;font-size: 12px; color: #999">
+                <p style="margin-top: 8px; font-size: 12px; color: #999">
                   提示：时间轴视图需要产品图号字段有值才能进行分组
                 </p>
                 <p style="font-size: 12px; color: #999">
@@ -227,19 +228,12 @@
                   </div>
                   <div class="view-dialog-info-item">
                     <span class="view-dialog-info-label">项目状态：</span>
-                    <span class="view-dialog-info-value">
-                      <el-tag
-                        :type="getStatusTagType(viewProjectData.项目状态)"
-                        size="small"
-                        class="pm-status-tag"
-                        :class="getStatusTagClass(viewProjectData.项目状态)"
-                      >
-                        {{ viewProjectData.项目状态 || '-' }}
-                      </el-tag>
-                    </span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.项目状态 || '-'
+                    }}</span>
                   </div>
                   <div class="view-dialog-info-item">
-                    <span class="view-dialog-info-label">计划首样日期：</span>
+                    <span class="view-dialog-info-label">计划首样：</span>
                     <span class="view-dialog-info-value">{{
                       formatDate(viewProjectData.计划首样日期) || '-'
                     }}</span>
@@ -268,30 +262,50 @@
             <div
               v-for="section in timelineDetailSections"
               :key="section.title"
-              class="detail-section"
+              class="pm-timeline-detail-section"
             >
-              <div class="detail-section-header">{{ section.title }}</div>
-              <div class="detail-grid">
-                <div v-for="item in section.items" :key="item.label" class="detail-cell">
-                  <span class="detail-label">{{ item.label }}</span>
-                  <span class="detail-value">
-                    <template v-if="item.tag">
-                      <el-tag
-                        :type="getStatusTagType(item.value as string)"
-                        class="pm-status-tag"
-                        :class="getStatusTagClass(item.value as string)"
+              <h3 class="pm-timeline-detail-section-title">{{ section.title }}</h3>
+              <div class="pm-timeline-detail-table-wrapper">
+                <table class="pm-timeline-detail-table">
+                  <thead>
+                    <tr>
+                      <th
+                        v-for="(item, index) in section.items"
+                        :key="index"
+                        class="pm-timeline-table-header"
                       >
-                        {{ item.value || '-' }}
-                      </el-tag>
-                    </template>
-                    <template v-else>
-                      {{ item.value || '-' }}
-                    </template>
-                  </span>
-                </div>
+                        {{ item.label }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td
+                        v-for="(item, index) in section.items"
+                        :key="index"
+                        class="pm-timeline-table-cell"
+                      >
+                        <template v-if="item.tag && item.value && item.value !== '-'">
+                          <el-tag
+                            :type="getStatusTagType(item.value as string)"
+                            size="small"
+                            class="pm-status-tag"
+                            :class="getStatusTagClass(item.value as string)"
+                          >
+                            {{ item.value || '-' }}
+                          </el-tag>
+                        </template>
+                        <template v-else>
+                          {{ item.value || '-' }}
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
+          <el-empty v-else description="暂无详情" />
         </div>
         <div v-else class="pm-timeline-detail-panel-empty">
           <el-empty description="请选择左侧分组中的项目" />
@@ -1810,7 +1824,8 @@ const resolvePcViewModeFromRoute = (): ViewMode => {
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolvePcViewModeFromRoute())
 const showMobileFilters = ref(false)
 const showMobileSummary = ref(false)
-const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 300px)'))
+// PC 端表格高度：对齐“销售订单”页面
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 220px)'))
 
 // 分页组件布局：PC 端保留完整布局，手机端精简，避免内容被遮挡
 const paginationLayout = computed(() =>
@@ -2643,6 +2658,14 @@ const loadStatistics = async () => {
       summary.processingProjects = response.data.processingProjects || 0
       summary.surfaceTreatingProjects = response.data.surfaceTreatingProjects || 0
       summary.completedProjects = response.data.completedProjects || 0
+
+      // 同步到store，用于工具栏显示
+      appStore.setProjectManagementSummary({
+        totalProjects: summary.totalProjects,
+        designingProjects: summary.designingProjects,
+        processingProjects: summary.processingProjects,
+        completedProjects: summary.completedProjects
+      })
     }
   } catch (error) {
     console.error('加载统计信息失败:', error)
@@ -2811,24 +2834,13 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
     { label: '移模日期', value: formatDate(data.移模日期 ?? '') }
   ]
 
-  const sections: DetailSection[] = []
-  if (baseInfo.some((item) => item.value !== '-')) {
-    sections.push({ title: '基本信息', items: baseInfo })
-  }
-  if (productInfo.some((item) => item.value !== '-')) {
-    sections.push({ title: '零件信息', items: productInfo })
-  }
-  if (mouldInfo.some((item) => item.value !== '-')) {
-    sections.push({ title: '模具信息', items: mouldInfo })
-  }
-  if (equipmentInfo.some((item) => item.value !== '-')) {
-    sections.push({ title: '设备信息', items: equipmentInfo })
-  }
-  if (dateInfo.some((item) => item.value !== '-')) {
-    sections.push({ title: '日期信息', items: dateInfo })
-  }
-
-  return sections
+  return [
+    { title: '基本信息', items: baseInfo },
+    { title: '零件信息', items: productInfo },
+    { title: '模具信息', items: mouldInfo },
+    { title: '设备信息', items: equipmentInfo },
+    { title: '日期信息', items: dateInfo }
+  ]
 })
 
 const viewDetailSections = computed<DetailSection[]>(() => {
@@ -4196,6 +4208,20 @@ watch(viewMode, (val) => {
   }
 }
 
+/* 响应式优化 - 表格在小屏幕上允许横向滚动 */
+@media (width <= 768px) {
+  .pm-timeline-basic-table-wrapper,
+  .pm-timeline-detail-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pm-timeline-basic-table,
+  .pm-timeline-detail-table {
+    min-width: 600px;
+  }
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -4744,7 +4770,7 @@ watch(viewMode, (val) => {
 /* 统计卡片样式 */
 .summary-card {
   display: flex;
-  height: 64px;
+  height: 56px;
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;
@@ -4821,12 +4847,14 @@ watch(viewMode, (val) => {
 .summary-title {
   font-size: 13px;
   font-weight: 500;
+  line-height: 18px;
 }
 
 .summary-value {
   margin-top: 2px;
   font-size: 20px;
   font-weight: 600;
+  line-height: 24px;
 }
 
 /* 压缩统计卡片高度，并垂直居中内容 */
@@ -5099,7 +5127,7 @@ watch(viewMode, (val) => {
 
 .pm-timeline-left {
   flex: 0 0 450px;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 220px);
   padding: 8px;
   overflow: auto;
   background-color: var(--el-bg-color);
@@ -5108,7 +5136,7 @@ watch(viewMode, (val) => {
 
 .pm-timeline-right {
   flex: 1;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 220px);
   padding: 8px 12px;
   overflow: auto;
   background-color: var(--el-bg-color);
@@ -5217,8 +5245,8 @@ watch(viewMode, (val) => {
 
 .view-dialog-section-header--timeline {
   display: flex;
-  padding-bottom: 12px;
-  margin-bottom: 16px;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--el-border-color-light);
   justify-content: space-between;
   align-items: flex-start;
@@ -5228,91 +5256,166 @@ watch(viewMode, (val) => {
   flex: 1;
 }
 
-.view-dialog-section-title {
-  margin-bottom: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
+.view-dialog-section-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .view-dialog-info-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px 16px;
-}
-
-.view-dialog-info-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px 16px;
 }
 
 .view-dialog-info-label {
+  color: #666;
+}
+
+.view-dialog-section-title {
+  margin-bottom: 6px;
   font-size: 13px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.view-dialog-info-value {
-  font-size: 13px;
-  color: var(--el-text-color-primary);
-  word-break: break-all;
-  flex: 1;
-}
-
-.pm-timeline-header-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.pm-timeline-detail-content {
-  margin-top: 16px;
-}
-
-.pm-timeline-detail-content .detail-section {
-  margin-bottom: 20px;
-}
-
-.pm-timeline-detail-content .detail-section-header {
-  margin-bottom: 8px;
-  font-size: 14px;
   font-weight: 600;
   color: var(--el-text-color-primary);
 }
 
-.pm-timeline-detail-content .detail-grid {
-  display: grid;
+.pm-timeline-basic-table-wrapper {
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.pm-timeline-basic-table {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-light);
+  border-collapse: collapse;
+  border-radius: 4px;
+}
+
+.pm-timeline-basic-table thead {
+  background-color: var(--el-fill-color-lighter);
+}
+
+.pm-timeline-basic-table tbody {
+  background-color: var(--el-bg-color);
+}
+
+.pm-timeline-table-header {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  text-align: center;
+  white-space: nowrap;
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+.pm-timeline-table-header:last-child {
+  border-right: none;
+}
+
+.pm-timeline-table-cell {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--el-text-color-primary);
+  text-align: center;
+  word-break: break-all;
+  border-top: 1px solid var(--el-border-color-light);
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+.pm-timeline-table-cell:last-child {
+  border-right: none;
+}
+
+.pm-timeline-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.pm-timeline-detail-content {
+  margin-top: 8px;
+}
+
+.pm-timeline-detail-section {
   padding: 8px;
+  margin-bottom: 8px;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px 12px;
 }
 
-.pm-timeline-detail-content .detail-cell {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 24px;
-  padding: 4px;
+.pm-timeline-detail-section:last-child {
+  margin-bottom: 0;
 }
 
-.pm-timeline-detail-content .detail-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.pm-timeline-detail-content .detail-value {
+.pm-timeline-detail-section-title {
+  padding-bottom: 4px;
+  margin-bottom: 6px;
   font-size: 13px;
-  color: var(--el-text-color-primary);
-  word-break: break-all;
-  flex: 1;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-/* 响应式优化 */
+.pm-timeline-detail-table-wrapper {
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.pm-timeline-detail-table {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-light);
+  border-collapse: collapse;
+  border-radius: 4px;
+}
+
+.pm-timeline-detail-table thead {
+  background-color: var(--el-fill-color-lighter);
+}
+
+.pm-timeline-detail-table tbody {
+  background-color: var(--el-bg-color);
+}
+
+.pm-timeline-detail-table .pm-timeline-table-header {
+  padding: 5px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  text-align: center;
+  white-space: nowrap;
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+.pm-timeline-detail-table .pm-timeline-table-header:last-child {
+  border-right: none;
+}
+
+.pm-timeline-detail-table .pm-timeline-table-cell {
+  padding: 5px 6px;
+  font-size: 12px;
+  color: var(--el-text-color-primary);
+  text-align: center;
+  word-break: break-all;
+  border-top: 1px solid var(--el-border-color-light);
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+.pm-timeline-detail-table .pm-timeline-table-cell:last-child {
+  border-right: none;
+}
+
+/* 优化标签样式 */
+.pm-timeline-basic-cell .pm-status-tag,
+.pm-timeline-detail-cell .pm-status-tag {
+  height: 20px;
+  padding: 0 6px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 20px;
+}
 </style>
