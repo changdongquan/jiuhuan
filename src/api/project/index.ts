@@ -28,7 +28,8 @@ export interface ProjectInfo {
   总成本?: number
   完成百分比?: number
   模具尺寸?: string
-  产品尺寸?: string
+  产品尺寸?: string | string[] // 支持旧格式（字符串）和新格式（JSON数组）
+  产品图号列表?: string[] // 产品图号列表（JSON数组）
   产品重量?: number
   收缩率?: number
   产品颜色?: string

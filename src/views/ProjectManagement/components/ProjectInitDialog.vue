@@ -31,11 +31,68 @@
         </el-descriptions-item>
       </el-descriptions>
 
+      <!-- 技术规格表读取区域 -->
+      <div class="pm-init-spec-section">
+        <div class="pm-init-spec-header">
+          <span class="pm-init-spec-title">技术规格表</span>
+          <el-upload
+            :auto-upload="false"
+            :show-file-list="false"
+            accept=".xlsx,.xls"
+            :on-change="handleSpecFileChange"
+          >
+            <template #trigger>
+              <el-button type="primary" plain size="small">
+                <Icon icon="vi-ep:upload" style="margin-right: 4px" />
+                读取技术规格表
+              </el-button>
+            </template>
+          </el-upload>
+        </div>
+
+        <!-- 读取的数据显示 -->
+        <div v-if="specData" class="pm-init-spec-content">
+          <el-descriptions :column="isMobile ? 1 : 2" border size="small">
+            <el-descriptions-item label="材料">
+              {{ specData.材料 || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="型腔">
+              {{ specData.型腔 || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="型芯">
+              {{ specData.型芯 || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="产品外观尺寸">
+              {{ specData.产品外观尺寸 || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="产品结构工程师">
+              {{ specData.产品结构工程师 || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="零件图片" v-if="specData.零件图片">
+              <img
+                :src="getSpecImageUrl(specData.零件图片)"
+                alt="零件图片"
+                class="pm-init-spec-image"
+                @click="showImagePreview(getSpecImageUrl(specData.零件图片))"
+              />
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+
       <div class="pm-init-groups-section">
         <div class="pm-init-groups-header">
           <div class="pm-init-groups-title">
             <div class="pm-init-groups-title__main">产品组</div>
-            <div class="pm-init-groups-title__sub">总穴数：{{ totalCavityCount }}</div>
+            <div class="pm-init-groups-title__sub">
+              <div>总穴数：{{ totalCavityCount }}</div>
+              <div
+                v-if="groups.length > 0"
+                style="margin-top: 2px; font-size: 11px; color: #909399"
+              >
+                <span>详细：{{ cavityDetailFormat }}</span>
+              </div>
+            </div>
           </div>
           <el-button type="primary" plain @click="handleAddGroup">+ 添加产品组</el-button>
         </div>
@@ -59,7 +116,7 @@
                     <Icon icon="vi-ep:rank" />
                   </div>
                   <div class="pm-init-group__title">
-                    {{ group.name || `产品组 ${index + 1}` }}
+                    {{ group.productDrawing || `产品组 ${index + 1}` }}
                   </div>
                 </div>
                 <div class="pm-init-group__right" @click.stop>
@@ -78,8 +135,12 @@
               <el-collapse-transition>
                 <div v-show="group.expanded" class="pm-init-group__detail" @click.stop>
                   <el-form label-width="100px" class="pm-init-group__detail-form">
-                    <el-form-item label="产品组名称">
-                      <el-input v-model="group.name" placeholder="例如：A组 / B组（可选）" />
+                    <el-form-item label="产品图号" :error="getProductDrawingError(group.id)">
+                      <el-input
+                        v-model="group.productDrawing"
+                        placeholder="请输入产品图号"
+                        @blur="validateProductDrawing(group.id)"
+                      />
                     </el-form-item>
                     <el-form-item label="穴数">
                       <el-input-number
@@ -107,18 +168,28 @@
       </div>
     </template>
   </el-dialog>
+
+  <!-- 图片预览对话框 -->
+  <el-dialog v-model="imagePreviewVisible" title="零件图片预览" width="800px">
+    <div style="text-align: center">
+      <img :src="imagePreviewUrl" alt="零件图片" style="max-width: 100%; max-height: 600px" />
+    </div>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { VueDraggable } from 'vue-draggable-plus'
+import * as XLSX from 'xlsx'
 import type { ProjectInfo } from '@/api/project'
+import type { UploadFile } from 'element-plus'
 
 type InitProductGroup = {
   id: string
   name: string
   cavityCount: number
+  productDrawing?: string // 产品图号
   expanded: boolean
 }
 
@@ -131,7 +202,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
-  (e: 'complete', v: Array<Omit<InitProductGroup, 'expanded'>>): void
+  (e: 'complete', v: Array<Omit<InitProductGroup, 'expanded'>>, specData?: any): void
 }>()
 
 const visible = computed({
@@ -140,6 +211,9 @@ const visible = computed({
 })
 
 const groups = ref<InitProductGroup[]>([])
+const specData = ref<any>(null) // 技术规格表数据
+const imagePreviewVisible = ref(false)
+const imagePreviewUrl = ref('')
 
 const toSafeCavity = (value: unknown) => {
   const n = Number(value)
@@ -151,20 +225,12 @@ const getProductDrawing = () => {
   return props.project?.productDrawing || props.project?.产品图号 || ''
 }
 
-const makeDefaultGroup = (
-  index: number,
-  cavityCount: number,
-  defaultName?: string
-): InitProductGroup => {
-  // 如果传入了 defaultName，优先使用；否则尝试获取产品图号；最后使用默认名称
-  let name = defaultName
-  if (!name) {
-    const productDrawing = getProductDrawing()
-    name = productDrawing || `产品组 ${index + 1}`
-  }
+const makeDefaultGroup = (index: number, cavityCount: number): InitProductGroup => {
+  const productDrawing = getProductDrawing()
   return {
     id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_${index}`,
-    name,
+    name: `产品组 ${index + 1}`, // 保留name字段用于内部标识，但不显示
+    productDrawing: productDrawing || '',
     cavityCount: toSafeCavity(cavityCount),
     expanded: true
   }
@@ -173,24 +239,30 @@ const makeDefaultGroup = (
 const resetFromProps = () => {
   const initial = props.initialGroups || []
   const productDrawing = getProductDrawing()
+  console.log('[初始化弹窗] resetFromProps - productDrawing:', productDrawing)
+  console.log('[初始化弹窗] resetFromProps - props.project:', props.project)
 
   if (initial.length) {
-    groups.value = initial.map((g, idx) => ({
-      id: g.id || makeDefaultGroup(idx, g.cavityCount).id,
-      name: g.name || productDrawing || `产品组 ${idx + 1}`,
-      cavityCount: toSafeCavity(g.cavityCount),
-      expanded: true
-    }))
+    groups.value = initial.map((g, idx) => {
+      return {
+        id: g.id || makeDefaultGroup(idx, g.cavityCount).id,
+        name: `产品组 ${idx + 1}`,
+        productDrawing: (g as any).productDrawing || productDrawing || '',
+        cavityCount: toSafeCavity(g.cavityCount),
+        expanded: true
+      }
+    })
     return
   }
 
-  // 没有初始数据时，创建默认产品组1，使用产品图号作为名称
+  // 没有初始数据时，创建默认产品组1
   const fallback = toSafeCavity((props.project as any)?.模具穴数)
-  const defaultName = productDrawing || `产品组 1`
+  console.log('[初始化弹窗] resetFromProps - productDrawing:', productDrawing)
   groups.value = [
     {
       id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_0`,
-      name: defaultName,
+      name: '产品组 1',
+      productDrawing: productDrawing || '',
       cavityCount: fallback,
       expanded: true
     }
@@ -205,17 +277,19 @@ watch(
   }
 )
 
-// 监听项目数据变化，如果产品组名称是默认的，且有产品图号，则更新名称
+// 监听项目数据变化，如果有产品图号，则更新默认产品组的产品图号
 watch(
   () => props.project,
   () => {
     if (!props.modelValue) return
     const productDrawing = getProductDrawing()
+    console.log('[初始化弹窗] watch project - productDrawing:', productDrawing)
+    console.log('[初始化弹窗] watch project - groups.value:', groups.value)
     if (productDrawing && groups.value.length > 0) {
       groups.value.forEach((group) => {
-        // 如果名称是默认格式（产品组 X），且有产品图号，则使用产品图号
-        if (/^产品组 \d+$/.test(group.name)) {
-          group.name = productDrawing
+        // 如果产品图号为空，则使用项目默认的产品图号
+        if (!group.productDrawing || !group.productDrawing.trim()) {
+          group.productDrawing = productDrawing
         }
       })
     }
@@ -226,6 +300,19 @@ watch(
 const totalCavityCount = computed(() =>
   groups.value.reduce((sum, g) => sum + toSafeCavity(g.cavityCount), 0)
 )
+
+// 生成模具穴数详细格式（如 1*2+1*2，表示1种产品×2穴 + 1种产品×2穴）
+const cavityDetailFormat = computed(() => {
+  if (!groups.value || groups.value.length === 0) return ''
+
+  if (groups.value.length === 1) {
+    // 单产品组，返回 1*穴数
+    return `1*${toSafeCavity(groups.value[0].cavityCount)}`
+  }
+
+  // 多产品组，使用 1*穴数 格式，用 + 连接
+  return groups.value.map((g) => `1*${toSafeCavity(g.cavityCount)}`).join('+')
+})
 
 const toggleExpanded = (id: string) => {
   const group = groups.value.find((g) => g.id === id)
@@ -246,16 +333,28 @@ const handleAddGroup = () => {
 const handleDeleteGroup = (id: string) => {
   if (groups.value.length <= 1) return
   groups.value = groups.value.filter((g) => g.id !== id)
+  // 删除后不需要重新编号，因为标题显示的是产品图号
+}
 
-  // 重新编号使用默认名称的产品组
-  let defaultIndex = 1
-  groups.value.forEach((group) => {
-    // 如果名称是默认格式（产品组 X），则重新编号
-    if (/^产品组 \d+$/.test(group.name)) {
-      group.name = `产品组 ${defaultIndex}`
-      defaultIndex++
+// 验证产品图号是否重复
+const validateProductDrawing = (groupId?: string) => {
+  const productDrawings = groups.value
+    .filter((g) => g.id !== groupId && g.productDrawing && g.productDrawing.trim())
+    .map((g) => g.productDrawing!.trim().toLowerCase())
+
+  const currentGroup = groupId ? groups.value.find((g) => g.id === groupId) : null
+  if (currentGroup && currentGroup.productDrawing) {
+    const currentDrawing = currentGroup.productDrawing.trim().toLowerCase()
+    if (currentDrawing && productDrawings.includes(currentDrawing)) {
+      return `产品图号 "${currentGroup.productDrawing}" 已被其他产品组使用`
     }
-  })
+  }
+  return ''
+}
+
+// 获取产品图号错误信息
+const getProductDrawingError = (groupId: string) => {
+  return validateProductDrawing(groupId)
 }
 
 const handleComplete = () => {
@@ -263,18 +362,315 @@ const handleComplete = () => {
     ElMessage.warning('请至少保留 1 个产品组')
     return
   }
+
+  // 验证所有产品组的产品图号是否重复
+  const errors: string[] = []
+  groups.value.forEach((group, index) => {
+    const error = validateProductDrawing(group.id)
+    if (error) {
+      errors.push(`产品组 ${index + 1}: ${error}`)
+    }
+  })
+
+  if (errors.length > 0) {
+    ElMessage.error('产品图号不能重复：\n' + errors.join('\n'))
+    return
+  }
+
   emit(
     'complete',
     groups.value.map(({ expanded: _expanded, ...g }) => ({
       ...g,
       cavityCount: toSafeCavity(g.cavityCount)
-    }))
+    })),
+    specData.value
   )
   visible.value = false
 }
 
 const handleClosed = () => {
-  // 弹窗关闭时的清理逻辑（如需要）
+  // 弹窗关闭时的清理逻辑
+  specData.value = null
+  imagePreviewVisible.value = false
+  imagePreviewUrl.value = ''
+}
+
+// 处理技术规格表文件上传
+const handleSpecFileChange = async (file: UploadFile) => {
+  if (!file.raw) {
+    ElMessage.error('文件读取失败')
+    return
+  }
+
+  const projectCode = props.project?.项目编号
+  const productDrawing = props.project?.productDrawing || props.project?.产品图号
+  const productName = props.project?.productName || props.project?.产品名称
+
+  if (!projectCode) {
+    ElMessage.error('请先设置项目编号')
+    return
+  }
+
+  if (!productDrawing || !productName) {
+    ElMessage.warning('项目缺少产品图号或产品名称，将尝试匹配技术规格表')
+  }
+
+  try {
+    // 读取Excel文件
+    const arrayBuffer = await file.raw.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+
+    // 获取第一个工作表
+    const firstSheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[firstSheetName]
+
+    // 转换为JSON格式（保留所有行，包括空单元格）
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][]
+
+    if (!jsonData || jsonData.length < 2) {
+      ElMessage.error('Excel文件格式错误：至少需要表头和数据行')
+      return
+    }
+
+    // 查找表头行（支持多行表头，通常在第2行或第3行）
+    // 第2行通常是主表头（可能有合并单元格），第3行是子表头
+    let mainHeaderRowIndex = -1 // 主表头行（包含"零件图号"、"零件名称"等）
+    let subHeaderRowIndex = -1 // 子表头行（包含"材料"等子列）
+    let mainHeaderRow: string[] = []
+    let subHeaderRow: string[] = []
+
+    // 先找主表头行（包含"零件图号"的行，通常是第2行，索引1）
+    for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+      const row = jsonData[i]
+      const rowStr = row
+        .map((cell) =>
+          String(cell || '')
+            .trim()
+            .toLowerCase()
+        )
+        .join('|')
+
+      // 检查是否包含关键列名
+      if (
+        (rowStr.includes('零件图号') || rowStr.includes('图号')) &&
+        (rowStr.includes('零件名称') || rowStr.includes('名称'))
+      ) {
+        mainHeaderRowIndex = i
+        mainHeaderRow = row.map((cell) => String(cell || '').trim())
+
+        // 检查下一行是否是子表头（包含"材料"）
+        if (i + 1 < jsonData.length) {
+          const nextRow = jsonData[i + 1]
+          const nextRowStr = nextRow
+            .map((cell) =>
+              String(cell || '')
+                .trim()
+                .toLowerCase()
+            )
+            .join('|')
+          if (nextRowStr.includes('材料') || nextRowStr.includes('材质')) {
+            subHeaderRowIndex = i + 1
+            subHeaderRow = nextRow.map((cell) => String(cell || '').trim())
+          }
+        }
+        break
+      }
+    }
+
+    if (mainHeaderRowIndex === -1) {
+      ElMessage.error('未找到表头行，请确保Excel包含"零件图号"和"零件名称"列')
+      return
+    }
+
+    // 查找列索引（优先在子表头行查找，如果找不到再在主表头行查找）
+    const findColumnIndex = (keywords: string[], preferSubHeader = false): number => {
+      // 如果指定优先查找子表头，且子表头存在，先查子表头
+      if (preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
+        for (let i = 0; i < subHeaderRow.length; i++) {
+          const cell = subHeaderRow[i].toLowerCase()
+          if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
+            return i
+          }
+        }
+      }
+
+      // 在主表头行查找
+      for (let i = 0; i < mainHeaderRow.length; i++) {
+        const cell = mainHeaderRow[i].toLowerCase()
+        if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
+          return i
+        }
+      }
+
+      // 如果主表头没找到，且子表头存在，再查子表头
+      if (!preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
+        for (let i = 0; i < subHeaderRow.length; i++) {
+          const cell = subHeaderRow[i].toLowerCase()
+          if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
+            return i
+          }
+        }
+      }
+
+      return -1
+    }
+
+    // 查找列索引
+    // "材料"是子列，优先在子表头行查找
+    const partDrawingCol = findColumnIndex(['零件图号', '图号'])
+    const partNameCol = findColumnIndex(['零件名称', '名称'])
+    const materialCol = findColumnIndex(['材料', '材质'], true) // 优先在子表头查找
+    // "型腔"和"型芯"只从主表头查找（模具组件列），不要表面要求下的子列
+    const cavityCol = findColumnIndex(['型腔', '前模'], false) // 只从主表头查找
+    const coreCol = findColumnIndex(['型芯', '后模'], false) // 只从主表头查找
+    const sizeCol = findColumnIndex(['产品外观尺寸', '外观尺寸', '尺寸'])
+    const engineerCol = findColumnIndex(['产品结构工程师', '结构工程师', '工程师'])
+    const imageCol = findColumnIndex(['零件图片', '图片', '图示'])
+
+    if (partDrawingCol === -1 || partNameCol === -1) {
+      ElMessage.error('未找到"零件图号"或"零件名称"列')
+      return
+    }
+
+    // 查找匹配的数据行（从表头行之后开始）
+    // 数据行从主表头行的下一行开始，如果有子表头，则从子表头的下一行开始
+    const dataStartRowIndex =
+      subHeaderRowIndex >= 0 ? subHeaderRowIndex + 1 : mainHeaderRowIndex + 1
+    let matchedRow: any[] | null = null
+
+    for (let i = dataStartRowIndex; i < jsonData.length; i++) {
+      const row = jsonData[i]
+      const rowPartDrawing = String(row[partDrawingCol] || '').trim()
+      const rowPartName = String(row[partNameCol] || '').trim()
+
+      // 匹配逻辑：零件图号或零件名称匹配
+      // 支持多个图号用"/"或空格分隔的情况
+      const rowDrawings = rowPartDrawing
+        .split(/[\s\/]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const drawingMatch =
+        productDrawing && rowDrawings.some((d) => d.toLowerCase() === productDrawing.toLowerCase())
+      const nameMatch = productName && rowPartName.toLowerCase() === productName.toLowerCase()
+
+      if (drawingMatch || nameMatch) {
+        matchedRow = row
+        break
+      }
+    }
+
+    if (!matchedRow) {
+      ElMessage.warning(
+        `未找到匹配的数据行（项目编号: ${projectCode}, 产品图号: ${productDrawing || '-'}, 产品名称: ${productName || '-'}）`
+      )
+      return
+    }
+
+    // 提取数据
+    const rowPartDrawing = String(matchedRow[partDrawingCol] || '').trim()
+    const rowPartSize = sizeCol >= 0 ? String(matchedRow[sizeCol] || '').trim() : ''
+
+    // 解析多个图号（支持空格或"/"分隔）
+    const 图号列表 = rowPartDrawing
+      .split(/[\s\/]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    // 解析多个尺寸（支持空格或"/"分隔）
+    const 尺寸列表 = rowPartSize
+      .split(/[\s\/]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+    // 确保长度一致
+    const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+    while (尺寸列表.length < maxLength) {
+      尺寸列表.push('')
+    }
+    while (尺寸列表.length > maxLength) {
+      尺寸列表.pop()
+    }
+
+    // 检查图号与主图号是否一致
+    if (productDrawing && 图号列表.length > 0) {
+      const 第一个图号 = 图号列表[0].toLowerCase()
+      const 主图号 = productDrawing.toLowerCase()
+      if (第一个图号 !== 主图号) {
+        try {
+          await ElMessageBox.confirm(
+            `技术规格表中的图号（${图号列表[0]}）与主图号（${productDrawing}）不一致，是否继续读取？`,
+            '图号不一致',
+            {
+              type: 'warning',
+              confirmButtonText: '继续',
+              cancelButtonText: '取消'
+            }
+          )
+        } catch {
+          return // 用户取消
+        }
+      }
+    }
+
+    const extractedData: any = {
+      材料: materialCol >= 0 ? String(matchedRow[materialCol] || '').trim() : '',
+      型腔: cavityCol >= 0 ? String(matchedRow[cavityCol] || '').trim() : '',
+      型芯: coreCol >= 0 ? String(matchedRow[coreCol] || '').trim() : '',
+      产品外观尺寸: rowPartSize, // 保留原始字符串，用于显示
+      产品图号列表: 图号列表, // 新增：图号列表
+      产品尺寸列表: 尺寸列表, // 新增：尺寸列表
+      产品结构工程师: engineerCol >= 0 ? String(matchedRow[engineerCol] || '').trim() : '',
+      零件图片: ''
+    }
+
+    // 处理图片（可能是嵌入的图片或路径）
+    if (imageCol >= 0) {
+      const imageValue = matchedRow[imageCol]
+      if (imageValue) {
+        // 如果是base64或URL，直接使用
+        if (
+          typeof imageValue === 'string' &&
+          (imageValue.startsWith('http') || imageValue.startsWith('data:'))
+        ) {
+          extractedData.零件图片 = imageValue
+        } else {
+          // 尝试从工作表中提取图片
+          // 注意：xlsx库不直接支持图片提取，这里需要特殊处理
+          // 暂时使用空字符串，后续可以通过其他方式处理
+          extractedData.零件图片 = ''
+        }
+      }
+    }
+
+    specData.value = extractedData
+    ElMessage.success('技术规格表读取成功')
+  } catch (error: any) {
+    console.error('读取技术规格表失败:', error)
+    ElMessage.error(`读取失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 获取技术规格表图片URL
+const getSpecImageUrl = (imageValue: any): string => {
+  if (!imageValue) return ''
+
+  if (typeof imageValue === 'string') {
+    // 如果是URL或base64，直接返回
+    if (imageValue.startsWith('http') || imageValue.startsWith('data:')) {
+      return imageValue
+    }
+    // 如果是相对路径，可能需要转换为完整URL
+    if (imageValue.startsWith('/')) {
+      return imageValue
+    }
+  }
+
+  return String(imageValue)
+}
+
+// 显示图片预览
+const showImagePreview = (url: string) => {
+  imagePreviewUrl.value = url
+  imagePreviewVisible.value = true
 }
 </script>
 
@@ -373,5 +769,42 @@ const handleClosed = () => {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.pm-init-spec-section {
+  padding: 16px;
+  margin-top: 20px;
+  background: var(--el-bg-color-page);
+  border-radius: 4px;
+}
+
+.pm-init-spec-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pm-init-spec-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pm-init-spec-content {
+  margin-top: 12px;
+}
+
+.pm-init-spec-image {
+  max-width: 120px;
+  max-height: 120px;
+  padding: 4px;
+  cursor: pointer;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.pm-init-spec-image:hover {
+  border-color: var(--el-color-primary);
 }
 </style>

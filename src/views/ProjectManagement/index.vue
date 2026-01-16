@@ -416,7 +416,20 @@
           fixed="left"
         />
         <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
-        <el-table-column prop="模具穴数" label="模具穴数" width="85" align="center" />
+        <el-table-column prop="模具穴数" label="模具穴数" width="120" align="center">
+          <template #default="{ row }">
+            <template v-if="row.模具穴数">
+              <span>{{ parseCavityExpression(row.模具穴数) }}穴</span>
+              <span
+                v-if="String(row.模具穴数).includes('+') || String(row.模具穴数).includes('*')"
+                style=" margin-left: 4px; font-size: 12px;color: #909399"
+              >
+                ({{ row.模具穴数 }})
+              </span>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="项目状态"
           label="项目状态"
@@ -533,7 +546,18 @@
             </div>
             <div>
               <span class="label">穴数</span>
-              <span class="value">{{ row.模具穴数 ?? '-' }}</span>
+              <span class="value">
+                <template v-if="row.模具穴数">
+                  <span>{{ parseCavityExpression(row.模具穴数) }}穴</span>
+                  <span
+                    v-if="String(row.模具穴数).includes('+') || String(row.模具穴数).includes('*')"
+                    style=" margin-left: 4px; font-size: 12px;color: #909399"
+                  >
+                    ({{ row.模具穴数 }})
+                  </span>
+                </template>
+                <span v-else>-</span>
+              </span>
             </div>
           </div>
           <div class="pm-mobile-card__dates">
@@ -857,8 +881,93 @@
                               readonly
                             />
                           </el-form-item>
-                          <el-form-item label="产品尺寸">
-                            <el-input v-model="editForm.产品尺寸" placeholder="产品尺寸" />
+                          <!-- 单个图号时显示单个输入框 -->
+                          <el-form-item
+                            v-if="productDrawingListDisplay.length <= 1"
+                            label="产品尺寸"
+                          >
+                            <el-input
+                              v-model="singleProductSize"
+                              placeholder="产品尺寸"
+                              @input="handleSingleSizeChange"
+                            />
+                          </el-form-item>
+                          <!-- 多个图号时显示表格 -->
+                          <el-form-item
+                            v-else-if="productDrawingListDisplay.length > 1"
+                            label="产品图号列表"
+                          >
+                            <div class="pm-product-drawing-list">
+                              <el-table
+                                :data="productDrawingListDisplay"
+                                border
+                                size="small"
+                                style="width: 100%"
+                              >
+                                <el-table-column
+                                  type="index"
+                                  label="序号"
+                                  width="60"
+                                  align="center"
+                                />
+                                <el-table-column label="产品图号" min-width="150">
+                                  <template #default="{ row, $index }">
+                                    <el-input
+                                      v-model="row.图号"
+                                      placeholder="请输入产品图号"
+                                      @blur="validateDrawingNumber($index)"
+                                      @input="handleDrawingNumberChange($index, $event)"
+                                    />
+                                    <div v-if="row.图号错误" class="pm-error-text">{{
+                                      row.图号错误
+                                    }}</div>
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="产品尺寸" min-width="200">
+                                  <template #default="{ row, $index }">
+                                    <el-input
+                                      v-model="row.尺寸"
+                                      placeholder="请输入产品尺寸"
+                                      @input="handleProductSizeChange($index, $event)"
+                                    />
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="80" align="center">
+                                  <template #default="{ $index }">
+                                    <el-button
+                                      type="danger"
+                                      link
+                                      size="small"
+                                      @click="deleteDrawingRow($index)"
+                                    >
+                                      删除
+                                    </el-button>
+                                  </template>
+                                </el-table-column>
+                              </el-table>
+                              <div style="margin-top: 8px">
+                                <el-button type="primary" plain size="small" @click="addDrawingRow">
+                                  + 添加行
+                                </el-button>
+                              </div>
+                            </div>
+                          </el-form-item>
+                          <!-- 列表为空时显示提示 -->
+                          <el-form-item v-else label="产品图号列表">
+                            <el-empty
+                              description="暂无产品图号列表，请手动添加或从技术规格表读取"
+                              :image-size="80"
+                            >
+                              <template #image>
+                                <Icon
+                                  icon="vi-ep:info-filled"
+                                  style="font-size: 48px; color: #909399"
+                                />
+                              </template>
+                              <el-button type="primary" plain size="small" @click="addDrawingRow">
+                                添加产品图号
+                              </el-button>
+                            </el-empty>
                           </el-form-item>
                           <el-form-item label="产品重量（克）" prop="产品重量">
                             <el-input-number
@@ -990,7 +1099,19 @@
                       <div class="pm-mould-group">
                         <div class="pm-mould-group__title">模具基本</div>
                         <el-form-item label="模具穴数" prop="模具穴数">
-                          <el-input v-model="editForm.模具穴数" placeholder="模具穴数" />
+                          <el-input
+                            v-model="editForm.模具穴数"
+                            placeholder="例如：1*4 或 1*2+1*2 或 1*2+1*4"
+                          >
+                            <template #append>
+                              <span
+                                v-if="editForm.模具穴数"
+                                style="font-size: 12px; color: #606266"
+                              >
+                                {{ parseCavityExpression(editForm.模具穴数) }}穴
+                              </span>
+                            </template>
+                          </el-input>
                         </el-form-item>
                         <el-form-item label="模具尺寸" prop="模具尺寸">
                           <el-input v-model="editForm.模具尺寸" placeholder="模具尺寸" />
@@ -2082,6 +2203,173 @@ const editActiveTab = ref<'basic' | 'part' | 'mould' | 'machine' | 'attachments'
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
+
+// 产品图号列表相关逻辑
+// 解析产品图号列表和产品尺寸（兼容旧数据）
+const parseProductDrawingList = (value: any): string[] => {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+const parseProductSize = (value: any): string[] => {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed
+      // 旧格式：普通字符串，转为数组
+      return value.trim() ? [value] : []
+    } catch {
+      // 解析失败，说明是旧格式（普通字符串）
+      return value.trim() ? [value] : []
+    }
+  }
+  return []
+}
+
+// 产品图号列表显示数据类型
+interface ProductDrawingRow {
+  图号: string
+  尺寸: string
+  图号错误: string
+}
+
+// 产品图号列表显示数据（用于表格）
+const productDrawingListDisplay = computed<ProductDrawingRow[]>(() => {
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+  // 确保长度一致
+  const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+  const result: ProductDrawingRow[] = []
+
+  for (let i = 0; i < maxLength; i++) {
+    result.push({
+      图号: 图号列表[i] || '',
+      尺寸: 尺寸列表[i] || '',
+      图号错误: ''
+    })
+  }
+
+  return result
+})
+
+// 单个产品尺寸（用于单个图号时的输入框）
+const singleProductSize = computed({
+  get: () => {
+    const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+    return 尺寸列表[0] || ''
+  },
+  set: (val: string) => {
+    // 单个图号时，不修改产品图号列表（保持为空或保持原值）
+    // 只更新产品尺寸数组的第一个元素
+    const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+    // 如果尺寸列表为空，初始化为单个元素
+    if (尺寸列表.length === 0) {
+      尺寸列表.push(val || '')
+    } else {
+      尺寸列表[0] = val || ''
+    }
+
+    editForm.产品尺寸 = 尺寸列表 as any
+  }
+})
+
+// 处理单个尺寸变化
+const handleSingleSizeChange = (val: string) => {
+  singleProductSize.value = val
+}
+
+// 处理图号变化
+const handleDrawingNumberChange = (index: number, val: string) => {
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  图号列表[index] = val || ''
+
+  // 确保尺寸数组长度一致
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  while (尺寸列表.length < 图号列表.length) {
+    尺寸列表.push('')
+  }
+  while (尺寸列表.length > 图号列表.length) {
+    尺寸列表.pop()
+  }
+
+  ;(editForm as any).产品图号列表 = 图号列表
+  editForm.产品尺寸 = 尺寸列表 as any
+
+  // 清除错误提示
+  if (productDrawingListDisplay.value[index]) {
+    productDrawingListDisplay.value[index].图号错误 = ''
+  }
+}
+
+// 处理产品尺寸列表中的尺寸变化
+const handleProductSizeChange = (index: number, val: string) => {
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  尺寸列表[index] = val || ''
+  editForm.产品尺寸 = 尺寸列表 as any
+}
+
+// 验证图号
+const validateDrawingNumber = (index: number) => {
+  const row = productDrawingListDisplay.value[index]
+  if (!row) return
+
+  const 图号 = row.图号?.trim() || ''
+
+  // 验证：不能与主图号相同
+  if (图号 && 图号 === editForm.productDrawing) {
+    row.图号错误 = '图号不能与主图号相同'
+    return
+  }
+
+  // 验证：不能与列表中其他图号重复
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 其他图号 = 图号列表
+    .map((图号, i) => (i !== index && 图号?.trim() ? 图号.trim() : null))
+    .filter(Boolean) as string[]
+
+  if (图号 && 其他图号.includes(图号)) {
+    row.图号错误 = '图号不能重复'
+    return
+  }
+
+  // 验证通过，清除错误
+  row.图号错误 = ''
+}
+
+// 添加行
+const addDrawingRow = () => {
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+  图号列表.push('')
+  尺寸列表.push('')
+  ;(editForm as any).产品图号列表 = 图号列表
+  editForm.产品尺寸 = 尺寸列表 as any
+}
+
+// 删除行
+const deleteDrawingRow = (index: number) => {
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+  图号列表.splice(index, 1)
+  尺寸列表.splice(index, 1)
+  ;(editForm as any).产品图号列表 = 图号列表
+  editForm.产品尺寸 = 尺寸列表 as any
+}
 const tripartiteAgreementDownloading = ref(false)
 const currentProjectCode = ref('')
 const editDialogBodyRef = ref<HTMLElement>()
@@ -2114,16 +2402,124 @@ const toSafeCavity = (value: unknown) => {
   return Math.min(64, Math.max(1, Math.round(n)))
 }
 
+/**
+ * 从产品组列表生成模具穴数表达式
+ * 例如：[{cavityCount: 2}, {cavityCount: 2}] -> "1*2+1*2"
+ *      [{cavityCount: 4}] -> "1*4"
+ */
+const generateCavityExpression = (groups: Array<{ cavityCount: number }>): string => {
+  if (!groups || groups.length === 0) return '1*1'
+
+  // 统一使用 1*穴数 格式，用 + 连接
+  return groups.map((g) => `1*${toSafeCavity(g.cavityCount)}`).join('+')
+}
+
+/**
+ * 解析模具穴数表达式，计算总穴数
+ * 例如："2+2" -> 4
+ *      "4" -> 4
+ *      "1*2+1*2" -> 4（如果支持乘法格式）
+ */
+const parseCavityExpression = (expression: string | number | null | undefined): number => {
+  if (expression === null || expression === undefined || expression === '') return 1
+
+  // 如果是数字，直接返回
+  if (typeof expression === 'number') {
+    return toSafeCavity(expression)
+  }
+
+  const expr = String(expression).trim()
+  if (!expr) return 1
+
+  // 尝试解析为数字（纯数字格式，向后兼容）
+  const num = Number(expr)
+  if (Number.isFinite(num) && !expr.includes('+') && !expr.includes('*')) {
+    return toSafeCavity(num)
+  }
+
+  // 解析表达式（支持 + 和 *）
+  try {
+    // 按 + 分割
+    const parts = expr
+      .split('+')
+      .map((part) => part.trim())
+      .filter(Boolean)
+
+    let total = 0
+    for (const part of parts) {
+      // 检查是否包含 *
+      if (part.includes('*')) {
+        const [multiplier, count] = part.split('*').map((s) => Number(s.trim()))
+        if (Number.isFinite(multiplier) && Number.isFinite(count)) {
+          total += toSafeCavity(multiplier) * toSafeCavity(count)
+        } else {
+          // 如果解析失败，尝试作为单个数字
+          const num = Number(part)
+          if (Number.isFinite(num)) {
+            total += toSafeCavity(num)
+          }
+        }
+      } else {
+        // 纯数字
+        const num = Number(part)
+        if (Number.isFinite(num)) {
+          total += toSafeCavity(num)
+        }
+      }
+    }
+
+    return total > 0 ? total : 1
+  } catch {
+    // 解析失败，尝试作为单个数字
+    const num = Number(expr)
+    return Number.isFinite(num) ? toSafeCavity(num) : 1
+  }
+}
+
 const buildDefaultInitGroups = (
   projectCode: string,
   fallbackCavity: unknown
-): InitProductGroupPersisted[] => [
-  {
-    id: `g_${projectCode || 'tmp'}_0`,
-    name: '产品组 1',
-    cavityCount: toSafeCavity(fallbackCavity)
+): InitProductGroupPersisted[] => {
+  // 如果 fallbackCavity 是表达式（如 "2+2"），解析它
+  const cavityStr = String(fallbackCavity || '').trim()
+
+  // 检查是否是表达式格式（包含 + 或 *）
+  if (cavityStr.includes('+') || cavityStr.includes('*')) {
+    // 解析表达式，生成产品组列表
+    const parts = cavityStr
+      .split('+')
+      .map((part) => part.trim())
+      .filter(Boolean)
+    return parts.map((part, idx) => {
+      let cavityCount = 1
+      if (part.includes('*')) {
+        const [multiplier, count] = part.split('*').map((s) => Number(s.trim()))
+        if (Number.isFinite(multiplier) && Number.isFinite(count)) {
+          cavityCount = toSafeCavity(multiplier) * toSafeCavity(count)
+        } else {
+          cavityCount = toSafeCavity(Number(part))
+        }
+      } else {
+        cavityCount = toSafeCavity(Number(part))
+      }
+      return {
+        id: `g_${projectCode || 'tmp'}_${idx}`,
+        name: '产品组 1',
+        cavityCount
+      }
+    })
   }
-]
+
+  // 纯数字格式（向后兼容）
+  const total = parseCavityExpression(fallbackCavity as string | number | null | undefined)
+  return [
+    {
+      id: `g_${projectCode || 'tmp'}_0`,
+      name: '产品组 1',
+      cavityCount: total
+    }
+  ]
+}
 
 const runnerTypeOptions = [
   { label: '开放式热流道', value: '开放式热流道' },
@@ -2877,7 +3273,17 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
   }
 
   const productInfo: DetailItem[] = [
-    { label: '产品尺寸', value: v(data.产品尺寸 ?? '') },
+    {
+      label: '产品尺寸',
+      value: (() => {
+        const 尺寸 = data.产品尺寸
+        if (!尺寸) return '-'
+        if (Array.isArray(尺寸)) {
+          return 尺寸.length > 0 ? 尺寸.join(', ') : '-'
+        }
+        return v(尺寸 as string | number | null)
+      })()
+    },
     { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
     { label: '产品材质', value: v(data.产品材质 ?? '') },
     { label: '产品颜色', value: v(data.产品颜色 ?? '') },
@@ -2886,7 +3292,19 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
   ]
 
   const mouldInfo: DetailItem[] = [
-    { label: '模具穴数', value: v(data.模具穴数 ?? '') },
+    {
+      label: '模具穴数',
+      value: (() => {
+        const cavity = data.模具穴数
+        if (!cavity) return '-'
+        const total = parseCavityExpression(cavity)
+        const expr = String(cavity)
+        if (expr.includes('+') || expr.includes('*')) {
+          return `${total}穴 (${expr})`
+        }
+        return `${total}穴`
+      })()
+    },
     { label: '模具尺寸', value: v(data.模具尺寸 ?? '') },
     { label: '模具重量（吨）', value: v(data.模具重量 ?? '') },
     { label: '前模材质', value: v(data.前模材质 ?? '') },
@@ -2946,7 +3364,17 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   ]
 
   const productInfo: DetailItem[] = [
-    { label: '产品尺寸', value: v(data.产品尺寸 ?? '') },
+    {
+      label: '产品尺寸',
+      value: (() => {
+        const 尺寸 = data.产品尺寸
+        if (!尺寸) return '-'
+        if (Array.isArray(尺寸)) {
+          return 尺寸.length > 0 ? 尺寸.join(', ') : '-'
+        }
+        return v(尺寸 as string | number | null)
+      })()
+    },
     { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
     { label: '产品材质', value: v(data.产品材质 ?? '') },
     { label: '产品颜色', value: v(data.产品颜色 ?? '') },
@@ -2955,7 +3383,19 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   ]
 
   const mouldInfo: DetailItem[] = [
-    { label: '模具穴数', value: v(data.模具穴数 ?? '') },
+    {
+      label: '模具穴数',
+      value: (() => {
+        const cavity = data.模具穴数
+        if (!cavity) return '-'
+        const total = parseCavityExpression(cavity)
+        const expr = String(cavity)
+        if (expr.includes('+') || expr.includes('*')) {
+          return `${total}穴 (${expr})`
+        }
+        return `${total}穴`
+      })()
+    },
     { label: '模具尺寸', value: v(data.模具尺寸 ?? '') },
     { label: '模具重量（吨）', value: v(data.模具重量 ?? '') },
     { label: '前模材质', value: v(data.前模材质 ?? '') },
@@ -3112,7 +3552,7 @@ const openEditDialog = async () => {
   }
 }
 
-const handleInitComplete = async (groups: InitProductGroupPersisted[]) => {
+const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?: any) => {
   const projectCode = currentProjectCode.value
   if (!projectCode) return
 
@@ -3120,17 +3560,156 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[]) => {
     cavityCount: toSafeCavity(g?.cavityCount)
   }))
 
+  // 生成表达式格式（如 "2+2" 或 "4"）
+  const expression = generateCavityExpression(safeGroups)
+  // 计算总穴数（用于验证和显示）
   const total = safeGroups.reduce((sum, g) => sum + toSafeCavity(g.cavityCount), 0)
-  ;(editForm as any).模具穴数 = String(total)
 
-  try {
-    // 方案 A：初始化完成立即写回数据库，确保之后不再弹窗
-    await updateProjectApi(projectCode, { 模具穴数: String(total), init_done: 1 })
-    ;(editForm as any).init_done = 1
-  } catch {
-    ElMessage.error('初始化写入失败（下次仍可能提示初始化）')
+  console.log('[初始化完成] 产品组:', safeGroups)
+  console.log('[初始化完成] 表达式:', expression)
+  console.log('[初始化完成] 总穴数:', total)
+  console.log('[初始化完成] 技术规格表数据:', specData)
+
+  // 只更新 editForm 的本地数据，不保存到数据库
+  // 数据将在编辑弹窗中点击"保存"按钮时一起保存
+  ;(editForm as any).模具穴数 = expression
+
+  // 如果有技术规格表数据，映射到 editForm（不保存到数据库）
+  if (specData) {
+    // 字段映射：技术规格表 -> editForm 字段
+    if (specData.材料) {
+      ;(editForm as any).产品材质 = specData.材料
+    }
+    if (specData.型腔) {
+      ;(editForm as any).前模材质 = specData.型腔
+    }
+    if (specData.型芯) {
+      ;(editForm as any).后模材质 = specData.型芯
+    }
+    if (specData.产品结构工程师) {
+      ;(editForm as any).设计师 = specData.产品结构工程师
+    }
+
+    // 处理产品图号列表和产品尺寸列表
+    if (
+      specData.产品图号列表 &&
+      Array.isArray(specData.产品图号列表) &&
+      specData.产品图号列表.length > 0
+    ) {
+      const 技术规格表图号列表 = specData.产品图号列表
+      const 技术规格表尺寸列表 = specData.产品尺寸列表 || []
+
+      // 确保尺寸列表长度与图号列表一致
+      while (技术规格表尺寸列表.length < 技术规格表图号列表.length) {
+        技术规格表尺寸列表.push('')
+      }
+      while (技术规格表尺寸列表.length > 技术规格表图号列表.length) {
+        技术规格表尺寸列表.pop()
+      }
+
+      // 获取现有的图号列表和尺寸列表
+      let 现有图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+      let 现有尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+      // 确保现有列表长度一致
+      const 现有最大长度 = Math.max(现有图号列表.length, 现有尺寸列表.length)
+      while (现有图号列表.length < 现有最大长度) {
+        现有图号列表.push('')
+      }
+      while (现有尺寸列表.length < 现有最大长度) {
+        现有尺寸列表.push('')
+      }
+
+      // 合并技术规格表的数据到现有列表
+      for (let i = 0; i < 技术规格表图号列表.length; i++) {
+        const 新图号 = 技术规格表图号列表[i]?.trim() || ''
+        const 新尺寸 = 技术规格表尺寸列表[i]?.trim() || ''
+
+        if (!新图号) continue
+
+        // 检查图号是否已存在于列表中
+        const 现有索引 = 现有图号列表.findIndex((图号) => 图号?.trim() === 新图号)
+
+        if (现有索引 >= 0) {
+          // 图号已存在，提示用户确认是否更新
+          try {
+            await ElMessageBox.confirm(
+              `图号 "${新图号}" 已存在于列表中，是否更新对应行的尺寸？`,
+              '图号已存在',
+              {
+                type: 'warning',
+                confirmButtonText: '更新',
+                cancelButtonText: '跳过'
+              }
+            )
+            // 用户确认更新
+            现有尺寸列表[现有索引] = 新尺寸
+          } catch {
+            // 用户取消，跳过该图号
+            continue
+          }
+        } else {
+          // 图号不存在，添加新行
+          现有图号列表.push(新图号)
+          现有尺寸列表.push(新尺寸)
+        }
+      }
+
+      // 更新editForm
+      ;(editForm as any).产品图号列表 = 现有图号列表
+      editForm.产品尺寸 = 现有尺寸列表 as any
+
+      console.log('[初始化完成] 合并后的产品图号列表:', 现有图号列表)
+      console.log('[初始化完成] 合并后的产品尺寸列表:', 现有尺寸列表)
+    } else if (specData.产品外观尺寸) {
+      // 如果没有图号列表，只有单个尺寸，使用旧的方式
+      ;(editForm as any).产品尺寸 = specData.产品外观尺寸
+    }
+    // 零件图片需要特殊处理（需要上传到服务器获得URL）
+    if (specData.零件图片) {
+      try {
+        // 如果图片是base64，需要转换为File并上传
+        if (typeof specData.零件图片 === 'string' && specData.零件图片.startsWith('data:')) {
+          // base64图片，需要转换为File并上传
+          const base64Data = specData.零件图片
+          const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+          if (matches && matches.length === 3) {
+            const mimeType = matches[1]
+            const base64String = matches[2]
+            const byteCharacters = atob(base64String)
+            const byteNumbers = new Array(byteCharacters.length)
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i)
+            }
+            const byteArray = new Uint8Array(byteNumbers)
+            const blob = new Blob([byteArray], { type: mimeType })
+            const file = new File([blob], 'spec-image.png', { type: mimeType })
+
+            // 上传图片（获得URL，但不保存到数据库）
+            const { uploadProjectPartImageApi } = await import('@/api/project')
+            const resp: any = await uploadProjectPartImageApi(projectCode, file)
+            if (resp?.data?.url) {
+              ;(editForm as any).零件图示URL = resp.data.url
+              console.log('[初始化完成] 零件图片已上传:', resp.data.url)
+            }
+          }
+        } else if (typeof specData.零件图片 === 'string' && specData.零件图片.startsWith('http')) {
+          // URL图片，直接使用
+          ;(editForm as any).零件图示URL = specData.零件图片
+          console.log('[初始化完成] 零件图片URL:', specData.零件图片)
+        }
+      } catch (error: any) {
+        console.error('[初始化完成] 零件图片处理失败:', error)
+        ElMessage.warning('零件图片处理失败，可在编辑弹窗中重新上传')
+      }
+    }
   }
 
+  // 标记初始化完成（仅本地标记，保存时一起写入数据库）
+  ;(editForm as any).init_done = 1
+
+  // 直接打开编辑对话框，不保存数据
+  // 用户需要在编辑对话框中点击"保存"按钮才会保存到数据库
   nextTick(() => openEditDialog())
 }
 
@@ -3150,6 +3729,48 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
       if (detail) {
         Object.assign(editForm, detail)
         console.log('[编辑项目] 加载详情，零件图示URL:', detail.零件图示URL)
+
+        // 如果模具穴数是纯数字格式，转换为表达式格式（如 "4" -> "1*4"）
+        const cavityCount = (detail as any).模具穴数
+        if (cavityCount && typeof cavityCount === 'string') {
+          const cavityStr = String(cavityCount).trim()
+          // 如果是纯数字（不包含 + 或 *），转换为 1*数字 格式
+          if (cavityStr && !cavityStr.includes('+') && !cavityStr.includes('*')) {
+            const num = Number(cavityStr)
+            if (Number.isFinite(num) && num > 0) {
+              ;(editForm as any).模具穴数 = `1*${num}`
+              console.log('[编辑项目] 转换模具穴数格式:', cavityStr, '->', `1*${num}`)
+            }
+          }
+        }
+
+        // 处理产品图号列表和产品尺寸的兼容
+        // 确保数据格式正确（JSON数组）
+        let 图号列表 = parseProductDrawingList((detail as any).产品图号列表)
+        let 尺寸列表 = parseProductSize(detail.产品尺寸)
+
+        // 特殊情况：如果列表只有一个图号，且与主图号相同，说明是迁移脚本初始化的
+        // 单个图号时，列表应该为空，只保留产品尺寸数组
+        if (图号列表.length === 1 && 图号列表[0] === editForm.productDrawing) {
+          // 这是单个图号的情况，清空列表
+          图号列表 = []
+          // 尺寸列表保持不变（如果有数据的话）
+        } else {
+          // 多个图号情况，确保长度一致
+          const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+          while (图号列表.length < maxLength) {
+            图号列表.push('')
+          }
+          while (尺寸列表.length < maxLength) {
+            尺寸列表.push('')
+          }
+        }
+
+        ;(editForm as any).产品图号列表 = 图号列表
+        editForm.产品尺寸 = 尺寸列表 as any
+
+        console.log('[编辑项目] 产品图号列表:', 图号列表)
+        console.log('[编辑项目] 产品尺寸列表:', 尺寸列表)
       }
     } catch {
       // ignore：详情失败时回退到列表行数据
@@ -3982,6 +4603,77 @@ const handleSubmitEdit = async () => {
     }
   }
 
+  // 保存前处理产品图号列表和产品尺寸
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+  // 单个图号情况：如果图号列表为空，说明是单个图号的情况
+  // 此时只保存尺寸数组，列表保持为空
+  if (图号列表.length === 0) {
+    // 单个图号情况，列表为空，只保存尺寸数组
+    // 不需要验证，直接保存
+    ;(editForm as any).产品图号列表 = []
+    editForm.产品尺寸 = 尺寸列表.length > 0 ? (尺寸列表 as any) : []
+    // 继续执行保存逻辑，跳过验证
+  } else {
+    // 多个图号情况，需要验证和处理
+
+    // 确保两个数组长度一致
+    const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+    const 对齐后图号列表 = [...图号列表]
+    const 对齐后尺寸列表 = [...尺寸列表]
+    while (对齐后图号列表.length < maxLength) {
+      对齐后图号列表.push('')
+    }
+    while (对齐后尺寸列表.length < maxLength) {
+      对齐后尺寸列表.push('')
+    }
+
+    // 1. 过滤空行（图号和尺寸都为空）
+    interface ValidDataItem {
+      图号: string
+      尺寸: string
+      索引: number
+    }
+    const 有效数据: ValidDataItem[] = []
+    for (let i = 0; i < 对齐后图号列表.length; i++) {
+      const 图号 = 对齐后图号列表[i]?.trim() || ''
+      const 尺寸 = 对齐后尺寸列表[i]?.trim() || ''
+      // 至少图号或尺寸有一个不为空
+      if (图号 || 尺寸) {
+        有效数据.push({ 图号, 尺寸, 索引: i })
+      }
+    }
+
+    const 过滤后图号列表 = 有效数据.map((d) => d.图号)
+    const 过滤后尺寸列表 = 有效数据.map((d) => d.尺寸)
+
+    // 2. 验证数组长度一致性
+    if (过滤后图号列表.length !== 过滤后尺寸列表.length) {
+      ElMessage.error('产品图号列表和产品尺寸列表长度不一致，无法保存')
+      return
+    }
+
+    // 3. 验证图号重复（在过滤后的列表中）
+    const 非空图号 = 过滤后图号列表.filter((图号) => 图号)
+    const 图号集合 = new Set(非空图号)
+    if (图号集合.size !== 非空图号.length) {
+      ElMessage.error('产品图号列表中存在重复图号，无法保存')
+      return
+    }
+
+    // 4. 验证图号不能与主图号相同（多个图号时才需要验证）
+    const 与主图号相同 = 非空图号.some((图号) => 图号 === editForm.productDrawing)
+    if (与主图号相同) {
+      ElMessage.error('产品图号列表中的图号不能与主图号相同，无法保存')
+      return
+    }
+
+    // 5. 更新editForm中的数据（过滤后的）
+    ;(editForm as any).产品图号列表 = 过滤后图号列表
+    editForm.产品尺寸 = 过滤后尺寸列表 as any
+  }
+
   editSubmitting.value = true
   // 保存前记录当前图片URL，如果保存失败则清理临时图片
   const currentImageUrl = editForm.零件图示URL
@@ -3990,6 +4682,15 @@ const handleSubmitEdit = async () => {
       // 过滤掉 productName 和 productDrawing，这两个字段不属于项目管理表
       // 同时过滤掉"分类"，它属于货物信息表，不应回写到项目管理表
       const { productName, productDrawing, 分类, ...updateData } = editForm as any
+
+      // 将产品图号列表和产品尺寸转换为JSON字符串
+      if (updateData.产品图号列表 && Array.isArray(updateData.产品图号列表)) {
+        updateData.产品图号列表 = JSON.stringify(updateData.产品图号列表)
+      }
+      if (updateData.产品尺寸 && Array.isArray(updateData.产品尺寸)) {
+        updateData.产品尺寸 = JSON.stringify(updateData.产品尺寸)
+      }
+
       await updateProjectApi(currentProjectCode.value, updateData)
       ElMessage.success('更新成功')
     } else {
@@ -4000,6 +4701,15 @@ const handleSubmitEdit = async () => {
       }
       // 过滤掉 productName 和 productDrawing
       const { productName, productDrawing, 分类, ...createData } = editForm as any
+
+      // 将产品图号列表和产品尺寸转换为JSON字符串
+      if (createData.产品图号列表 && Array.isArray(createData.产品图号列表)) {
+        createData.产品图号列表 = JSON.stringify(createData.产品图号列表)
+      }
+      if (createData.产品尺寸 && Array.isArray(createData.产品尺寸)) {
+        createData.产品尺寸 = JSON.stringify(createData.产品尺寸)
+      }
+
       await createProjectApi(createData as ProjectInfo)
       ElMessage.success('创建成功')
     }
@@ -4148,8 +4858,6 @@ watch(viewMode, (val) => {
 </script>
 
 <style scoped>
-
-
 @media (width <= 1200px) {
   .detail-grid {
     flex-wrap: wrap;
@@ -5613,5 +6321,25 @@ watch(viewMode, (val) => {
   margin: 0;
   font-size: 11px;
   line-height: 20px;
+}
+
+/* 产品图号列表相关样式 */
+.pm-product-drawing-list {
+  width: 100%;
+}
+
+.pm-product-drawing-list :deep(.el-table) {
+  font-size: 13px;
+}
+
+.pm-product-drawing-list :deep(.el-table .el-input) {
+  width: 100%;
+}
+
+.pm-error-text {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--el-color-danger);
 }
 </style>
