@@ -422,7 +422,7 @@
               <span>{{ parseCavityExpression(row.模具穴数) }}穴</span>
               <span
                 v-if="String(row.模具穴数).includes('+') || String(row.模具穴数).includes('*')"
-                style=" margin-left: 4px; font-size: 12px;color: #909399"
+                style="margin-left: 4px; font-size: 12px; color: #909399"
               >
                 ({{ row.模具穴数 }})
               </span>
@@ -551,7 +551,7 @@
                   <span>{{ parseCavityExpression(row.模具穴数) }}穴</span>
                   <span
                     v-if="String(row.模具穴数).includes('+') || String(row.模具穴数).includes('*')"
-                    style=" margin-left: 4px; font-size: 12px;color: #909399"
+                    style="margin-left: 4px; font-size: 12px; color: #909399"
                   >
                     ({{ row.模具穴数 }})
                   </span>
@@ -874,29 +874,17 @@
                               readonly
                             />
                           </el-form-item>
-                          <el-form-item label="产品图号">
-                            <el-input
-                              v-model="editForm.productDrawing"
-                              placeholder="产品图号（自动填充）"
-                              readonly
-                            />
+                        </el-col>
+
+                        <el-col :xs="24" :sm="12" :lg="12">
+                          <el-form-item label="产品材质" prop="产品材质">
+                            <el-input v-model="editForm.产品材质" placeholder="产品材质" />
                           </el-form-item>
-                          <!-- 单个图号时显示单个输入框 -->
-                          <el-form-item
-                            v-if="productDrawingListDisplay.length <= 1"
-                            label="产品尺寸"
-                          >
-                            <el-input
-                              v-model="singleProductSize"
-                              placeholder="产品尺寸"
-                              @input="handleSingleSizeChange"
-                            />
-                          </el-form-item>
-                          <!-- 多个图号时显示表格 -->
-                          <el-form-item
-                            v-else-if="productDrawingListDisplay.length > 1"
-                            label="产品图号列表"
-                          >
+                        </el-col>
+
+                        <el-col :xs="24" :sm="24" :lg="24">
+                          <!-- 始终显示产品图号列表（至少保留 1 行） -->
+                          <el-form-item label="产品图号列表">
                             <div class="pm-product-drawing-list">
                               <el-table
                                 :data="productDrawingListDisplay"
@@ -914,6 +902,10 @@
                                   <template #default="{ row, $index }">
                                     <el-input
                                       v-model="row.图号"
+                                      :class="{
+                                        'pm-cell-input--error': !!row.图号错误,
+                                        'pm-cell-input--empty': !String(row.图号 || '').trim()
+                                      }"
                                       placeholder="请输入产品图号"
                                       @blur="validateDrawingNumber($index)"
                                       @input="handleDrawingNumberChange($index, $event)"
@@ -927,6 +919,9 @@
                                   <template #default="{ row, $index }">
                                     <el-input
                                       v-model="row.尺寸"
+                                      :class="{
+                                        'pm-cell-input--empty': !String(row.尺寸 || '').trim()
+                                      }"
                                       placeholder="请输入产品尺寸"
                                       @input="handleProductSizeChange($index, $event)"
                                     />
@@ -938,6 +933,7 @@
                                       type="danger"
                                       link
                                       size="small"
+                                      :disabled="productDrawingListDisplay.length <= 1"
                                       @click="deleteDrawingRow($index)"
                                     >
                                       删除
@@ -952,23 +948,9 @@
                               </div>
                             </div>
                           </el-form-item>
-                          <!-- 列表为空时显示提示 -->
-                          <el-form-item v-else label="产品图号列表">
-                            <el-empty
-                              description="暂无产品图号列表，请手动添加或从技术规格表读取"
-                              :image-size="80"
-                            >
-                              <template #image>
-                                <Icon
-                                  icon="vi-ep:info-filled"
-                                  style="font-size: 48px; color: #909399"
-                                />
-                              </template>
-                              <el-button type="primary" plain size="small" @click="addDrawingRow">
-                                添加产品图号
-                              </el-button>
-                            </el-empty>
-                          </el-form-item>
+                        </el-col>
+
+                        <el-col :xs="24" :sm="12" :lg="12">
                           <el-form-item label="产品重量（克）" prop="产品重量">
                             <el-input-number
                               v-model="editForm.产品重量"
@@ -979,13 +961,14 @@
                             />
                           </el-form-item>
                         </el-col>
+
                         <el-col :xs="24" :sm="12" :lg="12">
-                          <el-form-item label="产品材质" prop="产品材质">
-                            <el-input v-model="editForm.产品材质" placeholder="产品材质" />
-                          </el-form-item>
                           <el-form-item label="产品颜色">
                             <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
                           </el-form-item>
+                        </el-col>
+
+                        <el-col :xs="24" :sm="12" :lg="12">
                           <el-form-item label="收缩率">
                             <el-input-number
                               v-model="editForm.收缩率"
@@ -995,6 +978,9 @@
                               style="width: 100%"
                             />
                           </el-form-item>
+                        </el-col>
+
+                        <el-col :xs="24" :sm="12" :lg="12">
                           <el-form-item label="料柄重量">
                             <el-input-number
                               v-model="editForm.料柄重量"
@@ -2222,19 +2208,146 @@ const parseProductDrawingList = (value: any): string[] => {
 
 const parseProductSize = (value: any): string[] => {
   if (!value) return []
-  if (Array.isArray(value)) return value
+  const normalizeSizeItem = (item: any): string => {
+    const raw = String(item ?? '').trim()
+    if (!raw) return ''
+    // 兼容“二次 JSON 序列化”的脏数据：["[\"170*...\"]"] 或类似
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          const parts = parsed.map((p) => String(p ?? '').trim()).filter(Boolean)
+          if (parts.length === 1) return parts[0]
+          if (parts.length > 1) return parts.join(' / ')
+          return ''
+        }
+      } catch {
+        // 兼容 SQL/导入导致的双引号转义（"" -> \\"）再尝试解析
+        if (raw.includes('""')) {
+          try {
+            const repaired = raw.replace(/\"\"/g, '\\"')
+            const parsed = JSON.parse(repaired)
+            if (Array.isArray(parsed)) {
+              const parts = parsed.map((p) => String(p ?? '').trim()).filter(Boolean)
+              if (parts.length === 1) return parts[0]
+              if (parts.length > 1) return parts.join(' / ')
+              return ''
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    return raw
+  }
+
+  if (Array.isArray(value)) return value.map(normalizeSizeItem)
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value)
-      if (Array.isArray(parsed)) return parsed
+      if (Array.isArray(parsed)) return parsed.map(normalizeSizeItem)
       // 旧格式：普通字符串，转为数组
-      return value.trim() ? [value] : []
+      return value.trim() ? [normalizeSizeItem(value)] : []
     } catch {
+      // 兼容类似：["[""170*106*68.3""]"]（双引号转义丢失）
+      if (value.includes('""')) {
+        try {
+          const repaired = value.replace(/\"\"/g, '\\"')
+          const parsed = JSON.parse(repaired)
+          if (Array.isArray(parsed)) return parsed.map(normalizeSizeItem)
+        } catch {
+          // ignore
+        }
+      }
       // 解析失败，说明是旧格式（普通字符串）
-      return value.trim() ? [value] : []
+      return value.trim() ? [normalizeSizeItem(value)] : []
     }
   }
   return []
+}
+
+const normalizeDrawingAndSizeLists = (
+  drawingsRaw: string[],
+  sizesRaw: string[],
+  mainDrawingRaw: string
+) => {
+  const mainDrawing = String(mainDrawingRaw || '').trim()
+  const drawings = (drawingsRaw || []).map((d) => String(d ?? '').trim())
+  const sizes = (sizesRaw || []).map((s) => String(s ?? '').trim())
+
+  // 至少保留 1 行
+  if (drawings.length === 0) {
+    drawings.push(mainDrawing || '')
+  }
+
+  // 长度对齐：保留更长的一侧，避免丢数据
+  const maxLength = Math.max(1, drawings.length, sizes.length)
+  while (drawings.length < maxLength) drawings.push('')
+  while (sizes.length < maxLength) sizes.push('')
+
+  return { drawings, sizes }
+}
+
+// 同步“产品图号列表/产品尺寸”：首行=主图号，至少一行，索引对齐
+const syncMainDrawingRowToForm = () => {
+  const mainDrawing = String(editForm.productDrawing || '').trim()
+  const drawingsRaw = parseProductDrawingList((editForm as any).产品图号列表)
+  const sizesRaw = parseProductSize(editForm.产品尺寸)
+  const { drawings, sizes } = normalizeDrawingAndSizeLists(drawingsRaw, sizesRaw, mainDrawing)
+  ;(editForm as any).产品图号列表 = drawings
+  editForm.产品尺寸 = sizes as any
+}
+
+const applyInitGroupsToProductDrawingList = (groups: Array<{ productDrawing?: string }>) => {
+  const mainDrawing = String(editForm.productDrawing || '').trim()
+
+  const extracted = (groups || [])
+    .map((g) => String(g?.productDrawing || '').trim())
+    .filter(Boolean)
+
+  const nextDrawings: string[] = []
+  const seen = new Set<string>()
+  for (const d of extracted) {
+    const key = d.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    nextDrawings.push(d)
+  }
+
+  if (nextDrawings.length === 0) {
+    nextDrawings.push(mainDrawing || '')
+  }
+
+  // 尽量保留现有尺寸（按图号匹配）
+  const existingDrawings = parseProductDrawingList((editForm as any).产品图号列表).map((d) =>
+    String(d || '').trim()
+  )
+  const existingSizes = parseProductSize(editForm.产品尺寸).map((s) => String(s || '').trim())
+  const drawingToSize = new Map<string, string>()
+  for (let i = 0; i < Math.max(existingDrawings.length, existingSizes.length); i++) {
+    const d = String(existingDrawings[i] || '').trim()
+    const s = String(existingSizes[i] || '').trim()
+    if (!d) continue
+    const key = d.toLowerCase()
+    if (drawingToSize.has(key)) continue
+    if (s) drawingToSize.set(key, s)
+  }
+
+  const nextSizes = nextDrawings.map((d) => drawingToSize.get(d.toLowerCase()) || '')
+
+  ;(editForm as any).产品图号列表 = nextDrawings
+  editForm.产品尺寸 = nextSizes as any
+  syncMainDrawingRowToForm()
+}
+
+const extractProjectNameFromProductDrawing = (drawing: unknown) => {
+  const raw = String(drawing || '').trim()
+  if (!raw) return ''
+  const firstToken = raw.split(/[\s;\/]+/).filter(Boolean)[0] || ''
+  if (!firstToken) return ''
+  const prefix = firstToken.split('.')[0] || ''
+  return prefix || firstToken
 }
 
 // 产品图号列表显示数据类型
@@ -2246,11 +2359,14 @@ interface ProductDrawingRow {
 
 // 产品图号列表显示数据（用于表格）
 const productDrawingListDisplay = computed<ProductDrawingRow[]>(() => {
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
-  const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  const mainDrawing = String(editForm.productDrawing || '').trim()
+  const { drawings: 图号列表, sizes: 尺寸列表 } = normalizeDrawingAndSizeLists(
+    parseProductDrawingList((editForm as any).产品图号列表),
+    parseProductSize(editForm.产品尺寸),
+    mainDrawing
+  )
 
-  // 确保长度一致
-  const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+  const maxLength = Math.max(图号列表.length, 尺寸列表.length, 1)
   const result: ProductDrawingRow[] = []
 
   for (let i = 0; i < maxLength; i++) {
@@ -2264,36 +2380,14 @@ const productDrawingListDisplay = computed<ProductDrawingRow[]>(() => {
   return result
 })
 
-// 单个产品尺寸（用于单个图号时的输入框）
-const singleProductSize = computed({
-  get: () => {
-    const 尺寸列表 = parseProductSize(editForm.产品尺寸)
-    return 尺寸列表[0] || ''
-  },
-  set: (val: string) => {
-    // 单个图号时，不修改产品图号列表（保持为空或保持原值）
-    // 只更新产品尺寸数组的第一个元素
-    const 尺寸列表 = parseProductSize(editForm.产品尺寸)
-
-    // 如果尺寸列表为空，初始化为单个元素
-    if (尺寸列表.length === 0) {
-      尺寸列表.push(val || '')
-    } else {
-      尺寸列表[0] = val || ''
-    }
-
-    editForm.产品尺寸 = 尺寸列表 as any
-  }
-})
-
-// 处理单个尺寸变化
-const handleSingleSizeChange = (val: string) => {
-  singleProductSize.value = val
-}
-
 // 处理图号变化
 const handleDrawingNumberChange = (index: number, val: string) => {
+  syncMainDrawingRowToForm()
+
   const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  while (图号列表.length <= index) {
+    图号列表.push('')
+  }
   图号列表[index] = val || ''
 
   // 确保尺寸数组长度一致
@@ -2316,7 +2410,12 @@ const handleDrawingNumberChange = (index: number, val: string) => {
 
 // 处理产品尺寸列表中的尺寸变化
 const handleProductSizeChange = (index: number, val: string) => {
+  syncMainDrawingRowToForm()
+
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  while (尺寸列表.length <= index) {
+    尺寸列表.push('')
+  }
   尺寸列表[index] = val || ''
   editForm.产品尺寸 = 尺寸列表 as any
 }
@@ -2327,15 +2426,9 @@ const validateDrawingNumber = (index: number) => {
   if (!row) return
 
   const 图号 = row.图号?.trim() || ''
-
-  // 验证：不能与主图号相同
-  if (图号 && 图号 === editForm.productDrawing) {
-    row.图号错误 = '图号不能与主图号相同'
-    return
-  }
+  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
 
   // 验证：不能与列表中其他图号重复
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
   const 其他图号 = 图号列表
     .map((图号, i) => (i !== index && 图号?.trim() ? 图号.trim() : null))
     .filter(Boolean) as string[]
@@ -2351,6 +2444,8 @@ const validateDrawingNumber = (index: number) => {
 
 // 添加行
 const addDrawingRow = () => {
+  syncMainDrawingRowToForm()
+
   const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
 
@@ -2362,8 +2457,15 @@ const addDrawingRow = () => {
 
 // 删除行
 const deleteDrawingRow = (index: number) => {
+  syncMainDrawingRowToForm()
+
   const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+
+  if (图号列表.length <= 1) {
+    ElMessage.warning('产品图号列表至少保留一行')
+    return
+  }
 
   图号列表.splice(index, 1)
   尺寸列表.splice(index, 1)
@@ -2378,7 +2480,8 @@ const editDialogBaseHeight = ref<number>()
 type InitProductGroupPersisted = {
   id: string
   name: string
-  cavityCount: number
+  cavityCount: number | undefined
+  productDrawing?: string
 }
 
 const initDialogVisible = ref(false)
@@ -2490,33 +2593,21 @@ const buildDefaultInitGroups = (
       .split('+')
       .map((part) => part.trim())
       .filter(Boolean)
-    return parts.map((part, idx) => {
-      let cavityCount = 1
-      if (part.includes('*')) {
-        const [multiplier, count] = part.split('*').map((s) => Number(s.trim()))
-        if (Number.isFinite(multiplier) && Number.isFinite(count)) {
-          cavityCount = toSafeCavity(multiplier) * toSafeCavity(count)
-        } else {
-          cavityCount = toSafeCavity(Number(part))
-        }
-      } else {
-        cavityCount = toSafeCavity(Number(part))
-      }
+    return parts.map((_part, idx) => {
       return {
         id: `g_${projectCode || 'tmp'}_${idx}`,
         name: '产品组 1',
-        cavityCount
+        cavityCount: undefined
       }
     })
   }
 
   // 纯数字格式（向后兼容）
-  const total = parseCavityExpression(fallbackCavity as string | number | null | undefined)
   return [
     {
       id: `g_${projectCode || 'tmp'}_0`,
       name: '产品组 1',
-      cavityCount: total
+      cavityCount: undefined
     }
   ]
 }
@@ -3252,6 +3343,14 @@ const formatValue = (value?: string | number | null) => {
   return value
 }
 
+const formatProductSizeDisplay = (value: any) => {
+  const sizes = parseProductSize(value)
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+  if (sizes.length === 0) return '-'
+  return sizes.length === 1 ? sizes[0] : sizes.join('/')
+}
+
 type DetailItem = {
   label: string
   value: string
@@ -3275,14 +3374,7 @@ const timelineDetailSections = computed<DetailSection[]>(() => {
   const productInfo: DetailItem[] = [
     {
       label: '产品尺寸',
-      value: (() => {
-        const 尺寸 = data.产品尺寸
-        if (!尺寸) return '-'
-        if (Array.isArray(尺寸)) {
-          return 尺寸.length > 0 ? 尺寸.join(', ') : '-'
-        }
-        return v(尺寸 as string | number | null)
-      })()
+      value: formatProductSizeDisplay((data as any).产品尺寸)
     },
     { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
     { label: '产品材质', value: v(data.产品材质 ?? '') },
@@ -3366,14 +3458,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
   const productInfo: DetailItem[] = [
     {
       label: '产品尺寸',
-      value: (() => {
-        const 尺寸 = data.产品尺寸
-        if (!尺寸) return '-'
-        if (Array.isArray(尺寸)) {
-          return 尺寸.length > 0 ? 尺寸.join(', ') : '-'
-        }
-        return v(尺寸 as string | number | null)
-      })()
+      value: formatProductSizeDisplay((data as any).产品尺寸)
     },
     { label: '产品重量（克）', value: v(data.产品重量 ?? '') },
     { label: '产品材质', value: v(data.产品材质 ?? '') },
@@ -3658,6 +3743,7 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       // 更新editForm
       ;(editForm as any).产品图号列表 = 现有图号列表
       editForm.产品尺寸 = 现有尺寸列表 as any
+      syncMainDrawingRowToForm()
 
       console.log('[初始化完成] 合并后的产品图号列表:', 现有图号列表)
       console.log('[初始化完成] 合并后的产品尺寸列表:', 现有尺寸列表)
@@ -3705,6 +3791,22 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
     }
   }
 
+  // 将初始化产品组的“产品图号”代入到“产品图号列表”
+  applyInitGroupsToProductDrawingList(groups)
+
+  // 产品图号形如 C25066.22.1.1 时，取前缀 C25066 作为“项目名称”自动回填
+  if (!String(editForm.项目名称 || '').trim()) {
+    const firstGroupDrawing = groups?.find((g) =>
+      String(g?.productDrawing || '').trim()
+    )?.productDrawing
+    const projectName = extractProjectNameFromProductDrawing(
+      firstGroupDrawing || editForm.productDrawing
+    )
+    if (projectName) {
+      ;(editForm as any).项目名称 = projectName
+    }
+  }
+
   // 标记初始化完成（仅本地标记，保存时一起写入数据库）
   ;(editForm as any).init_done = 1
 
@@ -3746,31 +3848,15 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
 
         // 处理产品图号列表和产品尺寸的兼容
         // 确保数据格式正确（JSON数组）
-        let 图号列表 = parseProductDrawingList((detail as any).产品图号列表)
-        let 尺寸列表 = parseProductSize(detail.产品尺寸)
+        ;(editForm as any).产品图号列表 = parseProductDrawingList((detail as any).产品图号列表)
+        editForm.产品尺寸 = parseProductSize(detail.产品尺寸) as any
+        syncMainDrawingRowToForm()
 
-        // 特殊情况：如果列表只有一个图号，且与主图号相同，说明是迁移脚本初始化的
-        // 单个图号时，列表应该为空，只保留产品尺寸数组
-        if (图号列表.length === 1 && 图号列表[0] === editForm.productDrawing) {
-          // 这是单个图号的情况，清空列表
-          图号列表 = []
-          // 尺寸列表保持不变（如果有数据的话）
-        } else {
-          // 多个图号情况，确保长度一致
-          const maxLength = Math.max(图号列表.length, 尺寸列表.length)
-          while (图号列表.length < maxLength) {
-            图号列表.push('')
-          }
-          while (尺寸列表.length < maxLength) {
-            尺寸列表.push('')
-          }
-        }
-
-        ;(editForm as any).产品图号列表 = 图号列表
-        editForm.产品尺寸 = 尺寸列表 as any
-
-        console.log('[编辑项目] 产品图号列表:', 图号列表)
-        console.log('[编辑项目] 产品尺寸列表:', 尺寸列表)
+        console.log(
+          '[编辑项目] 产品图号列表:',
+          parseProductDrawingList((editForm as any).产品图号列表)
+        )
+        console.log('[编辑项目] 产品尺寸列表:', parseProductSize(editForm.产品尺寸))
       }
     } catch {
       // ignore：详情失败时回退到列表行数据
@@ -4604,75 +4690,50 @@ const handleSubmitEdit = async () => {
   }
 
   // 保存前处理产品图号列表和产品尺寸
+  syncMainDrawingRowToForm()
+
+  const 主图号 = String(editForm.productDrawing || '').trim()
+  if (!主图号) {
+    ElMessage.error('主图号不能为空，无法保存')
+    return
+  }
+
   const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
 
-  // 单个图号情况：如果图号列表为空，说明是单个图号的情况
-  // 此时只保存尺寸数组，列表保持为空
-  if (图号列表.length === 0) {
-    // 单个图号情况，列表为空，只保存尺寸数组
-    // 不需要验证，直接保存
-    ;(editForm as any).产品图号列表 = []
-    editForm.产品尺寸 = 尺寸列表.length > 0 ? (尺寸列表 as any) : []
-    // 继续执行保存逻辑，跳过验证
-  } else {
-    // 多个图号情况，需要验证和处理
+  // 确保两个数组长度一致（保留更长的一侧）
+  const maxLength = Math.max(1, 图号列表.length, 尺寸列表.length)
+  const 对齐后图号列表 = [...图号列表]
+  const 对齐后尺寸列表 = [...尺寸列表]
+  while (对齐后图号列表.length < maxLength) 对齐后图号列表.push('')
+  while (对齐后尺寸列表.length < maxLength) 对齐后尺寸列表.push('')
 
-    // 确保两个数组长度一致
-    const maxLength = Math.max(图号列表.length, 尺寸列表.length)
-    const 对齐后图号列表 = [...图号列表]
-    const 对齐后尺寸列表 = [...尺寸列表]
-    while (对齐后图号列表.length < maxLength) {
-      对齐后图号列表.push('')
+  // 过滤空行（图号和尺寸都为空）
+  const 有效图号列表: string[] = []
+  const 有效尺寸列表: string[] = []
+  for (let i = 0; i < 对齐后图号列表.length; i++) {
+    const 图号 = String(对齐后图号列表[i] || '').trim()
+    const 尺寸 = String(对齐后尺寸列表[i] || '').trim()
+    if (图号 || 尺寸) {
+      有效图号列表.push(图号)
+      有效尺寸列表.push(尺寸)
     }
-    while (对齐后尺寸列表.length < maxLength) {
-      对齐后尺寸列表.push('')
-    }
-
-    // 1. 过滤空行（图号和尺寸都为空）
-    interface ValidDataItem {
-      图号: string
-      尺寸: string
-      索引: number
-    }
-    const 有效数据: ValidDataItem[] = []
-    for (let i = 0; i < 对齐后图号列表.length; i++) {
-      const 图号 = 对齐后图号列表[i]?.trim() || ''
-      const 尺寸 = 对齐后尺寸列表[i]?.trim() || ''
-      // 至少图号或尺寸有一个不为空
-      if (图号 || 尺寸) {
-        有效数据.push({ 图号, 尺寸, 索引: i })
-      }
-    }
-
-    const 过滤后图号列表 = 有效数据.map((d) => d.图号)
-    const 过滤后尺寸列表 = 有效数据.map((d) => d.尺寸)
-
-    // 2. 验证数组长度一致性
-    if (过滤后图号列表.length !== 过滤后尺寸列表.length) {
-      ElMessage.error('产品图号列表和产品尺寸列表长度不一致，无法保存')
-      return
-    }
-
-    // 3. 验证图号重复（在过滤后的列表中）
-    const 非空图号 = 过滤后图号列表.filter((图号) => 图号)
-    const 图号集合 = new Set(非空图号)
-    if (图号集合.size !== 非空图号.length) {
-      ElMessage.error('产品图号列表中存在重复图号，无法保存')
-      return
-    }
-
-    // 4. 验证图号不能与主图号相同（多个图号时才需要验证）
-    const 与主图号相同 = 非空图号.some((图号) => 图号 === editForm.productDrawing)
-    if (与主图号相同) {
-      ElMessage.error('产品图号列表中的图号不能与主图号相同，无法保存')
-      return
-    }
-
-    // 5. 更新editForm中的数据（过滤后的）
-    ;(editForm as any).产品图号列表 = 过滤后图号列表
-    editForm.产品尺寸 = 过滤后尺寸列表 as any
   }
+
+  if (有效图号列表.length === 0) {
+    ElMessage.error('产品图号列表至少保留一行')
+    return
+  }
+
+  // 验证图号重复（仅对非空图号）
+  const 非空图号 = 有效图号列表.filter((d) => d)
+  if (new Set(非空图号).size !== 非空图号.length) {
+    ElMessage.error('产品图号列表中存在重复图号，无法保存')
+    return
+  }
+
+  ;(editForm as any).产品图号列表 = 有效图号列表
+  editForm.产品尺寸 = 有效尺寸列表 as any
 
   editSubmitting.value = true
   // 保存前记录当前图片URL，如果保存失败则清理临时图片
@@ -4768,6 +4829,7 @@ const handleProjectCodeBlur = async () => {
         productDrawing: goodsData.productDrawing || '',
         分类: goodsData.category || ''
       } as Partial<ProjectInfo>)
+      syncMainDrawingRowToForm()
 
       console.log('填充后的 editForm:', editForm)
       console.log('productName:', editForm.productName, 'productDrawing:', editForm.productDrawing)
@@ -4780,6 +4842,7 @@ const handleProjectCodeBlur = async () => {
       editForm.productName = ''
       editForm.productDrawing = ''
       editForm.分类 = ''
+      syncMainDrawingRowToForm()
     }
 
     if (editDialogVisible.value) {
@@ -4858,6 +4921,8 @@ watch(viewMode, (val) => {
 </script>
 
 <style scoped>
+
+
 @media (width <= 1200px) {
   .detail-grid {
     flex-wrap: wrap;
@@ -5088,6 +5153,16 @@ watch(viewMode, (val) => {
   .pm-timeline-detail-table {
     min-width: 600px;
   }
+}
+
+.pm-product-drawing-list :deep(.pm-cell-input--error .el-input__wrapper) {
+  background: rgb(245 108 108 / 8%);
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+}
+
+.pm-product-drawing-list :deep(.pm-cell-input--empty .el-input__wrapper) {
+  background: rgb(230 162 60 / 8%);
+  box-shadow: 0 0 0 1px var(--el-color-warning) inset;
 }
 
 .pm-edit-footer {
@@ -6342,4 +6417,6 @@ watch(viewMode, (val) => {
   line-height: 1.2;
   color: var(--el-color-danger);
 }
+
+/* A) 产品图号列表单元格颜色 */
 </style>

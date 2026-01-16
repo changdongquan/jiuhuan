@@ -54,19 +54,34 @@
         <div v-if="specData" class="pm-init-spec-content">
           <el-descriptions :column="isMobile ? 1 : 2" border size="small">
             <el-descriptions-item label="材料">
-              {{ specData.材料 || '-' }}
+              <span :class="{ 'pm-spec--missing': !specData.材料 }">{{
+                specData.材料 || '待填写'
+              }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="型腔">
-              {{ specData.型腔 || '-' }}
+              <span :class="{ 'pm-spec--missing': !specData.型腔 }">{{
+                specData.型腔 || '待填写'
+              }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="型芯">
-              {{ specData.型芯 || '-' }}
+              <span :class="{ 'pm-spec--missing': !specData.型芯 }">{{
+                specData.型芯 || '待填写'
+              }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="模具穴数">
+              <span :class="{ 'pm-spec--missing': !specData.模具穴数 }">{{
+                specData.模具穴数 || '待填写'
+              }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="产品外观尺寸">
-              {{ specData.产品外观尺寸 || '-' }}
+              <span :class="{ 'pm-spec--missing': !specData.产品外观尺寸 }">{{
+                specData.产品外观尺寸 || '待填写'
+              }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="产品结构工程师">
-              {{ specData.产品结构工程师 || '-' }}
+              <span :class="{ 'pm-spec--missing': !specData.产品结构工程师 }">{{
+                specData.产品结构工程师 || '待填写'
+              }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="零件图片" v-if="specData.零件图片">
               <img
@@ -85,12 +100,12 @@
           <div class="pm-init-groups-title">
             <div class="pm-init-groups-title__main">产品组</div>
             <div class="pm-init-groups-title__sub">
-              <div>总穴数：{{ totalCavityCount }}</div>
+              <div>总穴数：{{ hasIncompleteCavity ? '待填写' : totalCavityCount }}</div>
               <div
                 v-if="groups.length > 0"
                 style="margin-top: 2px; font-size: 11px; color: #909399"
               >
-                <span>详细：{{ cavityDetailFormat }}</span>
+                <span>详细：{{ hasIncompleteCavity ? '待填写' : cavityDetailFormat }}</span>
               </div>
             </div>
           </div>
@@ -138,6 +153,10 @@
                     <el-form-item label="产品图号" :error="getProductDrawingError(group.id)">
                       <el-input
                         v-model="group.productDrawing"
+                        :class="{
+                          'pm-cell-input--error': !!getProductDrawingError(group.id),
+                          'pm-cell-input--empty': !String(group.productDrawing || '').trim()
+                        }"
                         placeholder="请输入产品图号"
                         @blur="validateProductDrawing(group.id)"
                       />
@@ -145,9 +164,13 @@
                     <el-form-item label="穴数">
                       <el-input-number
                         v-model="group.cavityCount"
-                        :min="1"
+                        :min="0"
                         :max="64"
                         :controls="true"
+                        :value-on-clear="undefined"
+                        :class="{
+                          'pm-cell-number--empty': !hasValidCavity(group.cavityCount)
+                        }"
                         style="width: 100%"
                         @change="normalizeCavity(group.id)"
                       />
@@ -188,7 +211,7 @@ import type { UploadFile } from 'element-plus'
 type InitProductGroup = {
   id: string
   name: string
-  cavityCount: number
+  cavityCount: number | undefined
   productDrawing?: string // 产品图号
   expanded: boolean
 }
@@ -216,22 +239,29 @@ const imagePreviewVisible = ref(false)
 const imagePreviewUrl = ref('')
 
 const toSafeCavity = (value: unknown) => {
+  if (value === undefined || value === '') return 1
   const n = Number(value)
   if (!Number.isFinite(n)) return 1
   return Math.min(64, Math.max(1, Math.round(n)))
+}
+
+const hasValidCavity = (value: unknown) => {
+  if (value === undefined || value === '') return false
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 1
 }
 
 const getProductDrawing = () => {
   return props.project?.productDrawing || props.project?.产品图号 || ''
 }
 
-const makeDefaultGroup = (index: number, cavityCount: number): InitProductGroup => {
+const makeDefaultGroup = (index: number, cavityCount?: number): InitProductGroup => {
   const productDrawing = getProductDrawing()
   return {
     id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_${index}`,
     name: `产品组 ${index + 1}`, // 保留name字段用于内部标识，但不显示
     productDrawing: productDrawing || '',
-    cavityCount: toSafeCavity(cavityCount),
+    cavityCount: cavityCount === undefined ? undefined : toSafeCavity(cavityCount),
     expanded: true
   }
 }
@@ -248,7 +278,7 @@ const resetFromProps = () => {
         id: g.id || makeDefaultGroup(idx, g.cavityCount).id,
         name: `产品组 ${idx + 1}`,
         productDrawing: (g as any).productDrawing || productDrawing || '',
-        cavityCount: toSafeCavity(g.cavityCount),
+        cavityCount: hasValidCavity(g.cavityCount) ? toSafeCavity(g.cavityCount) : undefined,
         expanded: true
       }
     })
@@ -256,7 +286,7 @@ const resetFromProps = () => {
   }
 
   // 没有初始数据时，创建默认产品组1
-  const fallback = toSafeCavity((props.project as any)?.模具穴数)
+  const fallback = undefined
   console.log('[初始化弹窗] resetFromProps - productDrawing:', productDrawing)
   groups.value = [
     {
@@ -298,12 +328,19 @@ watch(
 )
 
 const totalCavityCount = computed(() =>
-  groups.value.reduce((sum, g) => sum + toSafeCavity(g.cavityCount), 0)
+  groups.value.reduce(
+    (sum, g) => (hasValidCavity(g.cavityCount) ? sum + toSafeCavity(g.cavityCount) : sum),
+    0
+  )
 )
+
+const hasIncompleteCavity = computed(() => groups.value.some((g) => !hasValidCavity(g.cavityCount)))
 
 // 生成模具穴数详细格式（如 1*2+1*2，表示1种产品×2穴 + 1种产品×2穴）
 const cavityDetailFormat = computed(() => {
   if (!groups.value || groups.value.length === 0) return ''
+
+  if (groups.value.some((g) => !hasValidCavity(g.cavityCount))) return ''
 
   if (groups.value.length === 1) {
     // 单产品组，返回 1*穴数
@@ -323,17 +360,56 @@ const toggleExpanded = (id: string) => {
 const normalizeCavity = (id: string) => {
   const group = groups.value.find((g) => g.id === id)
   if (!group) return
+  if (!hasValidCavity(group.cavityCount)) {
+    group.cavityCount = undefined
+    return
+  }
   group.cavityCount = toSafeCavity(group.cavityCount)
 }
 
 const handleAddGroup = () => {
-  groups.value.push(makeDefaultGroup(groups.value.length, 1))
+  groups.value.push(makeDefaultGroup(groups.value.length))
 }
 
 const handleDeleteGroup = (id: string) => {
   if (groups.value.length <= 1) return
   groups.value = groups.value.filter((g) => g.id !== id)
   // 删除后不需要重新编号，因为标题显示的是产品图号
+}
+
+const applyProductDrawingsToGroups = (drawings: string[]) => {
+  const list = (drawings || []).map((d) => String(d || '').trim()).filter(Boolean)
+
+  if (list.length === 0) return
+
+  // 去重（忽略大小写），保持顺序
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const d of list) {
+    const key = d.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(d)
+  }
+
+  // 尽量保留已填写的穴数（按图号匹配）
+  const cavityByDrawing = new Map<string, number>()
+  for (const g of groups.value) {
+    const d = String(g.productDrawing || '').trim()
+    if (!d) continue
+    if (!hasValidCavity(g.cavityCount)) continue
+    const key = d.toLowerCase()
+    if (!cavityByDrawing.has(key)) cavityByDrawing.set(key, toSafeCavity(g.cavityCount))
+  }
+
+  groups.value = unique.map((d, idx) => {
+    const next = makeDefaultGroup(idx)
+    next.productDrawing = d
+    const kept = cavityByDrawing.get(d.toLowerCase())
+    next.cavityCount = kept === undefined ? undefined : kept
+    next.expanded = true
+    return next
+  })
 }
 
 // 验证产品图号是否重复
@@ -346,7 +422,7 @@ const validateProductDrawing = (groupId?: string) => {
   if (currentGroup && currentGroup.productDrawing) {
     const currentDrawing = currentGroup.productDrawing.trim().toLowerCase()
     if (currentDrawing && productDrawings.includes(currentDrawing)) {
-      return `产品图号 "${currentGroup.productDrawing}" 已被其他产品组使用`
+      return `图号重复`
     }
   }
   return ''
@@ -360,6 +436,18 @@ const getProductDrawingError = (groupId: string) => {
 const handleComplete = () => {
   if (!groups.value.length) {
     ElMessage.warning('请至少保留 1 个产品组')
+    return
+  }
+
+  // 验证穴数必填
+  const cavityErrors: string[] = []
+  groups.value.forEach((group, index) => {
+    if (!hasValidCavity(group.cavityCount)) {
+      cavityErrors.push(`产品组 ${index + 1}: 请填写穴数（>= 1）`)
+    }
+  })
+  if (cavityErrors.length > 0) {
+    ElMessage.error(cavityErrors.join('\n'))
     return
   }
 
@@ -515,17 +603,59 @@ const handleSpecFileChange = async (file: UploadFile) => {
       return -1
     }
 
+    const findColumnIndexFiltered = (
+      keywords: string[],
+      filter: (cell: string) => boolean,
+      preferSubHeader = false
+    ): number => {
+      const match = (cellRaw: string) => {
+        const cell = cellRaw.toLowerCase()
+        return filter(cell) && keywords.some((kw) => cell.includes(kw.toLowerCase()))
+      }
+
+      if (preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
+        for (let i = 0; i < subHeaderRow.length; i++) {
+          if (match(subHeaderRow[i])) return i
+        }
+      }
+
+      for (let i = 0; i < mainHeaderRow.length; i++) {
+        if (match(mainHeaderRow[i])) return i
+      }
+
+      if (!preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
+        for (let i = 0; i < subHeaderRow.length; i++) {
+          if (match(subHeaderRow[i])) return i
+        }
+      }
+
+      return -1
+    }
+
     // 查找列索引
     // "材料"是子列，优先在子表头行查找
     const partDrawingCol = findColumnIndex(['零件图号', '图号'])
     const partNameCol = findColumnIndex(['零件名称', '名称'])
     const materialCol = findColumnIndex(['材料', '材质'], true) // 优先在子表头查找
-    // "型腔"和"型芯"只从主表头查找（模具组件列），不要表面要求下的子列
-    const cavityCol = findColumnIndex(['型腔', '前模'], false) // 只从主表头查找
-    const coreCol = findColumnIndex(['型芯', '后模'], false) // 只从主表头查找
+    // "型腔"和"型芯"只从主表头查找（模具组件列），不要把“型腔数/穴数”等误认为材质列
+    const cavityCol = findColumnIndexFiltered(
+      ['型腔', '前模'],
+      (cell) => !cell.includes('数'),
+      false
+    )
+    const coreCol = findColumnIndexFiltered(['型芯', '后模'], (cell) => !cell.includes('数'), false)
     const sizeCol = findColumnIndex(['产品外观尺寸', '外观尺寸', '尺寸'])
     const engineerCol = findColumnIndex(['产品结构工程师', '结构工程师', '工程师'])
     const imageCol = findColumnIndex(['零件图片', '图片', '图示'])
+    const cavityCountCol = findColumnIndexFiltered(
+      ['模具穴数', '模具腔数', '穴数', '腔数', '型腔数'],
+      (cell) =>
+        cell.includes('穴') ||
+        cell.includes('腔') ||
+        cell.includes('型腔数') ||
+        cell.includes('模具'),
+      false
+    )
 
     if (partDrawingCol === -1 || partNameCol === -1) {
       ElMessage.error('未找到"零件图号"或"零件名称"列')
@@ -538,6 +668,79 @@ const handleSpecFileChange = async (file: UploadFile) => {
       subHeaderRowIndex >= 0 ? subHeaderRowIndex + 1 : mainHeaderRowIndex + 1
     let matchedRow: any[] | null = null
 
+    const parseDrawings = (val: any) => {
+      const raw = String(val || '').trim()
+      if (!raw) return []
+
+      const tokens = raw
+        .replace(/；/g, ';')
+        .split(/[\s;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const expandSlashToken = (token: string) => {
+        if (!token.includes('/')) return [token]
+
+        const segments = token
+          .split('/')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (segments.length <= 1) return [token]
+
+        const base = segments[0]
+        const baseParts = base
+          .split('.')
+          .map((s) => s.trim())
+          .filter(Boolean)
+
+        const results: string[] = [base]
+        for (const seg of segments.slice(1)) {
+          if (!seg) continue
+
+          const suffixParts = seg
+            .split('.')
+            .map((s) => s.trim())
+            .filter(Boolean)
+
+          if (suffixParts.length === 0 || baseParts.length === 0) {
+            results.push(seg)
+            continue
+          }
+
+          // 规则 A：baseParts.length - suffixParts.length === 1 时，
+          // 代表 suffix 省略了 base 的首段之外所有前缀，按 “首段 + suffix” 补全
+          if (baseParts.length - suffixParts.length === 1) {
+            results.push([baseParts[0], ...suffixParts].join('.'))
+            continue
+          }
+
+          // 规则 B：否则按右侧段数覆盖 base 的末尾同段数
+          if (suffixParts.length <= baseParts.length) {
+            const next = [...baseParts]
+            const start = baseParts.length - suffixParts.length
+            for (let i = 0; i < suffixParts.length; i++) {
+              next[start + i] = suffixParts[i]
+            }
+            results.push(next.join('.'))
+            continue
+          }
+
+          // suffix 段数比 base 多：按完整图号处理
+          results.push(seg)
+        }
+
+        return results
+      }
+
+      return tokens
+        .flatMap((t) => expandSlashToken(t))
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }
+
+    const mainDrawings = parseDrawings(productDrawing)
+    const mainDrawingSet = new Set(mainDrawings.map((d) => d.toLowerCase()))
+
     for (let i = dataStartRowIndex; i < jsonData.length; i++) {
       const row = jsonData[i]
       const rowPartDrawing = String(row[partDrawingCol] || '').trim()
@@ -545,12 +748,9 @@ const handleSpecFileChange = async (file: UploadFile) => {
 
       // 匹配逻辑：零件图号或零件名称匹配
       // 支持多个图号用"/"或空格分隔的情况
-      const rowDrawings = rowPartDrawing
-        .split(/[\s\/]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
+      const rowDrawings = parseDrawings(rowPartDrawing)
       const drawingMatch =
-        productDrawing && rowDrawings.some((d) => d.toLowerCase() === productDrawing.toLowerCase())
+        mainDrawingSet.size > 0 && rowDrawings.some((d) => mainDrawingSet.has(d.toLowerCase()))
       const nameMatch = productName && rowPartName.toLowerCase() === productName.toLowerCase()
 
       if (drawingMatch || nameMatch) {
@@ -571,10 +771,7 @@ const handleSpecFileChange = async (file: UploadFile) => {
     const rowPartSize = sizeCol >= 0 ? String(matchedRow[sizeCol] || '').trim() : ''
 
     // 解析多个图号（支持空格或"/"分隔）
-    const 图号列表 = rowPartDrawing
-      .split(/[\s\/]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
+    const 图号列表 = parseDrawings(rowPartDrawing)
     // 解析多个尺寸（支持空格或"/"分隔）
     const 尺寸列表 = rowPartSize
       .split(/[\s\/]+/)
@@ -591,13 +788,12 @@ const handleSpecFileChange = async (file: UploadFile) => {
     }
 
     // 检查图号与主图号是否一致
-    if (productDrawing && 图号列表.length > 0) {
-      const 第一个图号 = 图号列表[0].toLowerCase()
-      const 主图号 = productDrawing.toLowerCase()
-      if (第一个图号 !== 主图号) {
+    if (mainDrawingSet.size > 0 && 图号列表.length > 0) {
+      const notInMain = 图号列表.filter((d) => !mainDrawingSet.has(d.toLowerCase()))
+      if (notInMain.length > 0) {
         try {
           await ElMessageBox.confirm(
-            `技术规格表中的图号（${图号列表[0]}）与主图号（${productDrawing}）不一致，是否继续读取？`,
+            `技术规格表中的图号（${notInMain.join(' / ')}）不在主图号集合（${productDrawing}）中，是否继续读取？`,
             '图号不一致',
             {
               type: 'warning',
@@ -615,6 +811,7 @@ const handleSpecFileChange = async (file: UploadFile) => {
       材料: materialCol >= 0 ? String(matchedRow[materialCol] || '').trim() : '',
       型腔: cavityCol >= 0 ? String(matchedRow[cavityCol] || '').trim() : '',
       型芯: coreCol >= 0 ? String(matchedRow[coreCol] || '').trim() : '',
+      模具穴数: cavityCountCol >= 0 ? String(matchedRow[cavityCountCol] || '').trim() : '',
       产品外观尺寸: rowPartSize, // 保留原始字符串，用于显示
       产品图号列表: 图号列表, // 新增：图号列表
       产品尺寸列表: 尺寸列表, // 新增：尺寸列表
@@ -642,6 +839,8 @@ const handleSpecFileChange = async (file: UploadFile) => {
     }
 
     specData.value = extractedData
+    // 将技术规格表中的图号列表同步为产品组（一个图号一个产品组）
+    applyProductDrawingsToGroups(图号列表)
     ElMessage.success('技术规格表读取成功')
   } catch (error: any) {
     console.error('读取技术规格表失败:', error)
@@ -675,6 +874,38 @@ const showImagePreview = (url: string) => {
 </script>
 
 <style scoped>
+
+
+@media (width <= 768px) {
+  .pm-init-groups-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pm-cell-input--error :deep(.el-input__wrapper) {
+  background: rgb(245 108 108 / 8%);
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+}
+
+.pm-cell-input--empty :deep(.el-input__wrapper) {
+  background: rgb(230 162 60 / 8%);
+  box-shadow: 0 0 0 1px var(--el-color-warning) inset;
+}
+
+.pm-cell-number--empty :deep(.el-input__wrapper) {
+  background: rgb(230 162 60 / 8%);
+  box-shadow: 0 0 0 1px var(--el-color-warning) inset;
+}
+
+/* C) 技术规格表缺失字段高亮 */
+.pm-spec--missing {
+  display: inline-block;
+  padding: 0 6px;
+  color: var(--el-color-warning);
+  background: rgb(230 162 60 / 12%);
+  border-radius: 4px;
+}
+
 .pm-init-dialog-title {
   display: flex;
   align-items: center;
@@ -714,12 +945,6 @@ const showImagePreview = (url: string) => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-}
-
-@media (width <= 768px) {
-  .pm-init-groups-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .pm-init-group {
@@ -807,4 +1032,6 @@ const showImagePreview = (url: string) => {
 .pm-init-spec-image:hover {
   border-color: var(--el-color-primary);
 }
+
+/* B) 产品组单元格颜色（产品图号/穴数） */
 </style>
