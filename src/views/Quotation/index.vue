@@ -84,8 +84,8 @@
               <span class="value">{{ row.partName || '-' }}</span>
             </div>
             <div>
-              <span class="label">申请更改人</span>
-              <span class="value">{{ row.applicant || '-' }}</span>
+              <span class="label">经办人</span>
+              <span class="value">{{ row.operator || '-' }}</span>
             </div>
           </div>
           <div class="qt-mobile-card__stats">
@@ -154,7 +154,7 @@
           show-overflow-tooltip
         />
         <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="applicant" label="申请更改人" width="120" show-overflow-tooltip />
+        <el-table-column prop="operator" label="经办人" width="120" show-overflow-tooltip />
         <el-table-column prop="taxIncludedPrice" label="含税价格" width="120" align="right">
           <template #default="{ row }">
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
@@ -550,7 +550,7 @@
                 </td>
               </tr>
 
-              <!-- 申请更改部门 / 申请更改人 -->
+              <!-- 申请更改部门 / 经办人 -->
               <tr>
                 <td class="qs-label" colspan="2">申请更改部门</td>
                 <td class="qs-input qs-manual" colspan="2">
@@ -560,12 +560,12 @@
                     placeholder="请输入申请更改部门"
                   />
                 </td>
-                <td class="qs-label" colspan="2">申请更改人</td>
+                <td class="qs-label" colspan="2">经办人</td>
                 <td class="qs-input qs-manual">
                   <el-input
-                    v-model="quotationForm.applicant"
+                    v-model="quotationForm.operator"
                     :disabled="isViewMode"
-                    placeholder="请输入申请更改人"
+                    placeholder="请输入经办人"
                   />
                 </td>
               </tr>
@@ -1884,7 +1884,7 @@ const handleDownloadCompletionPdf = async () => {
   const missingFields: string[] = []
   if (!quotationForm.processingDate) missingFields.push('加工日期')
   if (!quotationForm.partName || !quotationForm.partName.trim()) missingFields.push('加工零件名称')
-  // 模具编号、申请更改部门、申请更改人改为非必填
+  // 模具编号、申请更改部门改为非必填
 
   if (missingFields.length > 0) {
     ElMessage.error(`完工单下载前请先填写：${missingFields.join('、')}`)
@@ -2117,7 +2117,7 @@ const handleSubmit = async () => {
         ElMessage.error('请输入加工零件名称')
         return
       }
-      // 模具编号、申请更改部门、申请更改人改为非必填
+      // 模具编号、申请更改部门改为非必填
     } else {
       const cleanedPartItems = quotationForm.partItems
         .map((item) => ({
