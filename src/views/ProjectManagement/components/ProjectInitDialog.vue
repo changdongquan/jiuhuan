@@ -816,29 +816,82 @@ const handleSpecFileChange = async (file: UploadFile) => {
 
     // 检查图号和尺寸数量是否一致
     if (图号列表.length > 1 && 尺寸列表.length === 1 && 尺寸列表[0]) {
-      // 有多个图号但只有一个尺寸，提示用户确认
-      const confirmed = await ElMessageBox.confirm(
-        `检测到 ${图号列表.length} 个产品图号，但只有 1 个产品尺寸：\n` +
-          `图号: ${图号列表.join(' / ')}\n` +
-          `尺寸: ${尺寸列表[0]}\n\n` +
-          `确认后将相同的尺寸应用到所有图号。是否继续？`,
-        '图号与尺寸数量不一致',
-        {
-          confirmButtonText: '确认',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }
-      ).catch(() => false)
-
-      if (!confirmed) {
-        return
-      }
-
-      // 用户确认，将相同的尺寸应用到所有图号
+      // 有多个图号但只有一个尺寸，提示用户选择处理方式
       const 相同尺寸 = 尺寸列表[0]
-      尺寸列表.length = 0
-      for (let i = 0; i < 图号列表.length; i++) {
-        尺寸列表.push(相同尺寸)
+
+      // 使用自定义对话框处理三种选择
+      const result = await new Promise<'confirm' | 'empty' | 'cancel'>((resolve) => {
+        ElMessageBox({
+          title: '图号与尺寸数量不一致',
+          message:
+            `检测到 ${图号列表.length} 个产品图号，但只有 1 个产品尺寸：\n` +
+            `图号: ${图号列表.join(' / ')}\n` +
+            `尺寸: ${尺寸列表[0]}\n\n` +
+            `请选择处理方式：`,
+          showCancelButton: true,
+          showConfirmButton: true,
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          distinguishCancelAndClose: true,
+          type: 'warning',
+          beforeClose: (action, _instance, done) => {
+            if (action === 'confirm') {
+              done()
+              resolve('confirm')
+            } else if (action === 'cancel') {
+              done()
+              resolve('cancel')
+            } else {
+              // close 按钮
+              done()
+              resolve('cancel')
+            }
+          }
+        }).catch(() => {
+          resolve('cancel')
+        })
+
+        // 添加"留空"按钮（等待对话框渲染后）
+        setTimeout(() => {
+          const messageBox = document.querySelector('.el-message-box')
+          if (messageBox) {
+            const footer = messageBox.querySelector('.el-message-box__btns') as HTMLElement
+            if (footer && !footer.querySelector('.empty-size-btn')) {
+              const emptyBtn = document.createElement('button')
+              emptyBtn.className = 'el-button el-button--default empty-size-btn'
+              emptyBtn.textContent = '留空'
+              emptyBtn.style.marginRight = '10px'
+              emptyBtn.onclick = (e) => {
+                e.stopPropagation()
+                ElMessageBox.close()
+                setTimeout(() => resolve('empty'), 0)
+              }
+              // 插入到取消按钮之后，确定按钮之前
+              const cancelBtn = footer.querySelector('.el-button--default:not(.empty-size-btn)')
+              if (cancelBtn && cancelBtn.nextSibling) {
+                footer.insertBefore(emptyBtn, cancelBtn.nextSibling)
+              } else {
+                footer.insertBefore(emptyBtn, footer.querySelector('.el-button--primary'))
+              }
+            }
+          }
+        }, 100)
+      })
+
+      if (result === 'cancel') {
+        return
+      } else if (result === 'confirm') {
+        // 用户确认，将相同的尺寸应用到所有图号
+        尺寸列表.length = 0
+        for (let i = 0; i < 图号列表.length; i++) {
+          尺寸列表.push(相同尺寸)
+        }
+      } else if (result === 'empty') {
+        // 用户选择留空，不填入尺寸（保持空数组）
+        尺寸列表.length = 0
+        for (let i = 0; i < 图号列表.length; i++) {
+          尺寸列表.push('')
+        }
       }
     } else {
       // 确保长度一致（其他情况：图号数量 <= 尺寸数量，或尺寸为空）

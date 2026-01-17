@@ -662,8 +662,9 @@
       </template>
     </el-dialog>
 
-    <!-- 初始化对话框（编辑前，仅需一次） -->
+    <!-- 初始化对话框（编辑前，仅需一次）- 仅当分类为"塑胶模具"时显示 -->
     <ProjectInitDialog
+      v-if="isPlasticMould"
       v-model="initDialogVisible"
       :project="editForm"
       :initial-groups="initDialogInitialGroups"
@@ -1894,7 +1895,7 @@
       <template #footer>
         <div class="pm-edit-footer">
           <el-button
-            v-if="currentProjectCode"
+            v-if="currentProjectCode && isPlasticMould"
             type="warning"
             plain
             :disabled="editSubmitting"
@@ -2496,6 +2497,9 @@ const isInitDone = (val: unknown) => {
 
 const shouldShowInitDialog = (projectCode: string) => {
   if (!projectCode) return false
+  // 只有分类为"塑胶模具"时才显示初始化弹窗
+  const category = String((editForm as any).分类 || '').trim()
+  if (category !== '塑胶模具') return false
   return !isInitDone((editForm as any).init_done)
 }
 
@@ -3595,6 +3599,13 @@ const handleEditFromView = () => {
 const handleResetInit = async () => {
   const projectCode = currentProjectCode.value
   if (!projectCode) return
+
+  // 只有分类为"塑胶模具"时才能重置初始化
+  const category = String((editForm as any).分类 || '').trim()
+  if (category !== '塑胶模具') {
+    ElMessage.warning('只有分类为"塑胶模具"的项目才能使用初始化功能')
+    return
+  }
 
   try {
     await ElMessageBox.confirm(
