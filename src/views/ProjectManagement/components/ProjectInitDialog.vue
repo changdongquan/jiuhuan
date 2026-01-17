@@ -746,16 +746,23 @@ const handleSpecFileChange = async (file: UploadFile) => {
       const rowPartDrawing = String(row[partDrawingCol] || '').trim()
       const rowPartName = String(row[partNameCol] || '').trim()
 
-      // 匹配逻辑：零件图号或零件名称匹配
+      // 匹配逻辑：优先匹配图号，图号匹配则直接使用
       // 支持多个图号用"/"或空格分隔的情况
       const rowDrawings = parseDrawings(rowPartDrawing)
       const drawingMatch =
         mainDrawingSet.size > 0 && rowDrawings.some((d) => mainDrawingSet.has(d.toLowerCase()))
       const nameMatch = productName && rowPartName.toLowerCase() === productName.toLowerCase()
 
-      if (drawingMatch || nameMatch) {
+      // 优先匹配图号：如果图号匹配，直接使用
+      if (drawingMatch) {
         matchedRow = row
         break
+      }
+
+      // 如果图号不匹配但名称匹配，记录为候选（但继续查找图号匹配的行）
+      if (nameMatch && !matchedRow) {
+        matchedRow = row
+        // 不break，继续查找是否有图号匹配的行
       }
     }
 
@@ -764,6 +771,35 @@ const handleSpecFileChange = async (file: UploadFile) => {
         `未找到匹配的数据行（项目编号: ${projectCode}, 产品图号: ${productDrawing || '-'}, 产品名称: ${productName || '-'}）`
       )
       return
+    }
+
+    // 检查最终匹配的行：如果只匹配了名称但图号不匹配，提示用户确认
+    const finalRowDrawing = String(matchedRow[partDrawingCol] || '').trim()
+    const finalRowDrawings = parseDrawings(finalRowDrawing)
+    const finalDrawingMatch =
+      mainDrawingSet.size > 0 && finalRowDrawings.some((d) => mainDrawingSet.has(d.toLowerCase()))
+    const finalRowName = String(matchedRow[partNameCol] || '').trim()
+    const finalNameMatch = productName && finalRowName.toLowerCase() === productName.toLowerCase()
+
+    if (!finalDrawingMatch && finalNameMatch) {
+      // 只匹配了名称，图号不匹配，需要用户确认
+      const confirmed = await ElMessageBox.confirm(
+        `找到产品名称匹配的行，但图号不一致：\n` +
+          `项目图号: ${productDrawing || '-'}\n` +
+          `Excel图号: ${finalRowDrawing || '-'}\n` +
+          `产品名称: ${productName || '-'}\n\n` +
+          `是否继续使用该行数据？`,
+        '图号不一致',
+        {
+          confirmButtonText: '继续使用',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      ).catch(() => false)
+
+      if (!confirmed) {
+        return
+      }
     }
 
     // 提取数据
@@ -874,8 +910,6 @@ const showImagePreview = (url: string) => {
 </script>
 
 <style scoped>
-
-
 @media (width <= 768px) {
   .pm-init-groups-grid {
     grid-template-columns: 1fr;
