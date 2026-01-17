@@ -814,13 +814,41 @@ const handleSpecFileChange = async (file: UploadFile) => {
       .map((s) => s.trim())
       .filter(Boolean)
 
-    // 确保长度一致
-    const maxLength = Math.max(图号列表.length, 尺寸列表.length)
-    while (尺寸列表.length < maxLength) {
-      尺寸列表.push('')
-    }
-    while (尺寸列表.length > maxLength) {
-      尺寸列表.pop()
+    // 检查图号和尺寸数量是否一致
+    if (图号列表.length > 1 && 尺寸列表.length === 1 && 尺寸列表[0]) {
+      // 有多个图号但只有一个尺寸，提示用户确认
+      const confirmed = await ElMessageBox.confirm(
+        `检测到 ${图号列表.length} 个产品图号，但只有 1 个产品尺寸：\n` +
+          `图号: ${图号列表.join(' / ')}\n` +
+          `尺寸: ${尺寸列表[0]}\n\n` +
+          `确认后将相同的尺寸应用到所有图号。是否继续？`,
+        '图号与尺寸数量不一致',
+        {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      ).catch(() => false)
+
+      if (!confirmed) {
+        return
+      }
+
+      // 用户确认，将相同的尺寸应用到所有图号
+      const 相同尺寸 = 尺寸列表[0]
+      尺寸列表.length = 0
+      for (let i = 0; i < 图号列表.length; i++) {
+        尺寸列表.push(相同尺寸)
+      }
+    } else {
+      // 确保长度一致（其他情况：图号数量 <= 尺寸数量，或尺寸为空）
+      const maxLength = Math.max(图号列表.length, 尺寸列表.length)
+      while (尺寸列表.length < maxLength) {
+        尺寸列表.push('')
+      }
+      while (尺寸列表.length > maxLength) {
+        尺寸列表.pop()
+      }
     }
 
     // 检查图号与主图号是否一致

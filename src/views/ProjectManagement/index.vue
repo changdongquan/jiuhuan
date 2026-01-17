@@ -416,7 +416,7 @@
           fixed="left"
         />
         <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
-        <el-table-column prop="模具穴数" label="模具穴数" width="120" align="center">
+        <el-table-column prop="模具穴数" label="模具穴数" width="120" align="left">
           <template #default="{ row }">
             <template v-if="row.模具穴数">
               <span>{{ parseCavityExpression(row.模具穴数) }}穴</span>
@@ -4921,8 +4921,6 @@ watch(viewMode, (val) => {
 </script>
 
 <style scoped>
-
-
 @media (width <= 1200px) {
   .detail-grid {
     flex-wrap: wrap;
