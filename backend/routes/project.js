@@ -7,6 +7,7 @@ const os = require('os')
 const fsp = fs.promises
 const multer = require('multer')
 const JSZip = require('jszip')
+const ExcelJS = require('exceljs')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
 
@@ -30,6 +31,14 @@ const TRIPARTITE_TEMPLATE_PATH = path.join(
   'templates',
   'project-management',
   '三方协议模板.docx'
+)
+
+const TRIAL_FORM_TEMPLATE_PATH = path.join(
+  __dirname,
+  '..',
+  'templates',
+  'project-management',
+  '试模单.xlsx'
 )
 
 const mkLibreOfficeProfileDir = async (tmpDir) => {
@@ -242,6 +251,44 @@ const loadProjectRowForTripartiteAgreement = async (code) => {
     `
   const result = await query(queryString, { projectCode: code })
   return Array.isArray(result) && result.length ? result[0] : null
+}
+
+const normalizeTrialCount = (val) => {
+  const raw = String(val || '')
+    .trim()
+    .replace(/\s+/g, '')
+  if (!raw) return null
+
+  let n = null
+  if (/^\d+$/.test(raw)) {
+    n = parseInt(raw, 10)
+  } else if (/^第\d+次$/.test(raw)) {
+    n = parseInt(raw.slice(1, -1), 10)
+  } else {
+    return null
+  }
+
+  if (!Number.isInteger(n) || n <= 0) return null
+  return `第${n}次`
+}
+
+const validateTrialFormRow = (row) => {
+  const errors = []
+  const add = (label, message) => errors.push(`${label}${message ? `：${message}` : ''}`)
+  const isEmpty = (v) => v === null || v === undefined || String(v).trim() === ''
+
+  const productName = row?.productName || row?.产品名称
+
+  if (isEmpty(row?.项目编号)) add('项目编号', '不能为空')
+  if (isEmpty(productName)) add('产品名称', '不能为空')
+  if (isEmpty(row?.模具穴数)) add('模具穴数', '不能为空')
+  if (isEmpty(row?.模具尺寸)) add('模具尺寸', '不能为空')
+  if (toNumber(row?.模具重量) === null) add('模具重量', '必须为数值')
+  if (toNumber(row?.产品重量) === null) add('产品重量', '必须为数值')
+  if (isEmpty(row?.产品材质)) add('产品材质', '不能为空')
+  if (isEmpty(row?.产品颜色)) add('产品颜色', '不能为空')
+
+  return errors
 }
 
 const generateTripartiteAgreementDocxBuffer = async (row) => {
@@ -1039,6 +1086,92 @@ router.get('/detail', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取项目信息失败',
+      error: error.message
+    })
+  }
+})
+
+// 生成试模单（xlsx）：基于模板单元格填充，直接下载（不保存附件）
+router.post('/trial-form-xlsx', async (req, res) => {
+  try {
+    const { projectCode, trialCount } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const normalizedTrialCount = normalizeTrialCount(trialCount)
+    if (!normalizedTrialCount) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模次数格式不正确（仅支持“第N次”或数字 N，且 N 为正整数）'
+      })
+    }
+
+    if (!fs.existsSync(TRIAL_FORM_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '试模单模板不存在，请联系管理员'
+      })
+    }
+
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const validateErrors = validateTrialFormRow(row)
+    if (validateErrors.length) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模单数据不完整，请先补齐后再生成',
+        errors: validateErrors
+      })
+    }
+
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(TRIAL_FORM_TEMPLATE_PATH)
+    const sheet = workbook.getWorksheet('试模单') || workbook.worksheets[0]
+    if (!sheet) {
+      return res.status(500).json({ code: 500, success: false, message: '试模单模板格式异常' })
+    }
+
+    sheet.getCell('C2').value = code
+    sheet.getCell('H2').value = row.productName || row.产品名称 || ''
+    sheet.getCell('L2').value = row.模具穴数 ? String(row.模具穴数) : ''
+    sheet.getCell('D3').value = row.模具尺寸 ? String(row.模具尺寸) : ''
+    sheet.getCell('H3').value =
+      row.模具重量 === null || row.模具重量 === undefined ? '' : String(row.模具重量)
+    sheet.getCell('L3').value =
+      row.产品重量 === null || row.产品重量 === undefined ? '' : String(row.产品重量)
+    sheet.getCell('D4').value = row.产品材质 ? String(row.产品材质) : ''
+    sheet.getCell('H4').value = row.产品颜色 ? String(row.产品颜色) : ''
+    sheet.getCell('D5').value = normalizedTrialCount
+
+    const today = formatDateYYYYMMDD(new Date())
+    const headerText = `&R${normalizedTrialCount} | 生成日期：${today}`
+    sheet.headerFooter = {
+      oddHeader: headerText,
+      evenHeader: headerText
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const encodedFilename = encodeURIComponent(`${code}_${normalizedTrialCount}.xlsx`)
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+    return res.send(Buffer.from(buffer))
+  } catch (error) {
+    console.error('生成试模单 xlsx 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成试模单失败',
       error: error.message
     })
   }

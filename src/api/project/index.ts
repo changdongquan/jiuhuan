@@ -198,6 +198,15 @@ export const generateTripartiteAgreementPdfApi = (projectCode: string) => {
   })
 }
 
+// 生成试模单（xlsx）：基于模板填充，直接下载（不保存附件）
+export const downloadTrialFormXlsxApi = (projectCode: string, trialCount: string) => {
+  return request.post<Blob>({
+    url: `/api/project/trial-form-xlsx`,
+    data: { projectCode, trialCount },
+    responseType: 'blob'
+  })
+}
+
 // 上传零件图示（匿名静态资源 URL）
 export const uploadProjectPartImageApi = (projectCode: string, file: File) => {
   const formData = new FormData()

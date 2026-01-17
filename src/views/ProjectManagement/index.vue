@@ -700,7 +700,21 @@
                 {{ editForm.项目状态 }}
               </el-tag>
             </div>
-            <!-- 三方协议入口移动到“附件区-三方协议”卡片，此处不再显示按钮 -->
+            <div class="pm-edit-header-actions">
+              <el-button
+                type="primary"
+                size="small"
+                :loading="trialFormGenerating"
+                :disabled="
+                  trialFormGenerating ||
+                  editSubmitting ||
+                  !(editForm.项目编号 || currentProjectCode)
+                "
+                @click="handleGenerateTrialFormXlsx"
+              >
+                生成试模单
+              </el-button>
+            </div>
           </div>
           <div class="pm-edit-header-sub">
             <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
@@ -1932,6 +1946,7 @@ import {
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
   generateTripartiteAgreementPdfApi,
+  downloadTrialFormXlsxApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
   type ProjectInfo,
@@ -2190,6 +2205,42 @@ const editActiveTab = ref<'basic' | 'part' | 'mould' | 'machine' | 'attachments'
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
+const trialFormGenerating = ref(false)
+
+const stableStringify = (input: any) => {
+  const seen = new WeakSet()
+  const normalize = (val: any): any => {
+    if (val === undefined) return null
+    if (val === null) return null
+    if (typeof val !== 'object') return val
+    if (typeof val === 'function') return null
+    if (seen.has(val)) return null
+    seen.add(val)
+    if (Array.isArray(val)) return val.map(normalize)
+    const out: Record<string, any> = {}
+    Object.keys(val)
+      .sort()
+      .forEach((k) => {
+        const v = (val as any)[k]
+        if (typeof v === 'function') return
+        out[k] = normalize(v)
+      })
+    return out
+  }
+  try {
+    return JSON.stringify(normalize(input))
+  } catch {
+    return ''
+  }
+}
+
+const editFormSnapshot = ref('')
+const setEditFormSnapshot = () => {
+  editFormSnapshot.value = stableStringify(editForm)
+}
+const isEditFormDirty = computed(
+  () => !!editFormSnapshot.value && stableStringify(editForm) !== editFormSnapshot.value
+)
 
 // 产品图号列表相关逻辑
 // 解析产品图号列表和产品尺寸（兼容旧数据）
@@ -3646,6 +3697,8 @@ const openEditDialog = async () => {
     loadAttachments()
     loadProductionTaskAttachments()
   }
+
+  setEditFormSnapshot()
 }
 
 const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?: any) => {
@@ -4321,6 +4374,104 @@ const downloadAttachment = async (row: ProjectAttachment) => {
     console.error('下载附件失败:', error)
     ElMessage.error(error?.message || '下载失败')
   }
+}
+
+const normalizeTrialCountInput = (val: any) => {
+  const raw = String(val || '')
+    .trim()
+    .replace(/\s+/g, '')
+  if (!raw) return null
+  let n: number | null = null
+  if (/^\d+$/.test(raw)) {
+    n = parseInt(raw, 10)
+  } else if (/^第\d+次$/.test(raw)) {
+    n = parseInt(raw.slice(1, -1), 10)
+  }
+  if (!Number.isInteger(n) || !n || n <= 0) return null
+  return `第${n}次`
+}
+
+const handleGenerateTrialFormXlsx = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+  if (trialFormGenerating.value || editSubmitting.value) return
+
+  const runGenerate = async () => {
+    let normalizedTrialCount = '第1次'
+    try {
+      const { value } = await ElMessageBox.prompt(
+        '请输入试模次数（例如：第1次 或 1）',
+        '试模次数',
+        {
+          inputValue: '第1次',
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputValidator: (v) => {
+            return normalizeTrialCountInput(v) ? true : '仅支持“第N次”或数字 N（N 为正整数）'
+          }
+        }
+      )
+      normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
+    } catch {
+      return
+    }
+
+    try {
+      trialFormGenerating.value = true
+      const resp: any = await downloadTrialFormXlsxApi(projectCode, normalizedTrialCount)
+      const blob = ((resp as any)?.data ?? resp) as Blob
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${projectCode}_${normalizedTrialCount}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('生成试模单失败:', error)
+      const resp = error?.response
+      const data = resp?.data
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text()
+          const json = JSON.parse(text)
+          const msg = json?.message || '生成试模单失败'
+          const errs = Array.isArray(json?.errors) ? json.errors : []
+          if (errs.length) {
+            ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+            return
+          }
+          ElMessage.error(msg)
+          return
+        } catch {
+          // ignore
+        }
+      }
+      ElMessage.error(resp?.data?.message || error?.message || '生成试模单失败')
+    } finally {
+      trialFormGenerating.value = false
+    }
+  }
+
+  if (isEditFormDirty.value) {
+    try {
+      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
+        type: 'warning',
+        confirmButtonText: '保存并继续生成',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await handleSubmitEdit()
+    if (editDialogVisible.value) return
+  }
+
+  await runGenerate()
 }
 
 const handleGenerateTripartiteAgreement = async () => {
