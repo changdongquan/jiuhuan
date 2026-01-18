@@ -104,6 +104,19 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     }
   },
   {
+    path: '/project-management/trial-form-print/:projectCode',
+    component: () => import('@/views/ProjectManagement/TrialFormPrintPreview.vue'),
+    name: 'TrialFormPrintPreview',
+    meta: {
+      title: '试模单打印预览',
+      hidden: true,
+      noTagsView: true,
+      noCache: true,
+      canTo: true,
+      roles: ['*']
+    }
+  },
+  {
     path: '/sales-orders',
     component: Layout,
     redirect: '/sales-orders/index',

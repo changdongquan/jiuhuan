@@ -700,7 +700,7 @@
                 {{ editForm.项目状态 }}
               </el-tag>
             </div>
-            <div class="pm-edit-header-actions">
+            <div class="pm-edit-header-actions pm-edit-header-actions--pair">
               <el-button
                 type="primary"
                 size="small"
@@ -710,9 +710,22 @@
                   editSubmitting ||
                   !(editForm.项目编号 || currentProjectCode)
                 "
-                @click="handleGenerateTrialFormXlsx"
+                @click="handleDownloadTrialFormXlsx"
               >
                 生成试模单
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                :disabled="
+                  trialFormGenerating ||
+                  editSubmitting ||
+                  !(editForm.项目编号 || currentProjectCode)
+                "
+                @click="handlePrintTrialFormPreview"
+              >
+                打印试模单
               </el-button>
             </div>
           </div>
@@ -1945,8 +1958,8 @@ import {
   getProjectAttachmentsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
-  generateTripartiteAgreementPdfApi,
   downloadTrialFormXlsxApi,
+  generateTripartiteAgreementPdfApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
   type ProjectInfo,
@@ -4391,77 +4404,36 @@ const normalizeTrialCountInput = (val: any) => {
   return `第${n}次`
 }
 
-const handleGenerateTrialFormXlsx = async () => {
+const handlePrintTrialFormPreview = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
     ElMessage.warning('请先填写项目编号')
     return
   }
-  if (trialFormGenerating.value || editSubmitting.value) return
+  if (editSubmitting.value) return
 
-  const runGenerate = async () => {
-    let normalizedTrialCount = '第1次'
-    try {
-      const { value } = await ElMessageBox.prompt(
-        '请输入试模次数（例如：第1次 或 1）',
-        '试模次数',
-        {
-          inputValue: '第1次',
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          inputValidator: (v) => {
-            return normalizeTrialCountInput(v) ? true : '仅支持“第N次”或数字 N（N 为正整数）'
-          }
-        }
-      )
-      normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
-    } catch {
-      return
-    }
-
-    try {
-      trialFormGenerating.value = true
-      const resp: any = await downloadTrialFormXlsxApi(projectCode, normalizedTrialCount)
-      const blob = ((resp as any)?.data ?? resp) as Blob
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${projectCode}_${normalizedTrialCount}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch (error: any) {
-      console.error('生成试模单失败:', error)
-      const resp = error?.response
-      const data = resp?.data
-      if (data instanceof Blob) {
-        try {
-          const text = await data.text()
-          const json = JSON.parse(text)
-          const msg = json?.message || '生成试模单失败'
-          const errs = Array.isArray(json?.errors) ? json.errors : []
-          if (errs.length) {
-            ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
-            return
-          }
-          ElMessage.error(msg)
-          return
-        } catch {
-          // ignore
-        }
+  // 先输入试模次数
+  let normalizedTrialCount = '第1次'
+  try {
+    const { value } = await ElMessageBox.prompt('请输入试模次数（例如：第1次 或 1）', '试模次数', {
+      inputValue: '第1次',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValidator: (v) => {
+        return normalizeTrialCountInput(v) ? true : '仅支持"第N次"或数字 N（N 为正整数）'
       }
-      ElMessage.error(resp?.data?.message || error?.message || '生成试模单失败')
-    } finally {
-      trialFormGenerating.value = false
-    }
+    })
+    normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
+  } catch {
+    return
   }
 
+  // 如果需要保存，先保存
   if (isEditFormDirty.value) {
     try {
-      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
+      await ElMessageBox.confirm('请先保存后再打印试模单', '提示', {
         type: 'warning',
-        confirmButtonText: '保存并继续生成',
+        confirmButtonText: '保存并继续',
         cancelButtonText: '取消'
       })
     } catch {
@@ -4471,7 +4443,102 @@ const handleGenerateTrialFormXlsx = async () => {
     if (editDialogVisible.value) return
   }
 
-  await runGenerate()
+  // 跳转到打印预览页面
+  const fromPath = route.path
+  router.push({
+    name: 'TrialFormPrintPreview',
+    params: { projectCode },
+    query: { trialCount: normalizedTrialCount, from: fromPath }
+  })
+}
+
+const resolveDownloadFilename = (resp: any, fallback: string) => {
+  const headers = resp?.headers || {}
+  const disposition = headers['content-disposition'] || headers['Content-Disposition'] || ''
+  const raw = String(disposition)
+  let fileName = ''
+
+  const matchUtf8 = raw.match(/filename\\*=(?:UTF-8''|utf-8'')?([^;]+)/)
+  if (matchUtf8?.[1]) {
+    fileName = matchUtf8[1].trim().replace(/^\"|\"$/g, '')
+    try {
+      fileName = decodeURIComponent(fileName)
+    } catch {
+      // ignore
+    }
+  } else {
+    const match = raw.match(/filename=([^;]+)/)
+    if (match?.[1]) {
+      fileName = match[1].trim().replace(/^\"|\"$/g, '')
+    }
+  }
+
+  return fileName || fallback
+}
+
+const downloadBlobAsFile = (blob: Blob, fileName: string) => {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
+}
+
+const handleDownloadTrialFormXlsx = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+  if (trialFormGenerating.value || editSubmitting.value) return
+
+  // 先输入试模次数
+  let normalizedTrialCount = '第1次'
+  try {
+    const { value } = await ElMessageBox.prompt('请输入试模次数（例如：第1次 或 1）', '试模次数', {
+      inputValue: '第1次',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValidator: (v) => {
+        return normalizeTrialCountInput(v) ? true : '仅支持"第N次"或数字 N（N 为正整数）'
+      }
+    })
+    normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
+  } catch {
+    return
+  }
+
+  // 如果需要保存，先保存（生成基于数据库数据）
+  if (isEditFormDirty.value) {
+    try {
+      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
+        type: 'warning',
+        confirmButtonText: '保存并继续',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await handleSubmitEdit()
+    if (editDialogVisible.value) return
+  }
+
+  try {
+    trialFormGenerating.value = true
+    const resp: any = await downloadTrialFormXlsxApi(projectCode, normalizedTrialCount)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const fallbackName = `${projectCode}_${normalizedTrialCount}.xlsx`
+    const fileName = resolveDownloadFilename(resp, fallbackName)
+    downloadBlobAsFile(blob, fileName)
+  } catch (error: any) {
+    console.error('生成试模单失败:', error)
+    ElMessage.error(error?.message || '生成试模单失败')
+  } finally {
+    trialFormGenerating.value = false
+  }
 }
 
 const handleGenerateTripartiteAgreement = async () => {
@@ -5439,6 +5506,15 @@ watch(viewMode, (val) => {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.pm-edit-header-actions--pair {
+  align-items: center;
+}
+
+:deep(.pm-edit-header-actions--pair .el-button) {
+  width: 110px;
+  justify-content: center;
 }
 
 .pm-edit-header-code {
