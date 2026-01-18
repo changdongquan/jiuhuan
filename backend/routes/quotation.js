@@ -296,6 +296,11 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   workbook.creator = 'CraftSys'
   workbook.created = new Date()
 
+  // 目标观感对齐“出库单打印预览”的单元格 padding（约 6px 8px）：
+  // LibreOffice 将 xlsx 转 PDF 时，Excel 的 indent 对“General/未显式对齐”的单元格效果不明显，
+  // 这里统一为有边框的单元格补齐 horizontal，并使用轻微 indent，让视觉上有“内边距”的效果。
+  const PRINT_CELL_INDENT = 1
+
   const colorTextMuted = { argb: 'FF606266' }
   const colorHeaderBg = { argb: 'FFF3F4F6' }
   const colorStripeBg = { argb: 'FFFAFAFB' }
@@ -437,8 +442,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     { header: '加工内容', key: 'process', width: pxToExcelWidth(100) },
     { header: '图示', key: 'image', width: pxToExcelWidth(140) },
     { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
-    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(110) }
+    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(90) },
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(120) }
   ]
   const colsDisabled = [
     { header: '序号', key: 'seq', width: pxToExcelWidth(60) },
@@ -447,8 +452,8 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     { header: '材质', key: 'material', width: pxToExcelWidth(110) },
     { header: '加工内容', key: 'process', width: pxToExcelWidth(110) },
     { header: '数量', key: 'qty', width: pxToExcelWidth(90) },
-    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(100) },
-    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(110) }
+    { header: '单价(元)', key: 'unitPrice', width: pxToExcelWidth(90) },
+    { header: '金额(元)', key: 'amount', width: pxToExcelWidth(120) }
   ]
   const cols = isEnabled ? colsEnabled : colsDisabled
   sheet.columns = cols
@@ -509,13 +514,9 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const leftValueStartCol = 2 // B列开始：值列（左对齐）
   const leftValueEndCol = Math.min(4, colCount) // 值列结束：D列或更少
 
-  // 右侧字段布局（参照出库单 .doc-info__right，margin-left: 50px）：
-  // - 表格最右侧列是 colCount（lastCol）
-  // - 标签列放在倒数第3列（固定宽度）
-  // - 值列合并倒数第1列和第2列（colCount-1 到 colCount），值放在合并后的单元格中
-  const rightLabelCol = Math.max(1, colCount - 2) // 标签列：倒数第3列
-  const rightValueStartCol = colCount - 1 // 值列开始位置：倒数第2列
-  const rightValueEndCol = colCount // 值列结束位置：倒数第1列（最右边），合并倒数第1和第2列
+  // 右侧字段布局：按用户要求合并最后三列（例如 G~I）作为右侧信息区
+  const rightMergedStartCol = Math.max(1, colCount - 2)
+  const rightMergedEndCol = colCount
 
   const applyBottomBorderForRange = (rowNo, startCol, endCol) => {
     for (let c = startCol; c <= endCol; c += 1) {
@@ -552,33 +553,15 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     }
   }
 
-  // 设置右侧字段（参照出库单 .doc-info__item 样式）
-  // 标签和值分离，标签右对齐，值左对齐
-  const setMetaFieldRight = ({
-    rowNo,
-    labelCol,
-    valueStartCol,
-    valueEndCol,
-    label,
-    value,
-    mutedValue = false
-  }) => {
-    // 标签单元格：右对齐
-    const labelCell = sheet.getRow(rowNo).getCell(labelCol)
-    labelCell.value = label ? `${label}：` : ''
-    labelCell.font = metaLabelFont // 标签字体：13px, #606266
-    labelCell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: false }
-
-    // 值单元格：左对齐，可以占据多列空间
-    if (valueStartCol <= valueEndCol) {
-      if (valueStartCol < valueEndCol) {
-        sheet.mergeCells(`${colLetter(valueStartCol)}${rowNo}:${colLetter(valueEndCol)}${rowNo}`)
-      }
-      const valueCell = sheet.getCell(`${colLetter(valueStartCol)}${rowNo}`)
-      valueCell.value = value || ''
-      valueCell.font = mutedValue ? metaValueMutedFont : metaValueFont // 值字体：13px, #303133
-      valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+  // 右侧字段：按用户要求合并三列（例如 G/H/I）后整体左对齐展示（避免标签被裁剪）
+  const setMetaFieldRightMerged = ({ rowNo, startCol, endCol, label, value }) => {
+    if (startCol < endCol) {
+      sheet.mergeCells(`${colLetter(startCol)}${rowNo}:${colLetter(endCol)}${rowNo}`)
     }
+    const cell = sheet.getCell(`${colLetter(startCol)}${rowNo}`)
+    cell.value = `${label ? `${label}：` : ''}${value || ''}`
+    cell.font = metaValueFont
+    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false }
   }
 
   // 设置行高（参照出库单的行间距 8px，每行行高约为20px）
@@ -591,45 +574,39 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   // "联系电话："需要更宽的列宽（5个中文字符+1个冒号，约需12-13个字符宽度）
   sheet.getColumn(leftLabelCol).width = 13 // 左侧标签列固定宽度（约91px，确保"联系电话："完整显示）
 
-  // 设置右侧标签列的宽度（约72px，与左侧标签列一致）
-  if (rightLabelCol > 0 && rightLabelCol <= colCount) {
-    sheet.getColumn(rightLabelCol).width = 10 // 右侧标签列固定宽度（约72px）
-  }
+  // 右侧信息区不再单独设置“标签列”宽度（因为标签和值合并到同一单元格中）
 
-  // 左侧：联系人 / 联系电话（合并第1、2列）
+  // 左侧：联系人 / 联系电话（合并左侧区域，避免联系电话较长时换行）
   // 客户名称已移到标题下方，不再显示在此处
-  // 联系人：合并A列和B列
-  sheet.mergeCells(`A${metaRow1}:B${metaRow1}`)
+  const leftMetaEndCol = Math.max(2, rightMergedStartCol - 1)
+  // 联系人：合并 A~leftMetaEndCol
+  sheet.mergeCells(`A${metaRow1}:${colLetter(leftMetaEndCol)}${metaRow1}`)
   const contactNameCell = sheet.getCell(`A${metaRow1}`)
   contactNameCell.value = `联系人：${row.contactName || '-'}`
   contactNameCell.font = metaValueMutedFont // 值字体：13px, #606266（灰色）
   contactNameCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
 
-  // 联系电话：合并A列和B列
-  sheet.mergeCells(`A${metaRow2}:B${metaRow2}`)
+  // 联系电话：合并 A~leftMetaEndCol
+  sheet.mergeCells(`A${metaRow2}:${colLetter(leftMetaEndCol)}${metaRow2}`)
   const contactPhoneCell = sheet.getCell(`A${metaRow2}`)
   contactPhoneCell.value = `联系电话：${row.contactPhone || '-'}`
   contactPhoneCell.font = metaValueMutedFont // 值字体：13px, #606266（灰色）
   contactPhoneCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
 
-  // 右侧：报价单号 / 报价日期（参照出库单 .doc-info__right 样式）
-  setMetaFieldRight({
+  // 右侧：报价单号 / 报价日期（合并三列后靠左）
+  setMetaFieldRightMerged({
     rowNo: metaRow1,
-    labelCol: rightLabelCol,
-    valueStartCol: rightValueStartCol,
-    valueEndCol: rightValueEndCol,
+    startCol: rightMergedStartCol,
+    endCol: rightMergedEndCol,
     label: '报价单号',
-    value: row.quotationNo || '',
-    mutedValue: false
+    value: row.quotationNo || ''
   })
-  setMetaFieldRight({
+  setMetaFieldRightMerged({
     rowNo: metaRow2,
-    labelCol: rightLabelCol,
-    valueStartCol: rightValueStartCol,
-    valueEndCol: rightValueEndCol,
+    startCol: rightMergedStartCol,
+    endCol: rightMergedEndCol,
     label: '报价日期',
-    value: toDateString(row.quotationDate) || '-',
-    mutedValue: false
+    value: toDateString(row.quotationDate) || '-'
   })
 
   // 恢复序号列（A列）的原始宽度：基本信息区域使用A列显示标签后，需要恢复序号列的60px宽度
@@ -1084,24 +1061,22 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const confirmRowNo = operatorRowNo
 
   // 经办人（邮箱下方，左侧与邮箱左对齐）
-  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A
-  operatorLabelCell.value = '经办人：'
-  operatorLabelCell.font = { size: 11, color: colorTextMuted }
-  operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle' }
-
-  const operatorValueStartCol = 2 // B
-  // 下划线缩短：只占用 1 列宽（B 列）
-  const operatorValueEndCol = operatorValueStartCol
-  if (operatorValueStartCol < operatorValueEndCol) {
-    sheet.mergeCells(
-      `${colLetter(operatorValueStartCol)}${operatorRowNo}:${colLetter(operatorValueEndCol)}${operatorRowNo}`
-    )
+  // 合并 A:B，避免“经办人：”在序号列（A列）宽度较窄时被裁剪
+  sheet.mergeCells(`A${operatorRowNo}:B${operatorRowNo}`)
+  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A (A:B merged)
+  const operatorText = row.operator || ''
+  const operatorLineText = operatorText ? operatorText : ' '.repeat(16)
+  operatorLabelCell.value = {
+    richText: [
+      { text: '经办人：', font: { size: 11, color: colorTextMuted } },
+      {
+        text: operatorLineText,
+        font: { size: 11, color: { argb: 'FF000000' }, underline: true }
+      }
+    ]
   }
-  const operatorValueCell = sheet.getCell(`${colLetter(operatorValueStartCol)}${operatorRowNo}`)
-  operatorValueCell.value = row.operator || ''
-  operatorValueCell.font = { size: 11 }
-  operatorValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(operatorRowNo, operatorValueStartCol, operatorValueEndCol)
+  operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false }
+  // 使用文字下划线模拟签名线，避免“经办人：”本身出现下划线
 
   // 客户确认（与经办人同一行，左右列位置不变）
   const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
@@ -1218,6 +1193,41 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.pageSetup.printArea = `A1:${lastCol}${footerEndRow}`
   sheet.headerFooter.oddHeader = `&R第 &P 页 / 共 &N 页`
   sheet.headerFooter.oddFooter = ''
+
+  // 统一单元格“内边距”观感：对有边框的单元格增加轻微缩进，避免内容贴边
+  sheet.eachRow({ includeEmpty: false }, (rowObj) => {
+    rowObj.eachCell({ includeEmpty: false }, (cell) => {
+      if (!cell.border) return
+      const alignment = cell.alignment || {}
+      if (alignment.horizontal === 'center') return
+      if (typeof alignment.indent === 'number' && alignment.indent > 0) return
+      const horizontal =
+        !alignment.horizontal || alignment.horizontal === 'general'
+          ? typeof cell.value === 'number'
+            ? 'right'
+            : 'left'
+          : alignment.horizontal
+      cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
+    })
+  })
+
+  // 补齐“公共信息区域 / 备注区域 / 页脚信息”等非边框单元格的内边距（它们很多没有 border）
+  sheet.eachRow({ includeEmpty: false }, (rowObj) => {
+    rowObj.eachCell({ includeEmpty: false }, (cell) => {
+      const v = cell.value
+      if (v === null || v === undefined || v === '') return
+      const alignment = cell.alignment || {}
+      if (alignment.horizontal === 'center') return
+      if (typeof alignment.indent === 'number' && alignment.indent > 0) return
+      const horizontal =
+        !alignment.horizontal || alignment.horizontal === 'general'
+          ? typeof v === 'number'
+            ? 'right'
+            : 'left'
+          : alignment.horizontal
+      cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
+    })
+  })
 
   return workbook
 }
@@ -2185,9 +2195,15 @@ router.get('/:id/export-excel', async (req, res) => {
 
     const sheet = workbook.worksheets[0]
 
-    // 工具方法：写入单元格，仅修改单元格数据，不改变样式/格式
+    const PRINT_CELL_INDENT = 1
+
+    // 工具方法：写入单元格，仅修改单元格数据；同时确保 PDF 里内容不贴边
     const setCell = (addr, value) => {
       const cell = sheet.getCell(addr)
+      const alignment = cell.alignment || {}
+      if (!(typeof alignment.indent === 'number' && alignment.indent > 0)) {
+        cell.alignment = { ...alignment, indent: PRINT_CELL_INDENT }
+      }
       if (value === null || value === undefined || value === '') {
         cell.value = ''
       } else if (value instanceof Date || typeof value === 'number') {
@@ -2462,9 +2478,15 @@ router.get('/:id/export-pdf', async (req, res) => {
 
     const sheet = workbook.worksheets[0]
 
-    // 工具方法：写入单元格，仅修改单元格数据，不改变样式/格式
+    const PRINT_CELL_INDENT = 1
+
+    // 工具方法：写入单元格，仅修改单元格数据；同时确保 PDF 里内容不贴边
     const setCell = (addr, value) => {
       const cell = sheet.getCell(addr)
+      const alignment = cell.alignment || {}
+      if (!(typeof alignment.indent === 'number' && alignment.indent > 0)) {
+        cell.alignment = { ...alignment, indent: PRINT_CELL_INDENT }
+      }
       if (value === null || value === undefined || value === '') {
         cell.value = ''
       } else if (value instanceof Date || typeof value === 'number') {
@@ -2745,8 +2767,14 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
 
     const sheet = workbook.worksheets[0]
 
+    const PRINT_CELL_INDENT = 1
+
     const setCell = (addr, value) => {
       const cell = sheet.getCell(addr)
+      const alignment = cell.alignment || {}
+      if (!(typeof alignment.indent === 'number' && alignment.indent > 0)) {
+        cell.alignment = { ...alignment, indent: PRINT_CELL_INDENT }
+      }
       if (value === null || value === undefined || value === '') {
         cell.value = ''
       } else if (value instanceof Date || typeof value === 'number') {

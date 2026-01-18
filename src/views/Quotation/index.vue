@@ -560,7 +560,7 @@
                     placeholder="请输入申请更改部门"
                   />
                 </td>
-                <td class="qs-label" colspan="2">经办人</td>
+                <td class="qs-label" colspan="2">经办人：</td>
                 <td class="qs-input qs-manual">
                   <el-input
                     v-model="quotationForm.operator"
@@ -880,7 +880,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="单价(元)" width="100" align="right">
+              <el-table-column label="单价(元)" width="90" align="right">
                 <template #default="{ row }">
                   <el-input
                     :model-value="
@@ -906,7 +906,7 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="金额(元)" width="95" align="right">
+              <el-table-column label="金额(元)" width="105" align="right">
                 <template #default="{ row }">
                   {{
                     row.quantity === undefined || row.unitPrice === undefined
@@ -3071,7 +3071,7 @@ onMounted(() => {
 }
 
 .qs-table td {
-  padding: 4px 6px;
+  padding: 6px 8px;
   border: 1px solid #000;
   box-sizing: border-box;
 }
@@ -3079,8 +3079,8 @@ onMounted(() => {
 /* 单位材料费 / 加工费用明细行：行高略微减小 */
 .qs-row-material td,
 .qs-row-process td {
-  padding-top: 2px;
-  padding-bottom: 2px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .qs-title {
