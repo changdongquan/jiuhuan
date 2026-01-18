@@ -4521,6 +4521,46 @@ const handleDownloadTrialFormXlsx = async () => {
   }
   if (trialFormGenerating.value || editSubmitting.value) return
 
+  // 如果需要保存，先保存（生成基于数据库数据）
+  if (isEditFormDirty.value) {
+    try {
+      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
+        type: 'warning',
+        confirmButtonText: '保存并继续',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await handleSubmitEdit()
+    if (editDialogVisible.value) return
+  }
+
+  // 保存后校验（与“打印试模单”保持一致）
+  try {
+    const resp: any = await validateTrialFormApi(projectCode)
+    if (resp?.code !== 0 && resp?.success !== true) {
+      const msg = resp?.message || '试模单数据不完整，请先补齐后再生成'
+      const errs = Array.isArray(resp?.errors) ? resp.errors : []
+      if (errs.length) {
+        await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+      } else {
+        ElMessage.error(msg)
+      }
+      return
+    }
+  } catch (error: any) {
+    const data = error?.response?.data
+    const msg = data?.message || '试模单数据不完整，请先补齐后再生成'
+    const errs = Array.isArray(data?.errors) ? data.errors : []
+    if (errs.length) {
+      await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+      return
+    }
+    ElMessage.error(msg)
+    return
+  }
+
   // 先输入试模次数
   let normalizedTrialCount = '第1次'
   try {
@@ -4535,21 +4575,6 @@ const handleDownloadTrialFormXlsx = async () => {
     normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
   } catch {
     return
-  }
-
-  // 如果需要保存，先保存（生成基于数据库数据）
-  if (isEditFormDirty.value) {
-    try {
-      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
-        type: 'warning',
-        confirmButtonText: '保存并继续',
-        cancelButtonText: '取消'
-      })
-    } catch {
-      return
-    }
-    await handleSubmitEdit()
-    if (editDialogVisible.value) return
   }
 
   try {
