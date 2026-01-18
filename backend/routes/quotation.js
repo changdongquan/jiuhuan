@@ -1065,12 +1065,20 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.mergeCells(`A${operatorRowNo}:B${operatorRowNo}`)
   const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A (A:B merged)
   const operatorText = row.operator || ''
-  const operatorLineText = operatorText ? operatorText : ' '.repeat(16)
+  // 用“下划线 + 不断行空格”把签名线从用户名开始延伸到单元格最右侧
+  // 说明：
+  // - 仅对“用户名 + 填充”部分加下划线，避免“经办人：”被划线
+  // - 使用 NBSP 避免尾随空格被转换/渲染时裁剪
+  const underlinePad = '\u00A0'.repeat(64)
   operatorLabelCell.value = {
     richText: [
       { text: '经办人：', font: { size: 11, color: colorTextMuted } },
       {
-        text: operatorLineText,
+        text: operatorText,
+        font: { size: 11, color: { argb: 'FF000000' }, underline: true }
+      },
+      {
+        text: underlinePad,
         font: { size: 11, color: { argb: 'FF000000' }, underline: true }
       }
     ]
