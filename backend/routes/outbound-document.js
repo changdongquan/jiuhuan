@@ -195,6 +195,31 @@ const safeFileName = (fileName) => {
   return String(fileName).replace(/[/\\?%*:|"<>]/g, '_')
 }
 
+const buildOutboundAttachmentBaseName = (itemCode) => {
+  const safeItemCode = safeFileName(String(itemCode || '').trim())
+  const base = `${safeItemCode}_出库单`.replace(/\s+/g, '_')
+  return base || '附件'
+}
+
+const buildOutboundAttachmentFileName = (itemCode, originalName) => {
+  const decodedName = normalizeAttachmentFileName(originalName)
+  const ext = path.extname(String(decodedName || '').trim())
+  return `${buildOutboundAttachmentBaseName(itemCode)}${ext || ''}`
+}
+
+const ensureUniqueFileName = (dirPath, fileName) => {
+  const parsed = path.parse(String(fileName || ''))
+  const base = parsed.name || '附件'
+  const ext = parsed.ext || ''
+  let candidate = `${base}${ext}`
+  let i = 2
+  while (fs.existsSync(path.join(dirPath, candidate))) {
+    candidate = `${base}_${i}${ext}`
+    i += 1
+  }
+  return candidate
+}
+
 const ensureDirSync = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true })
@@ -704,8 +729,9 @@ router.post(
       const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
       ensureDirSync(finalFullDir)
 
-      const originalName = normalizeAttachmentFileName(file.originalname)
-      const finalStoredFileName = safeFileName(req._attachmentStoredFileName || originalName)
+      const desiredName = buildOutboundAttachmentFileName(itemCode, file.originalname)
+      const finalStoredFileName = ensureUniqueFileName(finalFullDir, safeFileName(desiredName))
+      const originalName = finalStoredFileName
       const fromPath = path.join(req._tempAttachmentFullDir, file.filename)
       const toPath = path.join(finalFullDir, finalStoredFileName)
 
@@ -839,6 +865,8 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
       `
       SELECT TOP 1
         附件ID as id,
+        出库单号 as documentNo,
+        项目编号 as itemCode,
         原始文件名 as originalName,
         存储文件名 as storedFileName,
         相对路径 as relativePath
@@ -857,7 +885,11 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
     }
 
-    res.download(fullPath, attachment.originalName)
+    const downloadName = buildOutboundAttachmentFileName(
+      attachment.itemCode,
+      attachment.storedFileName || attachment.originalName
+    )
+    res.download(fullPath, safeFileName(downloadName))
   } catch (error) {
     console.error('下载出库单附件失败:', error)
     res.status(500).json({ code: 500, success: false, message: '下载出库单附件失败' })

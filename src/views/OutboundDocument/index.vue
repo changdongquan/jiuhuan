@@ -1595,10 +1595,7 @@ const handleTimelineDocumentClick = async (doc: Partial<OutboundDocument>) => {
   if (!docNo) return
   timelineActiveDocumentNo.value = docNo
   timelineActiveDetailKey.value = null
-  await Promise.all([
-    loadDocumentForTimeline(docNo),
-    loadOutboundAttachmentSummaryForDocument(docNo)
-  ])
+  await Promise.all([loadDocumentForTimeline(docNo), ensureOutboundAttachmentSummaryLoaded(docNo)])
 }
 
 const handleTimelineDetailClick = async (doc: Partial<OutboundDocument>, detail: any) => {
@@ -1606,7 +1603,7 @@ const handleTimelineDetailClick = async (doc: Partial<OutboundDocument>, detail:
   if (!docNo) return
   timelineActiveDocumentNo.value = docNo
   timelineActiveDetailKey.value = makeTimelineDetailKey(docNo, detail)
-  await loadDocumentForTimeline(docNo)
+  await Promise.all([loadDocumentForTimeline(docNo), ensureOutboundAttachmentSummaryLoaded(docNo)])
 }
 
 const buildTimelineRowFromView = (): Partial<OutboundDocument> | null => {
@@ -1674,7 +1671,10 @@ watch(viewMode, (mode) => {
     if (docNo) {
       timelineActiveDocumentNo.value = docNo
       timelineActiveDetailKey.value = null
-      void loadDocumentForTimeline(docNo)
+      void Promise.all([
+        loadDocumentForTimeline(docNo),
+        ensureOutboundAttachmentSummaryLoaded(docNo)
+      ])
     } else {
       timelineActiveDocumentNo.value = null
       timelineActiveDetailKey.value = null
@@ -1696,7 +1696,7 @@ watch(tableData, (rows) => {
   if (docNo) {
     timelineActiveDocumentNo.value = docNo
     timelineActiveDetailKey.value = null
-    void loadDocumentForTimeline(docNo)
+    void Promise.all([loadDocumentForTimeline(docNo), ensureOutboundAttachmentSummaryLoaded(docNo)])
   } else {
     timelineActiveDocumentNo.value = null
     timelineActiveDetailKey.value = null
@@ -2685,6 +2685,13 @@ const getOutboundItemAttachmentCount = (documentNo: string, itemCode: string) =>
   return outboundAttachmentSummaryByDoc.value?.[docNo]?.[code] ?? 0
 }
 
+const ensureOutboundAttachmentSummaryLoaded = async (documentNo: string) => {
+  const docNo = String(documentNo || '').trim()
+  if (!docNo) return
+  if (outboundAttachmentSummaryByDoc.value?.[docNo]) return
+  await loadOutboundAttachmentSummaryForDocument(docNo)
+}
+
 const loadOutboundAttachmentSummaryForDocument = async (documentNo: string) => {
   const docNo = String(documentNo || '').trim()
   if (!docNo) return
@@ -3503,7 +3510,11 @@ const downloadOutboundAttachment = async (row: OutboundDocumentAttachment) => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
+    const sourceName = row.storedFileName || row.originalName || ''
+    const ext = sourceName.includes('.') ? `.${sourceName.split('.').pop()}` : ''
+    const base = `${String(row.itemCode || '').trim()}_出库单`
+    const safeBase = base.replace(/[/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_')
+    a.download = safeBase ? `${safeBase}${ext}` : sourceName || `附件_${row.id}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
