@@ -1177,6 +1177,42 @@ router.post('/trial-form-xlsx', async (req, res) => {
   }
 })
 
+// 校验试模单数据完整性：用于打印预览等场景（不生成文件）
+router.post('/trial-form-validate', async (req, res) => {
+  try {
+    const { projectCode } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const validateErrors = validateTrialFormRow(row)
+    if (validateErrors.length) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模单数据不完整，请先补齐后再生成',
+        errors: validateErrors
+      })
+    }
+
+    return res.json({ code: 0, success: true })
+  } catch (error) {
+    console.error('校验试模单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '校验试模单失败',
+      error: error.message
+    })
+  }
+})
+
 // 生成三方协议（docx）：基于模板占位符填充，返回 docx 文件
 router.get('/tripartite-agreement-docx', async (req, res) => {
   try {

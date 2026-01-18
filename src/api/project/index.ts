@@ -207,6 +207,19 @@ export const downloadTrialFormXlsxApi = (projectCode: string, trialCount: string
   })
 }
 
+// 校验试模单数据完整性（不生成文件）
+export const validateTrialFormApi = (projectCode: string) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    errors?: string[]
+  }>({
+    url: `/api/project/trial-form-validate`,
+    data: { projectCode }
+  })
+}
+
 // 上传零件图示（匿名静态资源 URL）
 export const uploadProjectPartImageApi = (projectCode: string, file: File) => {
   const formData = new FormData()
