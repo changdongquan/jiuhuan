@@ -691,7 +691,7 @@ router.get('/detail', async (req, res) => {
 
 // 上传附件
 router.post(
-  '/:documentNo/items/:itemCode/attachments',
+  '/:documentNo/items/:itemCode(*)/attachments',
   uploadSingleAttachment,
   async (req, res) => {
     try {
@@ -785,7 +785,7 @@ router.post(
 )
 
 // 获取某出库单某项目编号的附件列表
-router.get('/:documentNo/items/:itemCode/attachments', async (req, res) => {
+router.get('/:documentNo/items/:itemCode(*)/attachments', async (req, res) => {
   try {
     await ensureAttachmentsTable()
     const documentNo = String(req.params.documentNo || '').trim()
