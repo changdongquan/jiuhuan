@@ -1773,7 +1773,9 @@ router.delete('/delete', async (req, res) => {
 // === 项目管理附件相关接口 ===
 
 // 上传附件
-router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (req, res) => {
+// 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
+// 使用 :projectCode(*) 以便参数可跨越多个 path segment
+router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -1977,7 +1979,9 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
 })
 
 // 获取附件列表
-router.get('/:projectCode/attachments', async (req, res) => {
+// 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
+// 使用 :projectCode(*) 以便参数可跨越多个 path segment
+router.get('/:projectCode(*)/attachments', async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const projectCode = String(req.params.projectCode || '').trim()

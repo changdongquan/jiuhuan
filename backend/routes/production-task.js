@@ -496,7 +496,9 @@ router.get('/detail', async (req, res) => {
 // === 生产任务附件相关接口 ===
 
 // 上传附件（照片 / 模具检验表）
-router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (req, res) => {
+// 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
+// 使用 :projectCode(*) 以便参数可跨越多个 path segment
+router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async (req, res) => {
   try {
     await ensureTaskAttachmentsTable()
     const projectCode = getProjectCodeParam(req)
@@ -722,7 +724,9 @@ router.post('/:projectCode/attachments/:type', uploadSingleAttachment, async (re
 })
 
 // 获取某生产任务下的附件列表（按类型可选）
-router.get('/:projectCode/attachments', async (req, res) => {
+// 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
+// 使用 :projectCode(*) 以便参数可跨越多个 path segment
+router.get('/:projectCode(*)/attachments', async (req, res) => {
   try {
     await ensureTaskAttachmentsTable()
     const projectCode = getProjectCodeParam(req)
