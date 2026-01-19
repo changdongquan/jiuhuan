@@ -41,6 +41,12 @@ const routesToSync = [
     page_title: '项目管理',
     parent_route: 'ProjectManagement'
   },
+  {
+    route_name: 'TrialFormPrintPreview',
+    route_path: '/project-management/trial-form-print/:projectCode',
+    page_title: '试模单打印预览',
+    parent_route: 'ProjectManagement'
+  },
 
   // 报价单（项目管理下）
   {
