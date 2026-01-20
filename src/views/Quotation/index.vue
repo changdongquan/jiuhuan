@@ -550,7 +550,7 @@
                 </td>
               </tr>
 
-              <!-- 申请更改部门 / 经办人 -->
+              <!-- 申请更改部门 / 申请更改人 -->
               <tr>
                 <td class="qs-label" colspan="2">申请更改部门</td>
                 <td class="qs-input qs-manual" colspan="2">
@@ -560,12 +560,12 @@
                     placeholder="请输入申请更改部门"
                   />
                 </td>
-                <td class="qs-label" colspan="2">经办人：</td>
+                <td class="qs-label" colspan="2">申请更改人</td>
                 <td class="qs-input qs-manual">
                   <el-input
-                    v-model="quotationForm.operator"
+                    v-model="quotationForm.applicant"
                     :disabled="isViewMode"
-                    placeholder="请输入经办人"
+                    placeholder="请输入申请更改人"
                   />
                 </td>
               </tr>
