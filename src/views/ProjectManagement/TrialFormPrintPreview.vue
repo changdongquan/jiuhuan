@@ -23,7 +23,7 @@
           <table class="trial-form-table" cellspacing="0" cellpadding="0">
             <colgroup>
               <!-- A-M: Excel template column widths -->
-              <col style="width: 5.65%" />
+              <col style="width: calc(5.65% + 5px)" />
               <col style="width: 8.93%" />
               <col style="width: 10.27%" />
               <col style="width: 6.4%" />
@@ -131,7 +131,7 @@
               <!-- 模板第8行 (20pt): 注塑机大小 / 预计用料重量 -->
               <tr class="trial-form-row" style="height: 20pt">
                 <td class="trial-form-label-cell">注塑机大小</td>
-                <td class="trial-form-label-cell">T</td>
+                <td class="trial-form-label-cell" style="text-align: right">T</td>
                 <td colspan="2" class="trial-form-label-cell">预计用料重量</td>
                 <td colspan="2" class="trial-form-value-cell">-</td>
                 <td class="trial-form-label-cell">KG</td>
@@ -233,34 +233,34 @@
               <!-- 模板第23行 (35pt): 料筒 -->
               <tr class="trial-form-row" style="height: 35pt">
                 <td class="trial-form-label-cell">料筒</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">S</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">S</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
               </tr>
 
               <!-- 模板第24行 (35pt): 温控箱、是否需要模温机、模温机温度 -->
               <tr class="trial-form-row" style="height: 35pt">
                 <td class="trial-form-label-cell">温控箱</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
-                <td class="trial-form-value-cell">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
                 <td colspan="2" class="trial-form-label-cell">是否需要<br />模温机</td>
                 <td class="trial-form-value-cell">☐是 ☐否</td>
                 <td class="trial-form-label-cell">模温<br />机温度</td>
-                <td class="trial-form-value-cell">℃</td>
+                <td class="trial-form-value-cell" style="text-align: right">℃</td>
               </tr>
 
               <!-- 模板第25行 (20pt): 备注 -->
@@ -297,13 +297,16 @@
               </tr>
 
               <!-- 模板第30行 (86pt): 试模结果 -->
-              <tr class="trial-form-row" style="height: 86pt">
+              <tr class="trial-form-row" style="height: 60.2pt">
                 <td rowspan="2" class="trial-form-label-cell trial-form-vertical-text"
                   >试模<br />结果</td
                 >
                 <td colspan="2" class="trial-form-label-cell">具体描述或其他未尽之处</td>
-                <td colspan="10" class="trial-form-value-cell trial-form-signature">
-                  <br /><br />
+                <td
+                  colspan="10"
+                  class="trial-form-value-cell trial-form-signature"
+                  style="vertical-align: bottom"
+                >
                   试模员：_______________________________________________ 日期：________________
                 </td>
               </tr>
@@ -311,17 +314,23 @@
               <!-- 模板第31行 (61pt): 尺寸检验结果 -->
               <tr class="trial-form-row" style="height: 61pt">
                 <td colspan="2" class="trial-form-label-cell">尺寸检验结果</td>
-                <td colspan="10" class="trial-form-value-cell trial-form-signature">
-                  <br />
+                <td
+                  colspan="10"
+                  class="trial-form-value-cell trial-form-signature"
+                  style="vertical-align: bottom"
+                >
                   检验员：_______________________________________________ 日期：________________
                 </td>
               </tr>
 
               <!-- 模板第32行 (93pt): 综合结论 -->
-              <tr class="trial-form-row" style="height: 93pt">
+              <tr class="trial-form-row" style="height: 65.1pt">
                 <td class="trial-form-label-cell trial-form-vertical-text">综合<br />结论</td>
-                <td colspan="12" class="trial-form-value-cell trial-form-signature">
-                  <br /><br />
+                <td
+                  colspan="12"
+                  class="trial-form-value-cell trial-form-signature"
+                  style="vertical-align: bottom"
+                >
                   工程主管：_______________________________________________ 日期：________________
                 </td>
               </tr>
@@ -443,6 +452,7 @@ onUnmounted(() => {
 @media print {
   @page {
     margin: 0;
+    margin-bottom: 0;
     size: a4;
   }
 
@@ -461,18 +471,22 @@ onUnmounted(() => {
   .paper {
     width: 210mm;
     min-height: 297mm;
-    padding: 4mm;
+    padding: 2mm;
+    margin: 0;
+    overflow: visible;
     border-radius: 0;
     transform: none !important;
     box-shadow: none;
+    box-sizing: border-box;
     page-break-inside: avoid;
   }
 
   .trial-form-table {
-    /* Fit exactly into one A4 page (accounting for 4mm padding on top/bottom). */
-    --trial-form-print-scale: 0.9113;
+    /* Fit exactly into one A4 page (accounting for 2mm padding). */
+    --trial-form-print-scale: 0.93;
 
     width: calc(100% / var(--trial-form-print-scale));
+    margin-bottom: 0;
     font-size: 9px;
     line-height: 1.3;
     border: 2px solid #000;
@@ -481,7 +495,7 @@ onUnmounted(() => {
     table-layout: fixed;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    transform-origin: top left;
+    transform-origin: top center;
     break-inside: avoid;
     page-break-inside: avoid;
   }
