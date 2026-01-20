@@ -68,6 +68,11 @@
                 报价日期：{{ formatDate(row.quotationDate) || '-' }}
               </div>
               <div class="qt-mobile-card__customer">{{ row.customerName || '-' }}</div>
+              <div class="qt-mobile-card__type">
+                <el-tag :type="row.quotationType === 'part' ? 'success' : 'primary'" size="small">
+                  {{ formatQuotationType(row.quotationType) }}
+                </el-tag>
+              </div>
             </div>
           </div>
           <div class="qt-mobile-card__meta">
@@ -122,6 +127,7 @@
         class="qt-table"
         row-key="id"
         @row-dblclick="handleRowDblClick"
+        @sort-change="handleSortChange"
       >
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column
@@ -136,10 +142,24 @@
           </template>
         </el-table-column>
         <el-table-column
+          prop="quotationType"
+          label="报价类型"
+          width="110"
+          align="center"
+          sortable="custom"
+        >
+          <template #default="{ row }">
+            <el-tag :type="row.quotationType === 'part' ? 'success' : 'primary'" size="small">
+              {{ formatQuotationType(row.quotationType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="customerName"
           label="客户名称"
           min-width="180"
           show-overflow-tooltip
+          sortable="custom"
         />
         <el-table-column
           prop="changeOrderNo"
@@ -154,7 +174,13 @@
           show-overflow-tooltip
         />
         <el-table-column prop="moldNo" label="模具编号" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="operator" label="经办人" width="120" show-overflow-tooltip />
+        <el-table-column
+          prop="operator"
+          label="经办人"
+          width="120"
+          show-overflow-tooltip
+          sortable="custom"
+        />
         <el-table-column prop="taxIncludedPrice" label="含税价格" width="120" align="right">
           <template #default="{ row }">
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
@@ -353,7 +379,10 @@
                   />
                 </el-form-item>
 
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                <el-form-item
+                  v-if="quotationForm.quotationType === 'part'"
+                  class="quotation-top-field quotation-top-field--inline"
+                >
                   <span class="field-label-inline">联系人：</span>
                   <el-input
                     v-model="quotationForm.contactName"
@@ -363,7 +392,10 @@
                   />
                 </el-form-item>
 
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                <el-form-item
+                  v-if="quotationForm.quotationType === 'part'"
+                  class="quotation-top-field quotation-top-field--inline"
+                >
                   <span class="field-label-inline">联系电话：</span>
                   <el-input
                     v-model="quotationForm.contactPhone"
@@ -389,79 +421,80 @@
           </template>
 
           <template v-else>
-            <div v-if="dialogMode === 'create'" class="quotation-top-summary">
-              <div class="quotation-top-summary__item">
-                <span class="field-label-inline">报价单号：</span>
-                <span class="field-value-inline">{{ quotationForm.quotationNo || '-' }}</span>
-              </div>
-              <div class="quotation-top-summary__item">
-                <span class="field-label-inline">客户名称：</span>
-                <span class="field-value-inline">{{ quotationForm.customerName || '-' }}</span>
-              </div>
-              <div class="quotation-top-summary__item">
-                <span class="field-label-inline">报价日期：</span>
-                <span class="field-value-inline">{{ quotationForm.quotationDate || '-' }}</span>
-              </div>
-            </div>
-
-            <div v-else class="quotation-top-left">
-              <el-form-item
-                prop="quotationNo"
-                class="quotation-top-field quotation-top-field--inline"
-              >
-                <span class="field-label-inline">报价单号：</span>
-                <el-input
-                  v-model="quotationForm.quotationNo"
-                  :disabled="true"
-                  placeholder="报价单号"
-                  class="field-input-inline field-input-quotation-no"
-                />
-              </el-form-item>
-
-              <el-form-item
-                prop="customerName"
-                class="quotation-top-field quotation-top-field--inline"
-                :show-message="false"
-              >
-                <span class="field-required">*</span>
-                <span class="field-label-inline">客户名称：</span>
-                <el-select
-                  v-model="quotationForm.customerName"
-                  placeholder="请选择客户名称"
-                  :disabled="isViewMode"
-                  filterable
-                  clearable
-                  :loading="customerLoading"
-                  class="field-input-inline field-input-customer-name"
+            <!-- 改模报价单：使用与零件报价单一致的布局结构 -->
+            <div class="quotation-top-part">
+              <div class="quotation-top-part__row">
+                <el-form-item
+                  prop="customerName"
+                  class="quotation-top-field quotation-top-field--inline quotation-top-part__customer"
+                  :show-message="false"
                 >
-                  <el-option
-                    v-for="customer in customerList"
-                    :key="customer.id"
-                    :label="customer.customerName"
-                    :value="customer.customerName"
-                  />
-                </el-select>
-              </el-form-item>
-            </div>
+                  <span class="field-required">*</span>
+                  <span class="field-label-inline">客户名称：</span>
+                  <el-select
+                    v-model="quotationForm.customerName"
+                    placeholder="请选择客户名称"
+                    :disabled="isViewMode || dialogMode === 'create'"
+                    filterable
+                    clearable
+                    :loading="customerLoading"
+                    class="field-input-inline field-input-customer-name"
+                  >
+                    <el-option
+                      v-for="customer in customerList"
+                      :key="customer.id"
+                      :label="customer.customerName"
+                      :value="customer.customerName"
+                    />
+                  </el-select>
+                </el-form-item>
+              </div>
 
-            <el-form-item
-              v-if="dialogMode !== 'create'"
-              prop="quotationDate"
-              class="quotation-top-field quotation-top-field--inline"
-              :show-message="false"
-            >
-              <span class="field-label-inline">报价日期：</span>
-              <el-date-picker
-                v-model="quotationForm.quotationDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择报价日期"
-                :disabled="isViewMode"
-                clearable
-                class="field-input-inline field-input-quotation-date"
-                style="width: 140px !important"
-              />
-            </el-form-item>
+              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
+                <el-form-item
+                  prop="quotationNo"
+                  class="quotation-top-field quotation-top-field--inline"
+                >
+                  <span class="field-label-inline">报价单号：</span>
+                  <el-input
+                    v-model="quotationForm.quotationNo"
+                    :disabled="true"
+                    placeholder="报价单号"
+                    class="field-input-inline field-input-quotation-no"
+                  />
+                </el-form-item>
+
+                <el-form-item
+                  prop="quotationDate"
+                  class="quotation-top-field quotation-top-field--inline"
+                  :show-message="false"
+                >
+                  <span class="field-label-inline">报价日期：</span>
+                  <el-date-picker
+                    v-model="quotationForm.quotationDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择报价日期"
+                    :disabled="isViewMode"
+                    clearable
+                    class="field-input-inline field-input-quotation-date"
+                    style="width: 140px !important"
+                  />
+                </el-form-item>
+              </div>
+
+              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">经办人：</span>
+                  <el-input
+                    v-model="quotationForm.operator"
+                    :disabled="isViewMode"
+                    placeholder="经办人"
+                    class="field-input-inline field-input-contact"
+                  />
+                </el-form-item>
+              </div>
+            </div>
           </template>
           <!-- 操作按钮 -->
           <div class="qt-dialog-actions">
@@ -1232,8 +1265,54 @@ const paginationLayout = computed(() =>
 
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
-// 直接使用后端返回的数据（后端已实现搜索和分页）
-const pagedQuotations = computed(() => quotations.value)
+// 排序配置
+const sortConfig = reactive<{
+  prop: string | null
+  order: 'ascending' | 'descending' | null
+}>({
+  prop: null,
+  order: null
+})
+
+// 排序后的数据
+const pagedQuotations = computed(() => {
+  let result = [...quotations.value]
+
+  if (sortConfig.prop && sortConfig.order) {
+    result.sort((a, b) => {
+      let aVal: any = a[sortConfig.prop as keyof QuotationRecord]
+      let bVal: any = b[sortConfig.prop as keyof QuotationRecord]
+
+      // 处理空值
+      if (aVal === null || aVal === undefined) aVal = ''
+      if (bVal === null || bVal === undefined) bVal = ''
+
+      // 报价类型特殊处理：part < mold（零件报价单 < 改模报价单）
+      if (sortConfig.prop === 'quotationType') {
+        const typeOrder = { part: 0, mold: 1 }
+        aVal = typeOrder[aVal as 'part' | 'mold'] ?? 2
+        bVal = typeOrder[bVal as 'part' | 'mold'] ?? 2
+      }
+
+      // 字符串比较
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        const comparison = aVal.localeCompare(bVal, 'zh-CN')
+        return sortConfig.order === 'ascending' ? comparison : -comparison
+      }
+
+      // 数字比较
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortConfig.order === 'ascending' ? aVal - bVal : bVal - aVal
+      }
+
+      // 默认比较
+      const comparison = String(aVal).localeCompare(String(bVal), 'zh-CN')
+      return sortConfig.order === 'ascending' ? comparison : -comparison
+    })
+  }
+
+  return result
+})
 
 // 表单 & 对话框
 const dialogVisible = ref(false)
@@ -1605,6 +1684,13 @@ const formatDate = (dateStr: string | null | undefined) => {
   } catch {
     return dateStr || '-'
   }
+}
+
+// 格式化报价类型
+const formatQuotationType = (type: string | null | undefined) => {
+  if (type === 'part') return '零件报价单'
+  if (type === 'mold') return '改模报价单'
+  return type || '-'
 }
 
 // 获取客户列表
@@ -2094,9 +2180,20 @@ const handleDelete = async (row: QuotationRecord) => {
   }
 }
 
-// 行双击查看
+// 行双击编辑
 const handleRowDblClick = (row: QuotationRecord) => {
-  handleView(row)
+  handleEdit(row)
+}
+
+// 排序变化处理
+const handleSortChange = ({ prop, order }: { prop: string; order: string | null }) => {
+  if (prop && order) {
+    sortConfig.prop = prop
+    sortConfig.order = order === 'ascending' ? 'ascending' : 'descending'
+  } else {
+    sortConfig.prop = null
+    sortConfig.order = null
+  }
 }
 
 // 保存
@@ -2539,6 +2636,10 @@ onMounted(() => {
 .qt-mobile-card__customer {
   font-size: 13px;
   color: #666;
+}
+
+.qt-mobile-card__type {
+  margin-top: 4px;
 }
 
 .qt-mobile-card__meta {
