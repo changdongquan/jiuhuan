@@ -481,9 +481,7 @@
                     style="width: 140px !important"
                   />
                 </el-form-item>
-              </div>
 
-              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
                 <el-form-item class="quotation-top-field quotation-top-field--inline">
                   <span class="field-label-inline">经办人：</span>
                   <el-input
@@ -491,6 +489,7 @@
                     :disabled="isViewMode"
                     placeholder="经办人"
                     class="field-input-inline field-input-contact"
+                    style="width: 140px !important"
                   />
                 </el-form-item>
               </div>
@@ -1276,7 +1275,7 @@ const sortConfig = reactive<{
 
 // 排序后的数据
 const pagedQuotations = computed(() => {
-  let result = [...quotations.value]
+  const result = [...quotations.value]
 
   if (sortConfig.prop && sortConfig.order) {
     result.sort((a, b) => {
