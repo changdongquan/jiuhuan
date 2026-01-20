@@ -559,12 +559,19 @@ const safeFileName = (fileName) => {
 }
 
 const ensureDirSync = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true })
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true })
+    }
+  } catch (e) {
+    // 目录创建失败时不抛出异常，避免服务启动失败
+    // 在实际使用时再尝试创建，或记录警告日志
+    console.warn(`[项目路由] 无法创建目录 ${dirPath}:`, e.message)
   }
 }
 
 // 确保零件图示临时目录存在（必须在ensureDirSync定义之后调用）
+// 注意：如果挂载点未就绪，这里可能失败，但不影响服务启动
 ensureDirSync(PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
 
 const moveFileWithFallback = async (fromPath, toPath) => {

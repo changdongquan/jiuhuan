@@ -1,13 +1,21 @@
 [Unit]
 Description=久环后端API服务
-After=network.target
+After=network.target remote-fs.target
+# 希望挂载点已挂载，但如果挂载失败，服务仍可启动（代码已处理目录创建失败）
+# 使用 Wants 而不是 Requires，这样即使挂载失败，服务也可以启动
+Wants=mnt-jiuhuan\\x2dfiles.mount
 
 [Service]
+# 服务启动超时：如果 NAS 启动较慢，等待最多 10 分钟（600 秒）
+# 这给了 NAS 足够的时间启动，同时避免服务无限等待
+TimeoutStartSec=600
 Type=simple
 User=www-data
 WorkingDirectory=/opt/jh-craftsys/source/backend
 Environment=NODE_ENV=production
 Environment=PORT=3001
+Environment=SALES_ORDER_FILES_ROOT=/mnt/jiuhuan-files
+Environment=SALES_ORDER_ATTACHMENT_MAX_SIZE=209715200
 # 如果需要域用户登录，取消下面的注释并配置 LDAP 信息
 # Environment=LDAP_URL=ldap://your-ad-server.com:389
 # Environment=LDAP_BASE_DN=DC=yourdomain,DC=com
