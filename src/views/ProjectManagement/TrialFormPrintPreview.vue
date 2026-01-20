@@ -19,7 +19,7 @@
         </div>
       </template>
       <template v-else-if="projectData">
-        <div class="paper" :style="{ transform: `scale(${zoom})` }">
+        <div class="paper" :style="paperPreviewStyle">
           <table class="trial-form-table" cellspacing="0" cellpadding="0">
             <colgroup>
               <!-- A-M: Excel template column widths -->
@@ -348,7 +348,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Loading, Printer } from '@element-plus/icons-vue'
@@ -369,6 +369,8 @@ const zoom = ref<number>(1)
 const loading = ref(false)
 const projectData = ref<any>(null)
 const trialCount = ref<string>('')
+
+const paperPreviewStyle = computed(() => ({ zoom: zoom.value }) as any)
 
 const processRows: ProcessRow[] = [
   { leftName: '射胶1', rightName: '熔胶1', other: '射胶时间' },
@@ -475,6 +477,7 @@ onUnmounted(() => {
     margin: 0;
     overflow: visible;
     border-radius: 0;
+    zoom: 1 !important;
     transform: none !important;
     box-shadow: none;
     box-sizing: border-box;
@@ -559,8 +562,11 @@ onUnmounted(() => {
 }
 
 .print-page {
+  display: flex;
+  height: 100vh;
   min-height: 100vh;
   background: #f5f7fa;
+  flex-direction: column;
 }
 
 .print-toolbar {
@@ -591,6 +597,9 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   padding: 18px 16px 36px;
+  flex: 1;
+  overflow: auto;
+  align-items: flex-start;
 }
 
 .paper {

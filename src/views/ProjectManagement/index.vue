@@ -1931,6 +1931,15 @@
             重置初始化
           </el-button>
           <div class="pm-edit-footer__right">
+            <el-button
+              v-if="editForm.项目编号 || currentProjectCode"
+              type="primary"
+              plain
+              :disabled="editSubmitting || !(editForm.项目编号 || currentProjectCode)"
+              @click="handlePrintTrialRecord"
+            >
+              打印试模记录单
+            </el-button>
             <el-button @click="editDialogVisible = false">取消</el-button>
             <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
               >保存</el-button
@@ -4475,6 +4484,37 @@ const handlePrintTrialFormPreview = async () => {
     name: 'TrialFormPrintPreview',
     params: { projectCode },
     query: { trialCount: normalizedTrialCount, from: fromPath }
+  })
+}
+
+const handlePrintTrialRecord = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+
+  // 如果需要保存，先保存
+  if (isEditFormDirty.value) {
+    try {
+      await ElMessageBox.confirm('请先保存后再打印试模记录单', '提示', {
+        type: 'warning',
+        confirmButtonText: '保存并继续',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await handleSubmitEdit()
+    if (!editDialogVisible.value) return
+  }
+
+  // 跳转到打印预览页面
+  const fromPath = route.path
+  void router.push({
+    name: 'TrialRecordPrintPreview',
+    params: { projectCode },
+    query: { from: fromPath }
   })
 }
 

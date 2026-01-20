@@ -2,16 +2,12 @@
   <div class="print-page">
     <div class="print-toolbar">
       <div class="print-toolbar__left">
-        <el-button @click="handleBack">返回</el-button>
-        <el-button type="primary" @click="handlePrint">打印</el-button>
+        <el-button type="primary" :icon="Printer" @click="handlePrint">打印</el-button>
+        <el-button :icon="ArrowLeft" @click="handleBack">返回</el-button>
       </div>
       <div class="print-toolbar__right">
-        <span class="print-toolbar__label">缩放</span>
-        <el-select v-model="zoom" size="small" style="width: 110px">
-          <el-option :value="0.5" label="50%" />
-          <el-option :value="0.75" label="75%" />
-          <el-option :value="1" label="100%" />
-        </el-select>
+        <span class="print-toolbar__label">缩放：</span>
+        <el-slider v-model="zoom" :min="0.5" :max="1.5" :step="0.1" :style="{ width: '200px' }" />
       </div>
     </div>
 
@@ -214,6 +210,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft, Printer } from '@element-plus/icons-vue'
 import { getOutboundDocumentDetailApi } from '@/api/outbound-document'
 
 const router = useRouter()
@@ -249,7 +246,7 @@ const fromPath = computed(() => {
 })
 
 const paperStyle = computed(() => ({
-  transform: `scale(${zoom.value})`
+  zoom: zoom.value
 }))
 
 const handleBack = () => {
@@ -329,14 +326,18 @@ onUnmounted(() => {
     min-height: auto;
     padding: 0;
     border-radius: 0;
+    zoom: 1 !important;
     transform: none !important;
     box-shadow: none;
   }
 }
 
 .print-page {
+  display: flex;
+  height: 100vh;
   min-height: 100vh;
   background: #f5f7fa;
+  flex-direction: column;
 }
 
 .print-toolbar {
@@ -367,6 +368,9 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   padding: 18px 16px 36px;
+  flex: 1;
+  overflow: auto;
+  align-items: flex-start;
 }
 
 .print-table {
