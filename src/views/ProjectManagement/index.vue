@@ -405,7 +405,6 @@
           label="产品图号"
           width="130"
           show-overflow-tooltip
-          fixed="left"
         />
         <el-table-column
           v-if="!isMobile && showExtraColumns"
@@ -413,7 +412,13 @@
           label="客户模号"
           width="115"
           show-overflow-tooltip
-          fixed="left"
+        />
+        <el-table-column
+          v-if="!isMobile && showExtraColumns"
+          prop="设计师"
+          label="设计师"
+          width="90"
+          show-overflow-tooltip
         />
         <el-table-column prop="产品材质" label="产品材质" width="85" show-overflow-tooltip />
         <el-table-column prop="模具穴数" label="模具穴数" width="120" align="left">
@@ -539,6 +544,10 @@
             <div>
               <span class="label">客户模号</span>
               <span class="value">{{ row.客户模号 || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">设计师</span>
+              <span class="value">{{ row.设计师 || '-' }}</span>
             </div>
             <div>
               <span class="label">材质</span>
@@ -3780,8 +3789,8 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       }
 
       // 获取现有的图号列表和尺寸列表
-      let 现有图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
-      let 现有尺寸列表 = parseProductSize(editForm.产品尺寸)
+      const 现有图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+      const 现有尺寸列表 = parseProductSize(editForm.产品尺寸)
 
       // 确保现有列表长度一致
       const 现有最大长度 = Math.max(现有图号列表.length, 现有尺寸列表.length)
