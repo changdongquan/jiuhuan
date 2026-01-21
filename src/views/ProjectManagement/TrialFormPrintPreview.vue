@@ -42,7 +42,7 @@
               <!-- 模板第1行: 标题 (34pt) -->
               <tr class="trial-form-row" style="height: 34pt">
                 <td colspan="13" class="trial-form-title-cell"
-                  >合肥久环模具设备制造有限公司试模过程单</td
+                  >合肥市久环模具设备制造有限公司试模过程单</td
                 >
               </tr>
 
@@ -54,15 +54,15 @@
                 >
                 <td class="trial-form-label-cell">项目编号</td>
                 <td colspan="3" class="trial-form-value-cell" data-cell="C2">{{
-                  projectData.项目编号 || '-'
+                  projectData.项目编号 ?? ''
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">产品名称</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="H2">
-                  {{ projectData.productName || projectData.产品名称 || '-' }}
+                  {{ projectData.productName || projectData.产品名称 || '' }}
                 </td>
                 <td colspan="2" class="trial-form-label-cell">模具穴数</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="L2">{{
-                  projectData.模具穴数 || '-'
+                  projectData.模具穴数 ?? ''
                 }}</td>
               </tr>
 
@@ -70,15 +70,15 @@
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">模具尺寸 宽长高/CM</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="D3">{{
-                  projectData.模具尺寸 || '-'
+                  projectData.模具尺寸 ?? ''
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">模具重量</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="H3">
-                  {{ projectData.模具重量 != null ? projectData.模具重量 : '-' }}
+                  {{ projectData.模具重量 != null ? projectData.模具重量 : '' }}
                 </td>
                 <td colspan="2" class="trial-form-label-cell">产品理论重量</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="L3">
-                  {{ projectData.产品重量 != null ? projectData.产品重量 : '-' }}
+                  {{ projectData.产品重量 != null ? projectData.产品重量 : '' }}
                 </td>
               </tr>
 
@@ -86,11 +86,11 @@
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">产品材料</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="D4">{{
-                  projectData.产品材质 || '-'
+                  projectData.产品材质 ?? ''
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">色母型号/颜色</td>
                 <td colspan="4" class="trial-form-value-cell" data-cell="H4">{{
-                  projectData.产品颜色 || '-'
+                  projectData.产品颜色 ?? ''
                 }}</td>
                 <td class="trial-form-label-cell">试模类别</td>
                 <td class="trial-form-value-cell">试封样</td>
@@ -100,13 +100,13 @@
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">试模次数</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="D5">{{
-                  trialCount || '-'
+                  trialCount || ''
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">试模产品数量</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">Pcs</td>
                 <td colspan="2" class="trial-form-label-cell">交样时间</td>
-                <td colspan="2" class="trial-form-value-cell">-</td>
+                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
               </tr>
 
               <!-- 模板第6行 (43pt): 试模目标 / 注意事项 / 试模要求 (合并) -->
@@ -123,7 +123,7 @@
                 <td rowspan="4" class="trial-form-label-cell trial-form-vertical-text">生产</td>
                 <td colspan="2" class="trial-form-label-cell">☐注塑试模 ☐外协试模</td>
                 <td colspan="2" class="trial-form-label-cell">试模时间</td>
-                <td colspan="2" class="trial-form-value-cell">-</td>
+                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">试模人员</td>
                 <td colspan="5" class="trial-form-value-cell">☐设计 ☐钳工 ☐检验 ☐客户</td>
               </tr>
@@ -133,7 +133,7 @@
                 <td class="trial-form-label-cell">注塑机大小</td>
                 <td class="trial-form-label-cell" style="text-align: right">T</td>
                 <td colspan="2" class="trial-form-label-cell">预计用料重量</td>
-                <td colspan="2" class="trial-form-value-cell">-</td>
+                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">KG</td>
                 <td colspan="5" class="trial-form-value-cell"></td>
               </tr>
@@ -141,24 +141,24 @@
               <!-- 模板第9行 (20pt): 实际领料重量 / 返还材料重量 / 实际用料重量 -->
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">实际领料重量</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">KG</td>
                 <td colspan="2" class="trial-form-label-cell">返还材料重量</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">KG</td>
                 <td colspan="2" class="trial-form-label-cell">实际用料重量</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">KG</td>
               </tr>
 
               <!-- 模板第10行 (20pt): 仓库确认 / 试模工时 -->
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">仓库确认</td>
-                <td colspan="2" class="trial-form-value-cell">-</td>
+                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td colspan="2" class="trial-form-label-cell">仓库确认</td>
-                <td colspan="2" class="trial-form-value-cell">-</td>
+                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td colspan="2" class="trial-form-label-cell">试模工时</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">H</td>
               </tr>
 
@@ -192,18 +192,18 @@
                 style="height: 20pt"
               >
                 <td class="trial-form-label-cell">{{ row.leftName }}</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">{{ row.rightName }}</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
-                <td class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">{{ row.other }}</td>
-                <td class="trial-form-value-cell">{{ row.otherLeft ?? '-' }}</td>
-                <td class="trial-form-value-cell">{{ row.otherRight ?? '-' }}</td>
+                <td class="trial-form-value-cell">{{ row.otherLeft ?? '' }}</td>
+                <td class="trial-form-value-cell">{{ row.otherRight ?? '' }}</td>
               </tr>
 
               <!-- 模板第21行 (20pt): 温控部分参数（℃） -->
@@ -231,7 +231,7 @@
               </tr>
 
               <!-- 模板第23行 (35pt): 料筒 -->
-              <tr class="trial-form-row" style="height: 35pt">
+              <tr class="trial-form-row trial-form-row--material-barrel" style="height: 35pt">
                 <td class="trial-form-label-cell">料筒</td>
                 <td class="trial-form-value-cell" style="text-align: right">℃</td>
                 <td class="trial-form-value-cell" style="text-align: right">℃</td>
@@ -248,7 +248,7 @@
               </tr>
 
               <!-- 模板第24行 (35pt): 温控箱、是否需要模温机、模温机温度 -->
-              <tr class="trial-form-row" style="height: 35pt">
+              <tr class="trial-form-row trial-form-row--temp-box" style="height: 35pt">
                 <td class="trial-form-label-cell">温控箱</td>
                 <td class="trial-form-value-cell" style="text-align: right">℃</td>
                 <td class="trial-form-value-cell" style="text-align: right">℃</td>
@@ -289,15 +289,15 @@
                 style="height: 20pt"
               >
                 <td colspan="2" class="trial-form-value-cell">{{ row.left }}</td>
-                <td class="trial-form-value-cell">-</td>
-                <td colspan="3" class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="3" class="trial-form-value-cell">&nbsp;</td>
                 <td colspan="2" class="trial-form-value-cell">{{ row.right }}</td>
-                <td class="trial-form-value-cell">-</td>
-                <td colspan="3" class="trial-form-value-cell">-</td>
+                <td class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="3" class="trial-form-value-cell">&nbsp;</td>
               </tr>
 
               <!-- 模板第30行 (86pt): 试模结果 -->
-              <tr class="trial-form-row" style="height: 60.2pt">
+              <tr class="trial-form-row trial-form-row--trial-result-desc" style="height: 60.2pt">
                 <td rowspan="2" class="trial-form-label-cell trial-form-vertical-text"
                   >试模<br />结果</td
                 >
@@ -312,7 +312,7 @@
               </tr>
 
               <!-- 模板第31行 (61pt): 尺寸检验结果 -->
-              <tr class="trial-form-row" style="height: 61pt">
+              <tr class="trial-form-row trial-form-row--size-check" style="height: 61pt">
                 <td colspan="2" class="trial-form-label-cell">尺寸检验结果</td>
                 <td
                   colspan="10"
@@ -324,7 +324,7 @@
               </tr>
 
               <!-- 模板第32行 (93pt): 综合结论 -->
-              <tr class="trial-form-row" style="height: 65.1pt">
+              <tr class="trial-form-row trial-form-row--conclusion" style="height: 65.1pt">
                 <td class="trial-form-label-cell trial-form-vertical-text">综合<br />结论</td>
                 <td
                   colspan="12"
@@ -454,12 +454,18 @@ onUnmounted(() => {
 @media print {
   @page {
     margin: 0;
-    margin-bottom: 0;
     size: a4;
   }
 
+  :global(html),
+  :global(body) {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
   .print-page {
-    background: #fff;
+    background: #fff !important;
   }
 
   .print-toolbar {
@@ -467,53 +473,96 @@ onUnmounted(() => {
   }
 
   .print-canvas {
-    padding: 0;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
   .paper {
-    width: 210mm;
-    min-height: 297mm;
-    padding: 2mm;
-    margin: 0;
+    display: flex !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+
+    /* 增加页面上下留白（同时保持上下对称） */
+    padding: 28mm 8mm !important;
+    margin: 0 !important;
     overflow: visible;
-    border-radius: 0;
+    border-radius: 0 !important;
     zoom: 1 !important;
     transform: none !important;
-    box-shadow: none;
+    box-shadow: none !important;
     box-sizing: border-box;
     page-break-inside: avoid;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .trial-form-table {
     /* Fit exactly into one A4 page (accounting for 2mm padding). */
-    --trial-form-print-scale: 0.93;
+    --trial-form-print-scale: 1;
 
-    width: calc(100% / var(--trial-form-print-scale));
-    margin-bottom: 0;
-    font-size: 9px;
-    line-height: 1.3;
-    border: 2px solid #000;
-    border-collapse: collapse;
-    transform: scale(var(--trial-form-print-scale));
-    table-layout: fixed;
+    width: 100% !important;
+    margin-bottom: 0 !important;
+    font-size: 12pt !important;
+
+    /* 压缩单元格高度：降低全局行距 */
+    line-height: 14pt !important;
+    border: 2px solid #000 !important;
+    border-collapse: collapse !important;
+    transform: none !important;
+    table-layout: fixed !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    transform-origin: top center;
+    transform-origin: center center !important;
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   .trial-form-table td {
-    padding: 2px 3px;
+    /* 压缩单元格高度：减少内边距 */
+    padding: 0 0.3pt !important;
     overflow: hidden;
     vertical-align: middle;
-    border: 1px solid #000;
+
+    /* 去除所有单元格背景，避免打印出灰底 */
+    background: transparent !important;
+    border: 1px solid #000 !important;
     overflow-wrap: break-word;
   }
 
+  /* 压缩常规行高（覆盖模板里写死的 20pt） */
+  .trial-form-row[style*='height: 20pt'] {
+    height: 16pt !important;
+  }
+
+  /* 指定行高（打印态覆盖 <tr style="height: ...">） */
+  .trial-form-row--material-barrel,
+  .trial-form-row--temp-box {
+    height: 35pt !important;
+  }
+
+  .trial-form-row--trial-result-desc {
+    height: 48pt !important;
+  }
+
+  .trial-form-row--size-check {
+    height: 48pt !important;
+  }
+
+  .trial-form-row--conclusion {
+    height: 54pt !important;
+  }
+
+  /* 这几块内容本身较少，单独降低行距以减少留白 */
+  .trial-form-row--trial-result-desc td,
+  .trial-form-row--size-check td,
+  .trial-form-row--conclusion td {
+    line-height: 14pt !important;
+  }
+
   .trial-form-title-cell {
-    padding: 4px;
-    font-size: 14px;
+    padding: 4px !important;
+    font-size: 13px !important;
     font-weight: bold;
     text-align: center;
   }
@@ -523,41 +572,45 @@ onUnmounted(() => {
   }
 
   .trial-form-label-cell {
-    padding: 2px 3px;
-    font-size: 9px;
+    padding: 0 2pt !important;
+    font-size: inherit;
     font-weight: 500;
+    line-height: inherit;
     text-align: center;
-    background-color: #f7f7f7;
+    background-color: transparent !important;
   }
 
   .trial-form-value-cell {
-    padding: 2px 4px;
-    font-size: 9px;
+    padding: 0 2pt !important;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .trial-form-signature {
-    padding: 3px;
-    font-size: 8px;
-    line-height: 1.4;
+    padding: 3px !important;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .trial-form-vertical-text {
     writing-mode: vertical-rl;
     text-orientation: upright;
-    font-size: 9px;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .trial-form-remark {
-    font-size: 8px;
-    line-height: 1.3;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .trial-form-section-header {
-    padding: 3px;
-    font-size: 9px;
+    padding: 3px !important;
+    font-size: inherit;
     font-weight: bold;
+    line-height: inherit;
     text-align: center;
-    background-color: #ededed;
+    background-color: transparent !important;
   }
 }
 
@@ -605,7 +658,9 @@ onUnmounted(() => {
 .paper {
   width: 210mm;
   min-height: 297mm;
-  padding: 8mm;
+
+  /* 预览态也保持与打印态接近的上下页边距 */
+  padding: 28mm 8mm;
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 10px 28px rgb(0 0 0 / 12%);
@@ -616,17 +671,18 @@ onUnmounted(() => {
 .trial-form-table {
   width: 100%;
   margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.25;
   border: 2px solid #000;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
 .trial-form-table td {
-  padding: 2px 4px;
+  padding: 1px 3px;
   overflow: hidden;
   vertical-align: middle;
+  background: transparent;
   border: 1px solid #000;
   overflow-wrap: break-word;
 }
@@ -643,40 +699,40 @@ onUnmounted(() => {
 }
 
 .trial-form-label-cell {
-  padding: 2px 3px;
-  font-size: 10px;
+  padding: 1px 2px;
+  font-size: 12px;
   font-weight: 500;
   text-align: center;
-  background-color: #f7f7f7;
+  background-color: transparent;
 }
 
 .trial-form-value-cell {
-  padding: 2px 4px;
-  font-size: 10px;
+  padding: 1px 3px;
+  font-size: 12px;
 }
 
 .trial-form-signature {
   padding: 4px;
-  font-size: 9px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .trial-form-vertical-text {
   writing-mode: vertical-rl;
   text-orientation: upright;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .trial-form-remark {
-  font-size: 9px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .trial-form-section-header {
   padding: 3px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
   text-align: center;
-  background-color: #ededed;
+  background-color: transparent;
 }
 </style>
