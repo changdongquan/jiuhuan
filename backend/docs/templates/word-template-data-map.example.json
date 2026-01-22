@@ -1,0 +1,13 @@
+{
+  "mould_no": "JH01-001",
+  "part_drawing": "P001",
+  "part_name": "产品名称示例",
+  "part_material": "ABS",
+  "cavity_material": "718H",
+  "core_material": "718H",
+  "slider_material": "718H",
+  "cavity_count": "2",
+  "first_sample_date": "2024-01-15",
+  "customer_name": "客户名称示例",
+  "project_code": "项目编号示例"
+}

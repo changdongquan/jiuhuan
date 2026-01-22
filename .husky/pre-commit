@@ -1,2 +1,3 @@
 npm run ts:check
 npm run lint:lint-staged
+./scripts/check-structure.sh
