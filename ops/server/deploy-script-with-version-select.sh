@@ -32,9 +32,11 @@ LOG_DIR="$APP_ROOT/logs"
 
 RUNTIME_DIR="$APP_ROOT/runtime"
 
-# 仓库（HTTPS）
+# 仓库
+# 建议使用 SSH + Deploy Key，避免每次拉取都要求输入账号密码（也更安全）。
+# 如需改回 HTTPS，可替换为 https://gitee.com/<org>/<repo>.git（但请使用 Token/凭据缓存，避免明文密码）。
 
-REPO_URL="https://gitee.com/changdongquan/jiuhuan.git"
+REPO_URL="git@gitee.com:changdongquan/jiuhuan.git"
 
 # 代理（混合），部署期启用，结束关闭
 
@@ -311,6 +313,16 @@ TARGET_VERSION="${1:-latest}"
 
 mkdir -p "$SRC_DIR"
 
+# 若使用 SSH 仓库地址，确保 known_hosts 已包含 gitee.com（避免首次连接交互确认）
+if [[ "${REPO_URL:-}" == git@* ]]; then
+  mkdir -p ~/.ssh
+  chmod 700 ~/.ssh
+  touch ~/.ssh/known_hosts
+  chmod 600 ~/.ssh/known_hosts
+  ssh-keygen -F gitee.com >/dev/null 2>&1 || ssh-keyscan -t rsa,ed25519 gitee.com >> ~/.ssh/known_hosts 2>/dev/null || true
+  export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes"
+fi
+
 if [ -d "$SRC_DIR/.git" ]; then
 
   echo "==> 更新仓库：$REPO_URL"
@@ -407,7 +419,8 @@ else
 
 fi
 
-git rev-parse HEAD > /opt/deploy/jh-craftsys/logs/last_commit.txt
+mkdir -p /opt/deploy/jh-craftsys/logs
+git rev-parse HEAD > /opt/deploy/jh-craftsys/logs/last_commit.txt 2>/dev/null || true
 
 echo "==> 当前版本：$(git rev-parse --short HEAD) ($(git describe --tags --always 2>/dev/null || echo 'no-tag'))"
 
@@ -563,6 +576,12 @@ echo "==> 安装前端依赖（pnpm）"
 
 cd "$SRC_DIR"
 
+if [ -d node_modules ]; then
+  echo "==> 清理旧 node_modules（避免 pnpm 交互提示）"
+  rm -rf node_modules
+fi
+
+export CI=1
 pnpm install --frozen-lockfile || pnpm install
 
 echo "==> 检查内存/交换分区"
@@ -853,6 +872,15 @@ set -euo pipefail
 
 DIR="/opt/deploy/jh-craftsys/bin"
 
+# 如果用 sudo/root 执行，切回原用户（确保 git/ssh 使用该用户的密钥，避免 root 无 key 导致拉取失败）
+if [ "$(id -u)" -eq 0 ]; then
+  if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+    exec sudo -u "$SUDO_USER" -H "$0" "$@"
+  fi
+  echo "ERROR: 请不要以 root 直接运行 update.sh；请使用普通用户运行（或用 sudo 从普通用户触发）。" >&2
+  exit 1
+fi
+
 # 获取版本参数，如果没有提供则交互式选择
 TARGET_VERSION="${1:-}"
 
@@ -1007,4 +1035,3 @@ echo "自    检：            sudo /opt/deploy/jh-craftsys/bin/09_status_and_di
 echo "配置文件：            /opt/deploy/jh-craftsys/conf/deploy.env  与  backend.env"
 
 echo "==============================================================="
-

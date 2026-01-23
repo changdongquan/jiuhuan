@@ -31,6 +31,16 @@ TARGET_VERSION="${1:-latest}"
 
 mkdir -p "$SRC_DIR"
 
+# 若使用 SSH 仓库地址，确保 known_hosts 已包含 gitee.com（避免首次连接交互确认）
+if [[ "${REPO_URL:-}" == git@* ]]; then
+  mkdir -p ~/.ssh
+  chmod 700 ~/.ssh
+  touch ~/.ssh/known_hosts
+  chmod 600 ~/.ssh/known_hosts
+  ssh-keygen -F gitee.com >/dev/null 2>&1 || ssh-keyscan -t rsa,ed25519 gitee.com >> ~/.ssh/known_hosts 2>/dev/null || true
+  export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes"
+fi
+
 if [ -d "$SRC_DIR/.git" ]; then
 
   echo "==> 更新仓库：$REPO_URL"
@@ -127,7 +137,8 @@ else
 
 fi
 
-git rev-parse HEAD > /opt/deploy/jh-craftsys/logs/last_commit.txt
+mkdir -p /opt/deploy/jh-craftsys/logs
+git rev-parse HEAD > /opt/deploy/jh-craftsys/logs/last_commit.txt 2>/dev/null || true
 
 echo "==> 当前版本：$(git rev-parse --short HEAD) ($(git describe --tags --always 2>/dev/null || echo 'no-tag'))"
 
@@ -149,6 +160,15 @@ set -euo pipefail
 . /opt/deploy/jh-craftsys/conf/deploy.env
 
 DIR="/opt/deploy/jh-craftsys/bin"
+
+# 如果用 sudo/root 执行，切回原用户（确保 git/ssh 使用该用户的密钥，避免 root 无 key 导致拉取失败）
+if [ "$(id -u)" -eq 0 ]; then
+  if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+    exec sudo -u "$SUDO_USER" -H "$0" "$@"
+  fi
+  echo "ERROR: 请不要以 root 直接运行 update.sh；请使用普通用户运行（或用 sudo 从普通用户触发）。" >&2
+  exit 1
+fi
 
 # 获取版本参数，如果没有提供则交互式选择
 TARGET_VERSION="${1:-}"
@@ -334,4 +354,3 @@ echo "  升级到最新版:  sudo /opt/deploy/jh-craftsys/bin/update.sh latest"
 echo ""
 echo "备份位置: $BACKUP_DIR"
 echo "===================================="
-
