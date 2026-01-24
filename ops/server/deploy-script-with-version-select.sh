@@ -140,7 +140,7 @@ server {
 
     # 静态资源缓存策略
 
-    location ~* \.(?:js|css|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
+    location ~* \.(?:js|mjs|css|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
 
         expires 7d;
 
@@ -705,6 +705,13 @@ sudo sed -i 's/^ *listen 80;$/    listen 80 default_server;/' "$SITE_FILE"
 sudo rm -f /etc/nginx/sites-enabled/default || true
 
 sudo ln -sf "$SITE_FILE" "$ENABLED_LINK"
+
+# 修复：Nginx 默认 mime.types 可能不包含 .mjs，导致浏览器无法加载 ESM Worker（pdfjs）
+if ! sudo grep -qE 'application/javascript\s+.*\bmjs\b' /etc/nginx/mime.types; then
+  echo "==> 修复 Nginx mime.types：为 .mjs 添加 application/javascript"
+  sudo cp /etc/nginx/mime.types "/etc/nginx/mime.types.bak.$(date +%Y%m%d%H%M%S)"
+  sudo sed -i 's#application/javascript[[:space:]]\\+js;#application/javascript                js mjs;#' /etc/nginx/mime.types
+fi
 
 sudo nginx -t
 
