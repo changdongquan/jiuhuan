@@ -605,7 +605,8 @@ const chooseOverwriteMode = async (
         showCancelButton: true,
         distinguishCancelAndClose: true,
         type: 'warning',
-        dangerouslyUseHTMLString: true
+        dangerouslyUseHTMLString: true,
+        customClass: 'external-import__confirm-box'
       }
     )
     return 'overwrite'
@@ -806,5 +807,12 @@ const handleImport = async () => {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   word-break: break-all;
+}
+</style>
+
+<style>
+.external-import__confirm-box {
+  width: 620px;
+  max-width: calc(100vw - 40px);
 }
 </style>
