@@ -99,11 +99,14 @@
       </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
+          <el-button @click="externalImportVisible = true">外部导入</el-button>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
         </div>
       </el-form-item>
     </el-form>
+
+    <ExternalImportDialog v-model="externalImportVisible" @imported="loadData" />
 
     <!-- PC 时间轴视图 -->
     <div v-if="!isMobile && viewMode === 'timeline'" class="pm-timeline-layout">
@@ -272,6 +275,12 @@
                     <span class="view-dialog-info-label">移模日期：</span>
                     <span class="view-dialog-info-value">{{
                       formatDate(viewProjectData.移模日期) || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">封样单号：</span>
+                    <span class="view-dialog-info-value">{{
+                      viewProjectData.封样单号 || '-'
                     }}</span>
                   </div>
                   <div class="view-dialog-info-item">
@@ -503,6 +512,7 @@
             {{ formatDate(row.移模日期) }}
           </template>
         </el-table-column>
+        <el-table-column prop="封样单号" label="封样单号" width="150" show-overflow-tooltip />
         <el-table-column
           prop="进度影响原因"
           label="进度影响原因"
@@ -803,6 +813,9 @@
                       </el-form-item>
                       <el-form-item label="制件厂家">
                         <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
+                      </el-form-item>
+                      <el-form-item label="封样单号">
+                        <el-input v-model="editForm.封样单号" placeholder="封样单号" />
                       </el-form-item>
                     </el-col>
 
@@ -1996,6 +2009,7 @@ import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import { ElMessageBox } from 'element-plus'
+import ExternalImportDialog from './components/ExternalImportDialog.vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -2026,6 +2040,7 @@ const appStore = useAppStore()
 const route = useRoute()
 const router = useRouter()
 const isMobile = computed(() => appStore.getMobile)
+const externalImportVisible = ref(false)
 
 const resolvePcViewModeFromRoute = (): ViewMode => {
   const v = route.query.view
@@ -3538,6 +3553,7 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { label: '产品图号', value: v(data.productDrawing ?? '') },
     { label: '客户模号', value: v(data.客户模号 ?? '') },
     { label: '制件厂家', value: v(data.制件厂家 ?? '') },
+    { label: '封样单号', value: v((data as any).封样单号 ?? '') },
     { label: '进度影响原因', value: v(data.进度影响原因 ?? '') },
     { label: '备注', value: v(data.备注 ?? '') }
   ]

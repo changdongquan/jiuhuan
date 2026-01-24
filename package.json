@@ -47,6 +47,7 @@
     "mitt": "^3.0.1",
     "monaco-editor": "^0.52.2",
     "nprogress": "^0.2.0",
+    "pdfjs-dist": "^5.4.530",
     "pinia": "^2.3.0",
     "pinia-plugin-persistedstate": "^4.2.0",
     "qrcode": "^1.5.4",

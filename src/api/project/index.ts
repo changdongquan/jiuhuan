@@ -22,6 +22,7 @@ export interface ProjectInfo {
   项目状态?: string
   移模日期?: string
   制件厂家?: string
+  封样单号?: string
   进度影响原因?: string
   前模材质?: string
   后模材质?: string
@@ -164,6 +165,50 @@ export const deleteProjectAttachmentApi = (attachmentId: number) => {
     message?: string
   }>({
     url: `/api/project/attachments/${attachmentId}`
+  })
+}
+
+export const uploadProjectAttachmentApi = (
+  projectCode: string,
+  type: ProjectAttachmentType,
+  file: File
+) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: unknown
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/attachments/${type}`,
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export type RelocationImportOverwriteMode = 'overwrite' | 'skipExisting'
+
+export interface RelocationImportItem {
+  projectCode: string
+  moveTo?: string
+  sealSampleNo?: string
+  mouldMoveDate?: string
+}
+
+export const relocationImportApi = (data: {
+  overwriteMode: RelocationImportOverwriteMode
+  mouldMoveDate?: string
+  items: RelocationImportItem[]
+}) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: { results?: any[] }
+  }>({
+    url: '/api/project/relocation-import',
+    data
   })
 }
 

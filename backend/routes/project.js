@@ -1777,6 +1777,150 @@ router.delete('/delete', async (req, res) => {
   }
 })
 
+// 批量导入移模单明细：按项目编号写入 制件厂家/移模日期/封样单号（字段级跳过已有或覆盖）
+router.post('/relocation-import', async (req, res) => {
+  try {
+    const { overwriteMode, mouldMoveDate, items } = req.body || {}
+
+    const mode = String(overwriteMode || '').trim()
+    if (mode !== 'overwrite' && mode !== 'skipExisting') {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'overwriteMode 必须为 overwrite 或 skipExisting'
+      })
+    }
+
+    const globalMoveDate = String(mouldMoveDate || '').trim()
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'items 不能为空' })
+    }
+
+    // 确认封样单号字段存在（避免直接 UPDATE 报错）
+    const sealFieldCheck = await query(
+      `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = '项目管理' AND COLUMN_NAME = '封样单号'
+      `
+    )
+    if (!sealFieldCheck || sealFieldCheck.length === 0) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message:
+          '数据库表中没有“封样单号”字段，请先执行迁移脚本：backend/migrations/20260124_add_project_management_seal_sample_no.sql'
+      })
+    }
+
+    const isEmptyValue = (v) => v === null || v === undefined || String(v).trim() === ''
+
+    const results = []
+
+    for (const it of items) {
+      const projectCode = String(it?.projectCode || '').trim()
+      const moveTo = String(it?.moveTo || '').trim()
+      const sealSampleNo = String(it?.sealSampleNo || '').trim()
+      const moveDate = String(it?.mouldMoveDate || globalMoveDate).trim()
+
+      if (!projectCode) {
+        results.push({ projectCode: '', ok: false, message: '项目编号不能为空' })
+        continue
+      }
+
+      if (!moveDate) {
+        results.push({ projectCode, ok: false, message: 'mouldMoveDate 不能为空' })
+        continue
+      }
+
+      // 检查项目是否存在及当前值
+      const rows = await query(
+        `
+        SELECT TOP 1
+          项目编号,
+          制件厂家,
+          移模日期,
+          封样单号
+        FROM 项目管理
+        WHERE 项目编号 = @projectCode
+        `,
+        { projectCode }
+      )
+
+      if (!rows || rows.length === 0) {
+        results.push({ projectCode, ok: false, message: '项目不存在' })
+        continue
+      }
+
+      const current = rows[0] || {}
+
+      const updates = {}
+      const skipped = []
+      const updated = []
+
+      // 制件厂家 = 移至地方
+      if (isEmptyValue(moveTo)) {
+        skipped.push('制件厂家')
+      } else if (mode === 'overwrite' || isEmptyValue(current.制件厂家)) {
+        updates['制件厂家'] = moveTo
+      } else {
+        skipped.push('制件厂家')
+      }
+
+      // 移模日期 = 模具移模时间（公共信息）
+      if (mode === 'overwrite' || isEmptyValue(current.移模日期)) {
+        updates['移模日期'] = moveDate
+      } else {
+        skipped.push('移模日期')
+      }
+
+      // 封样单号 = 明细封样单号
+      if (isEmptyValue(sealSampleNo)) {
+        skipped.push('封样单号')
+      } else if (mode === 'overwrite' || isEmptyValue(current.封样单号)) {
+        updates['封样单号'] = sealSampleNo
+      } else {
+        skipped.push('封样单号')
+      }
+
+      Object.keys(updates).forEach((k) => updated.push(k))
+
+      if (updated.length === 0) {
+        results.push({ projectCode, ok: true, updatedFields: [], skippedFields: skipped })
+        continue
+      }
+
+      const setParts = updated.map((k) => `[${k}] = @${k}`)
+      const params = { projectCode }
+      for (const k of updated) params[k] = updates[k]
+
+      const updateSql = `
+        UPDATE 项目管理
+        SET ${setParts.join(', ')}
+        WHERE 项目编号 = @projectCode
+      `
+      await query(updateSql, params)
+
+      results.push({ projectCode, ok: true, updatedFields: updated, skippedFields: skipped })
+    }
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: { results }
+    })
+  } catch (error) {
+    console.error('批量导入移模单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '批量导入移模单失败',
+      error: error.message
+    })
+  }
+})
+
 // === 项目管理附件相关接口 ===
 
 // 上传附件
