@@ -6,7 +6,10 @@ export type TechSpecData = {
   型芯: string
   模具穴数: string
   产品外观尺寸: string
-  产品图号列表: string[]
+  产品列表: string[]
+  产品名称列表: string[]
+  产品数量列表: number[]
+  产品重量列表: number[]
   产品尺寸列表: string[]
   产品结构工程师: string
   零件图片: string
@@ -238,6 +241,7 @@ const buildSpecDataFromRow = (args: {
   pmCol: number
   imageCol: number
   partDrawingRaw: string
+  partName: string
 }) => {
   const row = args.row
   const rowPartSize = args.sizeCol >= 0 ? normalize(row[args.sizeCol]) : ''
@@ -247,6 +251,9 @@ const buildSpecDataFromRow = (args: {
 
   const productDrawings = drawings
   let productSizes = sizes
+  const productNames = Array(productDrawings.length).fill(args.partName || '')
+  const productQty = Array(productDrawings.length).fill(0)
+  const productWeight = Array(productDrawings.length).fill(0)
 
   if (productDrawings.length > 1 && productSizes.length === 1 && productSizes[0]) {
     productSizes = Array(productDrawings.length).fill(productSizes[0])
@@ -266,7 +273,10 @@ const buildSpecDataFromRow = (args: {
     型芯: args.coreCol >= 0 ? normalize(row[args.coreCol]) : '',
     模具穴数: args.cavityCountCol >= 0 ? normalize(row[args.cavityCountCol]) : '',
     产品外观尺寸: rowPartSize,
-    产品图号列表: productDrawings,
+    产品列表: productDrawings,
+    产品名称列表: productNames,
+    产品数量列表: productQty,
+    产品重量列表: productWeight,
     产品尺寸列表: productSizes,
     产品结构工程师: productEngineer,
     零件图片: ''
@@ -341,7 +351,10 @@ const parseTechSpecSheetAsForm = (sheetName: string, jsonData: any[][]): TechSpe
       型芯: findLabelValue(jsonData, ['型芯', '后模']),
       模具穴数: findLabelValue(jsonData, ['模具穴数', '模具腔数', '穴数', '腔数', '型腔数']),
       产品外观尺寸: size,
-      产品图号列表: drawings,
+      产品列表: drawings,
+      产品名称列表: Array(drawings.length).fill(partName || ''),
+      产品数量列表: Array(drawings.length).fill(0),
+      产品重量列表: Array(drawings.length).fill(0),
       产品尺寸列表: sizes,
       产品结构工程师: engineer,
       零件图片: ''
@@ -446,7 +459,8 @@ export const parseTechSpecExcel = async (arrayBuffer: ArrayBuffer) => {
         engineerCol,
         pmCol,
         imageCol,
-        partDrawingRaw
+        partDrawingRaw,
+        partName
       })
 
       records.push({

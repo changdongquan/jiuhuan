@@ -930,7 +930,10 @@ const handleSpecFileChange = async (file: UploadFile) => {
       型芯: coreCol >= 0 ? String(matchedRow[coreCol] || '').trim() : '',
       模具穴数: cavityCountCol >= 0 ? String(matchedRow[cavityCountCol] || '').trim() : '',
       产品外观尺寸: rowPartSize, // 保留原始字符串，用于显示
-      产品图号列表: 图号列表, // 新增：图号列表
+      产品列表: 图号列表, // 新增：图号列表
+      产品名称列表: Array(图号列表.length).fill(String(finalRowName || '').trim()), // 新增：产品名称列表
+      产品数量列表: Array(图号列表.length).fill(0), // 新增：产品数量列表
+      产品重量列表: Array(图号列表.length).fill(0), // 新增：产品重量列表
       产品尺寸列表: 尺寸列表, // 新增：尺寸列表
       产品结构工程师: engineerCol >= 0 ? String(matchedRow[engineerCol] || '').trim() : '',
       零件图片: ''

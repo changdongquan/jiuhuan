@@ -30,7 +30,10 @@ export interface ProjectInfo {
   完成百分比?: number
   模具尺寸?: string
   产品尺寸?: string | string[] // 支持旧格式（字符串）和新格式（JSON数组）
-  产品图号列表?: string[] // 产品图号列表（JSON数组）
+  产品列表?: string[] // 产品列表（JSON数组）
+  产品名称列表?: string[] // 产品名称列表（JSON数组）
+  产品数量列表?: number[] // 产品数量列表（JSON数组）
+  产品重量列表?: number[] // 产品重量列表（JSON数组）
   产品重量?: number
   收缩率?: number
   产品颜色?: string
@@ -122,6 +125,8 @@ export type ProjectAttachmentType =
   | 'trial-record' // 试模记录表
   | 'tripartite-agreement' // 三方协议
   | 'trial-form' // 试模单
+  | 'drawing' // 图档
+  | 'seal-sample' // 封样单
 
 // 项目管理附件接口
 export interface ProjectAttachment {
@@ -239,6 +244,19 @@ export const generateTripartiteAgreementPdfApi = (projectCode: string) => {
     data?: { id?: number; storedFileName?: string }
   }>({
     url: `/api/project/tripartite-agreement-generate-pdf`,
+    data: { projectCode }
+  })
+}
+
+// 生成封样单（xlsx）并保存到“项目管理附件-封样单”（不直接下载）
+export const generateSealSampleXlsxApi = (projectCode: string) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: { id?: number; storedFileName?: string }
+  }>({
+    url: `/api/project/seal-sample-generate-xlsx`,
     data: { projectCode }
   })
 }

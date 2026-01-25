@@ -917,98 +917,8 @@
                       <div class="pm-edit-section-title">零件信息</div>
                       <el-row :gutter="isMobile ? 8 : 12" justify="center">
                         <el-col :xs="24" :sm="12" :lg="12">
-                          <el-form-item label="产品名称">
-                            <el-input
-                              v-model="editForm.productName"
-                              placeholder="产品名称（自动填充）"
-                              readonly
-                            />
-                          </el-form-item>
-                        </el-col>
-
-                        <el-col :xs="24" :sm="12" :lg="12">
                           <el-form-item label="产品材质" prop="产品材质">
                             <el-input v-model="editForm.产品材质" placeholder="产品材质" />
-                          </el-form-item>
-                        </el-col>
-
-                        <el-col :xs="24" :sm="24" :lg="24">
-                          <!-- 始终显示产品图号列表（至少保留 1 行） -->
-                          <el-form-item label="产品图号列表">
-                            <div class="pm-product-drawing-list">
-                              <el-table
-                                :data="productDrawingListDisplay"
-                                border
-                                size="small"
-                                style="width: 100%"
-                              >
-                                <el-table-column
-                                  type="index"
-                                  label="序号"
-                                  width="60"
-                                  align="center"
-                                />
-                                <el-table-column label="产品图号" min-width="150">
-                                  <template #default="{ row, $index }">
-                                    <el-input
-                                      v-model="row.图号"
-                                      :class="{
-                                        'pm-cell-input--error': !!row.图号错误,
-                                        'pm-cell-input--empty': !String(row.图号 || '').trim()
-                                      }"
-                                      placeholder="请输入产品图号"
-                                      @blur="validateDrawingNumber($index)"
-                                      @input="handleDrawingNumberChange($index, $event)"
-                                    />
-                                    <div v-if="row.图号错误" class="pm-error-text">{{
-                                      row.图号错误
-                                    }}</div>
-                                  </template>
-                                </el-table-column>
-                                <el-table-column label="产品尺寸" min-width="200">
-                                  <template #default="{ row, $index }">
-                                    <el-input
-                                      v-model="row.尺寸"
-                                      :class="{
-                                        'pm-cell-input--empty': !String(row.尺寸 || '').trim()
-                                      }"
-                                      placeholder="请输入产品尺寸"
-                                      @input="handleProductSizeChange($index, $event)"
-                                    />
-                                  </template>
-                                </el-table-column>
-                                <el-table-column label="操作" width="80" align="center">
-                                  <template #default="{ $index }">
-                                    <el-button
-                                      type="danger"
-                                      link
-                                      size="small"
-                                      :disabled="productDrawingListDisplay.length <= 1"
-                                      @click="deleteDrawingRow($index)"
-                                    >
-                                      删除
-                                    </el-button>
-                                  </template>
-                                </el-table-column>
-                              </el-table>
-                              <div style="margin-top: 8px">
-                                <el-button type="primary" plain size="small" @click="addDrawingRow">
-                                  + 添加行
-                                </el-button>
-                              </div>
-                            </div>
-                          </el-form-item>
-                        </el-col>
-
-                        <el-col :xs="24" :sm="12" :lg="12">
-                          <el-form-item label="产品重量（克）" prop="产品重量">
-                            <el-input-number
-                              v-model="editForm.产品重量"
-                              :min="0"
-                              :precision="2"
-                              :controls="false"
-                              style="width: 100%"
-                            />
                           </el-form-item>
                         </el-col>
 
@@ -1039,6 +949,110 @@
                               :controls="false"
                               style="width: 100%"
                             />
+                          </el-form-item>
+                        </el-col>
+
+                        <el-col :xs="24" :sm="24" :lg="24">
+                          <!-- 始终显示产品列表（至少保留 1 行） -->
+                          <el-form-item label="产品列表">
+                            <div class="pm-product-drawing-list">
+                              <el-table
+                                :data="productDrawingListDisplay"
+                                border
+                                size="small"
+                                style="width: 100%"
+                              >
+                                <el-table-column
+                                  type="index"
+                                  label="序号"
+                                  width="60"
+                                  align="center"
+                                />
+                                <el-table-column label="产品图号" min-width="150">
+                                  <template #default="{ row, $index }">
+                                    <el-input
+                                      v-model="row.图号"
+                                      :class="{
+                                        'pm-cell-input--error': !!row.图号错误,
+                                        'pm-cell-input--empty': !String(row.图号 || '').trim()
+                                      }"
+                                      placeholder="请输入产品图号"
+                                      @blur="validateDrawingNumber($index)"
+                                      @input="handleDrawingNumberChange($index, $event)"
+                                    />
+                                    <div v-if="row.图号错误" class="pm-error-text">{{
+                                      row.图号错误
+                                    }}</div>
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="产品名称" min-width="160">
+                                  <template #default="{ row, $index }">
+                                    <el-input
+                                      v-model="row.名称"
+                                      :class="{
+                                        'pm-cell-input--empty': !String(row.名称 || '').trim()
+                                      }"
+                                      placeholder="请输入产品名称"
+                                      @input="handleProductNameChange($index, $event)"
+                                    />
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="产品尺寸" min-width="130">
+                                  <template #default="{ row, $index }">
+                                    <el-input
+                                      v-model="row.尺寸"
+                                      :class="{
+                                        'pm-cell-input--empty': !String(row.尺寸 || '').trim()
+                                      }"
+                                      placeholder="请输入产品尺寸"
+                                      @input="handleProductSizeChange($index, $event)"
+                                    />
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="产品重量" width="120" align="center">
+                                  <template #default="{ row, $index }">
+                                    <el-input-number
+                                      v-model="row.重量"
+                                      :min="0"
+                                      :precision="2"
+                                      :controls="false"
+                                      style="width: 100%"
+                                      @input="handleProductWeightChange($index, $event as any)"
+                                    />
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="产品数量" width="110" align="center">
+                                  <template #default="{ row, $index }">
+                                    <el-input-number
+                                      v-model="row.数量"
+                                      :min="0"
+                                      :precision="0"
+                                      :controls="false"
+                                      style="width: 100%"
+                                      @input="handleProductQtyChange($index, $event as any)"
+                                    />
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="80" align="center">
+                                  <template #default="{ $index }">
+                                    <el-button
+                                      type="danger"
+                                      link
+                                      size="small"
+                                      :disabled="productDrawingListDisplay.length <= 1"
+                                      @click="deleteDrawingRow($index)"
+                                    >
+                                      删除
+                                    </el-button>
+                                  </template>
+                                </el-table-column>
+                              </el-table>
+                              <div style="margin-top: 8px">
+                                <el-button type="primary" plain size="small" @click="addDrawingRow">
+                                  + 添加行
+                                </el-button>
+                              </div>
+                            </div>
                           </el-form-item>
                         </el-col>
                       </el-row>
@@ -1611,23 +1625,22 @@
                       <el-card shadow="never" class="pm-attachment-card">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>三方协议</span>
+                            <span>封样单</span>
                             <el-button
                               type="primary"
                               size="small"
-                              :loading="tripartiteAgreementDownloading"
+                              :loading="sealSampleGenerating"
                               :disabled="
-                                tripartiteAgreementDownloading ||
-                                !(editForm.项目编号 || currentProjectCode)
+                                sealSampleGenerating || !(editForm.项目编号 || currentProjectCode)
                               "
-                              @click="handleGenerateTripartiteAgreement"
+                              @click="handleGenerateSealSample"
                             >
-                              {{ tripartiteAgreementDownloading ? '正在生成...' : '生成三方协议' }}
+                              {{ sealSampleGenerating ? '正在生成...' : '生成封样单' }}
                             </el-button>
                           </div>
                         </template>
                         <el-table
-                          :data="tripartiteAgreementAttachments"
+                          :data="sealSampleAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -1688,20 +1701,23 @@
                       <el-card shadow="never" class="pm-attachment-card">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>试模单</span>
-                            <el-upload
-                              :action="getAttachmentAction('trial-form')"
-                              :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
-                              :on-success="handleAttachmentUploadSuccess"
-                              :on-error="handleAttachmentUploadError"
+                            <span>三方协议</span>
+                            <el-button
+                              type="primary"
+                              size="small"
+                              :loading="tripartiteAgreementDownloading"
+                              :disabled="
+                                tripartiteAgreementDownloading ||
+                                !(editForm.项目编号 || currentProjectCode)
+                              "
+                              @click="handleGenerateTripartiteAgreement"
                             >
-                              <el-button type="primary" size="small">上传试模单</el-button>
-                            </el-upload>
+                              {{ tripartiteAgreementDownloading ? '正在生成...' : '生成三方协议' }}
+                            </el-button>
                           </div>
                         </template>
                         <el-table
-                          :data="trialFormAttachments"
+                          :data="tripartiteAgreementAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -1936,6 +1952,161 @@
                     </el-col>
                   </el-row>
                 </div>
+
+                <!-- 试模单 -->
+                <div class="pm-attachments" v-loading="attachmentLoading">
+                  <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>试模单</span>
+                            <el-upload
+                              :action="getAttachmentAction('trial-form')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传试模单</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="trialFormAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                      <el-card shadow="never" class="pm-attachment-card">
+                        <template #header>
+                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                            <span>图档</span>
+                            <el-upload
+                              :action="getAttachmentAction('drawing')"
+                              :show-file-list="false"
+                              :multiple="true"
+                              accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
+                              :before-upload="(file) => beforeAttachmentUpload(file, 'drawing')"
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
+                            >
+                              <el-button type="primary" size="small">上传图档</el-button>
+                            </el-upload>
+                          </div>
+                        </template>
+                        <el-table
+                          :data="drawingAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </el-card>
+                    </el-col>
+                  </el-row>
+                </div>
               </el-tab-pane>
             </el-tabs>
           </div>
@@ -1992,6 +2163,7 @@ import {
   downloadTrialFormXlsxApi,
   validateTrialFormApi,
   generateTripartiteAgreementPdfApi,
+  generateSealSampleXlsxApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
   type ProjectInfo,
@@ -2289,8 +2461,8 @@ const isEditFormDirty = computed(
   () => !!editFormSnapshot.value && stableStringify(editForm) !== editFormSnapshot.value
 )
 
-// 产品图号列表相关逻辑
-// 解析产品图号列表和产品尺寸（兼容旧数据）
+// 产品列表相关逻辑
+// 解析产品列表（兼容旧字段：产品图号列表）和产品尺寸（兼容旧数据）
 const parseProductDrawingList = (value: any): string[] => {
   if (!value) return []
   if (Array.isArray(value)) return value
@@ -2304,6 +2476,9 @@ const parseProductDrawingList = (value: any): string[] => {
   }
   return []
 }
+
+const getProductListRawFromEditForm = () =>
+  (editForm as any).产品列表 ?? (editForm as any).产品图号列表
 
 const parseProductSize = (value: any): string[] => {
   if (!value) return []
@@ -2366,14 +2541,97 @@ const parseProductSize = (value: any): string[] => {
   return []
 }
 
+const parseProductNameList = (value: any): string[] => {
+  if (!value) return []
+  if (Array.isArray(value)) return value.map((v) => String(v ?? '').trim())
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v ?? '').trim())
+      return value.trim() ? [value.trim()] : []
+    } catch {
+      return value.trim() ? [value.trim()] : []
+    }
+  }
+  return []
+}
+
+const parseProductQtyList = (value: any): number[] => {
+  if (value === null || value === undefined || value === '') return []
+  const normalizeQty = (v: any) => {
+    if (v === null || v === undefined || v === '') return null
+    const n = typeof v === 'number' ? v : Number(String(v).trim())
+    if (!Number.isFinite(n)) return null
+    const i = Math.trunc(n)
+    return i < 0 ? 0 : i
+  }
+  if (Array.isArray(value)) return value.map(normalizeQty).filter((x) => x !== null) as number[]
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed))
+        return parsed.map(normalizeQty).filter((x) => x !== null) as number[]
+      const single = normalizeQty(value)
+      return single === null ? [] : [single]
+    } catch {
+      const single = normalizeQty(value)
+      return single === null ? [] : [single]
+    }
+  }
+  const single = normalizeQty(value)
+  return single === null ? [] : [single]
+}
+
+const parseProductWeightList = (value: any): number[] => {
+  if (value === null || value === undefined || value === '') return []
+  const normalizeWeight = (v: any) => {
+    if (v === null || v === undefined || v === '') return null
+    const n = typeof v === 'number' ? v : Number(String(v).trim())
+    if (!Number.isFinite(n)) return null
+    return Math.max(0, n)
+  }
+  const normalizeArray = (arr: any[]) =>
+    arr.map(normalizeWeight).filter((x) => x !== null) as number[]
+  if (Array.isArray(value)) return normalizeArray(value)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return normalizeArray(parsed)
+      const single = normalizeWeight(value)
+      return single === null ? [] : [single]
+    } catch {
+      const single = normalizeWeight(value)
+      return single === null ? [] : [single]
+    }
+  }
+  const single = normalizeWeight(value)
+  return single === null ? [] : [single]
+}
+
 const normalizeDrawingAndSizeLists = (
   drawingsRaw: string[],
   sizesRaw: string[],
-  mainDrawingRaw: string
+  namesRaw: string[],
+  qtyRaw: number[],
+  weightRaw: number[],
+  mainDrawingRaw: string,
+  mainNameRaw: string
 ) => {
   const mainDrawing = String(mainDrawingRaw || '').trim()
+  const mainName = String(mainNameRaw || '').trim()
   const drawings = (drawingsRaw || []).map((d) => String(d ?? '').trim())
   const sizes = (sizesRaw || []).map((s) => String(s ?? '').trim())
+  const names = (namesRaw || []).map((n) => String(n ?? '').trim())
+  const qty = (qtyRaw || []).map((q) => {
+    const n = typeof q === 'number' ? q : Number(q)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.trunc(n))
+  })
+  const weights = (weightRaw || []).map((w) => {
+    const n = typeof w === 'number' ? w : Number(w)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, n)
+  })
 
   // 至少保留 1 行
   if (drawings.length === 0) {
@@ -2381,25 +2639,56 @@ const normalizeDrawingAndSizeLists = (
   }
 
   // 长度对齐：保留更长的一侧，避免丢数据
-  const maxLength = Math.max(1, drawings.length, sizes.length)
+  const maxLength = Math.max(
+    1,
+    drawings.length,
+    sizes.length,
+    names.length,
+    qty.length,
+    weights.length
+  )
   while (drawings.length < maxLength) drawings.push('')
   while (sizes.length < maxLength) sizes.push('')
+  while (names.length < maxLength) names.push('')
+  while (qty.length < maxLength) qty.push(0)
+  while (weights.length < maxLength) weights.push(0)
 
-  return { drawings, sizes }
+  // 若名称全为空且存在主名称，则首行自动补齐主名称（保持行为“尽量不空”但不强制）
+  if (names.every((n) => !n) && mainName) {
+    names[0] = mainName
+  }
+
+  return { drawings, sizes, names, qty, weights }
 }
 
-// 同步“产品图号列表/产品尺寸”：首行=主图号，至少一行，索引对齐
+// 同步“产品列表/产品尺寸”：首行=主图号，至少一行，索引对齐
 const syncMainDrawingRowToForm = () => {
   const mainDrawing = String(editForm.productDrawing || '').trim()
-  const drawingsRaw = parseProductDrawingList((editForm as any).产品图号列表)
+  const mainName = String(editForm.productName || '').trim()
+  const drawingsRaw = parseProductDrawingList(getProductListRawFromEditForm())
   const sizesRaw = parseProductSize(editForm.产品尺寸)
-  const { drawings, sizes } = normalizeDrawingAndSizeLists(drawingsRaw, sizesRaw, mainDrawing)
-  ;(editForm as any).产品图号列表 = drawings
+  const namesRaw = parseProductNameList((editForm as any).产品名称列表)
+  const qtyRaw = parseProductQtyList((editForm as any).产品数量列表)
+  const weightRaw = parseProductWeightList((editForm as any).产品重量列表)
+  const { drawings, sizes, names, qty, weights } = normalizeDrawingAndSizeLists(
+    drawingsRaw,
+    sizesRaw,
+    namesRaw,
+    qtyRaw,
+    weightRaw,
+    mainDrawing,
+    mainName
+  )
+  ;(editForm as any).产品列表 = drawings
   editForm.产品尺寸 = sizes as any
+  ;(editForm as any).产品名称列表 = names
+  ;(editForm as any).产品数量列表 = qty
+  ;(editForm as any).产品重量列表 = weights
 }
 
 const applyInitGroupsToProductDrawingList = (groups: Array<{ productDrawing?: string }>) => {
   const mainDrawing = String(editForm.productDrawing || '').trim()
+  const mainName = String(editForm.productName || '').trim()
 
   const extracted = (groups || [])
     .map((g) => String(g?.productDrawing || '').trim())
@@ -2419,7 +2708,7 @@ const applyInitGroupsToProductDrawingList = (groups: Array<{ productDrawing?: st
   }
 
   // 尽量保留现有尺寸（按图号匹配）
-  const existingDrawings = parseProductDrawingList((editForm as any).产品图号列表).map((d) =>
+  const existingDrawings = parseProductDrawingList(getProductListRawFromEditForm()).map((d) =>
     String(d || '').trim()
   )
   const existingSizes = parseProductSize(editForm.产品尺寸).map((s) => String(s || '').trim())
@@ -2434,9 +2723,18 @@ const applyInitGroupsToProductDrawingList = (groups: Array<{ productDrawing?: st
   }
 
   const nextSizes = nextDrawings.map((d) => drawingToSize.get(d.toLowerCase()) || '')
+  const nextNames = nextDrawings.map((_d, i) => {
+    const fallback = i === 0 ? mainName : ''
+    return fallback
+  })
+  const nextQty = nextDrawings.map((_d) => 0)
+  const nextWeights = nextDrawings.map((_d) => 0)
 
-  ;(editForm as any).产品图号列表 = nextDrawings
+  ;(editForm as any).产品列表 = nextDrawings
   editForm.产品尺寸 = nextSizes as any
+  ;(editForm as any).产品名称列表 = nextNames
+  ;(editForm as any).产品数量列表 = nextQty
+  ;(editForm as any).产品重量列表 = nextWeights
   syncMainDrawingRowToForm()
 }
 
@@ -2449,29 +2747,53 @@ const extractProjectNameFromProductDrawing = (drawing: unknown) => {
   return prefix || firstToken
 }
 
-// 产品图号列表显示数据类型
+// 产品列表显示数据类型
 interface ProductDrawingRow {
   图号: string
+  名称: string
   尺寸: string
+  重量: number
+  数量: number
   图号错误: string
 }
 
-// 产品图号列表显示数据（用于表格）
+// 产品列表显示数据（用于表格）
 const productDrawingListDisplay = computed<ProductDrawingRow[]>(() => {
   const mainDrawing = String(editForm.productDrawing || '').trim()
-  const { drawings: 图号列表, sizes: 尺寸列表 } = normalizeDrawingAndSizeLists(
-    parseProductDrawingList((editForm as any).产品图号列表),
+  const mainName = String(editForm.productName || '').trim()
+  const {
+    drawings: 图号列表,
+    sizes: 尺寸列表,
+    names: 名称列表,
+    qty: 数量列表,
+    weights: 重量列表
+  } = normalizeDrawingAndSizeLists(
+    parseProductDrawingList(getProductListRawFromEditForm()),
     parseProductSize(editForm.产品尺寸),
-    mainDrawing
+    parseProductNameList((editForm as any).产品名称列表),
+    parseProductQtyList((editForm as any).产品数量列表),
+    parseProductWeightList((editForm as any).产品重量列表),
+    mainDrawing,
+    mainName
   )
 
-  const maxLength = Math.max(图号列表.length, 尺寸列表.length, 1)
+  const maxLength = Math.max(
+    图号列表.length,
+    尺寸列表.length,
+    名称列表.length,
+    数量列表.length,
+    重量列表.length,
+    1
+  )
   const result: ProductDrawingRow[] = []
 
   for (let i = 0; i < maxLength; i++) {
     result.push({
       图号: 图号列表[i] || '',
+      名称: 名称列表[i] || '',
       尺寸: 尺寸列表[i] || '',
+      重量: 重量列表[i] ?? 0,
+      数量: 数量列表[i] ?? 0,
       图号错误: ''
     })
   }
@@ -2483,7 +2805,10 @@ const productDrawingListDisplay = computed<ProductDrawingRow[]>(() => {
 const handleDrawingNumberChange = (index: number, val: string) => {
   syncMainDrawingRowToForm()
 
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
+  const 名称列表 = parseProductNameList((editForm as any).产品名称列表)
+  const 数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+  const 重量列表 = parseProductWeightList((editForm as any).产品重量列表)
   while (图号列表.length <= index) {
     图号列表.push('')
   }
@@ -2498,13 +2823,73 @@ const handleDrawingNumberChange = (index: number, val: string) => {
     尺寸列表.pop()
   }
 
-  ;(editForm as any).产品图号列表 = 图号列表
+  while (名称列表.length < 图号列表.length) {
+    名称列表.push('')
+  }
+  while (名称列表.length > 图号列表.length) {
+    名称列表.pop()
+  }
+
+  while (数量列表.length < 图号列表.length) {
+    数量列表.push(0)
+  }
+  while (数量列表.length > 图号列表.length) {
+    数量列表.pop()
+  }
+
+  while (重量列表.length < 图号列表.length) {
+    重量列表.push(0)
+  }
+  while (重量列表.length > 图号列表.length) {
+    重量列表.pop()
+  }
+
+  ;(editForm as any).产品列表 = 图号列表
   editForm.产品尺寸 = 尺寸列表 as any
+  ;(editForm as any).产品名称列表 = 名称列表
+  ;(editForm as any).产品数量列表 = 数量列表
+  ;(editForm as any).产品重量列表 = 重量列表
 
   // 清除错误提示
   if (productDrawingListDisplay.value[index]) {
     productDrawingListDisplay.value[index].图号错误 = ''
   }
+}
+
+// 处理产品名称列表中的名称变化
+const handleProductNameChange = (index: number, val: string) => {
+  syncMainDrawingRowToForm()
+
+  const 名称列表 = parseProductNameList((editForm as any).产品名称列表)
+  while (名称列表.length <= index) {
+    名称列表.push('')
+  }
+  名称列表[index] = val || ''
+  ;(editForm as any).产品名称列表 = 名称列表
+}
+
+// 处理产品数量列表中的数量变化
+const handleProductQtyChange = (index: number, val: unknown) => {
+  syncMainDrawingRowToForm()
+  const 数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+  while (数量列表.length <= index) {
+    数量列表.push(0)
+  }
+  const n = typeof val === 'number' ? val : Number(val)
+  数量列表[index] = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+  ;(editForm as any).产品数量列表 = 数量列表
+}
+
+// 处理产品重量列表中的重量变化
+const handleProductWeightChange = (index: number, val: unknown) => {
+  syncMainDrawingRowToForm()
+  const 重量列表 = parseProductWeightList((editForm as any).产品重量列表)
+  while (重量列表.length <= index) {
+    重量列表.push(0)
+  }
+  const n = typeof val === 'number' ? val : Number(val)
+  重量列表[index] = Number.isFinite(n) ? Math.max(0, n) : 0
+  ;(editForm as any).产品重量列表 = 重量列表
 }
 
 // 处理产品尺寸列表中的尺寸变化
@@ -2525,7 +2910,7 @@ const validateDrawingNumber = (index: number) => {
   if (!row) return
 
   const 图号 = row.图号?.trim() || ''
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
 
   // 验证：不能与列表中其他图号重复
   const 其他图号 = 图号列表
@@ -2545,33 +2930,52 @@ const validateDrawingNumber = (index: number) => {
 const addDrawingRow = () => {
   syncMainDrawingRowToForm()
 
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  const 名称列表 = parseProductNameList((editForm as any).产品名称列表)
+  const 数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+  const 重量列表 = parseProductWeightList((editForm as any).产品重量列表)
 
   图号列表.push('')
   尺寸列表.push('')
-  ;(editForm as any).产品图号列表 = 图号列表
+  名称列表.push('')
+  数量列表.push(0)
+  重量列表.push(0)
+  ;(editForm as any).产品列表 = 图号列表
   editForm.产品尺寸 = 尺寸列表 as any
+  ;(editForm as any).产品名称列表 = 名称列表
+  ;(editForm as any).产品数量列表 = 数量列表
+  ;(editForm as any).产品重量列表 = 重量列表
 }
 
 // 删除行
 const deleteDrawingRow = (index: number) => {
   syncMainDrawingRowToForm()
 
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  const 名称列表 = parseProductNameList((editForm as any).产品名称列表)
+  const 数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+  const 重量列表 = parseProductWeightList((editForm as any).产品重量列表)
 
   if (图号列表.length <= 1) {
-    ElMessage.warning('产品图号列表至少保留一行')
+    ElMessage.warning('产品列表至少保留一行')
     return
   }
 
   图号列表.splice(index, 1)
   尺寸列表.splice(index, 1)
-  ;(editForm as any).产品图号列表 = 图号列表
+  名称列表.splice(index, 1)
+  数量列表.splice(index, 1)
+  重量列表.splice(index, 1)
+  ;(editForm as any).产品列表 = 图号列表
   editForm.产品尺寸 = 尺寸列表 as any
+  ;(editForm as any).产品名称列表 = 名称列表
+  ;(editForm as any).产品数量列表 = 数量列表
+  ;(editForm as any).产品重量列表 = 重量列表
 }
 const tripartiteAgreementDownloading = ref(false)
+const sealSampleGenerating = ref(false)
 const currentProjectCode = ref('')
 const editDialogBodyRef = ref<HTMLElement>()
 const editDialogBaseHeight = ref<number>()
@@ -3787,14 +4191,12 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       ;(editForm as any).设计师 = specData.产品结构工程师
     }
 
-    // 处理产品图号列表和产品尺寸列表
-    if (
-      specData.产品图号列表 &&
-      Array.isArray(specData.产品图号列表) &&
-      specData.产品图号列表.length > 0
-    ) {
-      const 技术规格表图号列表 = specData.产品图号列表
+    // 处理产品列表和产品尺寸列表
+    if (specData.产品列表 && Array.isArray(specData.产品列表) && specData.产品列表.length > 0) {
+      const 技术规格表图号列表 = specData.产品列表
       const 技术规格表尺寸列表 = specData.产品尺寸列表 || []
+      const 技术规格表名称列表 = specData.产品名称列表 || []
+      const 技术规格表数量列表 = specData.产品数量列表 || []
 
       // 确保尺寸列表长度与图号列表一致
       while (技术规格表尺寸列表.length < 技术规格表图号列表.length) {
@@ -3804,23 +4206,56 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
         技术规格表尺寸列表.pop()
       }
 
+      // 确保名称列表长度与图号列表一致
+      while (技术规格表名称列表.length < 技术规格表图号列表.length) {
+        技术规格表名称列表.push('')
+      }
+      while (技术规格表名称列表.length > 技术规格表图号列表.length) {
+        技术规格表名称列表.pop()
+      }
+
+      // 确保数量列表长度与图号列表一致
+      while (技术规格表数量列表.length < 技术规格表图号列表.length) {
+        技术规格表数量列表.push(0)
+      }
+      while (技术规格表数量列表.length > 技术规格表图号列表.length) {
+        技术规格表数量列表.pop()
+      }
+
       // 获取现有的图号列表和尺寸列表
-      const 现有图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+      const 现有图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
       const 现有尺寸列表 = parseProductSize(editForm.产品尺寸)
+      const 现有名称列表 = parseProductNameList((editForm as any).产品名称列表)
+      const 现有数量列表 = parseProductQtyList((editForm as any).产品数量列表)
 
       // 确保现有列表长度一致
-      const 现有最大长度 = Math.max(现有图号列表.length, 现有尺寸列表.length)
+      const 现有最大长度 = Math.max(
+        现有图号列表.length,
+        现有尺寸列表.length,
+        现有名称列表.length,
+        现有数量列表.length
+      )
       while (现有图号列表.length < 现有最大长度) {
         现有图号列表.push('')
       }
       while (现有尺寸列表.length < 现有最大长度) {
         现有尺寸列表.push('')
       }
+      while (现有名称列表.length < 现有最大长度) {
+        现有名称列表.push('')
+      }
+      while (现有数量列表.length < 现有最大长度) {
+        现有数量列表.push(0)
+      }
 
       // 合并技术规格表的数据到现有列表
       for (let i = 0; i < 技术规格表图号列表.length; i++) {
         const 新图号 = 技术规格表图号列表[i]?.trim() || ''
         const 新尺寸 = 技术规格表尺寸列表[i]?.trim() || ''
+        const 新名称 = 技术规格表名称列表[i]?.trim() || ''
+        const 新数量 = Number.isFinite(技术规格表数量列表[i] as any)
+          ? Number(技术规格表数量列表[i])
+          : 0
 
         if (!新图号) continue
 
@@ -3841,6 +4276,12 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
             )
             // 用户确认更新
             现有尺寸列表[现有索引] = 新尺寸
+            if (!String(现有名称列表[现有索引] || '').trim() && 新名称) {
+              现有名称列表[现有索引] = 新名称
+            }
+            if (!Number(现有数量列表[现有索引] || 0) && 新数量) {
+              现有数量列表[现有索引] = Math.max(0, Math.trunc(新数量))
+            }
           } catch {
             // 用户取消，跳过该图号
             continue
@@ -3849,15 +4290,19 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
           // 图号不存在，添加新行
           现有图号列表.push(新图号)
           现有尺寸列表.push(新尺寸)
+          现有名称列表.push(新名称)
+          现有数量列表.push(Math.max(0, Math.trunc(新数量)))
         }
       }
 
       // 更新editForm
-      ;(editForm as any).产品图号列表 = 现有图号列表
+      ;(editForm as any).产品列表 = 现有图号列表
       editForm.产品尺寸 = 现有尺寸列表 as any
+      ;(editForm as any).产品名称列表 = 现有名称列表
+      ;(editForm as any).产品数量列表 = 现有数量列表
       syncMainDrawingRowToForm()
 
-      console.log('[初始化完成] 合并后的产品图号列表:', 现有图号列表)
+      console.log('[初始化完成] 合并后的产品列表:', 现有图号列表)
       console.log('[初始化完成] 合并后的产品尺寸列表:', 现有尺寸列表)
     } else if (specData.产品外观尺寸) {
       // 如果没有图号列表，只有单个尺寸，使用旧的方式
@@ -3903,7 +4348,7 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
     }
   }
 
-  // 将初始化产品组的“产品图号”代入到“产品图号列表”
+  // 将初始化产品组的“产品图号”代入到“产品列表”
   applyInitGroupsToProductDrawingList(groups)
 
   // 产品图号形如 C25066.22.1.1 时，取前缀 C25066 作为“项目名称”自动回填
@@ -3958,15 +4403,20 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
           }
         }
 
-        // 处理产品图号列表和产品尺寸的兼容
+        // 处理产品列表和产品尺寸的兼容
         // 确保数据格式正确（JSON数组）
-        ;(editForm as any).产品图号列表 = parseProductDrawingList((detail as any).产品图号列表)
+        ;(editForm as any).产品列表 = parseProductDrawingList(
+          (detail as any).产品列表 ?? (detail as any).产品图号列表
+        )
+        ;(editForm as any).产品名称列表 = parseProductNameList((detail as any).产品名称列表)
+        ;(editForm as any).产品数量列表 = parseProductQtyList((detail as any).产品数量列表)
+        ;(editForm as any).产品重量列表 = parseProductWeightList((detail as any).产品重量列表)
         editForm.产品尺寸 = parseProductSize(detail.产品尺寸) as any
         syncMainDrawingRowToForm()
 
         console.log(
-          '[编辑项目] 产品图号列表:',
-          parseProductDrawingList((editForm as any).产品图号列表)
+          '[编辑项目] 产品列表:',
+          parseProductDrawingList(getProductListRawFromEditForm())
         )
         console.log('[编辑项目] 产品尺寸列表:', parseProductSize(editForm.产品尺寸))
       }
@@ -4007,6 +4457,12 @@ const tripartiteAgreementAttachments = computed(() =>
 )
 const trialFormAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'trial-form')
+)
+const drawingAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'drawing')
+)
+const sealSampleAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'seal-sample')
 )
 
 // 零件图示相关状态
@@ -4230,7 +4686,8 @@ const beforeAttachmentUpload = async (_file: File, type: ProjectAttachmentType) 
   const singleFileTypes: ProjectAttachmentType[] = [
     'relocation-process',
     'trial-record',
-    'tripartite-agreement'
+    'tripartite-agreement',
+    'seal-sample'
   ]
 
   if (singleFileTypes.includes(type)) {
@@ -4242,6 +4699,8 @@ const beforeAttachmentUpload = async (_file: File, type: ProjectAttachmentType) 
       existingAttachments = trialRecordAttachments.value
     } else if (type === 'tripartite-agreement') {
       existingAttachments = tripartiteAgreementAttachments.value
+    } else if (type === 'seal-sample') {
+      existingAttachments = sealSampleAttachments.value
     }
 
     if (existingAttachments.length > 0) {
@@ -4657,6 +5116,43 @@ const handleDownloadTrialFormXlsx = async () => {
   }
 }
 
+const handleGenerateSealSample = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+
+  try {
+    sealSampleGenerating.value = true
+    const resp: any = await generateSealSampleXlsxApi(projectCode)
+    if (resp?.code !== 0 && resp?.success !== true) {
+      ElMessage.error(resp?.message || '生成封样单失败')
+      return
+    }
+
+    ElMessage.success('封样单已生成并保存到附件')
+    await loadAttachments()
+  } catch (error: any) {
+    console.error('生成封样单失败:', error)
+    const resp = error?.response
+    const data = resp?.data
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text()
+        const json = JSON.parse(text)
+        ElMessage.error(json?.message || '生成封样单失败')
+        return
+      } catch {
+        // ignore
+      }
+    }
+    ElMessage.error(resp?.data?.message || error?.message || '生成封样单失败')
+  } finally {
+    sealSampleGenerating.value = false
+  }
+}
+
 const handleGenerateTripartiteAgreement = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
@@ -5034,7 +5530,7 @@ const handleSubmitEdit = async () => {
     }
   }
 
-  // 保存前处理产品图号列表和产品尺寸
+  // 保存前处理产品列表和产品尺寸
   syncMainDrawingRowToForm()
 
   const 主图号 = String(editForm.productDrawing || '').trim()
@@ -5043,41 +5539,69 @@ const handleSubmitEdit = async () => {
     return
   }
 
-  const 图号列表 = parseProductDrawingList((editForm as any).产品图号列表)
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
   const 尺寸列表 = parseProductSize(editForm.产品尺寸)
+  const 名称列表 = parseProductNameList((editForm as any).产品名称列表)
+  const 数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+  const 重量列表 = parseProductWeightList((editForm as any).产品重量列表)
 
   // 确保两个数组长度一致（保留更长的一侧）
-  const maxLength = Math.max(1, 图号列表.length, 尺寸列表.length)
+  const maxLength = Math.max(
+    1,
+    图号列表.length,
+    尺寸列表.length,
+    名称列表.length,
+    数量列表.length,
+    重量列表.length
+  )
   const 对齐后图号列表 = [...图号列表]
   const 对齐后尺寸列表 = [...尺寸列表]
+  const 对齐后名称列表 = [...名称列表]
+  const 对齐后数量列表 = [...数量列表]
+  const 对齐后重量列表 = [...重量列表]
   while (对齐后图号列表.length < maxLength) 对齐后图号列表.push('')
   while (对齐后尺寸列表.length < maxLength) 对齐后尺寸列表.push('')
+  while (对齐后名称列表.length < maxLength) 对齐后名称列表.push('')
+  while (对齐后数量列表.length < maxLength) 对齐后数量列表.push(0)
+  while (对齐后重量列表.length < maxLength) 对齐后重量列表.push(0)
 
-  // 过滤空行（图号和尺寸都为空）
+  // 过滤空行（图号/名称/尺寸都为空）
   const 有效图号列表: string[] = []
   const 有效尺寸列表: string[] = []
+  const 有效名称列表: string[] = []
+  const 有效数量列表: number[] = []
+  const 有效重量列表: number[] = []
   for (let i = 0; i < 对齐后图号列表.length; i++) {
     const 图号 = String(对齐后图号列表[i] || '').trim()
+    const 名称 = String(对齐后名称列表[i] || '').trim()
     const 尺寸 = String(对齐后尺寸列表[i] || '').trim()
-    if (图号 || 尺寸) {
+    const 数量 = Number.isFinite(对齐后数量列表[i] as any) ? Number(对齐后数量列表[i]) : 0
+    const 重量 = Number.isFinite(对齐后重量列表[i] as any) ? Number(对齐后重量列表[i]) : 0
+    if (图号 || 名称 || 尺寸 || 数量 || 重量) {
       有效图号列表.push(图号)
+      有效名称列表.push(名称)
       有效尺寸列表.push(尺寸)
+      有效数量列表.push(Math.max(0, Math.trunc(数量)))
+      有效重量列表.push(Math.max(0, 重量))
     }
   }
 
   if (有效图号列表.length === 0) {
-    ElMessage.error('产品图号列表至少保留一行')
+    ElMessage.error('产品列表至少保留一行')
     return
   }
 
   // 验证图号重复（仅对非空图号）
   const 非空图号 = 有效图号列表.filter((d) => d)
   if (new Set(非空图号).size !== 非空图号.length) {
-    ElMessage.error('产品图号列表中存在重复图号，无法保存')
+    ElMessage.error('产品列表中存在重复图号，无法保存')
     return
   }
 
-  ;(editForm as any).产品图号列表 = 有效图号列表
+  ;(editForm as any).产品列表 = 有效图号列表
+  ;(editForm as any).产品名称列表 = 有效名称列表
+  ;(editForm as any).产品数量列表 = 有效数量列表
+  ;(editForm as any).产品重量列表 = 有效重量列表
   editForm.产品尺寸 = 有效尺寸列表 as any
 
   editSubmitting.value = true
@@ -5089,9 +5613,18 @@ const handleSubmitEdit = async () => {
       // 同时过滤掉"分类"，它属于货物信息表，不应回写到项目管理表
       const { productName, productDrawing, 分类, ...updateData } = editForm as any
 
-      // 将产品图号列表和产品尺寸转换为JSON字符串
-      if (updateData.产品图号列表 && Array.isArray(updateData.产品图号列表)) {
-        updateData.产品图号列表 = JSON.stringify(updateData.产品图号列表)
+      // 将产品列表/产品名称列表/产品数量列表/产品重量列表/产品尺寸转换为JSON字符串
+      if (updateData.产品列表 && Array.isArray(updateData.产品列表)) {
+        updateData.产品列表 = JSON.stringify(updateData.产品列表)
+      }
+      if (updateData.产品名称列表 && Array.isArray(updateData.产品名称列表)) {
+        updateData.产品名称列表 = JSON.stringify(updateData.产品名称列表)
+      }
+      if (updateData.产品数量列表 && Array.isArray(updateData.产品数量列表)) {
+        updateData.产品数量列表 = JSON.stringify(updateData.产品数量列表)
+      }
+      if (updateData.产品重量列表 && Array.isArray(updateData.产品重量列表)) {
+        updateData.产品重量列表 = JSON.stringify(updateData.产品重量列表)
       }
       if (updateData.产品尺寸 && Array.isArray(updateData.产品尺寸)) {
         updateData.产品尺寸 = JSON.stringify(updateData.产品尺寸)
@@ -5108,9 +5641,18 @@ const handleSubmitEdit = async () => {
       // 过滤掉 productName 和 productDrawing
       const { productName, productDrawing, 分类, ...createData } = editForm as any
 
-      // 将产品图号列表和产品尺寸转换为JSON字符串
-      if (createData.产品图号列表 && Array.isArray(createData.产品图号列表)) {
-        createData.产品图号列表 = JSON.stringify(createData.产品图号列表)
+      // 将产品列表/产品名称列表/产品数量列表/产品重量列表/产品尺寸转换为JSON字符串
+      if (createData.产品列表 && Array.isArray(createData.产品列表)) {
+        createData.产品列表 = JSON.stringify(createData.产品列表)
+      }
+      if (createData.产品名称列表 && Array.isArray(createData.产品名称列表)) {
+        createData.产品名称列表 = JSON.stringify(createData.产品名称列表)
+      }
+      if (createData.产品数量列表 && Array.isArray(createData.产品数量列表)) {
+        createData.产品数量列表 = JSON.stringify(createData.产品数量列表)
+      }
+      if (createData.产品重量列表 && Array.isArray(createData.产品重量列表)) {
+        createData.产品重量列表 = JSON.stringify(createData.产品重量列表)
       }
       if (createData.产品尺寸 && Array.isArray(createData.产品尺寸)) {
         createData.产品尺寸 = JSON.stringify(createData.产品尺寸)
@@ -6750,7 +7292,7 @@ watch(viewMode, (val) => {
   line-height: 20px;
 }
 
-/* 产品图号列表相关样式 */
+/* 产品列表（产品图号列表）相关样式 */
 .pm-product-drawing-list {
   width: 100%;
 }
@@ -6770,5 +7312,5 @@ watch(viewMode, (val) => {
   color: var(--el-color-danger);
 }
 
-/* A) 产品图号列表单元格颜色 */
+/* A) 产品列表单元格颜色 */
 </style>

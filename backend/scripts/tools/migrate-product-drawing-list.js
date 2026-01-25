@@ -15,25 +15,25 @@ const executeMigration = async () => {
     // 1. 检查字段是否存在
     console.log('1. 检查字段是否存在...')
     const checkColumns = await pool.request().query(`
-      SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_NAME = '项目管理'
-      AND COLUMN_NAME IN ('产品图号列表', '产品尺寸')
-    `)
+	      SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+	      FROM INFORMATION_SCHEMA.COLUMNS
+	      WHERE TABLE_NAME = '项目管理'
+	      AND COLUMN_NAME IN ('产品列表', '产品图号列表', '产品尺寸')
+	    `)
 
     const existingColumns = checkColumns.recordset.map((r) => r.COLUMN_NAME)
     console.log('现有字段:', existingColumns)
 
-    // 2. 新增产品图号列表字段
-    if (!existingColumns.includes('产品图号列表')) {
-      console.log('2. 新增产品图号列表字段...')
+    // 2. 新增产品列表字段（替代旧字段：产品图号列表）
+    if (!existingColumns.includes('产品列表')) {
+      console.log('2. 新增产品列表字段...')
       await pool.request().query(`
-        ALTER TABLE 项目管理
-        ADD 产品图号列表 NVARCHAR(MAX) NULL
-      `)
-      console.log('✓ 产品图号列表字段已添加')
+	        ALTER TABLE 项目管理
+	        ADD 产品列表 NVARCHAR(MAX) NULL
+	      `)
+      console.log('✓ 产品列表字段已添加')
     } else {
-      console.log('✓ 产品图号列表字段已存在')
+      console.log('✓ 产品列表字段已存在')
     }
 
     // 3. 修改产品尺寸字段类型
@@ -72,44 +72,54 @@ const executeMigration = async () => {
     `)
     console.log(`✓ 产品尺寸数据迁移完成，影响 ${migrateSizeResult.rowsAffected[0]} 行`)
 
-    // 5. 初始化产品图号列表（从货物信息表关联获取主图号）
-    console.log('5. 初始化产品图号列表（从货物信息表）...')
-    const initDrawingListResult = await pool.request().query(`
-      UPDATE p
-      SET p.产品图号列表 = '["' + REPLACE(REPLACE(g.产品图号, '"', '""'), '''', '''''') + '"]'
-      FROM 项目管理 p
-      INNER JOIN (
-        SELECT 项目编号, 
-               (SELECT TOP 1 产品图号 
-                FROM 货物信息 
-                WHERE 项目编号 = g1.项目编号 
-                ORDER BY 货物ID) as 产品图号
-        FROM 货物信息 g1
-        GROUP BY 项目编号
-      ) g ON p.项目编号 = g.项目编号
-      WHERE g.产品图号 IS NOT NULL 
-        AND g.产品图号 != ''
-        AND (p.产品图号列表 IS NULL OR p.产品图号列表 = '' OR p.产品图号列表 = '[]')
-    `)
-    console.log(`✓ 产品图号列表初始化完成，影响 ${initDrawingListResult.rowsAffected[0]} 行`)
+    // 5. 回填产品列表：优先从旧字段 产品图号列表 迁移；再从货物信息表关联获取主图号
+    console.log('5. 回填产品列表（优先旧字段，其次货物信息表）...')
+    const backfillFromLegacyResult = await pool.request().query(`
+	      UPDATE 项目管理
+	      SET 产品列表 = 产品图号列表
+	      WHERE (产品列表 IS NULL OR 产品列表 = '' OR 产品列表 = '[]')
+	        AND 产品图号列表 IS NOT NULL
+	        AND 产品图号列表 != ''
+	        AND 产品图号列表 != '[]'
+	    `)
+    console.log(`✓ 从旧字段回填完成，影响 ${backfillFromLegacyResult.rowsAffected[0]} 行`)
+
+    const initProductListResult = await pool.request().query(`
+	      UPDATE p
+	      SET p.产品列表 = '["' + REPLACE(REPLACE(g.产品图号, '"', '""'), '''', '''''') + '"]'
+	      FROM 项目管理 p
+	      INNER JOIN (
+	        SELECT 项目编号, 
+	               (SELECT TOP 1 产品图号 
+	                FROM 货物信息 
+	                WHERE 项目编号 = g1.项目编号 
+	                ORDER BY 货物ID) as 产品图号
+	        FROM 货物信息 g1
+	        GROUP BY 项目编号
+	      ) g ON p.项目编号 = g.项目编号
+	      WHERE g.产品图号 IS NOT NULL 
+	        AND g.产品图号 != ''
+	        AND (p.产品列表 IS NULL OR p.产品列表 = '' OR p.产品列表 = '[]')
+	    `)
+    console.log(`✓ 从货物信息表初始化完成，影响 ${initProductListResult.rowsAffected[0]} 行`)
 
     // 6. 验证迁移结果
     console.log('6. 验证迁移结果...')
     const verifyResult = await pool.request().query(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN 产品尺寸 IS NULL OR 产品尺寸 = '' OR 产品尺寸 = '[]' THEN 1 ELSE 0 END) as empty_size,
-        SUM(CASE WHEN 产品尺寸 LIKE '[%' AND 产品尺寸 LIKE '%]' THEN 1 ELSE 0 END) as json_size,
-        SUM(CASE WHEN 产品图号列表 IS NOT NULL AND 产品图号列表 != '' AND 产品图号列表 != '[]' THEN 1 ELSE 0 END) as has_drawing_list
-      FROM 项目管理
-    `)
+	      SELECT 
+	        COUNT(*) as total,
+	        SUM(CASE WHEN 产品尺寸 IS NULL OR 产品尺寸 = '' OR 产品尺寸 = '[]' THEN 1 ELSE 0 END) as empty_size,
+	        SUM(CASE WHEN 产品尺寸 LIKE '[%' AND 产品尺寸 LIKE '%]' THEN 1 ELSE 0 END) as json_size,
+	        SUM(CASE WHEN 产品列表 IS NOT NULL AND 产品列表 != '' AND 产品列表 != '[]' THEN 1 ELSE 0 END) as has_product_list
+	      FROM 项目管理
+	    `)
 
     const stats = verifyResult.recordset[0]
     console.log('迁移统计:')
     console.log(`  总记录数: ${stats.total}`)
     console.log(`  空尺寸记录: ${stats.empty_size}`)
     console.log(`  JSON格式尺寸: ${stats.json_size}`)
-    console.log(`  有图号列表记录: ${stats.has_drawing_list}`)
+    console.log(`  有产品列表记录: ${stats.has_product_list}`)
 
     console.log('\n✅ 数据迁移完成！')
   } catch (err) {

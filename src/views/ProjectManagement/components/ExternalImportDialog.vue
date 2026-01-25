@@ -448,7 +448,10 @@ type TechSpecRow = {
     产品尺寸: string
     设计师: string
     零件图示URL: string
-    产品图号列表: string
+    产品列表: string
+    产品名称列表: string
+    产品数量列表: string
+    产品重量列表: string
   } | null
   importStatus: '' | 'success' | 'error' | 'skipped'
   importError: string
@@ -557,7 +560,10 @@ const hydrateTechSpecRowDetail = async (row: TechSpecRow, projectCode: string) =
       产品尺寸: stringifyList(detail.产品尺寸),
       设计师: normalizeKey(detail.设计师),
       零件图示URL: normalizeKey(detail.零件图示URL),
-      产品图号列表: stringifyList(detail.产品图号列表)
+      产品列表: stringifyList(detail.产品列表 ?? detail.产品图号列表),
+      产品名称列表: stringifyList(detail.产品名称列表),
+      产品数量列表: stringifyList(detail.产品数量列表),
+      产品重量列表: stringifyList(detail.产品重量列表)
     }
   } catch {
     row.initStatus = 'unknown'
@@ -1066,7 +1072,10 @@ const buildTechSpecConfirmHtml = (rows: TechSpecRow[]) => {
         产品尺寸: '',
         设计师: '',
         零件图示URL: '',
-        产品图号列表: ''
+        产品列表: '',
+        产品名称列表: '',
+        产品数量列表: '',
+        产品重量列表: ''
       }
 
       const nextCavityExpr = normalizeCavityExpression(r.specData.模具穴数)
@@ -1173,7 +1182,10 @@ const buildTechSpecUpdatePayload = async (
     产品尺寸: '',
     设计师: '',
     零件图示URL: '',
-    产品图号列表: ''
+    产品列表: '',
+    产品名称列表: '',
+    产品数量列表: '',
+    产品重量列表: ''
   }
 
   const shouldWrite = (next: unknown, existed: unknown) => {
@@ -1199,12 +1211,21 @@ const buildTechSpecUpdatePayload = async (
   const nextCavityExpr = normalizeCavityExpression(row.specData.模具穴数)
   if (shouldWrite(nextCavityExpr, existing.模具穴数)) payload.模具穴数 = nextCavityExpr
 
-  const nextDrawings = row.specData.产品图号列表 || []
+  const nextDrawings = row.specData.产品列表 || []
   const nextSizes = row.specData.产品尺寸列表 || []
+  const nextNames = row.specData.产品名称列表 || []
+  const nextQty = row.specData.产品数量列表 || []
+  const nextWeights = row.specData.产品重量列表 || []
   const nextDrawingsStr = nextDrawings.length ? JSON.stringify(nextDrawings) : ''
   const nextSizesStr = nextSizes.length ? JSON.stringify(nextSizes) : ''
+  const nextNamesStr = nextNames.length ? JSON.stringify(nextNames) : ''
+  const nextQtyStr = nextQty.length ? JSON.stringify(nextQty) : ''
+  const nextWeightsStr = nextWeights.length ? JSON.stringify(nextWeights) : ''
 
-  if (shouldWrite(nextDrawingsStr, existing.产品图号列表)) payload.产品图号列表 = nextDrawingsStr
+  if (shouldWrite(nextDrawingsStr, existing.产品列表)) payload.产品列表 = nextDrawingsStr
+  if (shouldWrite(nextNamesStr, existing.产品名称列表)) payload.产品名称列表 = nextNamesStr
+  if (shouldWrite(nextQtyStr, existing.产品数量列表)) payload.产品数量列表 = nextQtyStr
+  if (shouldWrite(nextWeightsStr, existing.产品重量列表)) payload.产品重量列表 = nextWeightsStr
   if (shouldWrite(nextSizesStr, existing.产品尺寸)) payload.产品尺寸 = nextSizesStr
 
   const nextImage = normalizeKey(row.specData.零件图片)

@@ -558,6 +558,19 @@ const safeFileName = (fileName) => {
   return String(fileName).replace(/[/\\?%*:|"<>]/g, '_')
 }
 
+const ensureUniqueFileName = (dirPath, fileName) => {
+  const parsed = path.parse(String(fileName || ''))
+  const base = parsed.name || '附件'
+  const ext = parsed.ext || ''
+  let candidate = `${base}${ext}`
+  let i = 2
+  while (fs.existsSync(path.join(dirPath, candidate))) {
+    candidate = `${base}_${i}${ext}`
+    i += 1
+  }
+  return candidate
+}
+
 const ensureDirSync = (dirPath) => {
   try {
     if (!fs.existsSync(dirPath)) {
@@ -707,6 +720,40 @@ const generateAttachmentFileName = (projectCode, customerModelNo, type, original
     // 试模单：项目编号_试模单_序号.{扩展名}，序号从01开始
     // 这个会在上传时动态计算序号
     fileName = `${projectCode}_试模单_序号${safeExt}`
+  } else if (type === 'drawing') {
+    // 图档：根据扩展名决定命名规则
+    // .pdf  => 项目编号_2D.pdf
+    // .dwg  => 项目编号_2D_CAD.dwg
+    // 3D（.prt .x_t .stp 等）=> 项目编号_3D.{扩展名}
+    const extLower = ext.toLowerCase()
+    const threeDExts = new Set([
+      'prt',
+      'x_t',
+      'x_b',
+      'stp',
+      'step',
+      'igs',
+      'iges',
+      'sldprt',
+      'sldasm',
+      'asm',
+      'par',
+      'psm',
+      'catpart',
+      'catproduct'
+    ])
+    if (extLower === 'pdf') {
+      fileName = `${projectCode}_2D${safeExt}`
+    } else if (extLower === 'dwg') {
+      fileName = `${projectCode}_2D_CAD${safeExt}`
+    } else if (threeDExts.has(extLower)) {
+      fileName = `${projectCode}_3D${safeExt}`
+    } else {
+      fileName = originalFileName
+    }
+  } else if (type === 'seal-sample') {
+    // 封样单：项目编号_封样单.{扩展名}
+    fileName = `${projectCode}_封样单${safeExt}`
   } else {
     // 默认使用原始文件名
     fileName = originalFileName
@@ -1575,10 +1622,218 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
   }
 })
 
+// 生成封样单（xlsx）并保存到“项目管理附件-封样单”（不直接下载）
+router.post('/seal-sample-generate-xlsx', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+
+    const { projectCode } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('封样单')
+
+    sheet.columns = [
+      { header: '字段', key: 'field', width: 18 },
+      { header: '内容', key: 'value', width: 45 }
+    ]
+
+    const productName = row?.productName || row?.产品名称 || ''
+    const productDrawing = row?.productDrawing || row?.产品图号 || ''
+    const sealSampleNo = row?.封样单号 || ''
+    const sealSampleTime = row?.封样时间 || ''
+
+    const rows = [
+      ['项目编号', code],
+      ['项目名称', String(row?.项目名称 || '').trim()],
+      ['产品名称', String(productName || '').trim()],
+      ['产品图号', String(productDrawing || '').trim()],
+      ['客户模号', String(row?.客户模号 || '').trim()],
+      ['封样单号', String(sealSampleNo || '').trim()],
+      ['封样时间', String(sealSampleTime || '').trim()],
+      ['制件厂家', String(row?.制件厂家 || '').trim()],
+      ['备注', '']
+    ]
+
+    rows.forEach(([field, value]) => {
+      sheet.addRow({ field, value })
+    })
+
+    sheet.getRow(1).font = { bold: true }
+    sheet.getRow(1).alignment = { vertical: 'middle' }
+    sheet.eachRow((r) => {
+      r.alignment = { vertical: 'middle', wrapText: true }
+    })
+
+    const xlsxBuffer = await workbook.xlsx.writeBuffer()
+
+    // 单文件覆盖：删除旧文件与记录
+    const existingRows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 项目编号 = @projectCode
+        AND 附件类型 = 'seal-sample'
+      ORDER BY 上传时间 DESC, 附件ID DESC
+      `,
+      { projectCode: code }
+    )
+    if (existingRows.length > 0) {
+      const oldAttachment = existingRows[0]
+      const oldFullPath = getFileFullPath(oldAttachment.relativePath, oldAttachment.storedFileName)
+      await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, {
+        attachmentId: oldAttachment.id
+      })
+      try {
+        if (fs.existsSync(oldFullPath)) {
+          await fsp.unlink(oldFullPath)
+        }
+      } catch (fileErr) {
+        console.warn('删除旧封样单文件失败:', fileErr)
+      }
+    }
+
+    const category = getCategoryFromProjectCode(code)
+    const safeProjectCode = safeProjectCodeForPath(code)
+    const finalRelativeDir = path.posix.join(category, safeProjectCode, '项目管理', '封样单')
+    const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+    ensureDirSync(finalFullDir)
+
+    const storedFileName = safeFileName(`${code}_封样单.xlsx`)
+    const finalFile = path.join(finalFullDir, storedFileName)
+    await fsp.writeFile(finalFile, Buffer.from(xlsxBuffer))
+
+    const inserted = await query(
+      `
+      INSERT INTO 项目管理附件 (
+        项目编号,
+        附件类型,
+        原始文件名,
+        存储文件名,
+        相对路径,
+        文件大小,
+        内容类型,
+        上传人
+      )
+      OUTPUT
+        INSERTED.附件ID as id,
+        INSERTED.上传时间 as uploadedAt
+      VALUES (
+        @projectCode,
+        'seal-sample',
+        @originalName,
+        @storedFileName,
+        @relativePath,
+        @fileSize,
+        @contentType,
+        @uploadedBy
+      )
+    `,
+      {
+        projectCode: code,
+        originalName: storedFileName,
+        storedFileName,
+        relativePath: finalRelativeDir,
+        fileSize: Buffer.byteLength(xlsxBuffer),
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        uploadedBy: null
+      }
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      message: '生成封样单成功',
+      data: { id: inserted?.[0]?.id, storedFileName }
+    })
+  } catch (error) {
+    console.error('生成并保存封样单 xlsx 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成封样单失败',
+      error: error.message
+    })
+  }
+})
+
 // 新增项目信息
 router.post('/', async (req, res) => {
   try {
     const data = req.body
+
+    // 兼容旧字段：产品图号列表 -> 产品列表
+    if (
+      data &&
+      data.产品列表 === undefined &&
+      data.产品图号列表 !== undefined &&
+      data.产品图号列表 !== null &&
+      data.产品图号列表 !== ''
+    ) {
+      data.产品列表 = data.产品图号列表
+      delete data.产品图号列表
+    }
+
+    // 若传入了产品列表/产品名称列表/产品数量列表/产品重量列表，确保数据库字段存在（避免动态 SQL 直接报错）
+    if (
+      data &&
+      (data.产品列表 !== undefined ||
+        data.产品名称列表 !== undefined ||
+        data.产品数量列表 !== undefined ||
+        data.产品重量列表 !== undefined)
+    ) {
+      const fieldCheck = await query(
+        `
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = '项目管理' AND COLUMN_NAME IN ('产品列表', '产品名称列表', '产品数量列表', '产品重量列表')
+        `
+      )
+      const cols = new Set((fieldCheck || []).map((r) => r.COLUMN_NAME))
+      if (data.产品列表 !== undefined && !cols.has('产品列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_list.sql'
+        })
+      }
+      if (data.产品名称列表 !== undefined && !cols.has('产品名称列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品名称列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_name_list.sql'
+        })
+      }
+      if (data.产品数量列表 !== undefined && !cols.has('产品数量列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品数量列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_qty_list.sql'
+        })
+      }
+      if (data.产品重量列表 !== undefined && !cols.has('产品重量列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品重量列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_weight_list.sql'
+        })
+      }
+    }
 
     // 构建动态字段
     const fields = []
@@ -1653,6 +1908,66 @@ router.put('/update', async (req, res) => {
         success: false,
         message: '项目编号不能为空'
       })
+    }
+
+    // 兼容旧字段：产品图号列表 -> 产品列表
+    if (
+      data.产品列表 === undefined &&
+      data.产品图号列表 !== undefined &&
+      data.产品图号列表 !== null &&
+      data.产品图号列表 !== ''
+    ) {
+      data.产品列表 = data.产品图号列表
+      delete data.产品图号列表
+    }
+
+    // 若传入了产品列表/产品名称列表/产品数量列表/产品重量列表，确保数据库字段存在（避免动态 SQL 直接报错）
+    if (
+      data.产品列表 !== undefined ||
+      data.产品名称列表 !== undefined ||
+      data.产品数量列表 !== undefined ||
+      data.产品重量列表 !== undefined
+    ) {
+      const fieldCheck = await query(
+        `
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = '项目管理' AND COLUMN_NAME IN ('产品列表', '产品名称列表', '产品数量列表', '产品重量列表')
+        `
+      )
+      const cols = new Set((fieldCheck || []).map((r) => r.COLUMN_NAME))
+      if (data.产品列表 !== undefined && !cols.has('产品列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_list.sql'
+        })
+      }
+      if (data.产品名称列表 !== undefined && !cols.has('产品名称列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品名称列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_name_list.sql'
+        })
+      }
+      if (data.产品数量列表 !== undefined && !cols.has('产品数量列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品数量列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_qty_list.sql'
+        })
+      }
+      if (data.产品重量列表 !== undefined && !cols.has('产品重量列表')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message:
+            '数据库表中没有“产品重量列表”字段，请先执行迁移脚本：backend/migrations/20260125_add_project_management_product_weight_list.sql'
+        })
+      }
     }
 
     // 处理零件图示：如果是临时图片，移动到正式目录
@@ -1936,8 +2251,15 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
     }
 
-    // 附件类型：移模流程单、试模记录表、三方协议、试模单
-    const validTypes = ['relocation-process', 'trial-record', 'tripartite-agreement', 'trial-form']
+    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单
+    const validTypes = [
+      'relocation-process',
+      'trial-record',
+      'tripartite-agreement',
+      'trial-form',
+      'drawing',
+      'seal-sample'
+    ]
     if (!validTypes.includes(type)) {
       return res.status(400).json({ code: 400, success: false, message: '附件类型不合法' })
     }
@@ -1970,7 +2292,9 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       'relocation-process': '移模流程单',
       'trial-record': '试模记录表',
       'tripartite-agreement': '三方协议',
-      'trial-form': '试模单'
+      'trial-form': '试模单',
+      drawing: '图档',
+      'seal-sample': '封样单'
     }
     const typeDirName = typeDirMap[type]
 
@@ -1989,15 +2313,49 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       const ext = originalName.split('.').pop()?.toLowerCase() || ''
       const safeExt = ext ? `.${ext}` : ''
       newFileName = `${projectCode}_试模单_${sequence}${safeExt}`
+    } else if (type === 'drawing') {
+      const ext = originalName.split('.').pop()?.toLowerCase() || ''
+      const extLower = ext.toLowerCase()
+      const allowed3DExts = new Set([
+        'prt',
+        'x_t',
+        'x_b',
+        'stp',
+        'step',
+        'igs',
+        'iges',
+        'sldprt',
+        'sldasm',
+        'asm',
+        'par',
+        'psm',
+        'catpart',
+        'catproduct'
+      ])
+      if (extLower !== 'pdf' && extLower !== 'dwg' && !allowed3DExts.has(extLower)) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '图档仅支持 .pdf / .dwg / 常见三维图纸格式（.prt .x_t .stp 等）'
+        })
+      }
+      newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
     } else {
       // 其他类型：使用固定格式
       newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
     }
 
     const safeNewFileName = safeFileName(newFileName)
+    const finalStoredFileName =
+      type === 'drawing' ? ensureUniqueFileName(finalFullDir, safeNewFileName) : safeNewFileName
 
     // 单文件类型（移模流程单、试模记录表、三方协议）：删除旧文件
-    const singleFileTypes = ['relocation-process', 'trial-record', 'tripartite-agreement']
+    const singleFileTypes = [
+      'relocation-process',
+      'trial-record',
+      'tripartite-agreement',
+      'seal-sample'
+    ]
     if (singleFileTypes.includes(type)) {
       const existingRows = await query(
         `
@@ -2041,7 +2399,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       req._tempAttachmentFullDir || FILE_ROOT,
       req._attachmentStoredFileName || file.filename
     )
-    const finalFile = path.join(finalFullDir, safeNewFileName)
+    const finalFile = path.join(finalFullDir, finalStoredFileName)
 
     await moveFileWithFallback(tempFile, finalFile)
 
@@ -2094,7 +2452,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         projectCode,
         type,
         originalName,
-        storedFileName: safeNewFileName,
+        storedFileName: finalStoredFileName,
         relativePath: finalRelativeDir,
         fileSize: file.size,
         contentType: file.mimetype || null,
@@ -2111,7 +2469,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         projectCode,
         type,
         originalName,
-        storedFileName: safeNewFileName,
+        storedFileName: finalStoredFileName,
         relativePath: finalRelativeDir,
         fileSize: file.size,
         contentType: file.mimetype || null,
