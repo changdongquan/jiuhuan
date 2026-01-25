@@ -709,15 +709,39 @@
               <span class="pm-edit-header-code">{{
                 editForm.项目编号 || currentProjectCode || '新项目'
               }}</span>
-              <el-tag
-                v-if="editForm.项目状态"
-                :type="getStatusTagType(editForm.项目状态)"
-                size="small"
-                class="pm-edit-header-status pm-status-tag"
-                :class="getStatusTagClass(editForm.项目状态)"
+              <span class="pm-edit-header-status-label">项目状态</span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-start"
+                popper-class="pm-edit-header-status-dropdown"
+                @command="
+                  (v) => {
+                    editForm.项目状态 = v as any
+                  }
+                "
               >
-                {{ editForm.项目状态 }}
-              </el-tag>
+                <span class="pm-edit-header-status-trigger">
+                  <el-tag
+                    :type="getStatusTagType(editForm.项目状态)"
+                    class="pm-edit-header-status pm-status-tag pm-edit-header-status-tag"
+                    :class="getStatusTagClass(editForm.项目状态)"
+                  >
+                    {{ editForm.项目状态 || '未设置' }}
+                  </el-tag>
+                  <span class="pm-edit-header-status-caret">▾</span>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="item in projectStatusOptions"
+                      :key="item.value"
+                      :command="item.value"
+                    >
+                      {{ item.label }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
             <div class="pm-edit-header-actions pm-edit-header-actions--pair">
               <el-button
@@ -774,134 +798,189 @@
                   基本信息
                   <span v-if="basicTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
-                <div class="pm-edit-section">
-                  <div class="pm-edit-section-title">基本信息</div>
-                  <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                    <!-- 第1列：项目与客户 -->
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="项目编号" prop="项目编号">
-                        <el-input
-                          v-model="editForm.项目编号"
-                          placeholder="项目编号"
-                          :disabled="!!currentProjectCode"
-                          @change="handleProjectCodeBlur"
-                        />
-                      </el-form-item>
-                      <el-form-item label="项目状态">
-                        <el-select
-                          v-model="editForm.项目状态"
-                          placeholder="请选择项目状态"
-                          clearable
-                          style="width: 100%"
-                        >
-                          <el-option
-                            v-for="item in projectStatusOptions"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value"
-                          />
-                        </el-select>
-                      </el-form-item>
-                      <el-form-item label="项目名称" prop="项目名称">
-                        <el-input v-model="editForm.项目名称" placeholder="项目名称" />
-                      </el-form-item>
-                      <el-form-item label="设计师">
-                        <el-input v-model="editForm.设计师" placeholder="设计师" />
-                      </el-form-item>
-                      <el-form-item label="客户模号" prop="客户模号">
-                        <el-input v-model="editForm.客户模号" placeholder="客户模号" />
-                      </el-form-item>
-                      <el-form-item label="制件厂家">
-                        <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
-                      </el-form-item>
-                      <el-form-item label="封样单号">
-                        <el-input v-model="editForm.封样单号" placeholder="封样单号" />
-                      </el-form-item>
-                    </el-col>
+                <!-- 左右并排布局：基本信息(3) : 图示(1) -->
+                <el-row :gutter="isMobile ? 8 : 12" style="align-items: stretch">
+                  <el-col :xs="24" :sm="24" :lg="15">
+                    <div class="pm-edit-section">
+                      <div class="pm-edit-section-title">基本信息</div>
+                      <el-row :gutter="isMobile ? 8 : 12">
+                        <!-- 第1列：项目与客户 -->
+                        <el-col :xs="24" :sm="12" :lg="12">
+                          <el-form-item label="项目名称" prop="项目名称">
+                            <el-input v-model="editForm.项目名称" placeholder="项目名称" />
+                          </el-form-item>
+                          <el-form-item label="设计师">
+                            <el-input v-model="editForm.设计师" placeholder="设计师" />
+                          </el-form-item>
+                          <el-form-item label="客户模号" prop="客户模号">
+                            <el-input v-model="editForm.客户模号" placeholder="客户模号" />
+                          </el-form-item>
+                          <el-form-item label="制件厂家">
+                            <el-input v-model="editForm.制件厂家" placeholder="制件厂家" />
+                          </el-form-item>
+                          <el-form-item label="封样单号">
+                            <el-input v-model="editForm.封样单号" placeholder="封样单号" />
+                          </el-form-item>
+                          <el-form-item label="进度影响原因">
+                            <el-input v-model="editForm.进度影响原因" placeholder="进度影响原因" />
+                          </el-form-item>
+                          <el-form-item label="备注">
+                            <el-input
+                              v-model="editForm.备注"
+                              type="textarea"
+                              :autosize="{ minRows: 1, maxRows: 1 }"
+                              resize="none"
+                              placeholder="备注"
+                            />
+                          </el-form-item>
+                        </el-col>
 
-                    <!-- 第2列：关键日期 -->
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="中标日期">
-                        <el-date-picker
-                          v-model="editForm.中标日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="中标日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="产品3D确认">
-                        <el-date-picker
-                          v-model="editForm.产品3D确认"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="产品3D确认"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="图纸下发日期">
-                        <el-date-picker
-                          v-model="editForm.图纸下发日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="图纸下发日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="计划首样日期">
-                        <el-date-picker
-                          v-model="editForm.计划首样日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="计划首样日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="首次送样日期" prop="首次送样日期">
-                        <el-date-picker
-                          v-model="editForm.首次送样日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="首次送样日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="封样时间">
-                        <el-date-picker
-                          v-model="editForm.封样时间"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="封样时间"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="移模日期">
-                        <el-date-picker
-                          v-model="editForm.移模日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="移模日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                    </el-col>
+                        <!-- 第2列：关键日期 -->
+                        <el-col :xs="24" :sm="12" :lg="12">
+                          <el-form-item label="中标日期">
+                            <el-date-picker
+                              v-model="editForm.中标日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="中标日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="产品3D确认">
+                            <el-date-picker
+                              v-model="editForm.产品3D确认"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="产品3D确认"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="图纸下发日期">
+                            <el-date-picker
+                              v-model="editForm.图纸下发日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="图纸下发日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="计划首样日期">
+                            <el-date-picker
+                              v-model="editForm.计划首样日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="计划首样日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="首次送样日期" prop="首次送样日期">
+                            <el-date-picker
+                              v-model="editForm.首次送样日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="首次送样日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="封样时间">
+                            <el-date-picker
+                              v-model="editForm.封样时间"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="封样时间"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="移模日期">
+                            <el-date-picker
+                              v-model="editForm.移模日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="移模日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </div>
+                  </el-col>
 
-                    <!-- 第3列：备注 -->
-                    <el-col :xs="24" :sm="12" :lg="6">
-                      <el-form-item label="进度影响原因">
-                        <el-input v-model="editForm.进度影响原因" placeholder="进度影响原因" />
-                      </el-form-item>
-                      <el-form-item label="备注">
-                        <el-input
-                          v-model="editForm.备注"
-                          type="textarea"
-                          :rows="8"
-                          placeholder="备注"
-                        />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
-                </div>
+                  <el-col :xs="24" :sm="24" :lg="9">
+                    <div class="pm-edit-section">
+                      <div class="pm-edit-section-title">图示</div>
+                      <div
+                        class="pm-part-image-container"
+                        tabindex="0"
+                        @mousedown="handleFocusPartImageCell"
+                        @paste="handlePartImagePaste"
+                        @dragover="handlePartImageDragOver"
+                        @drop="handlePartImageDrop"
+                      >
+                        <div v-if="partImageUploading" class="pm-part-image-cell__loading">
+                          上传中...
+                        </div>
+                        <template v-else>
+                          <template v-if="editForm.零件图示URL">
+                            <el-image
+                              class="pm-part-image-thumb"
+                              :src="toPartImageDisplayUrl(editForm.零件图示URL)"
+                              :preview-src-list="[toPartImageDisplayUrl(editForm.零件图示URL)]"
+                              :preview-teleported="true"
+                              fit="contain"
+                              @error="
+                                (e) => {
+                                  console.error('[图示预览] 图片加载失败:', e)
+                                  console.error('[图示预览] 原始URL:', editForm.零件图示URL)
+                                  console.error(
+                                    '[图示预览] 显示URL:',
+                                    toPartImageDisplayUrl(editForm.零件图示URL)
+                                  )
+                                }
+                              "
+                              @load="() => console.log('[图示预览] 图片加载成功')"
+                            />
+                            <button
+                              type="button"
+                              class="pm-part-image-remove"
+                              @click.stop="handleRemovePartImage"
+                            >
+                              ×
+                            </button>
+                            <button
+                              type="button"
+                              class="pm-part-image-pick"
+                              title="选择文件"
+                              @click.stop="handlePickPartImage"
+                            >
+                              ⤒
+                            </button>
+                          </template>
+                          <template v-else>
+                            <div class="pm-part-image-empty">
+                              <div class="pm-part-image-empty__text">粘贴/拖拽图片</div>
+                            </div>
+                            <button
+                              type="button"
+                              class="pm-part-image-pick"
+                              title="选择文件"
+                              @click.stop="handlePickPartImage"
+                            >
+                              ⤒
+                            </button>
+                          </template>
+                        </template>
+                      </div>
+                      <!-- 隐藏的文件输入 -->
+                      <input
+                        ref="partImageFileInputRef"
+                        type="file"
+                        accept="image/*"
+                        class="pm-part-image-file-input"
+                        @change="handlePartImageFileChange"
+                      />
+                    </div>
+                  </el-col>
+                </el-row>
               </el-tab-pane>
 
               <el-tab-pane name="part">
@@ -909,26 +988,24 @@
                   零件信息
                   <span v-if="partTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
-                <!-- 左右并排布局 -->
                 <el-row :gutter="isMobile ? 8 : 12" style="align-items: stretch">
-                  <!-- 左侧：零件信息区块 -->
-                  <el-col :xs="24" :sm="24" :lg="16">
+                  <el-col :xs="24" :sm="24" :lg="24">
                     <div class="pm-edit-section">
                       <div class="pm-edit-section-title">零件信息</div>
                       <el-row :gutter="isMobile ? 8 : 12" justify="center">
-                        <el-col :xs="24" :sm="12" :lg="12">
+                        <el-col :xs="24" :sm="12" :lg="6">
                           <el-form-item label="产品材质" prop="产品材质">
                             <el-input v-model="editForm.产品材质" placeholder="产品材质" />
                           </el-form-item>
                         </el-col>
 
-                        <el-col :xs="24" :sm="12" :lg="12">
+                        <el-col :xs="24" :sm="12" :lg="6">
                           <el-form-item label="产品颜色">
                             <el-input v-model="editForm.产品颜色" placeholder="产品颜色" />
                           </el-form-item>
                         </el-col>
 
-                        <el-col :xs="24" :sm="12" :lg="12">
+                        <el-col :xs="24" :sm="12" :lg="6">
                           <el-form-item label="收缩率">
                             <el-input-number
                               v-model="editForm.收缩率"
@@ -940,7 +1017,7 @@
                           </el-form-item>
                         </el-col>
 
-                        <el-col :xs="24" :sm="12" :lg="12">
+                        <el-col :xs="24" :sm="12" :lg="6">
                           <el-form-item label="料柄重量">
                             <el-input-number
                               v-model="editForm.料柄重量"
@@ -1056,82 +1133,6 @@
                           </el-form-item>
                         </el-col>
                       </el-row>
-                    </div>
-                  </el-col>
-                  <!-- 右侧：图示区块 -->
-                  <el-col :xs="24" :sm="24" :lg="8">
-                    <div class="pm-edit-section">
-                      <div class="pm-edit-section-title">图示</div>
-                      <div
-                        class="pm-part-image-container"
-                        tabindex="0"
-                        @mousedown="handleFocusPartImageCell"
-                        @paste="handlePartImagePaste"
-                        @dragover="handlePartImageDragOver"
-                        @drop="handlePartImageDrop"
-                      >
-                        <div v-if="partImageUploading" class="pm-part-image-cell__loading">
-                          上传中...
-                        </div>
-                        <template v-else>
-                          <template v-if="editForm.零件图示URL">
-                            <el-image
-                              class="pm-part-image-thumb"
-                              :src="toPartImageDisplayUrl(editForm.零件图示URL)"
-                              :preview-src-list="[toPartImageDisplayUrl(editForm.零件图示URL)]"
-                              :preview-teleported="true"
-                              fit="contain"
-                              @error="
-                                (e) => {
-                                  console.error('[图示预览] 图片加载失败:', e)
-                                  console.error('[图示预览] 原始URL:', editForm.零件图示URL)
-                                  console.error(
-                                    '[图示预览] 显示URL:',
-                                    toPartImageDisplayUrl(editForm.零件图示URL)
-                                  )
-                                }
-                              "
-                              @load="() => console.log('[图示预览] 图片加载成功')"
-                            />
-                            <button
-                              type="button"
-                              class="pm-part-image-remove"
-                              @click.stop="handleRemovePartImage"
-                            >
-                              ×
-                            </button>
-                            <button
-                              type="button"
-                              class="pm-part-image-pick"
-                              title="选择文件"
-                              @click.stop="handlePickPartImage"
-                            >
-                              ⤒
-                            </button>
-                          </template>
-                          <template v-else>
-                            <div class="pm-part-image-empty">
-                              <div class="pm-part-image-empty__text">粘贴/拖拽图片</div>
-                            </div>
-                            <button
-                              type="button"
-                              class="pm-part-image-pick"
-                              title="选择文件"
-                              @click.stop="handlePickPartImage"
-                            >
-                              ⤒
-                            </button>
-                          </template>
-                        </template>
-                      </div>
-                      <!-- 隐藏的文件输入 -->
-                      <input
-                        ref="partImageFileInputRef"
-                        type="file"
-                        accept="image/*"
-                        class="pm-part-image-file-input"
-                        @change="handlePartImageFileChange"
-                      />
                     </div>
                   </el-col>
                 </el-row>
@@ -6181,8 +6182,53 @@ watch(viewMode, (val) => {
   color: #303133;
 }
 
+.pm-edit-header-status-label {
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #909399;
+}
+
 .pm-edit-header-status {
+  margin-left: 8px;
+  cursor: pointer;
+}
+
+.pm-edit-header-status-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pm-edit-header-status-tag {
+  width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+.pm-edit-header-status-caret {
   margin-left: 4px;
+  font-size: 16px;
+  line-height: 1;
+  color: #909399;
+}
+
+:deep(.pm-edit-header-status-dropdown) {
+  min-width: 112px !important;
+  font-size: 16px !important;
+}
+
+:deep(.pm-edit-header-status-dropdown .el-dropdown-menu) {
+  width: 112px !important;
+  min-width: 112px !important;
+}
+
+:deep(.pm-edit-header-status-dropdown .el-dropdown-menu__item) {
+  overflow: hidden;
+  font-size: 16px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pm-edit-header-sub {
