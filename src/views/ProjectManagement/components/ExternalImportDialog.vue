@@ -26,7 +26,9 @@
             <div class="external-import__dropzone-title"
               >拖拽文件到此处 / 粘贴文件 / 或选择文件</div
             >
-            <div class="external-import__dropzone-subtitle">支持多文件，仅支持 PDF（文字版）</div>
+            <div class="external-import__dropzone-subtitle">
+              支持多文件：PDF（文字版移模流程单）/ Excel（技术规格表）
+            </div>
             <div class="external-import__actions">
               <el-button type="primary" @click="openFilePicker" :loading="isBusy"
                 >打开文件</el-button
@@ -43,7 +45,7 @@
           ref="fileInputRef"
           class="external-import__file-input"
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.xlsx,.xls"
           multiple
           @change="handleFileChange"
         />
@@ -57,7 +59,7 @@
               <span class="external-import__item-meta">
                 <span v-if="item.parsing">解析中…</span>
                 <span v-else-if="item.error" class="external-import__item-error">失败</span>
-                <span v-else-if="item.result">成功</span>
+                <span v-else-if="item.result || item.techSpecRows?.length">成功</span>
               </span>
               <el-button
                 class="external-import__item-remove"
@@ -185,6 +187,134 @@
                 </el-table-column>
               </el-table>
             </div>
+
+            <div v-else-if="item.techSpecRows?.length">
+              <el-table
+                :data="item.techSpecRows"
+                :max-height="420"
+                border
+                row-key="id"
+                @selection-change="(rows) => handleTechSpecSelectionChange(item.id, rows)"
+              >
+                <el-table-column
+                  type="selection"
+                  width="48"
+                  :selectable="(row) => canSelectTechSpecRow(row)"
+                />
+                <el-table-column label="图号" min-width="220">
+                  <template #default="{ row }">
+                    <span>{{ row.partDrawingRaw || '-' }}</span>
+                    <div style="font-size: 12px; color: var(--el-text-color-secondary)">
+                      {{ row.sheetName }}{{ row.rowIndex === null ? '' : ` #${row.rowIndex + 1}` }}
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="partName" label="名称" min-width="160" />
+                <el-table-column prop="projectCode" label="项目编号" min-width="130">
+                  <template #default="{ row }">
+                    <span v-if="row.projectStatus === 'pending'">查询中…</span>
+                    <el-select
+                      v-else-if="row.projectStatus === 'multi'"
+                      v-model="row.projectCode"
+                      size="small"
+                      placeholder="多匹配"
+                      style="width: 140px"
+                      @change="(v) => handleTechSpecProjectCodeSelect(item.id, row, String(v))"
+                    >
+                      <el-option
+                        v-for="code in row.projectCandidates"
+                        :key="code"
+                        :label="code"
+                        :value="code"
+                      />
+                    </el-select>
+                    <el-tag
+                      v-else-if="row.projectStatus === 'matched' && row.projectCode"
+                      size="small"
+                      type="success"
+                      effect="light"
+                    >
+                      {{ row.projectCode }}
+                    </el-tag>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="初始化状态" min-width="120">
+                  <template #default="{ row }">
+                    <span v-if="row.initStatus === 'pending'">查询中…</span>
+                    <el-tag
+                      v-else-if="row.initStatus === 'uninitialized'"
+                      size="small"
+                      type="warning"
+                      effect="light"
+                    >
+                      未初始化
+                    </el-tag>
+                    <el-tag
+                      v-else-if="row.initStatus === 'initialized'"
+                      size="small"
+                      type="success"
+                      effect="light"
+                    >
+                      已初始化
+                    </el-tag>
+                    <el-tag
+                      v-else-if="row.initStatus === 'notRequired'"
+                      size="small"
+                      type="info"
+                      effect="light"
+                    >
+                      不需要
+                    </el-tag>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="技术规格" min-width="460">
+                  <template #default="{ row }">
+                    <div class="external-import__spec-grid">
+                      <div
+                        ><span class="external-import__spec-k">材料：</span
+                        >{{ row.specData.材料 || '-' }}</div
+                      >
+                      <div
+                        ><span class="external-import__spec-k">型腔：</span
+                        >{{ row.specData.型腔 || '-' }}</div
+                      >
+                      <div
+                        ><span class="external-import__spec-k">型芯：</span
+                        >{{ row.specData.型芯 || '-' }}</div
+                      >
+                      <div>
+                        <span class="external-import__spec-k">模具穴数：</span
+                        >{{ row.specData.模具穴数 || '-' }}
+                      </div>
+                      <div>
+                        <span class="external-import__spec-k">外观尺寸：</span
+                        >{{ row.specData.产品外观尺寸 || '-' }}
+                      </div>
+                      <div>
+                        <span class="external-import__spec-k">工程师：</span
+                        >{{ row.specData.产品结构工程师 || '-' }}
+                      </div>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="导入状态" min-width="120">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.importStatus === 'success'" size="small" type="success">
+                      已导入
+                    </el-tag>
+                    <el-tag v-else-if="row.importStatus === 'error'" size="small" type="danger">
+                      失败
+                    </el-tag>
+                    <el-tag v-else-if="row.importStatus === 'skipped'" size="small" type="info">
+                      跳过
+                    </el-tag>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </el-collapse-item>
         </el-collapse>
       </div>
@@ -200,6 +330,15 @@
       >
         导入（已选 {{ selectedCount }} 条）
       </el-button>
+      <el-button
+        v-if="techSpecSelectedCount > 0 || hasAnyTechSpec"
+        type="primary"
+        :disabled="techSpecSelectedCount === 0 || isBusy"
+        :loading="isTechSpecImporting"
+        @click="handleTechSpecImport"
+      >
+        初始化导入（已选 {{ techSpecSelectedCount }} 项）
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -209,9 +348,12 @@ import { computed, nextTick, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getProjectDetailApi,
+  getProjectGoodsApi,
   getProjectListApi,
+  updateProjectApi,
   relocationImportApi,
   uploadProjectAttachmentApi,
+  uploadProjectPartImageApi,
   type RelocationImportOverwriteMode
 } from '@/api/project'
 import { extractPdfText } from '@/utils/pdf/extractPdfText'
@@ -219,6 +361,13 @@ import {
   parseMouldTransferFromText,
   type MouldTransferImportResult
 } from '@/utils/pdf/mouldTransferParser'
+import {
+  parseDrawings as parseTechSpecDrawings,
+  parseTechSpecExcel,
+  type TechSpecRecord,
+  type TechSpecData
+} from '@/utils/excel/techSpecParser'
+import { isInitDone, normalizeCavityExpression } from '@/utils/mould/cavityExpression'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -237,9 +386,12 @@ type ImportItem = {
   fileName: string
   fileKey: string
   file: File
+  kind: 'mouldTransfer' | 'techSpec' | 'unknown'
   parsing: boolean
   error: string
   result: MouldTransferImportResult | null
+  techSpecRecords: TechSpecRecord[]
+  techSpecRows: TechSpecRow[]
   projectMatches: Record<
     string,
     {
@@ -256,8 +408,11 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const items = ref<ImportItem[]>([])
 const activeNames = ref<string[]>([])
 const isDragging = ref(false)
-const isBusy = computed(() => items.value.some((i) => i.parsing))
 const isImporting = ref(false)
+const isTechSpecImporting = ref(false)
+const isBusy = computed(
+  () => items.value.some((i) => i.parsing) || isImporting.value || isTechSpecImporting.value
+)
 
 type ImportRow = MouldTransferImportResult['rows'][number] & {
   sourceItemId: string
@@ -270,6 +425,35 @@ type ImportRow = MouldTransferImportResult['rows'][number] & {
   importStatus: '' | 'success' | 'error' | 'skipped'
 }
 
+type TechSpecRow = {
+  id: string
+  sourceItemId: string
+  sourceAddedAt: number
+  sheetName: string
+  rowIndex: number | null
+  partDrawingRaw: string
+  partName: string
+  drawings: string[]
+  specData: TechSpecData
+  projectStatus: 'pending' | 'matched' | 'multi' | 'none'
+  projectCandidates: string[]
+  projectCode: string
+  category: string
+  initStatus: 'pending' | 'uninitialized' | 'initialized' | 'notRequired' | 'unknown'
+  existing: {
+    产品材质: string
+    前模材质: string
+    后模材质: string
+    模具穴数: string
+    产品尺寸: string
+    设计师: string
+    零件图示URL: string
+    产品图号列表: string
+  } | null
+  importStatus: '' | 'success' | 'error' | 'skipped'
+  importError: string
+}
+
 const normalizeKey = (v: unknown) => String(v ?? '').trim()
 const pairKey = (name: string, mouldNo: string) => `${name}\u0000${mouldNo}`
 const TARGET_FACTORY = '久环'
@@ -278,6 +462,8 @@ type ProjectListItem = {
   项目编号?: string
   productName?: string
   产品名称?: string
+  productDrawing?: string
+  产品图号?: string
   客户模号?: string
 }
 
@@ -305,6 +491,171 @@ const fetchProjectCodes = async (mouldName: string, mouldNo: string): Promise<st
   })
 
   return Array.from(new Set(matches.map((m) => normalizeKey(m['项目编号'])))).filter(Boolean)
+}
+
+const projectDetailCache = new Map<string, any>()
+const projectCategoryCache = new Map<string, string>()
+
+const extractProjectDetailForTechSpec = (resp: any): any => {
+  const data = resp?.data?.data ?? resp?.data ?? null
+  if (!data) return null
+  if (Array.isArray(data)) return data[0] ?? null
+  return data
+}
+
+const stringifyList = (input: unknown) => {
+  if (Array.isArray(input))
+    return input
+      .map((x) => normalizeKey(x))
+      .filter(Boolean)
+      .join(' / ')
+  return normalizeKey(input)
+}
+
+const hydrateTechSpecRowDetail = async (row: TechSpecRow, projectCode: string) => {
+  row.initStatus = 'pending'
+  const normalizedCode = normalizeKey(projectCode)
+  try {
+    const cached = projectDetailCache.get(normalizedCode)
+    const detail = cached
+      ? cached
+      : extractProjectDetailForTechSpec(await getProjectDetailApi(normalizedCode)) || {}
+    projectDetailCache.set(normalizedCode, detail)
+
+    let category = normalizeKey(detail.分类)
+    if (!category) {
+      const cachedCategory = projectCategoryCache.get(normalizedCode)
+      if (cachedCategory) {
+        category = cachedCategory
+      } else {
+        try {
+          const resp: any = await getProjectGoodsApi(normalizedCode)
+          const data = resp?.data?.data ?? resp?.data ?? null
+          const c = normalizeKey(data?.category)
+          if (c) {
+            category = c
+            projectCategoryCache.set(normalizedCode, c)
+          }
+        } catch {
+          // ignore goods fetch failure
+        }
+      }
+    }
+
+    row.category = category
+    if (category && category !== '塑胶模具') {
+      row.initStatus = 'notRequired'
+    } else {
+      row.initStatus = isInitDone(detail.init_done) ? 'initialized' : 'uninitialized'
+    }
+
+    row.existing = {
+      产品材质: normalizeKey(detail.产品材质),
+      前模材质: normalizeKey(detail.前模材质),
+      后模材质: normalizeKey(detail.后模材质),
+      模具穴数: normalizeKey(detail.模具穴数),
+      产品尺寸: stringifyList(detail.产品尺寸),
+      设计师: normalizeKey(detail.设计师),
+      零件图示URL: normalizeKey(detail.零件图示URL),
+      产品图号列表: stringifyList(detail.产品图号列表)
+    }
+  } catch {
+    row.initStatus = 'unknown'
+  }
+}
+
+const matchTechSpecRowProjectCode = async (row: TechSpecRow) => {
+  row.projectStatus = 'pending'
+  row.projectCandidates = []
+  row.projectCode = ''
+  row.initStatus = 'unknown'
+  row.category = ''
+  row.existing = null
+
+  const drawings = (row.drawings || []).map((d) => normalizeKey(d)).filter(Boolean)
+
+  // 仅使用“图号”作为反向匹配依据（名称可能大量重复，不参与匹配/兜底）
+  const keywords = Array.from(new Set(drawings.slice(0, 3))).filter(Boolean)
+  if (!keywords.length) {
+    row.projectStatus = 'none'
+    return
+  }
+
+  const fetchByKeyword = async (keyword: string) => {
+    const response: any = await getProjectListApi({ keyword, page: 1, pageSize: 200 })
+    return extractProjectList(response)
+  }
+
+  const candidateList: ProjectListItem[] = []
+  for (const kw of keywords) {
+    try {
+      candidateList.push(...(await fetchByKeyword(kw)))
+    } catch {
+      // ignore single keyword failure
+    }
+  }
+
+  const candidatesByCode = new Map<string, ProjectListItem>()
+  for (const c of candidateList) {
+    const code = normalizeKey(c['项目编号'])
+    if (!code) continue
+    if (!candidatesByCode.has(code)) candidatesByCode.set(code, c)
+  }
+
+  const drawingSet = new Set(drawings.map((d) => d.toLowerCase()))
+
+  const matchedCodes: string[] = []
+  for (const [code, c] of candidatesByCode.entries()) {
+    const cd = parseTechSpecDrawings(c.productDrawing || c.产品图号 || '')
+    const hasIntersection =
+      drawingSet.size > 0 && cd.some((d) => drawingSet.has(String(d).trim().toLowerCase()))
+    if (hasIntersection) matchedCodes.push(code)
+  }
+
+  const uniq = Array.from(new Set(matchedCodes)).filter(Boolean)
+  row.projectCandidates = uniq
+
+  if (uniq.length === 1) {
+    row.projectStatus = 'matched'
+    row.projectCode = uniq[0]
+    await hydrateTechSpecRowDetail(row, uniq[0])
+    return
+  }
+
+  if (uniq.length > 1) {
+    row.projectStatus = 'multi'
+    row.initStatus = 'unknown'
+    return
+  }
+
+  row.projectStatus = 'none'
+}
+
+const hydrateTechSpecRows = async (item: ImportItem) => {
+  const list = item.techSpecRows || []
+  for (const row of list) {
+    try {
+      await matchTechSpecRowProjectCode(row)
+    } catch {
+      row.projectStatus = 'none'
+    }
+  }
+}
+
+const canSelectTechSpecRow = (row: TechSpecRow) =>
+  row.projectStatus === 'matched' &&
+  row.initStatus === 'uninitialized' &&
+  row.importStatus !== 'success' &&
+  !isBusy.value
+
+const handleTechSpecProjectCodeSelect = async (itemId: string, row: TechSpecRow, code: string) => {
+  const item = items.value.find((x) => x.id === itemId)
+  if (!item) return
+
+  row.projectCandidates = row.projectCandidates || []
+  row.projectCode = code
+  row.projectStatus = 'matched'
+  await hydrateTechSpecRowDetail(row, code)
 }
 
 const applyProjectMatchToRows = (item: ImportItem, key: string) => {
@@ -371,6 +722,21 @@ const selectedCount = computed(() =>
   Object.values(selectedRowsByItem.value).reduce((sum, rows) => sum + (rows?.length || 0), 0)
 )
 
+const selectedTechSpecRowsByItem = ref<Record<string, TechSpecRow[]>>({})
+
+const handleTechSpecSelectionChange = (itemId: string, rows: TechSpecRow[]) => {
+  selectedTechSpecRowsByItem.value = { ...selectedTechSpecRowsByItem.value, [itemId]: rows }
+}
+
+const techSpecSelectedCount = computed(() =>
+  Object.values(selectedTechSpecRowsByItem.value).reduce(
+    (sum, rows) => sum + (rows?.length || 0),
+    0
+  )
+)
+
+const hasAnyTechSpec = computed(() => items.value.some((i) => (i.techSpecRows?.length || 0) > 0))
+
 const handleProjectCodeSelect = (itemId: string, row: ImportRow, code: string) => {
   const item = items.value.find((x) => x.id === itemId)
   if (!item) return
@@ -385,6 +751,8 @@ const handleProjectCodeSelect = (itemId: string, row: ImportRow, code: string) =
 
 const handleOpen = async () => {
   await nextTick()
+  projectDetailCache.clear()
+  projectCategoryCache.clear()
   rootRef.value?.focus()
   activeNames.value = items.value.map((i) => i.id)
 }
@@ -394,10 +762,13 @@ const handleClosed = () => {
 }
 
 const reset = () => {
+  projectDetailCache.clear()
+  projectCategoryCache.clear()
   items.value = []
   activeNames.value = []
   isDragging.value = false
   selectedRowsByItem.value = {}
+  selectedTechSpecRowsByItem.value = {}
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
@@ -406,11 +777,22 @@ const openFilePicker = () => fileInputRef.value?.click()
 const isPdfFile = (file: File) =>
   file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
+const isExcelFile = (file: File) => {
+  const name = file.name.toLowerCase()
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) return true
+  const t = String(file.type || '').toLowerCase()
+  return (
+    t.includes('spreadsheetml') ||
+    t.includes('ms-excel') ||
+    t.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  )
+}
+
 const fileKeyOf = (file: File) => `${file.name}::${file.size}::${file.lastModified}`
 
 const ensureItem = (file: File): ImportItem | null => {
-  if (!isPdfFile(file)) {
-    ElMessage.error(`仅支持 PDF 文件：${file.name}`)
+  if (!isPdfFile(file) && !isExcelFile(file)) {
+    ElMessage.error(`仅支持 PDF/Excel 文件：${file.name}`)
     return null
   }
 
@@ -429,9 +811,12 @@ const ensureItem = (file: File): ImportItem | null => {
     fileName: file.name,
     fileKey,
     file,
+    kind: 'unknown',
     parsing: false,
     error: '',
     result: null,
+    techSpecRecords: [],
+    techSpecRows: [],
     projectMatches: {},
     displayRows: []
   })
@@ -446,32 +831,75 @@ const parseItem = async (item: ImportItem, file: File) => {
   item.result = null
   item.projectMatches = {}
   item.displayRows = []
+  item.techSpecRecords = []
+  item.techSpecRows = []
+  item.kind = 'unknown'
 
   try {
     const buf = await file.arrayBuffer()
-    const text = await extractPdfText(buf)
-    const parsed = parseMouldTransferFromText(text)
-    if (!parsed.ok) {
-      item.error = parsed.error
+    if (isPdfFile(file)) {
+      const text = await extractPdfText(buf)
+      const parsed = parseMouldTransferFromText(text)
+      if (!parsed.ok) {
+        item.error = parsed.error
+        return
+      }
+      item.kind = 'mouldTransfer'
+      item.result = parsed.data
+      item.displayRows = parsed.data.rows.map((r) => {
+        const isUseless = normalizeKey(r.mouldFactory) !== TARGET_FACTORY
+        const key = pairKey(normalizeKey(r.mouldName), normalizeKey(r.mouldNo))
+        return {
+          ...r,
+          sourceItemId: item.id,
+          sourceAddedAt: item.addedAt,
+          projectKey: key,
+          isUseless,
+          projectStatus: isUseless ? 'skipped' : 'none',
+          projectCandidates: [],
+          projectCode: '',
+          importStatus: ''
+        }
+      })
+      void hydrateProjectCodes(item)
       return
     }
-    item.result = parsed.data
-    item.displayRows = parsed.data.rows.map((r) => {
-      const isUseless = normalizeKey(r.mouldFactory) !== TARGET_FACTORY
-      const key = pairKey(normalizeKey(r.mouldName), normalizeKey(r.mouldNo))
-      return {
-        ...r,
-        sourceItemId: item.id,
-        sourceAddedAt: item.addedAt,
-        projectKey: key,
-        isUseless,
-        projectStatus: isUseless ? 'skipped' : 'none',
-        projectCandidates: [],
-        projectCode: '',
-        importStatus: ''
+
+    if (isExcelFile(file)) {
+      const parsed = await parseTechSpecExcel(buf)
+      const records = parsed.records || []
+      if (!records.length) {
+        item.error = '未识别到“注塑模具制作规格表”或可解析的明细表头'
+        return
       }
-    })
-    void hydrateProjectCodes(item)
+      item.kind = 'techSpec'
+      item.techSpecRecords = records
+      item.techSpecRows = records.map((r) => {
+        return {
+          id: r.id,
+          sourceItemId: item.id,
+          sourceAddedAt: item.addedAt,
+          sheetName: r.sheetName,
+          rowIndex: r.rowIndex,
+          partDrawingRaw: r.partDrawingRaw,
+          partName: r.partName,
+          drawings: r.drawings,
+          specData: r.specData,
+          projectStatus: 'pending',
+          projectCandidates: [],
+          projectCode: '',
+          category: '',
+          initStatus: 'unknown',
+          existing: null,
+          importStatus: '',
+          importError: ''
+        } satisfies TechSpecRow
+      })
+      void hydrateTechSpecRows(item)
+      return
+    }
+
+    item.error = '不支持的文件类型'
   } catch (e) {
     item.error = `解析失败：${(e as Error)?.message || String(e)}`
   } finally {
@@ -480,11 +908,11 @@ const parseItem = async (item: ImportItem, file: File) => {
 }
 
 const parseFiles = async (files: File[]) => {
-  const pdfFiles = files.filter(isPdfFile)
-  if (!pdfFiles.length) return
+  const supportedFiles = files.filter((f) => isPdfFile(f) || isExcelFile(f))
+  if (!supportedFiles.length) return
 
   const toParse: Array<{ file: File; item: ImportItem }> = []
-  for (const f of pdfFiles) {
+  for (const f of supportedFiles) {
     const it = ensureItem(f)
     if (it) toParse.push({ file: f, item: it })
   }
@@ -495,7 +923,14 @@ const parseFiles = async (files: File[]) => {
     await parseItem(item, file)
   }
 
-  const allOk = toParse.length > 0 && toParse.every(({ item }) => item.result && !item.error)
+  const allOk =
+    toParse.length > 0 &&
+    toParse.every(({ item }) => {
+      if (item.error) return false
+      if (item.kind === 'mouldTransfer') return !!item.result
+      if (item.kind === 'techSpec') return (item.techSpecRows?.length || 0) > 0
+      return false
+    })
   if (allOk) ElMessage.success('读取成功')
 }
 
@@ -613,6 +1048,269 @@ const chooseOverwriteMode = async (
   } catch (action) {
     if (action === 'cancel') return 'skipExisting'
     return null
+  }
+}
+
+const buildTechSpecConfirmHtml = (rows: TechSpecRow[]) => {
+  if (!rows.length) return ''
+
+  const render = (v: unknown) => escapeHtml(normalizeKey(v) || '-')
+
+  const body = rows
+    .map((r) => {
+      const existing = r.existing || {
+        产品材质: '',
+        前模材质: '',
+        后模材质: '',
+        模具穴数: '',
+        产品尺寸: '',
+        设计师: '',
+        零件图示URL: '',
+        产品图号列表: ''
+      }
+
+      const nextCavityExpr = normalizeCavityExpression(r.specData.模具穴数)
+
+      const cells = [
+        render(r.projectCode),
+        render(
+          r.initStatus === 'uninitialized'
+            ? '未初始化'
+            : r.initStatus === 'initialized'
+              ? '已初始化'
+              : r.initStatus
+        ),
+        render(existing.产品材质),
+        render(existing.前模材质),
+        render(existing.后模材质),
+        render(existing.模具穴数),
+        render(existing.产品尺寸),
+        render(existing.设计师),
+        render(r.specData.材料),
+        render(r.specData.型腔),
+        render(r.specData.型芯),
+        render(nextCavityExpr || r.specData.模具穴数),
+        render(r.specData.产品外观尺寸),
+        render(r.specData.产品结构工程师)
+      ]
+
+      return `<tr>${cells.map((c) => `<td style="padding:6px 8px;border:1px solid #ebeef5;vertical-align:top;">${c}</td>`).join('')}</tr>`
+    })
+    .join('')
+
+  return `
+    <div style="margin-top:10px;">
+      <div style="margin-bottom:6px;color:#606266;">即将写入以下字段（与初始化弹窗一致）：</div>
+      <div style="max-height:260px;overflow:auto;">
+        <table style="border-collapse:collapse;width:100%;font-size:12px;">
+          <thead>
+            <tr>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">项目编号</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">初始化状态</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-材料</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-型腔</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-型芯</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-模具穴数</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-外观尺寸</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">已有-工程师</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-材料</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-型腔</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-型芯</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-模具穴数</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-外观尺寸</th>
+              <th style="padding:6px 8px;border:1px solid #ebeef5;background:#f5f7fa;text-align:left;">导入-工程师</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    </div>
+  `
+}
+
+const chooseTechSpecOverwriteMode = async (
+  html: string
+): Promise<RelocationImportOverwriteMode | null> => {
+  try {
+    await ElMessageBox.confirm(
+      `
+      <div>若目标字段已有值：请选择“覆盖”或“跳过已有（字段级跳过，其他字段仍可写）”。</div>
+      <div style="margin-top:6px;color:#909399;">空值不会写入；导入成功后会将 init_done 置为 1。</div>
+      ${html}
+      `,
+      '初始化导入确认',
+      {
+        confirmButtonText: '覆盖',
+        cancelButtonText: '跳过已有',
+        showCancelButton: true,
+        distinguishCancelAndClose: true,
+        type: 'warning',
+        dangerouslyUseHTMLString: true,
+        customClass: 'external-import__confirm-box external-import__confirm-box--wide'
+      }
+    )
+    return 'overwrite'
+  } catch (action) {
+    if (action === 'cancel') return 'skipExisting'
+    return null
+  }
+}
+
+const hasMeaningfulValue = (v: unknown) => {
+  const s = normalizeKey(v)
+  return !!s && s !== '-'
+}
+
+const buildTechSpecUpdatePayload = async (
+  row: TechSpecRow,
+  overwriteMode: RelocationImportOverwriteMode
+): Promise<Record<string, any>> => {
+  const existing = row.existing || {
+    产品材质: '',
+    前模材质: '',
+    后模材质: '',
+    模具穴数: '',
+    产品尺寸: '',
+    设计师: '',
+    零件图示URL: '',
+    产品图号列表: ''
+  }
+
+  const shouldWrite = (next: unknown, existed: unknown) => {
+    if (!hasMeaningfulValue(next)) return false
+    if (overwriteMode === 'overwrite') return true
+    return !hasMeaningfulValue(existed)
+  }
+
+  const payload: Record<string, any> = {}
+
+  const nextMat = normalizeKey(row.specData.材料)
+  if (shouldWrite(nextMat, existing.产品材质)) payload.产品材质 = nextMat
+
+  const nextCavity = normalizeKey(row.specData.型腔)
+  if (shouldWrite(nextCavity, existing.前模材质)) payload.前模材质 = nextCavity
+
+  const nextCore = normalizeKey(row.specData.型芯)
+  if (shouldWrite(nextCore, existing.后模材质)) payload.后模材质 = nextCore
+
+  const nextEngineer = normalizeKey(row.specData.产品结构工程师)
+  if (shouldWrite(nextEngineer, existing.设计师)) payload.设计师 = nextEngineer
+
+  const nextCavityExpr = normalizeCavityExpression(row.specData.模具穴数)
+  if (shouldWrite(nextCavityExpr, existing.模具穴数)) payload.模具穴数 = nextCavityExpr
+
+  const nextDrawings = row.specData.产品图号列表 || []
+  const nextSizes = row.specData.产品尺寸列表 || []
+  const nextDrawingsStr = nextDrawings.length ? JSON.stringify(nextDrawings) : ''
+  const nextSizesStr = nextSizes.length ? JSON.stringify(nextSizes) : ''
+
+  if (shouldWrite(nextDrawingsStr, existing.产品图号列表)) payload.产品图号列表 = nextDrawingsStr
+  if (shouldWrite(nextSizesStr, existing.产品尺寸)) payload.产品尺寸 = nextSizesStr
+
+  const nextImage = normalizeKey(row.specData.零件图片)
+  const shouldWriteImage = shouldWrite(nextImage, existing.零件图示URL)
+  if (shouldWriteImage && nextImage) {
+    if (nextImage.startsWith('data:')) {
+      const matches = nextImage.match(/^data:([A-Za-z-+\\/]+);base64,(.+)$/)
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1]
+        const base64String = matches[2]
+        const byteCharacters = atob(base64String)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: mimeType })
+        const file = new File([blob], 'spec-image.png', { type: mimeType })
+        const resp: any = await uploadProjectPartImageApi(row.projectCode, file)
+        const url = resp?.data?.data?.url ?? resp?.data?.url ?? resp?.data?.data?.data?.url
+        if (url) payload.零件图示URL = String(url)
+      }
+    } else {
+      payload.零件图示URL = nextImage
+    }
+  }
+
+  if (row.category === '塑胶模具') payload.init_done = 1
+
+  return payload
+}
+
+const handleTechSpecImport = async () => {
+  if (isBusy.value || isTechSpecImporting.value) return
+  if (techSpecSelectedCount.value === 0) {
+    ElMessage.warning('请先勾选需要导入的技术规格表记录（仅未初始化项目可勾选）')
+    return
+  }
+
+  isTechSpecImporting.value = true
+  try {
+    const selected = Object.values(selectedTechSpecRowsByItem.value).flat()
+
+    const aggregated = new Map<string, TechSpecRow>()
+    for (const row of selected) {
+      const code = normalizeKey(row.projectCode)
+      if (!code) continue
+      const prev = aggregated.get(code)
+      if (!prev) {
+        aggregated.set(code, row)
+        continue
+      }
+      const prevAdded = prev.sourceAddedAt
+      const nextAdded = row.sourceAddedAt
+      const prevIndex = prev.rowIndex === null ? -1 : prev.rowIndex
+      const nextIndex = row.rowIndex === null ? -1 : row.rowIndex
+      const isLater = nextAdded > prevAdded || (nextAdded === prevAdded && nextIndex >= prevIndex)
+      if (isLater) aggregated.set(code, row)
+    }
+
+    const targets = Array.from(aggregated.values())
+
+    for (const r of targets) {
+      if (!r.existing) await hydrateTechSpecRowDetail(r, r.projectCode)
+    }
+
+    const html = buildTechSpecConfirmHtml(targets)
+    const overwriteMode = await chooseTechSpecOverwriteMode(html)
+    if (!overwriteMode) return
+
+    const errors: string[] = []
+    let okCount = 0
+    let skippedCount = 0
+
+    for (const row of targets) {
+      try {
+        await hydrateTechSpecRowDetail(row, row.projectCode)
+        const payload = await buildTechSpecUpdatePayload(row, overwriteMode)
+        const keys = Object.keys(payload)
+        if (!keys.length) {
+          row.importStatus = 'skipped'
+          skippedCount++
+          continue
+        }
+
+        await updateProjectApi(row.projectCode, payload)
+        row.importStatus = 'success'
+        row.importError = ''
+        row.initStatus = 'initialized'
+        const cached = projectDetailCache.get(normalizeKey(row.projectCode))
+        if (cached) cached.init_done = 1
+        okCount++
+      } catch (e) {
+        row.importStatus = 'error'
+        row.importError = (e as Error)?.message || String(e)
+        errors.push(`${row.projectCode}: ${row.importError}`)
+      }
+    }
+
+    if (errors.length) {
+      ElMessage.warning(`导入完成：成功 ${okCount}，跳过 ${skippedCount}，失败 ${errors.length}`)
+    } else {
+      ElMessage.success(`导入完成：成功 ${okCount}，跳过 ${skippedCount}`)
+    }
+  } finally {
+    isTechSpecImporting.value = false
   }
 }
 
@@ -808,11 +1506,28 @@ const handleImport = async () => {
   color: var(--el-text-color-secondary);
   word-break: break-all;
 }
+
+.external-import__spec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.external-import__spec-k {
+  color: var(--el-text-color-secondary);
+}
 </style>
 
 <style>
 .external-import__confirm-box {
   width: 620px;
+  max-width: calc(100vw - 40px);
+}
+
+.external-import__confirm-box--wide {
+  width: 980px;
   max-width: calc(100vw - 40px);
 }
 </style>
