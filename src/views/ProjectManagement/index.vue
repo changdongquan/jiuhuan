@@ -2687,49 +2687,123 @@ const syncMainDrawingRowToForm = () => {
   ;(editForm as any).产品重量列表 = weights
 }
 
-const applyInitGroupsToProductDrawingList = (groups: Array<{ productDrawing?: string }>) => {
+const applyInitGroupsToProductDrawingList = (
+  groups: Array<{
+    productDrawing?: string
+    productName?: string
+    productSize?: string
+    cavityCount?: number | undefined
+  }>
+) => {
   const mainDrawing = String(editForm.productDrawing || '').trim()
   const mainName = String(editForm.productName || '').trim()
 
   const extracted = (groups || [])
-    .map((g) => String(g?.productDrawing || '').trim())
-    .filter(Boolean)
+    .map((g) => ({
+      drawing: String(g?.productDrawing || '').trim(),
+      name: String(g?.productName || '').trim(),
+      size: String(g?.productSize || '').trim(),
+      qty: g?.cavityCount
+    }))
+    .filter((x) => Boolean(x.drawing))
 
   const nextDrawings: string[] = []
   const seen = new Set<string>()
-  for (const d of extracted) {
-    const key = d.toLowerCase()
+  const groupNameByDrawing = new Map<string, string>()
+  const groupQtyByDrawing = new Map<string, number>()
+  const groupSizeByDrawing = new Map<string, string>()
+  for (const { drawing, name } of extracted) {
+    const key = drawing.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
-    nextDrawings.push(d)
+    nextDrawings.push(drawing)
+    if (name && !groupNameByDrawing.has(key)) groupNameByDrawing.set(key, name)
+  }
+  for (const { drawing, size } of extracted) {
+    const key = drawing.toLowerCase()
+    if (groupSizeByDrawing.has(key)) continue
+    if (!size) continue
+    groupSizeByDrawing.set(key, size)
+  }
+  for (const { drawing, qty } of extracted) {
+    const key = drawing.toLowerCase()
+    if (groupQtyByDrawing.has(key)) continue
+    const n = qty === undefined ? NaN : Number(qty)
+    if (!Number.isFinite(n)) continue
+    groupQtyByDrawing.set(key, Math.max(0, Math.trunc(n)))
   }
 
   if (nextDrawings.length === 0) {
     nextDrawings.push(mainDrawing || '')
   }
 
-  // 尽量保留现有尺寸（按图号匹配）
   const existingDrawings = parseProductDrawingList(getProductListRawFromEditForm()).map((d) =>
     String(d || '').trim()
   )
   const existingSizes = parseProductSize(editForm.产品尺寸).map((s) => String(s || '').trim())
+  const existingNames = parseProductNameList((editForm as any).产品名称列表).map((n) =>
+    String(n || '').trim()
+  )
+  const existingQty = parseProductQtyList((editForm as any).产品数量列表).map((q) => {
+    const n = typeof q === 'number' ? q : Number(q)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.trunc(n))
+  })
+  const existingWeights = parseProductWeightList((editForm as any).产品重量列表).map((w) => {
+    const n = typeof w === 'number' ? w : Number(w)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, n)
+  })
+
   const drawingToSize = new Map<string, string>()
-  for (let i = 0; i < Math.max(existingDrawings.length, existingSizes.length); i++) {
+  const drawingToName = new Map<string, string>()
+  const drawingToQty = new Map<string, number>()
+  const drawingToWeight = new Map<string, number>()
+  for (
+    let i = 0;
+    i <
+    Math.max(
+      existingDrawings.length,
+      existingSizes.length,
+      existingNames.length,
+      existingQty.length,
+      existingWeights.length
+    );
+    i++
+  ) {
     const d = String(existingDrawings[i] || '').trim()
-    const s = String(existingSizes[i] || '').trim()
     if (!d) continue
     const key = d.toLowerCase()
-    if (drawingToSize.has(key)) continue
-    if (s) drawingToSize.set(key, s)
+
+    const s = String(existingSizes[i] || '').trim()
+    const n = String(existingNames[i] || '').trim()
+    const q = Number.isFinite(existingQty[i] as any) ? Number(existingQty[i]) : 0
+    const w = Number.isFinite(existingWeights[i] as any) ? Number(existingWeights[i]) : 0
+
+    if (!drawingToSize.has(key) && s) drawingToSize.set(key, s)
+    if (!drawingToName.has(key) && n) drawingToName.set(key, n)
+    if (!drawingToQty.has(key) && q) drawingToQty.set(key, Math.max(0, Math.trunc(q)))
+    if (!drawingToWeight.has(key) && w) drawingToWeight.set(key, Math.max(0, w))
   }
 
-  const nextSizes = nextDrawings.map((d) => drawingToSize.get(d.toLowerCase()) || '')
-  const nextNames = nextDrawings.map((_d, i) => {
-    const fallback = i === 0 ? mainName : ''
-    return fallback
+  const nextSizes = nextDrawings.map((d) => {
+    const key = d.toLowerCase()
+    return groupSizeByDrawing.get(key) || drawingToSize.get(key) || ''
   })
-  const nextQty = nextDrawings.map((_d) => 0)
-  const nextWeights = nextDrawings.map((_d) => 0)
+  const nextNames = nextDrawings.map((d, i) => {
+    const key = d.toLowerCase()
+    const fromGroup = groupNameByDrawing.get(key) || ''
+    const fromExisting = drawingToName.get(key) || ''
+    const fallback = i === 0 ? mainName : ''
+    return fromGroup || fromExisting || fallback
+  })
+  const nextQty = nextDrawings.map((d) => {
+    const key = d.toLowerCase()
+    const fromGroup = groupQtyByDrawing.get(key) || 0
+    if (fromGroup) return fromGroup
+    return drawingToQty.get(key) || 0
+  })
+  const nextWeights = nextDrawings.map((d) => drawingToWeight.get(d.toLowerCase()) || 0)
 
   ;(editForm as any).产品列表 = nextDrawings
   editForm.产品尺寸 = nextSizes as any
@@ -2986,6 +3060,8 @@ type InitProductGroupPersisted = {
   name: string
   cavityCount: number | undefined
   productDrawing?: string
+  productName?: string
+  productSize?: string
 }
 
 const initDialogVisible = ref(false)
@@ -3090,33 +3166,75 @@ const buildDefaultInitGroups = (
   projectCode: string,
   fallbackCavity: unknown
 ): InitProductGroupPersisted[] => {
-  // 如果 fallbackCavity 是表达式（如 "2+2"），解析它
-  const cavityStr = String(fallbackCavity || '').trim()
+  const parseCavityExpressionToCounts = (expression: unknown): number[] => {
+    if (expression === null || expression === undefined || expression === '') return []
+    if (typeof expression === 'number') return [toSafeCavity(expression)]
+    const raw = String(expression || '').trim()
+    if (!raw) return []
 
-  // 检查是否是表达式格式（包含 + 或 *）
-  if (cavityStr.includes('+') || cavityStr.includes('*')) {
-    // 解析表达式，生成产品组列表
-    const parts = cavityStr
+    const num = Number(raw)
+    if (Number.isFinite(num) && !raw.includes('+') && !raw.includes('*')) {
+      return [toSafeCavity(num)]
+    }
+
+    const parts = raw
       .split('+')
-      .map((part) => part.trim())
+      .map((p) => p.trim())
       .filter(Boolean)
-    return parts.map((_part, idx) => {
-      return {
-        id: `g_${projectCode || 'tmp'}_${idx}`,
-        name: '产品组 1',
-        cavityCount: undefined
-      }
+
+    return parts.map((part) => {
+      const token = part.includes('*') ? part.split('*').pop() || '' : part
+      const n = Number(String(token).trim())
+      return toSafeCavity(n)
     })
   }
 
-  // 纯数字格式（向后兼容）
-  return [
-    {
-      id: `g_${projectCode || 'tmp'}_0`,
-      name: '产品组 1',
-      cavityCount: undefined
+  const mainDrawing = String(editForm.productDrawing || '').trim()
+  const mainName = String(editForm.productName || '').trim()
+
+  const drawingsRaw = parseProductDrawingList(getProductListRawFromEditForm()).map((d) =>
+    String(d || '').trim()
+  )
+  const namesRaw = parseProductNameList((editForm as any).产品名称列表).map((n) =>
+    String(n || '').trim()
+  )
+  const sizesRaw = parseProductSize(editForm.产品尺寸).map((s) => String(s || '').trim())
+
+  const drawingToName = new Map<string, string>()
+  for (let i = 0; i < Math.max(drawingsRaw.length, namesRaw.length); i++) {
+    const d = String(drawingsRaw[i] || '').trim()
+    const n = String(namesRaw[i] || '').trim()
+    if (!d || !n) continue
+    const key = d.toLowerCase()
+    if (!drawingToName.has(key)) drawingToName.set(key, n)
+  }
+
+  const drawingToSize = new Map<string, string>()
+  for (let i = 0; i < Math.max(drawingsRaw.length, sizesRaw.length); i++) {
+    const d = String(drawingsRaw[i] || '').trim()
+    const s = String(sizesRaw[i] || '').trim()
+    if (!d || !s) continue
+    const key = d.toLowerCase()
+    if (!drawingToSize.has(key)) drawingToSize.set(key, s)
+  }
+
+  const drawings = drawingsRaw.map((d) => d.trim()).filter(Boolean)
+  const counts = parseCavityExpressionToCounts(fallbackCavity)
+
+  const groupCount = Math.max(1, drawings.length || 0, counts.length || 0)
+  return Array.from({ length: groupCount }).map((_, idx) => {
+    const drawing = drawings[idx] || (idx === 0 ? mainDrawing : '')
+    const nameFromList = drawing ? drawingToName.get(String(drawing).toLowerCase()) || '' : ''
+    const sizeFromList = drawing ? drawingToSize.get(String(drawing).toLowerCase()) || '' : ''
+    return {
+      id: `g_${projectCode || 'tmp'}_${idx}`,
+      name: `产品组 ${idx + 1}`,
+      cavityCount: counts[idx] === undefined ? undefined : toSafeCavity(counts[idx]),
+      productDrawing: drawing,
+      productName: nameFromList || (idx === 0 ? mainName : ''),
+      productSize: sizeFromList || ''
     }
-  ]
+  })
 }
 
 const runnerTypeOptions = [
@@ -4198,6 +4316,7 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       const 技术规格表尺寸列表 = specData.产品尺寸列表 || []
       const 技术规格表名称列表 = specData.产品名称列表 || []
       const 技术规格表数量列表 = specData.产品数量列表 || []
+      const 技术规格表重量列表 = specData.产品重量列表 || []
 
       // 确保尺寸列表长度与图号列表一致
       while (技术规格表尺寸列表.length < 技术规格表图号列表.length) {
@@ -4223,18 +4342,28 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
         技术规格表数量列表.pop()
       }
 
+      // 确保重量列表长度与图号列表一致
+      while (技术规格表重量列表.length < 技术规格表图号列表.length) {
+        技术规格表重量列表.push(0)
+      }
+      while (技术规格表重量列表.length > 技术规格表图号列表.length) {
+        技术规格表重量列表.pop()
+      }
+
       // 获取现有的图号列表和尺寸列表
       const 现有图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
       const 现有尺寸列表 = parseProductSize(editForm.产品尺寸)
       const 现有名称列表 = parseProductNameList((editForm as any).产品名称列表)
       const 现有数量列表 = parseProductQtyList((editForm as any).产品数量列表)
+      const 现有重量列表 = parseProductWeightList((editForm as any).产品重量列表)
 
       // 确保现有列表长度一致
       const 现有最大长度 = Math.max(
         现有图号列表.length,
         现有尺寸列表.length,
         现有名称列表.length,
-        现有数量列表.length
+        现有数量列表.length,
+        现有重量列表.length
       )
       while (现有图号列表.length < 现有最大长度) {
         现有图号列表.push('')
@@ -4248,6 +4377,9 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       while (现有数量列表.length < 现有最大长度) {
         现有数量列表.push(0)
       }
+      while (现有重量列表.length < 现有最大长度) {
+        现有重量列表.push(0)
+      }
 
       // 合并技术规格表的数据到现有列表
       for (let i = 0; i < 技术规格表图号列表.length; i++) {
@@ -4256,6 +4388,9 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
         const 新名称 = 技术规格表名称列表[i]?.trim() || ''
         const 新数量 = Number.isFinite(技术规格表数量列表[i] as any)
           ? Number(技术规格表数量列表[i])
+          : 0
+        const 新重量 = Number.isFinite(技术规格表重量列表[i] as any)
+          ? Number(技术规格表重量列表[i])
           : 0
 
         if (!新图号) continue
@@ -4283,6 +4418,9 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
             if (!Number(现有数量列表[现有索引] || 0) && 新数量) {
               现有数量列表[现有索引] = Math.max(0, Math.trunc(新数量))
             }
+            if (!Number(现有重量列表[现有索引] || 0) && 新重量) {
+              现有重量列表[现有索引] = Math.max(0, 新重量)
+            }
           } catch {
             // 用户取消，跳过该图号
             continue
@@ -4293,6 +4431,7 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
           现有尺寸列表.push(新尺寸)
           现有名称列表.push(新名称)
           现有数量列表.push(Math.max(0, Math.trunc(新数量)))
+          现有重量列表.push(Math.max(0, 新重量))
         }
       }
 
@@ -4301,6 +4440,7 @@ const handleInitComplete = async (groups: InitProductGroupPersisted[], specData?
       editForm.产品尺寸 = 现有尺寸列表 as any
       ;(editForm as any).产品名称列表 = 现有名称列表
       ;(editForm as any).产品数量列表 = 现有数量列表
+      ;(editForm as any).产品重量列表 = 现有重量列表
       syncMainDrawingRowToForm()
 
       console.log('[初始化完成] 合并后的产品列表:', 现有图号列表)

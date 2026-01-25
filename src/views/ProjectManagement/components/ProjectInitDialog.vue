@@ -16,7 +16,7 @@
       </div>
     </template>
     <div class="pm-init-body">
-      <el-descriptions :column="isMobile ? 1 : 3" border class="pm-init-desc">
+      <el-descriptions :column="isMobile ? 1 : 4" border class="pm-init-desc">
         <el-descriptions-item label="项目编号">
           {{ project?.项目编号 || '-' }}
         </el-descriptions-item>
@@ -131,7 +131,19 @@
                     <Icon icon="vi-ep:rank" />
                   </div>
                   <div class="pm-init-group__title">
-                    {{ group.productDrawing || `产品组 ${index + 1}` }}
+                    <div>{{ group.productDrawing || `产品组 ${index + 1}` }}</div>
+                    <div
+                      v-if="String(group.productName || '').trim()"
+                      class="pm-init-group__subtitle"
+                    >
+                      {{ group.productName }}
+                    </div>
+                    <div
+                      v-if="String(group.productSize || '').trim()"
+                      class="pm-init-group__subtitle"
+                    >
+                      {{ group.productSize }}
+                    </div>
                   </div>
                 </div>
                 <div class="pm-init-group__right" @click.stop>
@@ -160,6 +172,12 @@
                         placeholder="请输入产品图号"
                         @blur="validateProductDrawing(group.id)"
                       />
+                    </el-form-item>
+                    <el-form-item label="产品名称">
+                      <el-input v-model="group.productName" placeholder="请输入产品名称（可选）" />
+                    </el-form-item>
+                    <el-form-item label="产品尺寸">
+                      <el-input v-model="group.productSize" placeholder="请输入产品尺寸（可选）" />
                     </el-form-item>
                     <el-form-item label="穴数">
                       <el-input-number
@@ -213,6 +231,8 @@ type InitProductGroup = {
   name: string
   cavityCount: number | undefined
   productDrawing?: string // 产品图号
+  productName?: string // 产品名称
+  productSize?: string // 产品尺寸
   expanded: boolean
 }
 
@@ -251,16 +271,113 @@ const hasValidCavity = (value: unknown) => {
   return Number.isFinite(n) && n >= 1
 }
 
+const parseChineseNumber = (raw: string): number | null => {
+  const s = String(raw || '').trim()
+  if (!s) return null
+  if (/^\d+$/.test(s)) return Number(s)
+
+  const digitMap: Record<string, number> = {
+    零: 0,
+    〇: 0,
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9
+  }
+
+  if (s === '十') return 10
+  if (s.includes('十')) {
+    const [leftRaw, rightRaw] = s.split('十')
+    const left = leftRaw ? digitMap[leftRaw] : 1
+    const right = rightRaw ? digitMap[rightRaw] : 0
+    if (left === undefined || right === undefined) return null
+    return left * 10 + right
+  }
+
+  const single = digitMap[s]
+  return single === undefined ? null : single
+}
+
+const parseMouldCavityText = (raw: unknown): { expression: string; counts: number[] } => {
+  const original = String(raw || '').trim()
+  if (!original) return { expression: '', counts: [] }
+
+  const normalized = original.replaceAll('（', '(').replaceAll('）', ')').replace(/\s+/g, '')
+
+  const parenMatch = normalized.match(/\(([^)]+)\)/)
+  const inside = parenMatch?.[1] || ''
+
+  const parseCountsFromExpr = (expr: string): number[] => {
+    const e = String(expr || '').trim()
+    if (!e) return []
+    const parts = e
+      .split('+')
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const counts: number[] = []
+    for (const part of parts) {
+      const token = part.includes('*') ? part.split('*').pop() || '' : part
+      const n = Number(String(token).trim())
+      if (!Number.isFinite(n) || n <= 0) continue
+      counts.push(Math.max(1, Math.trunc(n)))
+    }
+    return counts
+  }
+
+  // A) 优先解析括号内的 "2+2" / "1*2+1*2"（每段代表一个产品的穴数）
+  const countsFromParen = parseCountsFromExpr(inside)
+  if (countsFromParen.length) {
+    return {
+      expression: countsFromParen.map((n) => `1*${n}`).join('+'),
+      counts: countsFromParen
+    }
+  }
+
+  // B) 没有括号表达式：解析 "一模四腔/一模四穴/一模4穴" -> "1*4"
+  const arabicMatch = normalized.match(/一模(\d+)(?:腔|穴)/)
+  if (arabicMatch?.[1]) {
+    const n = Number(arabicMatch[1])
+    if (Number.isFinite(n) && n > 0) {
+      const c = Math.max(1, Math.trunc(n))
+      return { expression: `1*${c}`, counts: [c] }
+    }
+  }
+
+  const zhMatch = normalized.match(/一模([一二两三四五六七八九十〇零]+)(?:腔|穴)/)
+  if (zhMatch?.[1]) {
+    const n = parseChineseNumber(zhMatch[1])
+    if (n && n > 0) {
+      const c = Math.max(1, Math.trunc(n))
+      return { expression: `1*${c}`, counts: [c] }
+    }
+  }
+
+  return { expression: '', counts: [] }
+}
+
 const getProductDrawing = () => {
   return props.project?.productDrawing || props.project?.产品图号 || ''
 }
 
+const getProductName = () => {
+  return props.project?.productName || props.project?.产品名称 || ''
+}
+
 const makeDefaultGroup = (index: number, cavityCount?: number): InitProductGroup => {
   const productDrawing = getProductDrawing()
+  const productName = getProductName()
   return {
     id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_${index}`,
     name: `产品组 ${index + 1}`, // 保留name字段用于内部标识，但不显示
     productDrawing: productDrawing || '',
+    productName: productName || '',
+    productSize: '',
     cavityCount: cavityCount === undefined ? undefined : toSafeCavity(cavityCount),
     expanded: true
   }
@@ -269,6 +386,7 @@ const makeDefaultGroup = (index: number, cavityCount?: number): InitProductGroup
 const resetFromProps = () => {
   const initial = props.initialGroups || []
   const productDrawing = getProductDrawing()
+  const productName = getProductName()
   console.log('[初始化弹窗] resetFromProps - productDrawing:', productDrawing)
   console.log('[初始化弹窗] resetFromProps - props.project:', props.project)
 
@@ -278,6 +396,8 @@ const resetFromProps = () => {
         id: g.id || makeDefaultGroup(idx, g.cavityCount).id,
         name: `产品组 ${idx + 1}`,
         productDrawing: (g as any).productDrawing || productDrawing || '',
+        productName: (g as any).productName || productName || '',
+        productSize: (g as any).productSize || '',
         cavityCount: hasValidCavity(g.cavityCount) ? toSafeCavity(g.cavityCount) : undefined,
         expanded: true
       }
@@ -293,6 +413,8 @@ const resetFromProps = () => {
       id: `g_${Date.now()}_${Math.random().toString(16).slice(2)}_0`,
       name: '产品组 1',
       productDrawing: productDrawing || '',
+      productName: productName || '',
+      productSize: '',
       cavityCount: fallback,
       expanded: true
     }
@@ -377,8 +499,14 @@ const handleDeleteGroup = (id: string) => {
   // 删除后不需要重新编号，因为标题显示的是产品图号
 }
 
-const applyProductDrawingsToGroups = (drawings: string[]) => {
+const applyProductDrawingsToGroups = (
+  drawings: string[],
+  sizes?: string[],
+  cavityCounts?: number[]
+) => {
   const list = (drawings || []).map((d) => String(d || '').trim()).filter(Boolean)
+  const sizeList = (sizes || []).map((s) => String(s || '').trim())
+  const cavityList = (cavityCounts || []).map((c) => toSafeCavity(c))
 
   if (list.length === 0) return
 
@@ -394,19 +522,32 @@ const applyProductDrawingsToGroups = (drawings: string[]) => {
 
   // 尽量保留已填写的穴数（按图号匹配）
   const cavityByDrawing = new Map<string, number>()
+  const nameByDrawing = new Map<string, string>()
+  const sizeByDrawing = new Map<string, string>()
   for (const g of groups.value) {
     const d = String(g.productDrawing || '').trim()
     if (!d) continue
-    if (!hasValidCavity(g.cavityCount)) continue
     const key = d.toLowerCase()
+    const pn = String(g.productName || '').trim()
+    if (pn && !nameByDrawing.has(key)) nameByDrawing.set(key, pn)
+    const ps = String(g.productSize || '').trim()
+    if (ps && !sizeByDrawing.has(key)) sizeByDrawing.set(key, ps)
+    if (!hasValidCavity(g.cavityCount)) continue
     if (!cavityByDrawing.has(key)) cavityByDrawing.set(key, toSafeCavity(g.cavityCount))
   }
 
   groups.value = unique.map((d, idx) => {
     const next = makeDefaultGroup(idx)
     next.productDrawing = d
+    const fromSpecCavity = cavityList[idx]
     const kept = cavityByDrawing.get(d.toLowerCase())
-    next.cavityCount = kept === undefined ? undefined : kept
+    next.cavityCount =
+      fromSpecCavity !== undefined ? fromSpecCavity : kept === undefined ? undefined : kept
+    const keptName = nameByDrawing.get(d.toLowerCase())
+    if (keptName) next.productName = keptName
+    const fromSpecSize = sizeList[idx] || ''
+    const keptSize = sizeByDrawing.get(d.toLowerCase()) || ''
+    next.productSize = fromSpecSize || keptSize || ''
     next.expanded = true
     return next
   })
@@ -939,6 +1080,8 @@ const handleSpecFileChange = async (file: UploadFile) => {
       零件图片: ''
     }
 
+    const cavityParsed = parseMouldCavityText(extractedData.模具穴数)
+
     // 处理图片（可能是嵌入的图片或路径）
     if (imageCol >= 0) {
       const imageValue = matchedRow[imageCol]
@@ -960,7 +1103,7 @@ const handleSpecFileChange = async (file: UploadFile) => {
 
     specData.value = extractedData
     // 将技术规格表中的图号列表同步为产品组（一个图号一个产品组）
-    applyProductDrawingsToGroups(图号列表)
+    applyProductDrawingsToGroups(图号列表, 尺寸列表, cavityParsed.counts)
     ElMessage.success('技术规格表读取成功')
   } catch (error: any) {
     console.error('读取技术规格表失败:', error)
@@ -1013,6 +1156,17 @@ const showImagePreview = (url: string) => {
 .pm-cell-number--empty :deep(.el-input__wrapper) {
   background: rgb(230 162 60 / 8%);
   box-shadow: 0 0 0 1px var(--el-color-warning) inset;
+}
+
+.pm-init-group__subtitle {
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.1;
+  color: var(--el-text-color-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* C) 技术规格表缺失字段高亮 */
