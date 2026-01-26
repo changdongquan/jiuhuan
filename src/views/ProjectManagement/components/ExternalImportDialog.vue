@@ -126,7 +126,18 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="moveTo" label="移至地方" min-width="120" />
-                <el-table-column prop="sealSampleNo" label="封样单号" min-width="220" />
+                <el-table-column prop="sealSampleNo" label="封样单号" min-width="220">
+                  <template #default="{ row }">
+                    <el-input
+                      v-if="!row.sealSampleNo && !row.isUseless"
+                      v-model="row.sealSampleNo"
+                      size="small"
+                      placeholder="手工填写"
+                      clearable
+                    />
+                    <span v-else>{{ row.sealSampleNo || '-' }}</span>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="projectCode" label="项目编号" min-width="140">
                   <template #default="{ row }">
                     <el-tag v-if="row.isUseless" size="small" type="info" effect="light">
@@ -350,17 +361,14 @@ import {
   getProjectDetailApi,
   getProjectGoodsApi,
   getProjectListApi,
+  relocationParsePdfApi,
   updateProjectApi,
   relocationImportApi,
   uploadProjectAttachmentApi,
   uploadProjectPartImageApi,
   type RelocationImportOverwriteMode
 } from '@/api/project'
-import { extractPdfText } from '@/utils/pdf/extractPdfText'
-import {
-  parseMouldTransferFromText,
-  type MouldTransferImportResult
-} from '@/utils/pdf/mouldTransferParser'
+import { type MouldTransferImportResult } from '@/utils/pdf/mouldTransferParser'
 import {
   parseDrawings as parseTechSpecDrawings,
   parseTechSpecExcel,
@@ -458,7 +466,11 @@ type TechSpecRow = {
 }
 
 const normalizeKey = (v: unknown) => String(v ?? '').trim()
-const pairKey = (name: string, mouldNo: string) => `${name}\u0000${mouldNo}`
+const normalizeMatchKey = (v: unknown) =>
+  normalizeKey(v)
+    .replace(/\s+/g, '')
+    .replace(/[（）()]/g, '')
+    .replace(/[\uE000-\uF8FF]/g, '')
 const TARGET_FACTORY = '久环'
 
 type ProjectListItem = {
@@ -475,22 +487,20 @@ const extractProjectList = (resp: any): ProjectListItem[] => {
   return Array.isArray(list) ? list : []
 }
 
-const fetchProjectCodes = async (mouldName: string, mouldNo: string): Promise<string[]> => {
-  const name = normalizeKey(mouldName)
-  const no = normalizeKey(mouldNo)
-  if (!name || !no) return []
+const fetchProjectCodesByCustomerMouldNo = async (mouldNo: string): Promise<string[]> => {
+  const no = normalizeMatchKey(mouldNo)
+  if (!no) return []
 
   const fetchByKeyword = async (keyword: string) => {
     const response: any = await getProjectListApi({ keyword, page: 1, pageSize: 200 })
     return extractProjectList(response)
   }
 
-  const candidates = [...(await fetchByKeyword(no)), ...(await fetchByKeyword(name))]
+  const candidates = await fetchByKeyword(no)
   const matches = candidates.filter((p) => {
-    const pn = normalizeKey(p.productName || p.产品名称)
-    const mn = normalizeKey(p['客户模号'])
+    const mn = normalizeMatchKey(p['客户模号'])
     const code = normalizeKey(p['项目编号'])
-    return code && pn === name && mn === no
+    return code && mn === no
   })
 
   return Array.from(new Set(matches.map((m) => normalizeKey(m['项目编号'])))).filter(Boolean)
@@ -699,7 +709,7 @@ const hydrateProjectCodes = async (item: ImportItem) => {
       }
       applyProjectMatchToRows(item, key)
 
-      const codes = await fetchProjectCodes(row.mouldName, row.mouldNo)
+      const codes = await fetchProjectCodesByCustomerMouldNo(row.mouldNo)
       if (codes.length === 1) {
         item.projectMatches[key] = { status: 'matched', candidates: codes, selectedCode: codes[0] }
       } else if (codes.length > 1) {
@@ -842,19 +852,29 @@ const parseItem = async (item: ImportItem, file: File) => {
   item.kind = 'unknown'
 
   try {
-    const buf = await file.arrayBuffer()
     if (isPdfFile(file)) {
-      const text = await extractPdfText(buf)
-      const parsed = parseMouldTransferFromText(text)
-      if (!parsed.ok) {
-        item.error = parsed.error
+      // Prefer backend parsing for stability (browser pdf.js text order is not reliable).
+      const resp: any = await relocationParsePdfApi(file)
+      // `request` wrapper may return either AxiosResponse or already-unwrapped payload.
+      const payload: any = resp?.data ?? resp
+      const data: any = payload?.data ?? payload
+      const ok = payload?.success === true || payload?.code === 0 || Array.isArray(data?.rows)
+      if (!ok || !Array.isArray(data?.rows) || data.rows.length === 0) {
+        item.error = payload?.message || '解析失败：未返回明细行'
         return
       }
+
       item.kind = 'mouldTransfer'
-      item.result = parsed.data
-      item.displayRows = parsed.data.rows.map((r) => {
-        const isUseless = normalizeKey(r.mouldFactory) !== TARGET_FACTORY
-        const key = pairKey(normalizeKey(r.mouldName), normalizeKey(r.mouldNo))
+      item.result = {
+        type: 'mould-transfer',
+        mouldMoveDate: String(data?.mouldMoveDate || ''),
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+        rawText: ''
+      } satisfies MouldTransferImportResult
+
+      item.displayRows = item.result.rows.map((r) => {
+        const isUseless = normalizeMatchKey(r.mouldFactory) !== TARGET_FACTORY
+        const key = normalizeMatchKey(r.mouldNo)
         return {
           ...r,
           sourceItemId: item.id,
@@ -872,6 +892,7 @@ const parseItem = async (item: ImportItem, file: File) => {
     }
 
     if (isExcelFile(file)) {
+      const buf = await file.arrayBuffer()
       const parsed = await parseTechSpecExcel(buf)
       const records = parsed.records || []
       if (!records.length) {

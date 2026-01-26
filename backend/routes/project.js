@@ -10,6 +10,7 @@ const JSZip = require('jszip')
 const ExcelJS = require('exceljs')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
+const { parseMouldTransferPdf } = require('../utils/pdf/mouldTransferPdfParser')
 
 const execFileAsync = promisify(execFile)
 
@@ -2232,6 +2233,30 @@ router.post('/relocation-import', async (req, res) => {
       success: false,
       message: '批量导入移模单失败',
       error: error.message
+    })
+  }
+})
+
+// 解析移模通知单（外调）PDF：后端统一解析（比浏览器 pdf.js 更稳定，便于排障/升级为 OCR）
+const relocationPdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 }
+})
+
+router.post('/relocation-parse-pdf', relocationPdfUpload.single('file'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file || !file.buffer) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 PDF 文件（file）' })
+    }
+
+    const result = await parseMouldTransferPdf(file.buffer)
+    return res.json({ code: 0, success: true, data: result })
+  } catch (error) {
+    return res.status(400).json({
+      code: 400,
+      success: false,
+      message: error?.message || '解析 PDF 失败'
     })
   }
 })

@@ -217,6 +217,37 @@ export const relocationImportApi = (data: {
   })
 }
 
+export interface RelocationPdfParseRow {
+  index: number
+  partNo: string
+  mouldName: string
+  mouldNo: string
+  mouldFactory: string
+  moveTo: string
+  sealSampleNo: string
+}
+
+export interface RelocationPdfParseResult {
+  type: 'mould-transfer'
+  mouldMoveDate: string
+  rows: RelocationPdfParseRow[]
+}
+
+export const relocationParsePdfApi = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: RelocationPdfParseResult
+  }>({
+    url: '/api/project/relocation-parse-pdf',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 // 生成并下载三方协议（docx）
 export const downloadTripartiteAgreementDocxApi = (projectCode: string) => {
   return request.get<Blob>({

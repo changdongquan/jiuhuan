@@ -28,9 +28,19 @@ type TextLine = {
 const groupByY = (items: PositionedText[], tolerance = 2.5): TextLine[] => {
   const lines: TextLine[] = []
   for (const item of items) {
-    const existing = lines.find((l) => Math.abs(l.y - item.y) <= tolerance)
-    if (existing) {
-      existing.items.push(item)
+    let best: TextLine | null = null
+    let bestDiff = Infinity
+    for (const l of lines) {
+      const diff = Math.abs(l.y - item.y)
+      if (diff <= tolerance && diff < bestDiff) {
+        best = l
+        bestDiff = diff
+      }
+    }
+    if (best) {
+      best.items.push(item)
+      // Keep a running centroid to make clustering stable when y slightly drifts across columns.
+      best.y = (best.y * (best.items.length - 1) + item.y) / best.items.length
       continue
     }
     lines.push({ y: item.y, items: [item] })
@@ -65,9 +75,13 @@ const buildLineText = (line: TextLine): string => {
   return out.trimEnd()
 }
 
-export async function extractPdfText(arrayBuffer: ArrayBuffer): Promise<string> {
+export async function extractPdfText(
+  arrayBuffer: ArrayBuffer,
+  options?: { yTolerance?: number }
+): Promise<string> {
   const doc = await getDocument({ data: arrayBuffer }).promise
   const pages: string[] = []
+  const yTolerance = options?.yTolerance ?? 2.5
 
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
     const page = await doc.getPage(pageNo)
@@ -86,7 +100,7 @@ export async function extractPdfText(arrayBuffer: ArrayBuffer): Promise<string> 
       })
     }
 
-    const lines = groupByY(positioned).sort((a, b) => b.y - a.y)
+    const lines = groupByY(positioned, yTolerance).sort((a, b) => b.y - a.y)
     const pageText = lines
       .map(buildLineText)
       .filter((l) => l.trim().length > 0)
