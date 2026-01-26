@@ -97,13 +97,65 @@ const splitColumns = (line: string): string[] => {
     .trim()
     .split(/\s{2,}/)
     .filter(Boolean)
-  if (cols.length >= 2) return cols
+  if (cols.length >= 2) {
+    // Some PDFs place `index` and `partNo` in the same "column" separated by a single space,
+    // e.g. "1 B22197.21.1.3  把手座  ML01230271  ...". Split it back.
+    const m = cols[0]?.match(/^(\d+)\s+(\S.*)$/)
+    if (m?.[1] && m?.[2]) {
+      cols.splice(0, 1, m[1], m[2])
+    }
+    return cols
+  }
   return line.trim().split(/\s+/).filter(Boolean)
 }
 
 const compressSpaces = (s: string) => s.replace(/\s+/g, ' ').trim()
 
 const stripCheckboxPrefix = (line: string) => line.replace(/^\s*[□☐✓✔✅]\s*/, '')
+
+const extractFirst = (re: RegExp, s: string) => s.match(re)?.[1] ?? ''
+
+const parseSingleLineRow = (index: number, line: string): MouldTransferRow => {
+  // Handles cases where column spacing is inconsistent (e.g. index+partNo share a column,
+  // or mouldName+mouldNo are merged).
+  let s = compressSpaces(stripCheckboxPrefix(line))
+  s = s.replace(/^\s*\d+\s+/, '')
+
+  const sealSampleNo = extractFirst(SEAL_NO_RE, s)
+  if (sealSampleNo) s = compressSpaces(s.replace(sealSampleNo, ' '))
+
+  const mouldNo = extractFirst(MOULD_NO_RE, s)
+  if (mouldNo) s = compressSpaces(s.replace(mouldNo, ' '))
+
+  const partNo = extractPartNo(s)
+  if (partNo) s = compressSpaces(s.replace(partNo, ' '))
+
+  const tokens = s.split(/\s+/).filter(Boolean)
+  let mouldName = ''
+  let mouldFactory = ''
+  let moveTo = ''
+
+  if (tokens.length >= 3) {
+    mouldFactory = tokens[tokens.length - 2] ?? ''
+    moveTo = tokens[tokens.length - 1] ?? ''
+    mouldName = tokens.slice(0, -2).join(' ')
+  } else if (tokens.length === 2) {
+    mouldName = tokens[0] ?? ''
+    mouldFactory = tokens[1] ?? ''
+  } else {
+    mouldName = tokens[0] ?? ''
+  }
+
+  return {
+    index,
+    partNo: compressSpaces(partNo),
+    mouldName: compressSpaces(mouldName),
+    mouldNo: compressSpaces(mouldNo),
+    mouldFactory: compressSpaces(mouldFactory),
+    moveTo: compressSpaces(moveTo),
+    sealSampleNo: compressSpaces(sealSampleNo)
+  }
+}
 
 const fillMissingFieldsFromLine = (row: MouldTransferRow, line: string) => {
   let s = compressSpaces(stripCheckboxPrefix(line))
@@ -274,30 +326,15 @@ export function parseMouldTransferFromText(
 
     // New row line (may include checkbox prefix)
     if (isNewRowLine(cleaned)) {
-      const cols = splitColumns(cleaned)
-      const index = Number(cols[0])
+      const idxMatch = cleaned.match(/^\s*(\d+)\s+/)
+      const index = idxMatch ? Number(idxMatch[1]) : NaN
       if (!Number.isFinite(index)) continue
 
-      // Best-effort mapping by columns
-      const row: MouldTransferRow = {
-        index,
-        partNo: cols[1] ?? '',
-        mouldName: cols[2] ?? '',
-        mouldNo: cols[3] ?? '',
-        mouldFactory: cols[4] ?? '',
-        moveTo: cols[5] ?? '',
-        sealSampleNo: cols.slice(6).join(' ') ?? ''
+      const row = parseSingleLineRow(index, cleaned)
+      // If the PDF extraction didn't expose some fields, keep the old multi-line filling logic as fallback.
+      if (!row.partNo || !row.mouldNo || !row.sealSampleNo || !row.mouldFactory || !row.moveTo) {
+        fillMissingFieldsFromLine(row, cleaned)
       }
-
-      // Fallback via regex if some fields are missing
-      if (!row.mouldNo) row.mouldNo = line.match(MOULD_NO_RE)?.[1] ?? ''
-      if (!row.sealSampleNo) row.sealSampleNo = line.match(SEAL_NO_RE)?.[1] ?? ''
-      if (!row.partNo) row.partNo = line.match(PART_NO_RE)?.[1] ?? ''
-
-      row.mouldName = compressSpaces(row.mouldName)
-      row.mouldFactory = compressSpaces(row.mouldFactory)
-      row.moveTo = compressSpaces(row.moveTo)
-      row.sealSampleNo = compressSpaces(row.sealSampleNo)
 
       rows.push(row)
       current = row
