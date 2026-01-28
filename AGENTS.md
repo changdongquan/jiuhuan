@@ -13,20 +13,21 @@
 
 - `packages/frontend/`：前端工程（pnpm）
 - `packages/frontend/src/`：前端业务代码
-- `backend/`：后端 API（Node/Express）
+- `packages/backend/`：后端 API（Node/Express，npm）
 - `docs/`：项目说明文档（除根目录 `README*`/`CHANGELOG.md`/`LICENSE`）
 - `docs/dev/`：开发说明（测试、集成、实现摘要等）
 - `tools/`：一次性/辅助脚本（不参与应用运行与构建）
 - `sql/`：非迁移用途 SQL（参考脚本、临时查询等）
 - `ops/`：部署/运维相关脚本（不参与应用运行）
-- `backend/migrations/`：数据库迁移 SQL（按日期命名）
-- `backend/docs/`：后端/部署相关文档（按子目录分类）
-- `backend/ops/`：后端部署/运维相关脚本与配置样例（systemd/nginx/apache/kerberos 等）
+- `packages/backend/migrations/`：数据库迁移 SQL（按日期命名）
+- `packages/backend/docs/`：后端/部署相关文档（按子目录分类）
+- `packages/backend/ops/`：后端部署/运维相关脚本与配置样例（systemd/nginx/apache/kerberos 等）
 
 ## 新增文件放置规则
 
-- 新增文档：放 `docs/`（或 `backend/docs/`）
-- 新增一次性脚本：放 `tools/`（或后端相关则放 `backend/scripts/`/`backend/ops/`）
+- 新增文档：放 `docs/`（或 `packages/backend/docs/`）
+- 新增一次性脚本：放 `tools/`（或后端相关则放 `packages/backend/scripts/` / `packages/backend/ops/`）
+- 后端相关脚本（迁移后）：放 `packages/backend/scripts/` / `packages/backend/ops/`
 - 新增 SQL：
-  - 迁移：`backend/migrations/`
+  - 迁移：`packages/backend/migrations/`
   - 参考/临时：`sql/`

@@ -1,6 +1,6 @@
 # Monorepo 迁移方案（详细版）
 
-> 本文为迁移规划与落地记录：本次先完成「前端迁移到 `packages/frontend`」，后端暂时仍在 `backend/`（继续使用 npm，不做 pnpm 化），后续再评估迁入 `packages/backend`。
+> 本文为迁移规划与落地记录：当前已完成「前端迁移到 `packages/frontend`」与「后端迁移到 `packages/backend`」。
 >
 > 统一约定：前端构建产物只认 `packages/frontend/dist/`。
 
@@ -24,7 +24,7 @@
 ```
 jiuhuan/
 ├── src/                    # 前端源代码（根目录）
-├── backend/                # 后端代码（子目录）
+├── packages/backend/       # 后端代码（npm）
 ├── package.json            # 前端依赖配置
 ├── vite.config.ts          # 前端构建配置
 ├── tsconfig.json           # TypeScript 配置（前端）
@@ -46,16 +46,15 @@ jiuhuan/
    - 路径别名 `@/*` 指向 `src/*`
    - 构建输出到 `dist/` 或 `dist-*`
 
-2. **后端独立在 `backend/` 目录**
-   - 有自己的 `package.json` 和依赖
-   - 使用 npm（前端使用 pnpm）
+2. **后端独立在 `packages/backend/` 目录**
+   - 有自己的 `package.json` / `package-lock.json`（npm）
    - 运行在 3001 端口
 
 3. **工具脚本跨目录引用**
    - `tools/pdf/debug-mould-transfer.ts` 引用 `../../src/utils/pdf/mouldTransferParser`
 
 4. **部署脚本硬编码路径**
-   - 多个 shell 脚本中硬编码了 `backend/` 和 `src/` 路径
+   - 多个 shell 脚本中硬编码了 `packages/backend/` 和 `packages/frontend/src/` 路径
 
 ---
 
@@ -77,7 +76,7 @@ jiuhuan/
 │   │   ├── uno.config.ts   # UnoCSS 配置
 │   │   └── index.html      # HTML 入口
 │   │
-│   └── backend/            # 后端包
+│   └── backend/            # 后端包（npm）
 │       ├── routes/          # 路由
 │       ├── migrations/      # 数据库迁移
 │       ├── templates/      # 模板文件
@@ -160,7 +159,7 @@ pnpm install
 pnpm run dev
 
 # 测试后端
-cd backend
+cd packages/backend
 npm install
 npm start
 ```
@@ -197,9 +196,8 @@ mv eslint.config.mjs packages/frontend/
 
 #### 2.3 移动后端文件
 ```bash
-# 本次先不迁移后端（仍在 backend/，继续使用 npm）
-# 后续如需迁移，可再执行：
-# mv backend packages/
+# 后端迁移：
+# mv backend packages/backend
 ```
 
 #### 2.4 保留根目录文件
@@ -338,11 +336,11 @@ const outputDir = path.resolve(process.cwd(), 'packages/frontend/src/components/
 #### 5.1 更新 ops/local/start-all.sh
 ```bash
 # 修改前：
-cd backend
+cd packages/backend
 cd ..
 
 # 修改后：
-cd backend
+cd packages/backend
 cd ..
 ```
 
@@ -354,9 +352,9 @@ cd ..
 #### 5.3 更新其他部署脚本
 检查以下文件并更新路径：
 - `ops/server/minimal-version-upgrade.sh`
-- `backend/ops/systemd/*.sh`
-- `backend/ops/FIX_AND_SETUP.sh`
-- `backend/ops/CREATE_FILES_ON_SERVER.sh`
+- `packages/backend/ops/systemd/*.sh`
+- `packages/backend/ops/FIX_AND_SETUP.sh`
+- `packages/backend/ops/CREATE_FILES_ON_SERVER.sh`
 
 ---
 
@@ -392,7 +390,7 @@ volumes:
 #### 6.3 更新 .devcontainer/devcontainer.json
 ```json
 {
-  "updateContentCommand": "pnpm install && cd backend && npm install"
+  "updateContentCommand": "pnpm install && cd packages/backend && npm install"
 }
 ```
 
@@ -423,7 +421,7 @@ volumes:
 ## 目录职责（约定）
 
 - `packages/frontend/src/`：前端业务代码
-- `backend/`：后端 API（Node/Express）
+- `packages/backend/`：后端 API（Node/Express）
 - ...
 ```
 
@@ -458,7 +456,7 @@ cd packages/frontend && pnpm dev
 
 #### 9.4 测试后端
 ```bash
-cd backend && npm start
+cd packages/backend && npm start
 # 或
 pnpm backend:start
 ```
@@ -505,10 +503,10 @@ docker-compose -f docker-compose.dev.yaml up
 | `ops/local/start-all.sh` | 更新 cd 路径 | 🔴 高 |
 | `ops/server/deploy-script-with-version-select.sh` | 更新所有路径引用 | 🔴 高 |
 | `ops/server/minimal-version-upgrade.sh` | 更新路径引用 | 🔴 高 |
-| `backend/ops/systemd/setup-systemd.sh` | 更新路径引用 | 🔴 高 |
-| `backend/ops/systemd/start.sh` | 更新路径引用 | 🔴 高 |
-| `backend/ops/FIX_AND_SETUP.sh` | 更新路径引用 | 🔴 高 |
-| `backend/ops/CREATE_FILES_ON_SERVER.sh` | 更新路径引用 | 🔴 高 |
+| `packages/backend/ops/systemd/setup-systemd.sh` | 更新路径引用 | 🔴 高 |
+| `packages/backend/ops/systemd/start.sh` | 更新路径引用 | 🔴 高 |
+| `packages/backend/ops/FIX_AND_SETUP.sh` | 更新路径引用 | 🔴 高 |
+| `packages/backend/ops/CREATE_FILES_ON_SERVER.sh` | 更新路径引用 | 🔴 高 |
 
 ### Docker 和开发环境配置（需要修改）
 

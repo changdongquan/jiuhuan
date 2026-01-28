@@ -6,7 +6,7 @@
 
 ```bash
 # 将服务文件复制到 systemd 目录
-sudo cp /path/to/jiuhuan/backend/ops/systemd/jiuhuan-backend.service /etc/systemd/system/
+sudo cp /path/to/jiuhuan/packages/backend/ops/systemd/jiuhuan-backend.service /etc/systemd/system/
 ```
 
 **注意**：将 `/path/to/jiuhuan/backend` 替换为实际的项目路径，例如：

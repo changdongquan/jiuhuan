@@ -4,7 +4,7 @@
 # ============================================
 
 # 方法 1：使用 sudo tee 创建文件（推荐）
-cd /opt/jh-craftsys/source/backend
+cd /opt/jh-craftsys/source/packages/backend
 
 sudo tee jiuhuan-backend.service > /dev/null << 'EOF'
 [Unit]
@@ -14,7 +14,7 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/jh-craftsys/source/backend
+WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 Environment=NODE_ENV=production
 Environment=PORT=3001
 ExecStart=/usr/bin/node server.js
@@ -41,7 +41,7 @@ sudo systemctl status jiuhuan-backend.service
 sudo systemctl show jiuhuan-backend.service | grep Environment
 
 # 方法 2：如果方法 1 不行，使用临时文件
-# cd /opt/jh-craftsys/source/backend
+# cd /opt/jh-craftsys/source/packages/backend
 # cat > /tmp/jiuhuan-backend.service << 'EOF'
 # [Unit]
 # Description=久环后端API服务
@@ -50,7 +50,7 @@ sudo systemctl show jiuhuan-backend.service | grep Environment
 # [Service]
 # Type=simple
 # User=www-data
-# WorkingDirectory=/opt/jh-craftsys/source/backend
+# WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 # Environment=NODE_ENV=production
 # Environment=PORT=3001
 # ExecStart=/usr/bin/node server.js
@@ -62,5 +62,4 @@ sudo systemctl show jiuhuan-backend.service | grep Environment
 # [Install]
 # WantedBy=multi-user.target
 # EOF
-# sudo mv /tmp/jiuhuan-backend.service /opt/jh-craftsys/source/backend/
-
+# sudo mv /tmp/jiuhuan-backend.service /opt/jh-craftsys/source/packages/backend/

@@ -2,7 +2,7 @@
 
 ## 准备工作
 
-✅ **服务器后端路径**：`/opt/jh-craftsys/source/backend`
+✅ **服务器后端路径**：`/opt/jh-craftsys/source/packages/backend`
 
 ## 在 Ubuntu 服务器上执行以下命令
 
@@ -20,18 +20,18 @@ which node
 
 ### 步骤 2：上传服务文件到服务器
 
-将 `backend/ops/systemd/jiuhuan-backend.service` 文件上传到服务器的 `/opt/jh-craftsys/source/backend/ops/systemd/` 目录。
+将 `packages/backend/ops/systemd/jiuhuan-backend.service` 文件上传到服务器的 `/opt/jh-craftsys/source/packages/backend/ops/systemd/` 目录。
 
 ### 步骤 3：检查并修改服务文件（如果需要）
 
 ```bash
-cd /opt/jh-craftsys/source/backend
+cd /opt/jh-craftsys/source/packages/backend
 nano jiuhuan-backend.service
 ```
 
 **检查以下内容**：
 
-1. ✅ `WorkingDirectory=/opt/jh-craftsys/source/backend` （已正确）
+1. ✅ `WorkingDirectory=/opt/jh-craftsys/source/packages/backend` （已正确）
 2. ⚠️ `ExecStart=/usr/bin/node server.js` - 如果步骤1中 `which node` 的输出不是 `/usr/bin/node`，需要修改这一行
 3. ⚠️ `User=www-data` - 确认运行服务的用户（通常是 `www-data` 或你的用户名）
 
@@ -44,7 +44,7 @@ ExecStart=/usr/local/bin/node server.js
 ### 步骤 4：复制服务文件到系统目录
 
 ```bash
-sudo cp /opt/jh-craftsys/source/backend/ops/systemd/jiuhuan-backend.service /etc/systemd/system/
+sudo cp /opt/jh-craftsys/source/packages/backend/ops/systemd/jiuhuan-backend.service /etc/systemd/system/
 ```
 
 ### 步骤 5：重新加载 systemd 配置
@@ -104,7 +104,7 @@ curl http://localhost:3001/api/auth/login
 which node
 
 # 2. 进入项目目录
-cd /opt/jh-craftsys/source/backend
+cd /opt/jh-craftsys/source/packages/backend
 
 # 3. 检查并修改服务文件（如果需要）
 nano jiuhuan-backend.service
@@ -151,7 +151,7 @@ sudo journalctl -u jiuhuan-backend.service -n 50
 
 ```bash
 # 确保项目目录权限正确
-sudo chown -R www-data:www-data /opt/jh-craftsys/source/backend
+sudo chown -R www-data:www-data /opt/jh-craftsys/source/packages/backend
 ```
 
 ### 问题：Node.js 路径错误

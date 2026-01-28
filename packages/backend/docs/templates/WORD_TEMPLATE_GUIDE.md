@@ -9,20 +9,20 @@
 ### 方法一：使用命令行参数（推荐）
 
 ```bash
-node backend/scripts/tools/create-word-template.js <已填充文档路径> <输出模板路径> <数据映射JSON文件路径>
+node packages/backend/scripts/tools/create-word-template.js <已填充文档路径> <输出模板路径> <数据映射JSON文件路径>
 ```
 
 **示例：**
 
 ```bash
-# 1. 准备数据映射文件（参考 backend/docs/templates/word-template-data-map.example.json）
+# 1. 准备数据映射文件（参考 packages/backend/docs/templates/word-template-data-map.example.json）
 # 2. 运行脚本
-node backend/scripts/tools/create-word-template.js filled.docx template.docx word-template-data-map.json
+node packages/backend/scripts/tools/create-word-template.js filled.docx template.docx word-template-data-map.json
 ```
 
 ### 方法二：在代码中直接修改数据映射
 
-1. 打开 `backend/scripts/tools/create-word-template.js` 文件
+1. 打开 `packages/backend/scripts/tools/create-word-template.js` 文件
 2. 找到 `dataMap` 对象（大约在第 100 行）
 3. 修改为你需要的数据映射：
 
@@ -38,7 +38,7 @@ dataMap = {
 4. 运行脚本：
 
 ```bash
-node backend/scripts/tools/create-word-template.js filled.docx template.docx
+node packages/backend/scripts/tools/create-word-template.js filled.docx template.docx
 ```
 
 ## 数据映射 JSON 文件格式
@@ -127,7 +127,7 @@ Word 可能会将文本分割成多个片段（例如在格式化时），工具
 2. 运行脚本：
 
 ```bash
-node backend/scripts/tools/create-word-template.js 三方协议-已填充.docx 三方协议模板.docx agreement-map.json
+node packages/backend/scripts/tools/create-word-template.js 三方协议-已填充.docx 三方协议模板.docx agreement-map.json
 ```
 
 3. 生成的模板文件 `三方协议模板.docx` 中，内容会变成：
@@ -182,10 +182,10 @@ node backend/scripts/tools/create-word-template.js 三方协议-已填充.docx �
 
 ## 相关文件
 
-- `backend/scripts/tools/create-word-template.js` - 主脚本文件
-- `backend/docs/templates/word-template-data-map.example.json` - 数据映射示例文件
-- `backend/routes/project.js` - 使用模板填充文档的代码示例
+- `packages/backend/scripts/tools/create-word-template.js` - 主脚本文件
+- `packages/backend/docs/templates/word-template-data-map.example.json` - 数据映射示例文件
+- `packages/backend/routes/project.js` - 使用模板填充文档的代码示例
 
 ## 参考
 
-查看 `backend/routes/project.js` 中的 `generateTripartiteAgreementDocxBuffer` 函数，了解如何使用生成的模板文件填充数据。
+查看 `packages/backend/routes/project.js` 中的 `generateTripartiteAgreementDocxBuffer` 函数，了解如何使用生成的模板文件填充数据。

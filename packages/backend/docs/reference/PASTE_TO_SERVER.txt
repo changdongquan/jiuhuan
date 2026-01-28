@@ -1,16 +1,11 @@
 # ============================================
-# 修复权限问题的命令
-# 在服务器终端直接粘贴执行
+# 在服务器终端直接粘贴执行的命令
 # ============================================
 
-# 1. 进入项目目录
-cd /opt/jh-craftsys/source/backend
+# 步骤 1: 进入项目目录
+cd /opt/jh-craftsys/source/packages/backend
 
-# 2. 检查当前目录和文件
-echo "当前目录: $(pwd)"
-ls -lh jiuhuan-backend.service setup-systemd.sh 2>/dev/null || echo "文件不存在，需要创建"
-
-# 3. 重新创建服务文件（如果不存在或有问题）
+# 步骤 2: 创建服务文件 jiuhuan-backend.service
 cat > jiuhuan-backend.service << 'EOF'
 [Unit]
 Description=久环后端API服务
@@ -19,7 +14,7 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/jh-craftsys/source/backend
+WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 Environment=NODE_ENV=production
 Environment=PORT=3001
 # 如果需要域用户登录，取消下面的注释并配置 LDAP 信息
@@ -37,7 +32,7 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# 4. 重新创建配置脚本（如果不存在或有问题）
+# 步骤 3: 创建配置脚本 setup-systemd.sh
 cat > setup-systemd.sh << 'EOFSCRIPT'
 #!/bin/bash
 set -e
@@ -45,7 +40,7 @@ echo "=========================================="
 echo "久环后端 Systemd 服务配置脚本"
 echo "=========================================="
 echo ""
-PROJECT_DIR="/opt/jh-craftsys/source/backend"
+PROJECT_DIR="/opt/jh-craftsys/source/packages/backend"
 SERVICE_NAME="jiuhuan-backend.service"
 SYSTEMD_DIR="/etc/systemd/system"
 if [ "$EUID" -ne 0 ]; then 
@@ -142,23 +137,14 @@ echo "服务将在服务器重启后自动启动！"
 echo ""
 EOFSCRIPT
 
-# 5. 只给脚本文件设置执行权限（服务文件不需要）
+# 步骤 4: 设置脚本执行权限
 chmod +x setup-systemd.sh
 
-# 6. 验证文件
 echo ""
 echo "=========================================="
 echo "✅ 文件创建完成！"
 echo "=========================================="
 echo ""
-echo "文件列表："
-ls -lh jiuhuan-backend.service setup-systemd.sh
-echo ""
-echo "下一步：执行配置脚本（使用 sudo）"
+echo "下一步：执行配置脚本"
 echo "  sudo bash setup-systemd.sh"
 echo ""
-echo "注意："
-echo "  - jiuhuan-backend.service 是配置文件，不需要执行"
-echo "  - setup-systemd.sh 是脚本，需要使用 'bash' 或 'sudo bash' 执行"
-echo ""
-

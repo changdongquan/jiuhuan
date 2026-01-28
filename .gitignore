@@ -18,11 +18,11 @@ pnpm-debug.log*
 .env.*.local
 
 # deployment artifacts
-backend/.env
-backend/*.bak.*
+packages/backend/.env
+packages/backend/*.bak.*
 dist-pro/
 stats.html
 
 # user data files (should not be in version control)
-backend/local-users.json
-backend/uploads/
+packages/backend/local-users.json
+packages/backend/uploads/

@@ -4,7 +4,7 @@
 
 ### 1. 后端实现
 
-#### 认证路由 (`backend/routes/auth.js`)
+#### 认证路由 (`packages/backend/routes/auth.js`)
 
 - ✅ **自动登录接口** (`GET /api/auth/auto-login`)
   - 开发环境：返回模拟用户数据
@@ -15,7 +15,7 @@
   - 开发环境：域用户使用模拟验证
   - 生产环境：域用户使用 LDAP 验证
 
-#### 路由注册 (`backend/server.js`)
+#### 路由注册 (`packages/backend/server.js`)
 
 - ✅ 已注册 `/api/auth` 路由
 
@@ -133,7 +133,7 @@
 1. **启动后端**：
 
 ```bash
-cd backend
+cd packages/backend
 npm start
 ```
 
@@ -164,7 +164,7 @@ npm run dev
 
 ### 后端配置
 
-**环境变量**（可选，在 `backend/.env` 或 `backend/routes/auth.js` 中配置）：
+**环境变量**（可选，在 `packages/backend/.env` 或 `packages/backend/routes/auth.js` 中配置）：
 
 ```env
 LDAP_URL=ldap://ad.yourdomain.com:389
@@ -176,7 +176,7 @@ NODE_ENV=production
 
 ### Apache 配置
 
-参考 `backend/WINDOWS_DOMAIN_AUTH.md` 中的详细配置说明。
+参考 `packages/backend/WINDOWS_DOMAIN_AUTH.md` 中的详细配置说明。
 
 ## 🔍 测试检查清单
 
@@ -190,7 +190,7 @@ NODE_ENV=production
 
 ## 📚 相关文档
 
-1. **部署指南**：`backend/WINDOWS_DOMAIN_AUTH.md`
+1. **部署指南**：`packages/backend/WINDOWS_DOMAIN_AUTH.md`
    - Apache + Kerberos 配置
    - LDAP 配置
    - 浏览器配置

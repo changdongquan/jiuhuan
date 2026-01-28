@@ -29,7 +29,7 @@ sudo nano /etc/systemd/system/jiuhuan-backend.service
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/jh-craftsys/source/backend
+WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 Environment=NODE_ENV=production
 Environment=PORT=3001
 

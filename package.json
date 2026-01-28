@@ -20,8 +20,8 @@
     "lint:lint-staged": "pnpm -C packages/frontend lint:lint-staged",
     "p": "pnpm -C packages/frontend p",
     "icon": "pnpm -C packages/frontend icon",
-    "backend:start": "cd backend && npm start",
-    "backend:dev": "cd backend && npm run dev"
+    "backend:start": "cd packages/backend && npm start",
+    "backend:dev": "cd packages/backend && npm run dev"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.1",
