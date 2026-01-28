@@ -588,6 +588,56 @@
                 </div>
               </el-tab-pane>
 
+              <el-tab-pane label="产品列表" name="productList">
+                <div class="pt-product-list" v-loading="productListLoading">
+                  <div class="pt-product-list__hint"
+                    >数据来源：项目管理 → 编辑项目 → 零件信息 → 产品列表</div
+                  >
+                  <el-empty
+                    v-if="!projectProductRows.length"
+                    description="暂无产品列表"
+                    :image-size="isMobile ? 60 : 80"
+                  />
+                  <el-table
+                    v-else
+                    :data="projectProductRows"
+                    border
+                    size="small"
+                    style="width: 100%"
+                  >
+                    <el-table-column type="index" label="序号" width="60" align="center" />
+                    <el-table-column
+                      prop="图号"
+                      label="产品图号"
+                      min-width="150"
+                      show-overflow-tooltip
+                    />
+                    <el-table-column
+                      prop="名称"
+                      label="产品名称"
+                      min-width="160"
+                      show-overflow-tooltip
+                    />
+                    <el-table-column
+                      prop="尺寸"
+                      label="产品尺寸"
+                      min-width="130"
+                      show-overflow-tooltip
+                    />
+                    <el-table-column prop="重量" label="产品重量" width="120" align="center">
+                      <template #default="{ row }">
+                        {{ row.重量 === null || row.重量 === undefined ? '-' : row.重量 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="数量" label="产品数量" width="110" align="center">
+                      <template #default="{ row }">
+                        {{ row.数量 === null || row.数量 === undefined ? '-' : row.数量 }}
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </el-tab-pane>
+
               <el-tab-pane label="附件" name="attachments">
                 <div class="pt-attachments" v-loading="attachmentLoading">
                   <el-row class="pt-attachments-row" :gutter="isMobile ? 8 : 16">
@@ -849,6 +899,7 @@ import {
   type ProductionTaskAttachmentType,
   type ProductionTaskInfo
 } from '@/api/production-task'
+import { getProjectDetailApi } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
@@ -912,7 +963,7 @@ const dialogFormRef = ref<FormInstance>()
 const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
 const currentProjectCode = ref('')
 const isViewMode = ref(false)
-const dialogActiveTab = ref<'production' | 'hours' | 'attachments'>('production')
+const dialogActiveTab = ref<'production' | 'productList' | 'hours' | 'attachments'>('production')
 
 // 判断字段是否已填写
 const isFieldFilled = (value: unknown) => {
@@ -937,6 +988,96 @@ const productionTabCompleted = computed(() => {
 const attachmentLoading = ref(false)
 const photoAttachments = ref<ProductionTaskAttachment[]>([])
 const inspectionAttachments = ref<ProductionTaskAttachment[]>([])
+
+type ProjectProductRow = {
+  图号: string
+  名称: string
+  尺寸: string
+  重量: number | null
+  数量: number | null
+}
+
+const productListLoading = ref(false)
+const projectProductRows = ref<ProjectProductRow[]>([])
+
+const tryParseJsonArray = <T,>(value: unknown): T[] | null => {
+  if (Array.isArray(value)) return value as T[]
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return []
+  try {
+    const parsed = JSON.parse(trimmed)
+    return Array.isArray(parsed) ? (parsed as T[]) : null
+  } catch {
+    return null
+  }
+}
+
+const normalizeStringArray = (value: unknown): string[] => {
+  const arr = tryParseJsonArray<unknown>(value)
+  if (arr) return arr.map((x) => String(x ?? '').trim())
+  if (typeof value === 'string') {
+    const v = value.trim()
+    if (!v) return []
+    return v
+      .split(/\r?\n|,|，/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+const normalizeNumberArray = (value: unknown): (number | null)[] => {
+  const arr = tryParseJsonArray<unknown>(value)
+  if (arr) {
+    return arr.map((x) => {
+      const n = typeof x === 'number' ? x : Number(String(x ?? '').trim())
+      return Number.isFinite(n) ? n : null
+    })
+  }
+  return []
+}
+
+const loadProjectProductList = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) {
+    projectProductRows.value = []
+    return
+  }
+  productListLoading.value = true
+  try {
+    const resp: any = await getProjectDetailApi(projectCode)
+    const detail = resp?.data?.data || resp?.data || {}
+
+    const drawings = normalizeStringArray(detail.产品列表 ?? detail.产品图号列表)
+    const names = normalizeStringArray(detail.产品名称列表)
+    const sizes = normalizeStringArray(detail.产品尺寸)
+    const weights = normalizeNumberArray(detail.产品重量列表)
+    const qtys = normalizeNumberArray(detail.产品数量列表)
+
+    const len = Math.max(drawings.length, names.length, sizes.length, weights.length, qtys.length)
+    const rows: ProjectProductRow[] = Array.from({ length: len }).map((_, i) => ({
+      图号: drawings[i] ?? '',
+      名称: names[i] ?? '',
+      尺寸: sizes[i] ?? '',
+      重量: weights[i] ?? null,
+      数量: qtys[i] ?? null
+    }))
+
+    projectProductRows.value = rows.filter(
+      (r) =>
+        [r.图号, r.名称, r.尺寸].some((x) => String(x || '').trim().length > 0) ||
+        r.重量 !== null ||
+        r.数量 !== null
+    )
+  } catch (error) {
+    console.error('加载项目产品列表失败:', error)
+    ElMessage.error('加载产品列表失败')
+    projectProductRows.value = []
+  } finally {
+    productListLoading.value = false
+  }
+}
 
 const photoAppearanceAttachments = computed(() =>
   photoAttachments.value.filter((a) => a.tag === 'appearance')
@@ -1478,6 +1619,8 @@ watch(
   (tab) => {
     if (tab === 'attachments') {
       void loadAttachments()
+    } else if (tab === 'productList') {
+      void loadProjectProductList()
     }
   }
 )
@@ -1543,6 +1686,7 @@ const handleDialogClosed = () => {
   dialogFormRef.value?.clearValidate()
   photoAttachments.value = []
   inspectionAttachments.value = []
+  projectProductRows.value = []
 }
 
 onMounted(() => {
@@ -1672,19 +1816,35 @@ onMounted(() => {
   .query-form__actions {
     margin-top: 8px;
   }
+
+  .pt-attachments {
+    padding: 0 4px;
+  }
 }
 
 .pt-attachments-row {
   align-items: stretch;
 }
 
+.pt-attachments {
+  padding: 0 8px;
+  overflow-x: hidden;
+}
+
 .pt-attachment-col {
   display: flex;
+  min-width: 0;
 }
 
 .pt-attachment-card {
   width: 100%;
   height: 100%;
+}
+
+.pt-product-list__hint {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 /* PC 端弹窗：固定 body 高度，避免切换页签导致弹窗高度变化 */
