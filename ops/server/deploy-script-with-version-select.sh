@@ -59,7 +59,9 @@ MAX_OLD_SPACE="6144"   # 6G
 
 SWAP_SIZE_GB="6"       # 物理内存不足时创建的 swap 大小（GB）
 
-DIST_DIR=""            # 留空=自动识别；若你想固定，可填 "dist-pro" / "dist"
+# 前端构建产物目录（相对 $SRC_DIR）
+# 迁移到 packages/frontend 后，统一只认这里：
+DIST_DIR="packages/frontend/dist"
 
 # 内网访问 IP（仅提示）
 
@@ -637,21 +639,9 @@ unset NODE_OPTIONS
 
 echo "==> 定位构建产物目录"
 
-CANDIDATES=()
+OUT_DIR="$SRC_DIR/${DIST_DIR:-packages/frontend/dist}"
 
-[ -n "${DIST_DIR:-}" ] && CANDIDATES+=("$DIST_DIR")
-
-CANDIDATES+=("dist-pro" "dist" "build" "frontend/dist")
-
-OUT_DIR=""
-
-for d in "${CANDIDATES[@]}"; do
-
-  if [ -d "$SRC_DIR/$d" ]; then OUT_DIR="$SRC_DIR/$d"; break; fi
-
-done
-
-[ -n "$OUT_DIR" ] || { echo "ERROR: 未找到构建产物目录。尝试过：${CANDIDATES[*]}"; exit 1; }
+[ -d "$OUT_DIR" ] || { echo "ERROR: 未找到构建产物目录：$OUT_DIR"; exit 1; }
 
 echo "==> 发现产物目录：$OUT_DIR"
 

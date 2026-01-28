@@ -7,6 +7,39 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      '@commitlint/cli':
+        specifier: ^19.6.1
+        version: 19.8.1(@types/node@22.18.12)(typescript@5.7.3)
+      '@commitlint/config-conventional':
+        specifier: ^19.6.0
+        version: 19.8.1
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.18.12
+      consola:
+        specifier: ^3.4.2
+        version: 3.4.2
+      element-plus:
+        specifier: 2.9.2
+        version: 2.9.2(vue@3.5.13(typescript@5.7.3))
+      esno:
+        specifier: ^4.8.0
+        version: 4.8.0
+      husky:
+        specifier: ^9.1.7
+        version: 9.1.7
+      pdfjs-dist:
+        specifier: ^5.4.530
+        version: 5.4.530
+      postcss-html:
+        specifier: ^1.8.0
+        version: 1.8.0
+      typescript:
+        specifier: 5.7.3
+        version: 5.7.3
+
+  packages/frontend:
     dependencies:
       '@element-plus/icons-vue':
         specifier: ^2.3.2
@@ -108,12 +141,6 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
-      '@commitlint/cli':
-        specifier: ^19.6.1
-        version: 19.8.1(@types/node@22.18.12)(typescript@5.7.3)
-      '@commitlint/config-conventional':
-        specifier: ^19.6.0
-        version: 19.8.1
       '@iconify/json':
         specifier: ^2.2.293
         version: 2.2.400
@@ -195,9 +222,6 @@ importers:
       fs-extra:
         specifier: ^11.2.0
         version: 11.3.2
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
       inquirer:
         specifier: ^12.3.0
         version: 12.10.0(@types/node@22.18.12)
@@ -1564,6 +1588,12 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
+  '@napi-rs/canvas-android-arm64@0.1.88':
+    resolution: {integrity: sha512-KEaClPnZuVxJ8smUWjV1wWFkByBO/D+vy4lN+Dm5DFH514oqwukxKGeck9xcKJhaWJGjfruGmYGiwRe//+/zQQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+
   '@napi-rs/canvas-darwin-arm64@0.1.88':
     resolution: {integrity: sha512-Xgywz0dDxOKSgx3eZnK85WgGMmGrQEW7ZLA/E7raZdlEE+xXCozobgqz2ZvYigpB6DJFYkqnwHjqCOTSDGlFdg==}
     engines: {node: '>= 10'}
@@ -1598,6 +1628,12 @@ packages:
     resolution: {integrity: sha512-HVuH7QgzB0yavYdNZDRyAsn/ejoXB0hn8twwFnOqUbCCdkV+REna7RXjSR7+PdfW0qMQ2YYWsLvVBT5iL/mGpw==}
     engines: {node: '>= 10'}
     cpu: [riscv64]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-x64-gnu@0.1.88':
+    resolution: {integrity: sha512-hvcvKIcPEQrvvJtJnwD35B3qk6umFJ8dFIr8bSymfrSMem0EQsfn1ztys8ETIFndTwdNWJKWluvxztA41ivsEw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
     os: [linux]
 
   '@napi-rs/canvas-linux-x64-musl@0.1.88':
@@ -7183,6 +7219,9 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
+  '@napi-rs/canvas-android-arm64@0.1.88':
+    optional: true
+
   '@napi-rs/canvas-darwin-arm64@0.1.88':
     optional: true
 
@@ -7201,6 +7240,9 @@ snapshots:
   '@napi-rs/canvas-linux-riscv64-gnu@0.1.88':
     optional: true
 
+  '@napi-rs/canvas-linux-x64-gnu@0.1.88':
+    optional: true
+
   '@napi-rs/canvas-linux-x64-musl@0.1.88':
     optional: true
 
@@ -7212,12 +7254,14 @@ snapshots:
 
   '@napi-rs/canvas@0.1.88':
     optionalDependencies:
+      '@napi-rs/canvas-android-arm64': 0.1.88
       '@napi-rs/canvas-darwin-arm64': 0.1.88
       '@napi-rs/canvas-darwin-x64': 0.1.88
       '@napi-rs/canvas-linux-arm-gnueabihf': 0.1.88
       '@napi-rs/canvas-linux-arm64-gnu': 0.1.88
       '@napi-rs/canvas-linux-arm64-musl': 0.1.88
       '@napi-rs/canvas-linux-riscv64-gnu': 0.1.88
+      '@napi-rs/canvas-linux-x64-gnu': 0.1.88
       '@napi-rs/canvas-linux-x64-musl': 0.1.88
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.88
       '@napi-rs/canvas-win32-x64-msvc': 0.1.88

@@ -21,23 +21,23 @@
 
 ### 2. 前端实现
 
-#### 路由守卫 (`src/permission.ts`)
+#### 路由守卫 (`packages/frontend/src/permission.ts`)
 
 - ✅ 未登录时自动尝试域自动登录
 - ✅ 自动登录失败后跳转登录页
 - ✅ 自动登录成功后自动加载路由并导航
 
-#### API 接口 (`src/api/login/index.ts`)
+#### API 接口 (`packages/frontend/src/api/login/index.ts`)
 
 - ✅ `autoLoginApi()` - 自动登录接口
 - ✅ `loginApi()` - 支持真实后端接口（根据环境变量切换）
 
-#### 用户 Store (`src/store/modules/user.ts`)
+#### 用户 Store (`packages/frontend/src/store/modules/user.ts`)
 
 - ✅ 添加 `autoTried` 标记，防止重复尝试自动登录
 - ✅ 添加 `getAutoTried()` 和 `setAutoTried()` 方法
 
-#### 登录表单 (`src/views/Login/components/LoginForm.vue`)
+#### 登录表单 (`packages/frontend/src/views/Login/components/LoginForm.vue`)
 
 - ✅ 支持域用户格式输入提示
 - ✅ 正确处理后端返回的 token

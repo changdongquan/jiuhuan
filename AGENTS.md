@@ -11,7 +11,8 @@
 
 ## 目录职责（约定）
 
-- `src/`：前端业务代码
+- `packages/frontend/`：前端工程（pnpm）
+- `packages/frontend/src/`：前端业务代码
 - `backend/`：后端 API（Node/Express）
 - `docs/`：项目说明文档（除根目录 `README*`/`CHANGELOG.md`/`LICENSE`）
 - `docs/dev/`：开发说明（测试、集成、实现摘要等）

@@ -12,12 +12,17 @@ import PurgeIcons from 'vite-plugin-purge-icons'
 import ServerUrlCopy from 'vite-plugin-url-copy'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
-import { createStyleImportPlugin, ElementPlusResolve } from 'vite-plugin-style-import'
+import { createRequire } from 'module'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import UnoCSS from 'unocss/vite'
 import { visualizer } from 'rollup-plugin-visualizer'
+
+// vite-plugin-style-import 的 ESM 版本在 Node ESM 下会触发 `require is not defined`
+// 这里显式使用 CJS 导出，避免构建失败。
+const require = createRequire(import.meta.url)
+const { createStyleImportPlugin, ElementPlusResolve } = require('vite-plugin-style-import')
 
 // https://vitejs.dev/config/
 const root = process.cwd()
@@ -133,7 +138,7 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
     },
     build: {
       target: 'es2015',
-      outDir: env.VITE_OUT_DIR || 'dist',
+      outDir: 'dist',
       sourcemap: env.VITE_SOURCEMAP === 'true',
       // brotliSize: false,
       rollupOptions: {

@@ -185,7 +185,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 
 1. 后端服务是否正常运行？
 2. 浏览器控制台是否有错误？
-3. 检查 `src/permission.ts` 中的自动登录逻辑是否正确执行
+3. 检查 `packages/frontend/src/permission.ts` 中的自动登录逻辑是否正确执行
 
 **解决方案**：
 

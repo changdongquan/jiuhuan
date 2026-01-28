@@ -12,7 +12,7 @@
   },
 
   "postCreateCommand": "corepack enable && corepack prepare pnpm@10.20.0 --activate && pnpm -v",
-  "updateContentCommand": "pnpm install && cd backend && pnpm install",
+  "updateContentCommand": "pnpm install && cd backend && npm install",
 
   "forwardPorts": [4000, 3001, 9229],
   "portsAttributes": {

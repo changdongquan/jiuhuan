@@ -50,9 +50,10 @@ echo ""
 echo "🚀 启动前端服务..."
 echo "📦 检查前端依赖..."
 
+cd packages/frontend
 if [ ! -d "node_modules" ]; then
     echo "📦 安装前端依赖..."
-    npm install
+    pnpm install
 fi
 
 echo "🔄 启动前端服务..."
@@ -65,7 +66,7 @@ echo ""
 echo "按 Ctrl+C 停止所有服务"
 
 # 启动前端服务
-npm run dev
+pnpm run dev
 
 # 清理函数
 cleanup() {

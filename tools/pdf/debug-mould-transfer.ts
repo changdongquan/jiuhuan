@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
-import { parseMouldTransferFromText } from '../../src/utils/pdf/mouldTransferParser'
+import { parseMouldTransferFromText } from '../../packages/frontend/src/utils/pdf/mouldTransferParser'
 
 type TextItem = {
   str: string

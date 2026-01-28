@@ -2,5 +2,5 @@
 /public/*
 public/*
 /dist*
-/src/types/env.d.ts
+/types/env.d.ts
 /docs/**/*

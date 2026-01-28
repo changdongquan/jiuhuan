@@ -69,7 +69,7 @@ jobs:
         with:
           deploy_key: ${{secrets.ACTIONS_DEPLOY_KEY}}
           publish_branch: gh-pages
-          publish_dir: ./dist-pro
+          publish_dir: ./packages/frontend/dist
           force_orphan: true
           cname: element-plus-admin.cn
 
@@ -113,7 +113,7 @@ jobs:
         with:
           deploy_key: ${{secrets.ACTIONS_DEPLOY_KEY}}
           publish_branch: gh-pages-gitee
-          publish_dir: ./dist-pro
+          publish_dir: ./packages/frontend/dist
           force_orphan: true
 
       - name: Sync Github Repos To Gitee # 名字随便起
