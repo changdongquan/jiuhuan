@@ -4,7 +4,7 @@
 # ============================================
 
 # 步骤 1: 进入项目目录
-cd /opt/jh-craftsys/source/backend
+cd /opt/jh-craftsys/source/packages/backend
 
 # 步骤 2: 使用 nano 编辑器创建服务文件（如果文件不存在）
 # 如果文件已存在，可以跳过这一步，直接到步骤 3
@@ -18,7 +18,7 @@ nano jiuhuan-backend.service
 # [Service]
 # Type=simple
 # User=www-data
-# WorkingDirectory=/opt/jh-craftsys/source/backend
+# WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 # Environment=NODE_ENV=production
 # Environment=PORT=3001
 # ExecStart=/usr/bin/node server.js
@@ -39,7 +39,7 @@ nano jiuhuan-backend.service
 # [Service]
 # Type=simple
 # User=www-data
-# WorkingDirectory=/opt/jh-craftsys/source/backend
+# WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 # Environment=NODE_ENV=production
 # Environment=PORT=3001
 # ExecStart=/usr/bin/node server.js
@@ -78,4 +78,3 @@ sudo systemctl status jiuhuan-backend.service
 sudo systemctl show jiuhuan-backend.service | grep Environment
 
 # 完成！
-

@@ -27,7 +27,7 @@ pm2 start server.js --env production
 确保 `ldapjs` 已安装（用于域用户 LDAP 验证）：
 
 ```bash
-cd backend
+cd packages/backend
 npm install
 # 或单独安装
 npm install ldapjs --save
@@ -40,7 +40,7 @@ npm install ldapjs --save
 **创建 `.env` 文件**（或直接在系统环境变量中设置）：
 
 ```bash
-cd backend
+cd packages/backend
 cat > .env << EOF
 # LDAP 配置（用于域用户验证）
 LDAP_URL=ldap://your-ad-server.com:389
@@ -63,7 +63,7 @@ EOF
 
 ### 4. 修改后端代码加载环境变量（如果使用 .env 文件）
 
-在 `backend/server.js` 开头添加：
+在 `packages/backend/server.js` 开头添加：
 
 ```javascript
 require('dotenv').config()
@@ -75,7 +75,7 @@ require('dotenv').config()
 
 如果需要实现域用户自动登录（无需输入密码），需要配置 Apache + mod_auth_gssapi。
 
-**详细步骤**：请参考 `backend/WINDOWS_DOMAIN_AUTH.md` 文档。
+**详细步骤**：请参考 `packages/backend/WINDOWS_DOMAIN_AUTH.md` 文档。
 
 **简要步骤**：
 
@@ -89,7 +89,7 @@ require('dotenv').config()
 当前普通账号（如 `admin`）使用硬编码验证。如果希望从数据库验证：
 
 1. 创建用户表（如果不存在）
-2. 修改 `backend/routes/auth.js` 中的 `verifyLocalUser` 函数，从数据库查询用户
+2. 修改 `packages/backend/routes/auth.js` 中的 `verifyLocalUser` 函数，从数据库查询用户
 
 ## 🔍 验证清单
 
@@ -110,7 +110,7 @@ echo $LDAP_BASE_DN
 ### 2. 检查依赖
 
 ```bash
-cd backend
+cd packages/backend
 npm list ldapjs
 # 应该显示 ldapjs 已安装
 ```
@@ -160,7 +160,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 1. **进入后端目录**
 
    ```bash
-   cd backend
+   cd packages/backend
    ```
 
 2. **安装依赖**
@@ -190,6 +190,6 @@ curl -X POST http://localhost:3001/api/auth/login \
 
 ## 📚 相关文档
 
-- `backend/WINDOWS_DOMAIN_AUTH.md` - 详细的 Kerberos/SSO 配置指南
-- `backend/routes/auth.js` - 认证逻辑实现
-- `backend/README.md` - 后端服务说明
+- `packages/backend/WINDOWS_DOMAIN_AUTH.md` - 详细的 Kerberos/SSO 配置指南
+- `packages/backend/routes/auth.js` - 认证逻辑实现
+- `packages/backend/README.md` - 后端服务说明

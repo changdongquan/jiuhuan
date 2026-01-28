@@ -156,7 +156,7 @@ nslookup AD2016-1.JIUHUAN.LOCAL
 
 **方法一：使用提供的 PowerShell 脚本**
 
-1. 将 `backend/KTAB_COMMAND_JIUHUAN.ps1` 文件复制到域控制器
+1. 将 `packages/backend/KTAB_COMMAND_JIUHUAN.ps1` 文件复制到域控制器
 2. 编辑脚本，修改以下变量：
    ```powershell
    $ubuntuHostname = "craftsys.jiuhuan.local"  # 改为实际主机名
@@ -482,7 +482,7 @@ sudo tail -f /var/log/apache2/jiuhuan_access.log
 sudo journalctl -u jiuhuan-backend.service -f
 
 # 或者查看日志文件（如果使用文件日志）
-tail -f /path/to/backend/logs/server.log
+tail -f /path/to/packages/backend/logs/server.log
 ```
 
 ### 7.3 在域内电脑上测试
@@ -667,7 +667,7 @@ sudo chmod 640 /etc/apache2/keytab/http.keytab
 1. **在后端添加 CORS 支持**：
 
    ```javascript
-   // 在 backend/server.js 中添加
+   // 在 packages/backend/server.js 中添加
    app.use(
      cors({
        origin: 'http://your-app.jiuhuan.local',
@@ -729,9 +729,9 @@ sudo chmod 640 /etc/apache2/keytab/http.keytab
 2. **后端日志**：`sudo journalctl -u jiuhuan-backend.service -f`
 3. **浏览器控制台**：F12 打开开发者工具，查看网络请求和错误信息
 4. **相关文档**：
-   - `backend/WINDOWS_DOMAIN_AUTH.md` - 详细配置文档
-   - `backend/DEPLOY_STEP3_SSO.md` - SSO 配置步骤
-   - `backend/docs/sso/SSO_CONFIG_STEPS.txt` - 快速配置步骤
+   - `packages/backend/WINDOWS_DOMAIN_AUTH.md` - 详细配置文档
+   - `packages/backend/DEPLOY_STEP3_SSO.md` - SSO 配置步骤
+   - `packages/backend/docs/sso/SSO_CONFIG_STEPS.txt` - 快速配置步骤
 
 ---
 

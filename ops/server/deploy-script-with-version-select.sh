@@ -511,9 +511,9 @@ set -a
 
 set +a
 
-mkdir -p "$SRC_DIR/backend"
+mkdir -p "$SRC_DIR/packages/backend"
 
-cat > "$SRC_DIR/backend/.env" <<ENV
+cat > "$SRC_DIR/packages/backend/.env" <<ENV
 
 DB_SERVER=${DB_SERVER}
 
@@ -527,7 +527,7 @@ DB_DATABASE=${DB_DATABASE}
 
 ENV
 
-echo "==> 已写入 $SRC_DIR/backend/.env"
+echo "==> 已写入 $SRC_DIR/packages/backend/.env"
 
 EOF
 
@@ -541,7 +541,7 @@ set -euo pipefail
 
 . /opt/deploy/jh-craftsys/conf/deploy.env
 
-cd "$SRC_DIR/backend"
+cd "$SRC_DIR/packages/backend"
 
 echo "==> 安装后端依赖（优先 npm ci）"
 

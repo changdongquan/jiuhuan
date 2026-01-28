@@ -5,7 +5,7 @@
 ### 1. 启动后端服务
 
 ```bash
-cd backend
+cd packages/backend
 npm start
 ```
 
@@ -198,7 +198,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 **检查项**：
 
 1. 后端路由是否正确注册？
-2. 检查 `backend/server.js` 中是否添加了 `app.use('/api/auth', authRoutes)`
+2. 检查 `packages/backend/server.js` 中是否添加了 `app.use('/api/auth', authRoutes)`
 
 **解决方案**：
 
@@ -257,7 +257,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 在后端代码中添加日志：
 
 ```javascript
-// backend/routes/auth.js
+// packages/backend/routes/auth.js
 console.log('收到登录请求:', { username, isDomainUser: parsed.isDomainUser })
 ```
 
@@ -276,7 +276,7 @@ localStorage.getItem('user.autoTried')
 
 完成测试后，可以：
 
-1. **配置生产环境**：参考 `backend/WINDOWS_DOMAIN_AUTH.md`
+1. **配置生产环境**：参考 `packages/backend/WINDOWS_DOMAIN_AUTH.md`
 2. **优化用户体验**：添加登录提示、错误处理等
 3. **创建用户表**：将普通账号从硬编码改为数据库存储
 4. **添加角色映射**：将域用户与系统角色进行映射

@@ -15,13 +15,13 @@
 如果需要域用户手动登录功能（LDAP 验证），需要安装 `ldapjs`：
 
 ```bash
-cd backend
+cd packages/backend
 npm install ldapjs --save
 ```
 
 ### 2. 环境变量配置
 
-在 `backend/.env` 文件中配置（或直接在 `backend/routes/auth.js` 中修改）：
+在 `packages/backend/.env` 文件中配置（或直接在 `packages/backend/routes/auth.js` 中修改）：
 
 ```env
 # LDAP 配置（用于域用户验证）
@@ -36,7 +36,7 @@ NODE_ENV=production  # 生产环境设置为 production
 
 ### 3. 普通账号配置
 
-普通账号（如 `admin`）的验证逻辑在 `backend/routes/auth.js` 的 `verifyLocalUser` 函数中。
+普通账号（如 `admin`）的验证逻辑在 `packages/backend/routes/auth.js` 的 `verifyLocalUser` 函数中。
 
 **当前实现**：硬编码了 `admin/admin` 和 `test/test` 两个测试账号。
 
@@ -197,7 +197,7 @@ Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "AuthServer
 - **域用户登录**：使用模拟验证（测试账号：`domain\testuser` / `password123`）
 - **普通账号登录**：验证 `admin/admin` 和 `test/test`
 
-可以在 `backend/routes/auth.js` 的 `mockVerifyDomainUser` 函数中修改模拟账号。
+可以在 `packages/backend/routes/auth.js` 的 `mockVerifyDomainUser` 函数中修改模拟账号。
 
 ## 测试验证
 
@@ -236,7 +236,7 @@ Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "AuthServer
 
 ### 普通账号登录失败
 
-1. 检查 `backend/routes/auth.js` 中的 `verifyLocalUser` 函数
+1. 检查 `packages/backend/routes/auth.js` 中的 `verifyLocalUser` 函数
 2. 确认账号密码匹配
 3. 检查数据库用户表（如果已创建）
 

@@ -16,7 +16,7 @@ echo "✅ Node.js 已安装: $(node --version)"
 # 启动后端服务
 echo ""
 echo "🚀 启动后端服务..."
-cd backend
+cd packages/backend
 
 # 检查是否已安装依赖
 if [ ! -d "node_modules" ]; then
@@ -43,7 +43,7 @@ else
 fi
 
 # 返回项目根目录
-cd ..
+cd ../..
 
 # 启动前端服务
 echo ""

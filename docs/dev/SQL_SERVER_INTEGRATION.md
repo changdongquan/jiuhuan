@@ -23,7 +23,7 @@ CREATE TABLE 货物信息 (
 
 ### 1. 安装后端依赖
 ```bash
-cd backend
+cd packages/backend
 npm install
 ```
 

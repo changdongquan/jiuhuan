@@ -7,7 +7,7 @@ pwd
 ls -la
 
 # 第2步：进入项目目录
-cd /opt/jh-craftsys/source/backend
+cd /opt/jh-craftsys/source/packages/backend
 
 # 第3步：确认在正确目录
 pwd
@@ -21,7 +21,7 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/jh-craftsys/source/backend
+WorkingDirectory=/opt/jh-craftsys/source/packages/backend
 Environment=NODE_ENV=production
 Environment=PORT=3001
 ExecStart=/usr/bin/node server.js
@@ -38,7 +38,7 @@ EOF
 cat << 'EOFSCRIPT' | tee setup-systemd.sh
 #!/bin/bash
 set -e
-PROJECT_DIR="/opt/jh-craftsys/source/backend"
+PROJECT_DIR="/opt/jh-craftsys/source/packages/backend"
 SERVICE_NAME="jiuhuan-backend.service"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -128,4 +128,3 @@ echo ""
 echo "注意：不要直接执行 .service 文件"
 echo "      使用 'bash setup-systemd.sh' 或 'sudo bash setup-systemd.sh'"
 echo ""
-

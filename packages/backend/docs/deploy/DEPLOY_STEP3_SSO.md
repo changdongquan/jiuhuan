@@ -295,6 +295,6 @@ LogLevel debug
 
 如果还有问题，请查看：
 
-- `backend/WINDOWS_DOMAIN_AUTH.md` - 详细配置文档
+- `packages/backend/WINDOWS_DOMAIN_AUTH.md` - 详细配置文档
 - Apache 错误日志：`/var/log/apache2/jiuhuan_error.log`
 - 后端日志：`sudo journalctl -u jiuhuan-backend.service -f`

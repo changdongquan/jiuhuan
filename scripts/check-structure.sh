@@ -23,16 +23,15 @@ done
 
 # 3) 防止误提交后端 secrets
 
-# 3) 后端保持 npm：禁止提交 backend/pnpm-lock.yaml
-if [ -f backend/pnpm-lock.yaml ]; then
-  fail "后端保持 npm：请删除 backend/pnpm-lock.yaml（只保留 backend/package-lock.json）"
+# 3) 后端保持 npm：禁止提交 packages/backend/pnpm-lock.yaml
+if [ -f packages/backend/pnpm-lock.yaml ]; then
+  fail "后端保持 npm：请删除 packages/backend/pnpm-lock.yaml（只保留 packages/backend/package-lock.json）"
 fi
 
-if [ -f backend/local-users.json ]; then
-  if git ls-files --error-unmatch backend/local-users.json >/dev/null 2>&1; then
-    fail "backend/local-users.json 不应被纳入版本控制（请确保 .gitignore 生效）"
+if [ -f packages/backend/local-users.json ]; then
+  if git ls-files --error-unmatch packages/backend/local-users.json >/dev/null 2>&1; then
+    fail "packages/backend/local-users.json 不应被纳入版本控制（请确保 .gitignore 生效）"
   fi
 fi
 
 echo "OK"
-
