@@ -192,6 +192,88 @@ export const uploadProjectAttachmentApi = (
   })
 }
 
+// === 项目管理：检验报告（项目编号 + 产品图号/行序号 绑定，多文件） ===
+
+export interface ProjectInspectionReportAttachment {
+  id: number
+  projectCode: string
+  type: 'inspection-report'
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+  drawing?: string | null
+  rowIndex?: number | null
+  isOrphan?: boolean
+  orphanReason?: string | null
+  orphanRowIndex?: number | null
+}
+
+export const getProjectInspectionReportsApi = (projectCode: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectInspectionReportAttachment[]
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/inspection-reports`
+  })
+}
+
+export const moveProjectInspectionReportsApi = (
+  projectCode: string,
+  payload: {
+    fromDrawing?: string | null
+    fromRowIndex?: number | null
+    toDrawing?: string | null
+    toRowIndex?: number | null
+  }
+) => {
+  return request.post<{
+    code: number
+    success: boolean
+    data?: { movedCount?: number }
+    message?: string
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/inspection-reports/move`,
+    data: payload
+  })
+}
+
+export const orphanProjectInspectionReportsApi = (
+  projectCode: string,
+  payload: { rowIndex: number; reason?: string }
+) => {
+  return request.post<{
+    code: number
+    success: boolean
+    data?: { orphanedCount?: number }
+    message?: string
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/inspection-reports/orphan`,
+    data: payload
+  })
+}
+
+export const downloadProjectInspectionReportApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/inspection-reports/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+export const deleteProjectInspectionReportApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/project/inspection-reports/${attachmentId}`
+  })
+}
+
 export type RelocationImportOverwriteMode = 'overwrite' | 'skipExisting'
 
 export interface RelocationImportItem {

@@ -634,8 +634,27 @@
                         {{ row.数量 === null || row.数量 === undefined ? '-' : row.数量 }}
                       </template>
                     </el-table-column>
+                    <el-table-column label="检验报告" width="160" align="center">
+                      <template #default="{ row, $index }">
+                        <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          @click="openInspectionDrawer(row, $index)"
+                        >
+                          查看（{{ getInspectionReportCount(row, $index) }}）
+                        </el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </div>
+                <InspectionReportDrawer
+                  v-model="inspectionDrawerVisible"
+                  :project-code="inspectionDrawerProjectCode"
+                  :drawing="inspectionDrawerDrawing"
+                  :row-index="inspectionDrawerRowIndex"
+                  :readonly="false"
+                />
               </el-tab-pane>
 
               <el-tab-pane label="附件" name="attachments">
@@ -899,10 +918,15 @@ import {
   type ProductionTaskAttachmentType,
   type ProductionTaskInfo
 } from '@/api/production-task'
-import { getProjectDetailApi } from '@/api/project'
+import {
+  getProjectDetailApi,
+  getProjectInspectionReportsApi,
+  type ProjectInspectionReportAttachment
+} from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
+import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
@@ -999,6 +1023,14 @@ type ProjectProductRow = {
 
 const productListLoading = ref(false)
 const projectProductRows = ref<ProjectProductRow[]>([])
+const inspectionReports = ref<ProjectInspectionReportAttachment[]>([])
+
+const inspectionDrawerVisible = ref(false)
+const inspectionDrawerDrawing = ref<string | null>(null)
+const inspectionDrawerRowIndex = ref<number | null>(null)
+const inspectionDrawerProjectCode = computed(
+  () => String(currentProjectCode.value || dialogForm.项目编号 || '').trim() || ''
+)
 
 const tryParseJsonArray = <T,>(value: unknown): T[] | null => {
   if (Array.isArray(value)) return value as T[]
@@ -1078,6 +1110,45 @@ const loadProjectProductList = async () => {
     productListLoading.value = false
   }
 }
+
+const loadInspectionReports = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) {
+    inspectionReports.value = []
+    return
+  }
+  try {
+    const resp: any = await getProjectInspectionReportsApi(projectCode)
+    inspectionReports.value = resp?.data?.data || resp?.data || []
+  } catch (error) {
+    console.error('加载检验报告失败:', error)
+    inspectionReports.value = []
+  }
+}
+
+const getInspectionReportCount = (row: ProjectProductRow, rowIndex: number) => {
+  const drawing = String(row.图号 || '').trim()
+  if (drawing) {
+    return inspectionReports.value.filter(
+      (a) => !a.isOrphan && String(a.drawing || '').trim() === drawing
+    ).length
+  }
+  return inspectionReports.value.filter((a) => !a.isOrphan && !a.drawing && a.rowIndex === rowIndex)
+    .length
+}
+
+const openInspectionDrawer = (row: ProjectProductRow, rowIndex: number) => {
+  inspectionDrawerDrawing.value = String(row.图号 || '').trim() || null
+  inspectionDrawerRowIndex.value = inspectionDrawerDrawing.value ? null : rowIndex
+  inspectionDrawerVisible.value = true
+}
+
+watch(
+  () => inspectionDrawerVisible.value,
+  (v) => {
+    if (!v) void loadInspectionReports()
+  }
+)
 
 const photoAppearanceAttachments = computed(() =>
   photoAttachments.value.filter((a) => a.tag === 'appearance')
@@ -1621,6 +1692,7 @@ watch(
       void loadAttachments()
     } else if (tab === 'productList') {
       void loadProjectProductList()
+      void loadInspectionReports()
     }
   }
 )
@@ -1687,6 +1759,10 @@ const handleDialogClosed = () => {
   photoAttachments.value = []
   inspectionAttachments.value = []
   projectProductRows.value = []
+  inspectionReports.value = []
+  inspectionDrawerVisible.value = false
+  inspectionDrawerDrawing.value = null
+  inspectionDrawerRowIndex.value = null
 }
 
 onMounted(() => {

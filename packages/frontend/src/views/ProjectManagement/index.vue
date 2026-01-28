@@ -1110,6 +1110,18 @@
                                     />
                                   </template>
                                 </el-table-column>
+                                <el-table-column label="检验报告" width="150" align="center">
+                                  <template #default="{ row, $index }">
+                                    <el-button
+                                      type="primary"
+                                      link
+                                      size="small"
+                                      @click="openInspectionDrawer(row.图号, $index)"
+                                    >
+                                      查看（{{ getInspectionReportCount(row.图号, $index) }}）
+                                    </el-button>
+                                  </template>
+                                </el-table-column>
                                 <el-table-column label="操作" width="80" align="center">
                                   <template #default="{ $index }">
                                     <el-button
@@ -1129,6 +1141,15 @@
                                   + 添加行
                                 </el-button>
                               </div>
+                              <InspectionReportDrawer
+                                v-model="inspectionDrawerVisible"
+                                :project-code="
+                                  String(currentProjectCode || editForm.项目编号 || '')
+                                "
+                                :drawing="inspectionDrawerDrawing"
+                                :row-index="inspectionDrawerRowIndex"
+                                :readonly="true"
+                              />
                             </div>
                           </el-form-item>
                         </el-col>
@@ -2159,6 +2180,9 @@ import {
   getProjectGoodsApi,
   getProjectStatisticsApi,
   getProjectAttachmentsApi,
+  getProjectInspectionReportsApi,
+  moveProjectInspectionReportsApi,
+  orphanProjectInspectionReportsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
   downloadTrialFormXlsxApi,
@@ -2169,7 +2193,8 @@ import {
   deleteProjectTempPartImageApi,
   type ProjectInfo,
   type ProjectAttachment,
-  type ProjectAttachmentType
+  type ProjectAttachmentType,
+  type ProjectInspectionReportAttachment
 } from '@/api/project'
 import { getProductionTaskDetailApi } from '@/api/production-task'
 import {
@@ -2181,6 +2206,7 @@ import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
+import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
 import { ElMessageBox } from 'element-plus'
 import ExternalImportDialog from './components/ExternalImportDialog.vue'
 
@@ -3023,8 +3049,8 @@ const addDrawingRow = () => {
   ;(editForm as any).产品重量列表 = 重量列表
 }
 
-// 删除行
-const deleteDrawingRow = (index: number) => {
+// 删除行：图号为空时，rowIndex 绑定的检验报告会被标记为“未绑定/已删除行”
+const deleteDrawingRow = async (index: number) => {
   syncMainDrawingRowToForm()
 
   const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm())
@@ -3038,6 +3064,9 @@ const deleteDrawingRow = (index: number) => {
     return
   }
 
+  const removedDrawing = String(图号列表[index] || '').trim()
+  const removedRowIndex = index
+
   图号列表.splice(index, 1)
   尺寸列表.splice(index, 1)
   名称列表.splice(index, 1)
@@ -3048,6 +3077,22 @@ const deleteDrawingRow = (index: number) => {
   ;(editForm as any).产品名称列表 = 名称列表
   ;(editForm as any).产品数量列表 = 数量列表
   ;(editForm as any).产品重量列表 = 重量列表
+
+  // 仅当图号为空（rowIndex 绑定）时，执行 orphan
+  if (!removedDrawing) {
+    const projectCode = String(currentProjectCode.value || editForm.项目编号 || '').trim()
+    if (projectCode) {
+      try {
+        await orphanProjectInspectionReportsApi(projectCode, {
+          rowIndex: removedRowIndex,
+          reason: 'row_deleted'
+        })
+        await loadInspectionReports(projectCode)
+      } catch (e) {
+        console.warn('标记检验报告为未绑定失败（忽略）:', e)
+      }
+    }
+  }
 }
 const tripartiteAgreementDownloading = ref(false)
 const sealSampleGenerating = ref(false)
@@ -4560,6 +4605,12 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
           parseProductDrawingList(getProductListRawFromEditForm())
         )
         console.log('[编辑项目] 产品尺寸列表:', parseProductSize(editForm.产品尺寸))
+
+        // 记录产品图号快照：用于保存时自动迁移“检验报告”绑定
+        originalProductDrawingsSnapshot.value = parseProductDrawingList(
+          getProductListRawFromEditForm()
+        )
+        void loadInspectionReports(projectCode)
       }
     } catch {
       // ignore：详情失败时回退到列表行数据
@@ -4605,6 +4656,46 @@ const drawingAttachments = computed(() =>
 const sealSampleAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'seal-sample')
 )
+
+// 检验报告（项目编号 + 产品图号/行序号 绑定）
+const inspectionReports = ref<ProjectInspectionReportAttachment[]>([])
+const inspectionDrawerVisible = ref(false)
+const inspectionDrawerDrawing = ref<string | null>(null)
+const inspectionDrawerRowIndex = ref<number | null>(null)
+const originalProductDrawingsSnapshot = ref<string[]>([])
+
+const loadInspectionReports = async (projectCode: string) => {
+  const code = String(projectCode || '').trim()
+  if (!code) {
+    inspectionReports.value = []
+    return
+  }
+  try {
+    const resp: any = await getProjectInspectionReportsApi(code)
+    inspectionReports.value = resp?.data?.data || resp?.data || []
+  } catch (error) {
+    console.error('加载检验报告失败:', error)
+    inspectionReports.value = []
+  }
+}
+
+const getInspectionReportCount = (drawing: string, rowIndex: number) => {
+  const d = String(drawing || '').trim()
+  if (d) {
+    return inspectionReports.value.filter(
+      (a) => !a.isOrphan && String(a.drawing || '').trim() === d
+    ).length
+  }
+  return inspectionReports.value.filter((a) => !a.isOrphan && !a.drawing && a.rowIndex === rowIndex)
+    .length
+}
+
+const openInspectionDrawer = (drawing: string, rowIndex: number) => {
+  const d = String(drawing || '').trim()
+  inspectionDrawerDrawing.value = d || null
+  inspectionDrawerRowIndex.value = d ? null : rowIndex
+  inspectionDrawerVisible.value = true
+}
 
 // 零件图示相关状态
 const partImageUploading = ref(false)
@@ -5706,6 +5797,56 @@ const handleSubmitEdit = async () => {
   while (对齐后数量列表.length < maxLength) 对齐后数量列表.push(0)
   while (对齐后重量列表.length < maxLength) 对齐后重量列表.push(0)
 
+  // 保存时自动迁移“检验报告”绑定：
+  // - 图号改名：fromDrawing -> toDrawing
+  // - 图号为空补齐：fromRowIndex -> toDrawing
+  // - 有->空：若存在附件则禁止清空
+  const projectCodeForInspection = String(
+    currentProjectCode.value || editForm.项目编号 || ''
+  ).trim()
+  const shouldMigrateInspectionReports = !!currentProjectCode.value && !!projectCodeForInspection
+  const inspectionMoveOps: Array<{
+    fromDrawing?: string
+    fromRowIndex?: number
+    toDrawing?: string
+    toRowIndex?: number
+  }> = []
+
+  const oldSnapshot = [...(originalProductDrawingsSnapshot.value || [])].map((x) =>
+    String(x || '').trim()
+  )
+  while (oldSnapshot.length < maxLength) oldSnapshot.push('')
+
+  if (shouldMigrateInspectionReports) {
+    // 确保已加载检验报告列表（用于“有->空”校验）
+    if (inspectionReports.value.length === 0) {
+      await loadInspectionReports(projectCodeForInspection)
+    }
+
+    for (let i = 0; i < maxLength; i++) {
+      const oldD = String(oldSnapshot[i] || '').trim()
+      const newD = String(对齐后图号列表[i] || '').trim()
+
+      if (oldD && !newD) {
+        const count = inspectionReports.value.filter(
+          (a) => !a.isOrphan && String(a.drawing || '').trim() === oldD
+        ).length
+        if (count > 0) {
+          ElMessage.error(
+            `产品图号“${oldD}”下存在检验报告（${count}份），不能清空图号。请先迁移到新图号。`
+          )
+          return
+        }
+      }
+
+      if (!oldD && newD) {
+        inspectionMoveOps.push({ fromRowIndex: i, toDrawing: newD })
+      } else if (oldD && newD && oldD !== newD) {
+        inspectionMoveOps.push({ fromDrawing: oldD, toDrawing: newD })
+      }
+    }
+  }
+
   // 过滤空行（图号/名称/尺寸都为空）
   const 有效图号列表: string[] = []
   const 有效尺寸列表: string[] = []
@@ -5773,6 +5914,24 @@ const handleSubmitEdit = async () => {
 
       await updateProjectApi(currentProjectCode.value, updateData)
       ElMessage.success('更新成功')
+
+      // 更新成功后，再执行检验报告迁移（避免保存失败导致附件错误移动）
+      if (shouldMigrateInspectionReports && inspectionMoveOps.length > 0) {
+        try {
+          for (const op of inspectionMoveOps) {
+            await moveProjectInspectionReportsApi(projectCodeForInspection, op)
+          }
+          await loadInspectionReports(projectCodeForInspection)
+        } catch (e) {
+          console.warn('检验报告迁移失败（忽略）:', e)
+          ElMessage.warning('项目已保存，但检验报告迁移失败，可稍后重试保存或手动调整')
+        }
+      }
+
+      // 更新快照（用于下一次保存时对比）
+      originalProductDrawingsSnapshot.value = parseProductDrawingList(
+        getProductListRawFromEditForm()
+      )
     } else {
       // 确保项目编号存在
       if (!editForm.项目编号) {

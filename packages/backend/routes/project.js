@@ -813,11 +813,42 @@ const ensureProjectAttachmentsTable = async () => {
         文件大小 BIGINT NOT NULL,
         内容类型 NVARCHAR(100) NULL,
         上传时间 DATETIME2 NOT NULL CONSTRAINT DF_项目管理附件_上传时间 DEFAULT (SYSDATETIME()),
-        上传人 NVARCHAR(100) NULL
+        上传人 NVARCHAR(100) NULL,
+        绑定产品图号 NVARCHAR(150) NULL,
+        绑定行序号 INT NULL,
+        是否孤儿 BIT NOT NULL CONSTRAINT DF_项目管理附件_是否孤儿 DEFAULT (0),
+        孤儿原因 NVARCHAR(50) NULL,
+        孤儿行序号 INT NULL
       );
 
       CREATE INDEX IX_项目管理附件_项目编号 ON dbo.项目管理附件 (项目编号);
       CREATE INDEX IX_项目管理附件_项目编号_类型 ON dbo.项目管理附件 (项目编号, 附件类型, 上传时间 DESC, 附件ID DESC);
+      CREATE INDEX IX_项目管理附件_检验报告_绑定 ON dbo.项目管理附件 (项目编号, 附件类型, 绑定产品图号, 绑定行序号, 是否孤儿, 上传时间 DESC, 附件ID DESC);
+    END
+  `)
+
+  // 兼容旧表：按需补列（避免线上已有表但缺少新字段）
+  await query(`
+    IF COL_LENGTH(N'dbo.项目管理附件', N'绑定产品图号') IS NULL
+      ALTER TABLE dbo.项目管理附件 ADD 绑定产品图号 NVARCHAR(150) NULL;
+    IF COL_LENGTH(N'dbo.项目管理附件', N'绑定行序号') IS NULL
+      ALTER TABLE dbo.项目管理附件 ADD 绑定行序号 INT NULL;
+    IF COL_LENGTH(N'dbo.项目管理附件', N'是否孤儿') IS NULL
+      ALTER TABLE dbo.项目管理附件 ADD 是否孤儿 BIT NOT NULL CONSTRAINT DF_项目管理附件_是否孤儿 DEFAULT (0);
+    IF COL_LENGTH(N'dbo.项目管理附件', N'孤儿原因') IS NULL
+      ALTER TABLE dbo.项目管理附件 ADD 孤儿原因 NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'dbo.项目管理附件', N'孤儿行序号') IS NULL
+      ALTER TABLE dbo.项目管理附件 ADD 孤儿行序号 INT NULL;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM sys.indexes
+      WHERE name = N'IX_项目管理附件_检验报告_绑定'
+        AND object_id = OBJECT_ID(N'dbo.项目管理附件')
+    )
+    BEGIN
+      CREATE INDEX IX_项目管理附件_检验报告_绑定
+      ON dbo.项目管理附件 (项目编号, 附件类型, 绑定产品图号, 绑定行序号, 是否孤儿, 上传时间 DESC, 附件ID DESC);
     END
   `)
 }
@@ -2276,14 +2307,15 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
     }
 
-    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单
+    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单、检验报告
     const validTypes = [
       'relocation-process',
       'trial-record',
       'tripartite-agreement',
       'trial-form',
       'drawing',
-      'seal-sample'
+      'seal-sample',
+      'inspection-report'
     ]
     if (!validTypes.includes(type)) {
       return res.status(400).json({ code: 400, success: false, message: '附件类型不合法' })
@@ -2319,7 +2351,8 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       'tripartite-agreement': '三方协议',
       'trial-form': '试模单',
       drawing: '图档',
-      'seal-sample': '封样单'
+      'seal-sample': '封样单',
+      'inspection-report': '检验报告'
     }
     const typeDirName = typeDirMap[type]
 
@@ -2371,8 +2404,41 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
     }
 
     const safeNewFileName = safeFileName(newFileName)
-    const finalStoredFileName =
-      type === 'drawing' ? ensureUniqueFileName(finalFullDir, safeNewFileName) : safeNewFileName
+    const finalStoredFileName = ['drawing', 'inspection-report'].includes(type)
+      ? ensureUniqueFileName(finalFullDir, safeNewFileName)
+      : safeNewFileName
+
+    // 检验报告绑定字段：drawing / rowIndex（0-based）
+    let bindingDrawing = null
+    let bindingRowIndex = null
+    if (type === 'inspection-report') {
+      bindingDrawing = String(req.body?.drawing || '').trim() || null
+      const rowIndexRaw = req.body?.rowIndex
+      bindingRowIndex =
+        rowIndexRaw === undefined || rowIndexRaw === null || String(rowIndexRaw).trim() === ''
+          ? null
+          : parseInt(String(rowIndexRaw), 10)
+
+      if (!bindingDrawing && (bindingRowIndex === null || Number.isNaN(bindingRowIndex))) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '检验报告需要提供 drawing 或 rowIndex 进行绑定'
+        })
+      }
+
+      const ext = String(path.extname(originalName || '') || '').toLowerCase().replace('.', '')
+      const isPdf = ext === 'pdf'
+      const isExcel = ext === 'xls' || ext === 'xlsx'
+      const isImage = String(file.mimetype || '').toLowerCase().startsWith('image/')
+      if (!isPdf && !isExcel && !isImage) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '检验报告仅支持 PDF / Excel（.xls .xlsx）/ 图片文件'
+        })
+      }
+    }
 
     // 单文件类型（移模流程单、试模记录表、三方协议）：删除旧文件
     const singleFileTypes = [
@@ -2457,7 +2523,12 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         相对路径,
         文件大小,
         内容类型,
-        上传人
+        上传人,
+        绑定产品图号,
+        绑定行序号,
+        是否孤儿,
+        孤儿原因,
+        孤儿行序号
       )
       OUTPUT
         INSERTED.附件ID as id,
@@ -2470,7 +2541,12 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         @relativePath,
         @fileSize,
         @contentType,
-        @uploadedBy
+        @uploadedBy,
+        @bindingDrawing,
+        @bindingRowIndex,
+        0,
+        NULL,
+        NULL
       )
     `,
       {
@@ -2481,7 +2557,9 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         relativePath: finalRelativeDir,
         fileSize: file.size,
         contentType: file.mimetype || null,
-        uploadedBy: null
+        uploadedBy: null,
+        bindingDrawing,
+        bindingRowIndex
       }
     )
 
@@ -2557,6 +2635,272 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
       code: 500,
       success: false,
       message: '获取项目管理附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// === 项目管理：检验报告（项目编号 + 产品图号/行序号 绑定，多文件） ===
+
+// 获取检验报告列表（返回该项目下所有检验报告附件）
+router.get('/:projectCode(*)/inspection-reports', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        附件ID as id,
+        项目编号 as projectCode,
+        附件类型 as type,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy,
+        绑定产品图号 as drawing,
+        绑定行序号 as rowIndex,
+        是否孤儿 as isOrphan,
+        孤儿原因 as orphanReason,
+        孤儿行序号 as orphanRowIndex
+      FROM 项目管理附件
+      WHERE 项目编号 = @projectCode
+        AND 附件类型 = N'inspection-report'
+      ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+      { projectCode }
+    )
+
+    return res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取检验报告列表失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取检验报告列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 迁移检验报告绑定（图号改名 / rowIndex -> drawing）
+router.post('/:projectCode(*)/inspection-reports/move', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const fromDrawing = String(req.body?.fromDrawing || '').trim() || null
+    const toDrawing = String(req.body?.toDrawing || '').trim() || null
+    const fromRowIndexRaw = req.body?.fromRowIndex
+    const toRowIndexRaw = req.body?.toRowIndex
+    const fromRowIndex =
+      fromRowIndexRaw === undefined || fromRowIndexRaw === null || String(fromRowIndexRaw).trim() === ''
+        ? null
+        : parseInt(String(fromRowIndexRaw), 10)
+    const toRowIndex =
+      toRowIndexRaw === undefined || toRowIndexRaw === null || String(toRowIndexRaw).trim() === ''
+        ? null
+        : parseInt(String(toRowIndexRaw), 10)
+
+    if (!fromDrawing && (fromRowIndex === null || Number.isNaN(fromRowIndex))) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 fromDrawing 或 fromRowIndex' })
+    }
+    if (!toDrawing && (toRowIndex === null || Number.isNaN(toRowIndex))) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 toDrawing 或 toRowIndex' })
+    }
+
+    const whereParts = [`项目编号 = @projectCode`, `附件类型 = N'inspection-report'`, `是否孤儿 = 0`]
+    const params = { projectCode }
+    if (fromDrawing) {
+      whereParts.push(`绑定产品图号 = @fromDrawing`)
+      params.fromDrawing = fromDrawing
+    } else {
+      whereParts.push(`绑定产品图号 IS NULL AND 绑定行序号 = @fromRowIndex`)
+      params.fromRowIndex = fromRowIndex
+    }
+
+    const setParts = []
+    if (toDrawing) {
+      setParts.push(`绑定产品图号 = @toDrawing`, `绑定行序号 = NULL`)
+      params.toDrawing = toDrawing
+    } else {
+      setParts.push(`绑定产品图号 = NULL`, `绑定行序号 = @toRowIndex`)
+      params.toRowIndex = toRowIndex
+    }
+    setParts.push(`是否孤儿 = 0`, `孤儿原因 = NULL`, `孤儿行序号 = NULL`)
+
+    const result = await query(
+      `
+      UPDATE 项目管理附件
+      SET ${setParts.join(', ')}
+      WHERE ${whereParts.join(' AND ')};
+      SELECT @@ROWCOUNT as movedCount;
+    `,
+      params
+    )
+
+    const movedCount = result?.[0]?.movedCount ?? 0
+    return res.json({ code: 0, success: true, data: { movedCount } })
+  } catch (error) {
+    console.error('迁移检验报告失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '迁移检验报告失败',
+      error: error.message
+    })
+  }
+})
+
+// 标记 rowIndex 绑定的检验报告为孤儿（用于“图号为空的行被删除”）
+router.post('/:projectCode(*)/inspection-reports/orphan', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const rowIndexRaw = req.body?.rowIndex
+    const rowIndex =
+      rowIndexRaw === undefined || rowIndexRaw === null || String(rowIndexRaw).trim() === ''
+        ? null
+        : parseInt(String(rowIndexRaw), 10)
+    if (rowIndex === null || Number.isNaN(rowIndex)) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 rowIndex' })
+    }
+
+    const orphanReason = String(req.body?.reason || 'row_deleted').trim().slice(0, 50)
+
+    const result = await query(
+      `
+      UPDATE 项目管理附件
+      SET 是否孤儿 = 1,
+          孤儿原因 = @orphanReason,
+          孤儿行序号 = @rowIndex,
+          绑定产品图号 = NULL,
+          绑定行序号 = NULL
+      WHERE 项目编号 = @projectCode
+        AND 附件类型 = N'inspection-report'
+        AND 是否孤儿 = 0
+        AND 绑定产品图号 IS NULL
+        AND 绑定行序号 = @rowIndex;
+      SELECT @@ROWCOUNT as orphanedCount;
+    `,
+      { projectCode, rowIndex, orphanReason }
+    )
+
+    const orphanedCount = result?.[0]?.orphanedCount ?? 0
+    return res.json({ code: 0, success: true, data: { orphanedCount } })
+  } catch (error) {
+    console.error('标记检验报告孤儿失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '标记检验报告孤儿失败',
+      error: error.message
+    })
+  }
+})
+
+// 下载检验报告
+router.get('/inspection-reports/:attachmentId/download', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 附件ID = @attachmentId
+        AND 附件类型 = N'inspection-report'
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    return res.download(fullPath, attachment.originalName)
+  } catch (error) {
+    console.error('下载检验报告失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载检验报告失败',
+      error: error.message
+    })
+  }
+})
+
+// 删除检验报告（仅前端控制入口；如需更严格可在后端加权限校验）
+router.delete('/inspection-reports/:attachmentId', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 项目管理附件
+      WHERE 附件ID = @attachmentId
+        AND 附件类型 = N'inspection-report'
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+
+    await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath)
+      }
+    } catch (fileErr) {
+      console.warn('删除检验报告文件失败（已删除数据库记录）:', fileErr)
+    }
+
+    return res.json({ code: 0, success: true, message: '删除成功' })
+  } catch (error) {
+    console.error('删除检验报告失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除检验报告失败',
       error: error.message
     })
   }
