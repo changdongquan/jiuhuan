@@ -48,9 +48,10 @@ PROXY_PORT="7890"
 
 API_PORT="3001"
 
-PM2_APP_NAME="jh-craftsys-api"
-
 SITE_NAME="jh-craftsys"
+
+# 后端进程由 systemd 管理
+BACKEND_SERVICE_NAME="jiuhuan-backend.service"
 
 # 前端构建
 
@@ -291,10 +292,6 @@ echo "==> 启用 corepack & 安装 pnpm 9"
 sudo corepack enable
 
 sudo corepack prepare pnpm@9 --activate
-
-echo "==> 安装 pm2（全局）"
-
-sudo npm i -g pm2
 
 EOF
 
@@ -723,7 +720,36 @@ echo "==> Nginx 已启用站点（default_server）：$SITE_NAME"
 
 EOF
 
-# 07 PM2 后端（最新版：不再 eval，去掉 $: command not found）
+# 07 后端：重启 systemd 服务（推荐）
+
+cat >/opt/deploy/jh-craftsys/bin/07_restart_backend_systemd.sh <<'EOF'
+
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+. /opt/deploy/jh-craftsys/conf/deploy.env
+
+SERVICE="${BACKEND_SERVICE_NAME:-jiuhuan-backend.service}"
+
+echo "==> 重启后端 systemd 服务 ${SERVICE}"
+
+# 避免因重启失败直接中断整个 update 流程，手动处理退出码
+set +e
+sudo systemctl restart "$SERVICE"
+STATUS=$?
+set -e
+
+if [ "$STATUS" -eq 0 ]; then
+  echo "==> ${SERVICE} 已成功重启"
+else
+  echo "[WARN] 重启 ${SERVICE} 失败，请手动执行：" >&2
+  echo "  sudo systemctl restart ${SERVICE}" >&2
+fi
+
+EOF
+
+# 07 PM2（已废弃）：保留兼容脚本名，但内部转发到 systemd
 
 cat >/opt/deploy/jh-craftsys/bin/07_pm2_bootstrap.sh <<'EOF'
 
@@ -733,23 +759,9 @@ set -euo pipefail
 
 . /opt/deploy/jh-craftsys/conf/deploy.env
 
-echo "==> 启动/守护后端（PM2）"
-
-cd "$SRC_DIR"
-
-pm2 delete "$PM2_APP_NAME" >/dev/null 2>&1 || true
-
-pm2 start "$SRC_DIR/backend/server.js" --name "$PM2_APP_NAME" --cwd "$SRC_DIR/backend" --time
-
-pm2 save
-
-# 直接调用，不 eval 返回字符串，避免 '$: command not found'
-
-pm2 startup systemd -u "$USER" --hp "$HOME" >/dev/null 2>&1 || true
-
-mkdir -p "$LOG_DIR/pm2"
-
-echo "==> PM2 已启动：$PM2_APP_NAME"
+echo "[DEPRECATED] 07_pm2_bootstrap.sh 已更名为 07_restart_backend_systemd.sh" >&2
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/07_restart_backend_systemd.sh" "$@"
 
 EOF
 
@@ -827,7 +839,8 @@ echo "==> 服务状态"
 
 systemctl --no-pager status nginx | sed -n '1,8p' || true
 
-pm2 ls || true
+SERVICE="${BACKEND_SERVICE_NAME:-jiuhuan-backend.service}"
+systemctl --no-pager status "$SERVICE" | sed -n '1,12p' || true
 
 echo "==> 端口监听"
 
@@ -861,7 +874,13 @@ TS=$(ls -1 "$REL_DIR" | grep -E '^[0-9]{8}-[0-9]{6}$' | sort -r | sed -n "${IDX}
 
 ln -sfn "$REL_DIR/$TS" "$CUR_LINK"
 
-pm2 reload "$PM2_APP_NAME" || true
+SCRIPT_DIR="/opt/deploy/jh-craftsys/bin"
+if [ -x "$SCRIPT_DIR/07_restart_backend_systemd.sh" ]; then
+  "$SCRIPT_DIR/07_restart_backend_systemd.sh" || true
+else
+  SERVICE="${BACKEND_SERVICE_NAME:-jiuhuan-backend.service}"
+  sudo systemctl restart "$SERVICE" || true
+fi
 
 echo "==> 已切换到 $TS 并重载后端"
 
@@ -957,7 +976,7 @@ echo "==> 开始升级到版本: ${TARGET_VERSION:-latest}"
 
 "$DIR/05_install_frontend_deps_build.sh"
 
-"$DIR/07_pm2_bootstrap.sh"
+"$DIR/07_restart_backend_systemd.sh"
 
 "$DIR/08_deploy_switch_and_smoke.sh"
 
@@ -1007,7 +1026,7 @@ echo "==> 首次部署，版本: ${TARGET_VERSION}"
 
 "$DIR/06_nginx_setup.sh"
 
-"$DIR/07_pm2_bootstrap.sh"
+"$DIR/07_restart_backend_systemd.sh"
 
 "$DIR/08_deploy_switch_and_smoke.sh"
 
