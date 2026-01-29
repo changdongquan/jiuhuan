@@ -31,3 +31,31 @@
 - 新增 SQL：
   - 迁移：`packages/backend/migrations/`
   - 参考/临时：`sql/`
+
+## 提交 / 发布（强约束）
+
+> 目标：避免“远端 update.sh 才发现构建/校验失败”，避免夹带无关改动上线。
+
+- 提交前必须执行（前端）：
+  - `pnpm ts:check`
+  - `pnpm lint:eslint`（必要时可再跑 `pnpm lint:style` / `pnpm lint:format`）
+  - `pnpm build:pro`
+- 代码风格底线：
+  - **禁止空 `catch {}`**。如需忽略异常，至少写 `catch (e) { /* ignore */ }` 或 `catch (e) { // ignore }`（满足 lint）。
+- 提交范围：
+  - **只提交本需求相关文件**；如工作区还有无关改动（例如 `.gitignore`、`package.json`、其它页面样式等），必须拆分到另一个明确的提交，或直接还原。
+  - 尽量做到“一件事一个 commit”（或一组强相关 commit）。
+
+## 部署（jiuhuan）
+
+> 目标：统一部署入口，减少跑错脚本/漏验收。
+
+- 部署脚本路径（jiuhuan 机器）：
+  - `/opt/deploy/jh-craftsys/bin/update.sh`
+- 建议执行方式：
+  - `ssh jiuhuan` 后执行：`sudo -n /opt/deploy/jh-craftsys/bin/update.sh`
+- 部署后必须检查输出：
+  - 是否切到 `origin/main` 最新 commit
+  - 前端构建是否成功
+  - `jiuhuan-backend.service` 是否重启成功
+  - 冒烟测试（静态站点、`/api/health`）是否通过
