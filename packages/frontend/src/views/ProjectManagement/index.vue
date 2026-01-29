@@ -1148,7 +1148,7 @@
                                 "
                                 :drawing="inspectionDrawerDrawing"
                                 :row-index="inspectionDrawerRowIndex"
-                                :readonly="true"
+                                :readonly="false"
                               />
                             </div>
                           </el-form-item>

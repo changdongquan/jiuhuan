@@ -37,7 +37,7 @@
             <el-tab-pane :label="`本行（${currentList.length}）`" name="current">
               <el-table :data="currentList" border size="small" style="width: 100%">
                 <el-table-column type="index" label="序号" width="54" align="center" />
-                <el-table-column label="文件名" min-width="220" show-overflow-tooltip>
+                <el-table-column label="文件名" min-width="160" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ row.storedFileName || row.originalName }}</span>
                   </template>
@@ -47,9 +47,9 @@
                     <el-tag size="small">{{ fileKind(row) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="上传时间" width="150" show-overflow-tooltip>
+                <el-table-column label="日期" width="110" show-overflow-tooltip>
                   <template #default="{ row }">
-                    <span>{{ row.uploadedAt || '-' }}</span>
+                    <span>{{ formatUploadedDate(row.uploadedAt) }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="190" align="center">
@@ -79,7 +79,7 @@
             <el-tab-pane :label="`未绑定/已删除行（${orphanList.length}）`" name="orphan">
               <el-table :data="orphanList" border size="small" style="width: 100%">
                 <el-table-column type="index" label="序号" width="54" align="center" />
-                <el-table-column label="文件名" min-width="220" show-overflow-tooltip>
+                <el-table-column label="文件名" min-width="160" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ row.storedFileName || row.originalName }}</span>
                   </template>
@@ -89,12 +89,12 @@
                     <el-tag size="small">{{ fileKind(row) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="上传时间" width="150" show-overflow-tooltip>
+                <el-table-column label="日期" width="110" show-overflow-tooltip>
                   <template #default="{ row }">
-                    <span>{{ row.uploadedAt || '-' }}</span>
+                    <span>{{ formatUploadedDate(row.uploadedAt) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="150" align="center">
+                <el-table-column label="操作" width="190" align="center">
                   <template #default="{ row }">
                     <div style="display: flex; gap: 8px; justify-content: center">
                       <el-button type="primary" link size="small" @click="preview(row)"
@@ -103,6 +103,15 @@
                       <el-button type="primary" link size="small" @click="download(row)"
                         >下载</el-button
                       >
+                      <el-button
+                        v-if="!readonly"
+                        type="danger"
+                        link
+                        size="small"
+                        @click="remove(row)"
+                      >
+                        删除
+                      </el-button>
                     </div>
                   </template>
                 </el-table-column>
@@ -179,6 +188,14 @@ const bindingLabel = computed(() => {
 })
 
 const drawerTitle = computed(() => (isMobile.value ? '检验报告' : '检验报告（抽屉预览）'))
+
+const formatUploadedDate = (val?: string | null) => {
+  const s = String(val || '').trim()
+  if (!s) return '-'
+  // 常见格式：2026-01-29T10:20:30.000Z / 2026-01-29 10:20:30 / 2026-01-29
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
+  return m?.[1] || s
+}
 
 const uploadAction = computed(
   () => `/api/project/${encodeURIComponent(props.projectCode)}/attachments/inspection-report`
@@ -436,7 +453,9 @@ onBeforeUnmount(() => {
 
 .ird__body {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+
+  /* 右侧预览区更宽：更适合看 PDF/图片 */
+  grid-template-columns: minmax(360px, 0.9fr) minmax(560px, 1.3fr);
   gap: 12px;
   height: calc(100vh - 220px);
 }
