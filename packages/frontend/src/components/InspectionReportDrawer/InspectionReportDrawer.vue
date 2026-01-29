@@ -265,7 +265,9 @@ const clearPreviewUrl = () => {
   if (previewUrl.value) {
     try {
       window.URL.revokeObjectURL(previewUrl.value)
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
   previewUrl.value = ''
 }
