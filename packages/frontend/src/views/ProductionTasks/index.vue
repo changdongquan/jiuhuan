@@ -421,6 +421,7 @@
             <el-tabs v-model="dialogActiveTab" class="pt-edit-tabs" tab-position="top">
               <el-tab-pane name="production">
                 <template #label>
+                  <el-icon class="pt-edit-tab-icon"><Calendar /></el-icon>
                   投产信息
                   <span v-if="productionTabCompleted" class="pt-tab-complete-dot"></span>
                 </template>
@@ -510,7 +511,11 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="工时记录" name="hours">
+              <el-tab-pane name="hours">
+                <template #label>
+                  <el-icon class="pt-edit-tab-icon"><Clock /></el-icon>
+                  工时记录
+                </template>
                 <div class="pt-edit-section">
                   <div class="pt-edit-section-title">工时记录</div>
                   <el-row :gutter="isMobile ? 8 : 20">
@@ -588,7 +593,11 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="产品列表" name="productList">
+              <el-tab-pane name="productList">
+                <template #label>
+                  <el-icon class="pt-edit-tab-icon"><Box /></el-icon>
+                  产品列表
+                </template>
                 <div class="pt-product-list" v-loading="productListLoading">
                   <div class="pt-product-list__hint"
                     >数据来源：项目管理 → 编辑项目 → 零件信息 → 产品列表</div
@@ -646,6 +655,19 @@
                         </el-button>
                       </template>
                     </el-table-column>
+                    <el-table-column label="零件图纸" width="160" align="center">
+                      <template #default="{ row }">
+                        <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          :disabled="!String(row.图号 || '').trim()"
+                          @click="openPartDrawingDrawer(row.图号)"
+                        >
+                          下载（{{ getPartDrawingCount(row.图号) }}）
+                        </el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </div>
                 <InspectionReportDrawer
@@ -655,9 +677,19 @@
                   :row-index="inspectionDrawerRowIndex"
                   :readonly="false"
                 />
+                <PartDrawingDrawer
+                  v-model="partDrawingDrawerVisible"
+                  :project-code="inspectionDrawerProjectCode"
+                  :drawing="partDrawingDrawerDrawing"
+                  :readonly="true"
+                />
               </el-tab-pane>
 
-              <el-tab-pane label="附件" name="attachments">
+              <el-tab-pane name="attachments">
+                <template #label>
+                  <el-icon class="pt-edit-tab-icon"><Paperclip /></el-icon>
+                  附件
+                </template>
                 <div class="pt-attachments" v-loading="attachmentLoading">
                   <el-row class="pt-attachments-row" :gutter="isMobile ? 8 : 16">
                     <el-col :xs="24" :lg="12" class="pt-attachment-col">
@@ -882,6 +914,55 @@
                             </template>
                           </el-table-column>
                         </el-table>
+
+                        <div style="margin: 16px 0 8px; font-weight: 600">模具图档</div>
+                        <el-table
+                          :data="moldDrawingAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px)"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isMoldDrawingImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleMoldDrawingPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isMoldDrawingPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleMoldDrawingPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadMoldDrawing(row)"
+                              >
+                                下载
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
                       </el-card>
                     </el-col>
                   </el-row>
@@ -921,12 +1002,17 @@ import {
 import {
   getProjectDetailApi,
   getProjectInspectionReportsApi,
-  type ProjectInspectionReportAttachment
+  getProjectAttachmentsApi,
+  downloadProjectAttachmentApi,
+  type ProjectInspectionReportAttachment,
+  type ProjectAttachment
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
+import PartDrawingDrawer from '@/components/PartDrawingDrawer/PartDrawingDrawer.vue'
+import { Calendar, Clock, Box, Paperclip } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
@@ -1111,6 +1197,35 @@ const loadProjectProductList = async () => {
   }
 }
 
+// 零件图纸（来自项目管理）
+const partDrawingAttachments = ref<ProjectAttachment[]>([])
+const partDrawingDrawerVisible = ref(false)
+const partDrawingDrawerDrawing = ref<string | null>(null)
+const loadPartDrawings = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) {
+    partDrawingAttachments.value = []
+    return
+  }
+  try {
+    const resp: any = await getProjectAttachmentsApi(projectCode, 'part-drawing')
+    partDrawingAttachments.value = resp?.data?.data ?? resp?.data ?? []
+  } catch (error) {
+    console.error('加载零件图纸失败:', error)
+    partDrawingAttachments.value = []
+  }
+}
+const getPartDrawingCount = (drawing: string) => {
+  const d = String(drawing || '').trim()
+  if (!d) return 0
+  return partDrawingAttachments.value.filter((a) => String((a as any).drawing || '').trim() === d)
+    .length
+}
+const openPartDrawingDrawer = (drawing: string) => {
+  partDrawingDrawerDrawing.value = String(drawing || '').trim() || null
+  partDrawingDrawerVisible.value = true
+}
+
 const loadInspectionReports = async () => {
   const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
   if (!projectCode) {
@@ -1167,22 +1282,27 @@ const getAttachmentUploadData = (type: ProductionTaskAttachmentType, tag?: strin
   return { tag }
 }
 
+const moldDrawingAttachments = ref<ProjectAttachment[]>([])
+
 const loadAttachments = async () => {
   const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
   if (!projectCode) return
   attachmentLoading.value = true
   try {
-    const [photoResp, inspectionResp]: any[] = await Promise.all([
+    const [photoResp, inspectionResp, drawingResp]: any[] = await Promise.all([
       getProductionTaskAttachmentsApi(projectCode, 'photo'),
-      getProductionTaskAttachmentsApi(projectCode, 'inspection')
+      getProductionTaskAttachmentsApi(projectCode, 'inspection'),
+      getProjectAttachmentsApi(projectCode, 'drawing')
     ])
     photoAttachments.value = photoResp?.data || []
     inspectionAttachments.value = inspectionResp?.data || []
+    moldDrawingAttachments.value = drawingResp?.data || []
   } catch (error) {
-    console.error('加载生产任务附件失败:', error)
+    console.error('加载附件失败:', error)
     ElMessage.error('加载附件失败')
     photoAttachments.value = []
     inspectionAttachments.value = []
+    moldDrawingAttachments.value = []
   } finally {
     attachmentLoading.value = false
   }
@@ -1223,6 +1343,102 @@ const isPdfFile = (attachment: ProductionTaskAttachment): boolean => {
   const fileName = attachment.storedFileName || attachment.originalName || ''
   const ext = fileName.split('.').pop()?.toLowerCase() || ''
   return ext === 'pdf'
+}
+
+// 模具图档（ProjectAttachment）判断与操作
+const isMoldDrawingImageFile = (attachment: ProjectAttachment): boolean => {
+  if (attachment.contentType?.startsWith('image/')) return true
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)
+}
+const isMoldDrawingPdfFile = (attachment: ProjectAttachment): boolean => {
+  if (attachment.contentType === 'application/pdf') return true
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'pdf'
+}
+const handleMoldDrawingPreview = async (attachment: ProjectAttachment) => {
+  if (!isMoldDrawingImageFile(attachment)) {
+    ElMessage.warning('该文件不是图片格式')
+    return
+  }
+  try {
+    const imageAttachments = moldDrawingAttachments.value.filter(isMoldDrawingImageFile)
+    const currentIndex = imageAttachments.findIndex((item) => item.id === attachment.id)
+    const blobUrls: string[] = []
+    const urlList: string[] = []
+    for (const item of imageAttachments) {
+      try {
+        const resp: any = await downloadProjectAttachmentApi(item.id)
+        const blob = resp?.data ?? resp
+        const url = window.URL.createObjectURL(blob as Blob)
+        blobUrls.push(url)
+        urlList.push(url)
+      } catch (e) {
+        console.error(`加载图片 ${item.storedFileName || item.originalName} 失败:`, e)
+      }
+    }
+    if (urlList.length === 0) {
+      ElMessage.warning('加载图片失败')
+      return
+    }
+    createImageViewer({
+      urlList,
+      initialIndex: currentIndex >= 0 ? currentIndex : 0,
+      infinite: true,
+      hideOnClickModal: true,
+      zIndex: 3000,
+      teleported: true
+    })
+  } catch (error) {
+    console.error('预览模具图档失败:', error)
+    ElMessage.error('预览失败')
+  }
+}
+const handleMoldDrawingPdfPreview = async (attachment: ProjectAttachment) => {
+  if (!isMoldDrawingPdfFile(attachment)) {
+    ElMessage.warning('该文件不是 PDF 格式')
+    return
+  }
+  try {
+    const resp: any = await downloadProjectAttachmentApi(attachment.id)
+    const blob = resp?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    if (isMobile.value) {
+      const newWindow = window.open(url, '_blank')
+      if (!newWindow) {
+        ElMessage.warning('请允许弹出窗口以预览 PDF')
+        window.URL.revokeObjectURL(url)
+      }
+    } else {
+      createPdfViewer({
+        url,
+        fileName: attachment.storedFileName || attachment.originalName || 'PDF 文件'
+      })
+    }
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    ElMessage.error('预览失败')
+  }
+}
+const downloadMoldDrawing = async (attachment: ProjectAttachment) => {
+  try {
+    const resp: any = await downloadProjectAttachmentApi(attachment.id)
+    const blob = resp?.data ?? resp
+    const url = window.URL.createObjectURL(blob as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = attachment.storedFileName || attachment.originalName || `附件_${attachment.id}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('下载成功')
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error('下载失败')
+  }
 }
 
 // 预览图片附件
@@ -1693,6 +1909,7 @@ watch(
     } else if (tab === 'productList') {
       void loadProjectProductList()
       void loadInspectionReports()
+      void loadPartDrawings()
     }
   }
 )
@@ -1758,10 +1975,14 @@ const handleDialogClosed = () => {
   dialogFormRef.value?.clearValidate()
   photoAttachments.value = []
   inspectionAttachments.value = []
+  moldDrawingAttachments.value = []
+  partDrawingAttachments.value = []
   projectProductRows.value = []
   inspectionReports.value = []
   inspectionDrawerVisible.value = false
   inspectionDrawerDrawing.value = null
+  partDrawingDrawerVisible.value = false
+  partDrawingDrawerDrawing.value = null
   inspectionDrawerRowIndex.value = null
 }
 
@@ -2081,6 +2302,11 @@ onMounted(() => {
   margin-left: 4px;
   background-color: var(--el-color-success);
   border-radius: 50%;
+}
+
+.pt-edit-tab-icon {
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .pt-edit-section {

@@ -795,6 +795,7 @@
             <el-tabs v-model="editActiveTab" class="pm-edit-tabs" tab-position="top">
               <el-tab-pane name="basic">
                 <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Document /></el-icon>
                   基本信息
                   <span v-if="basicTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
@@ -985,6 +986,7 @@
 
               <el-tab-pane name="part">
                 <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Box /></el-icon>
                   零件信息
                   <span v-if="partTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
@@ -1042,7 +1044,7 @@
                                 <el-table-column
                                   type="index"
                                   label="序号"
-                                  width="60"
+                                  width="45"
                                   align="center"
                                 />
                                 <el-table-column label="产品图号" min-width="150">
@@ -1086,7 +1088,7 @@
                                     />
                                   </template>
                                 </el-table-column>
-                                <el-table-column label="产品重量" width="120" align="center">
+                                <el-table-column label="产品重量" width="100" align="center">
                                   <template #default="{ row, $index }">
                                     <el-input-number
                                       v-model="row.重量"
@@ -1098,7 +1100,7 @@
                                     />
                                   </template>
                                 </el-table-column>
-                                <el-table-column label="产品数量" width="110" align="center">
+                                <el-table-column label="产品数量" width="100" align="center">
                                   <template #default="{ row, $index }">
                                     <el-input-number
                                       v-model="row.数量"
@@ -1110,7 +1112,7 @@
                                     />
                                   </template>
                                 </el-table-column>
-                                <el-table-column label="检验报告" width="150" align="center">
+                                <el-table-column label="检验报告" width="100" align="center">
                                   <template #default="{ row, $index }">
                                     <el-button
                                       type="primary"
@@ -1119,6 +1121,19 @@
                                       @click="openInspectionDrawer(row.图号, $index)"
                                     >
                                       查看（{{ getInspectionReportCount(row.图号, $index) }}）
+                                    </el-button>
+                                  </template>
+                                </el-table-column>
+                                <el-table-column label="零件图纸" width="100" align="center">
+                                  <template #default="{ row }">
+                                    <el-button
+                                      type="primary"
+                                      link
+                                      size="small"
+                                      :disabled="!String(row.图号 || '').trim()"
+                                      @click="openPartDrawingDrawer(row.图号)"
+                                    >
+                                      查看（{{ getPartDrawingCount(row.图号) }}）
                                     </el-button>
                                   </template>
                                 </el-table-column>
@@ -1148,6 +1163,14 @@
                                 "
                                 :drawing="inspectionDrawerDrawing"
                                 :row-index="inspectionDrawerRowIndex"
+                                :readonly="true"
+                              />
+                              <PartDrawingDrawer
+                                v-model="partDrawingDrawerVisible"
+                                :project-code="
+                                  String(currentProjectCode || editForm.项目编号 || '')
+                                "
+                                :drawing="partDrawingDrawerDrawing"
                                 :readonly="false"
                               />
                             </div>
@@ -1161,6 +1184,7 @@
 
               <el-tab-pane name="mould">
                 <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Setting /></el-icon>
                   模具信息
                   <span v-if="mouldTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
@@ -1420,6 +1444,7 @@
 
               <el-tab-pane name="machine">
                 <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Cpu /></el-icon>
                   设备与工艺参数
                   <span v-if="machineTabCompleted" class="pm-tab-complete-dot"></span>
                 </template>
@@ -1486,7 +1511,11 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="附件 1" name="attachments">
+              <el-tab-pane name="attachments">
+                <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Folder /></el-icon>
+                  附件 1
+                </template>
                 <div class="pm-attachments" v-loading="attachmentLoading">
                   <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
                     <el-col :xs="24" :sm="12" class="pm-attachment-col">
@@ -1799,19 +1828,24 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="附件 2" name="attachments2">
-                <!-- 生产任务附件 -->
+              <el-tab-pane name="attachments2">
+                <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Paperclip /></el-icon>
+                  附件 2
+                </template>
                 <div
-                  class="pm-production-task-attachments"
-                  v-loading="productionTaskAttachmentLoading"
+                  class="pm-attachments2-layout"
+                  v-loading="productionTaskAttachmentLoading || attachmentLoading"
                 >
-                  <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
+                  <el-row
+                    class="pm-attachments-row pm-attachments2-row"
+                    :gutter="isMobile ? 8 : 16"
+                  >
+                    <!-- 左：文件和照片（合并） -->
                     <el-col :xs="24" :sm="12" class="pm-attachment-col">
-                      <el-card shadow="never" class="pm-attachment-card">
+                      <el-card shadow="never" class="pm-attachment-card pm-attachments2-left-card">
                         <template #header>
-                          <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>照片</span>
-                          </div>
+                          <span>文件和照片</span>
                         </template>
 
                         <div style="margin: 4px 0 8px; font-weight: 600">模具外观</div>
@@ -1868,7 +1902,7 @@
                           :data="productionTaskPhotoNameplateAttachments"
                           border
                           size="small"
-                          style="width: calc(100% - 2px)"
+                          style="width: calc(100% - 2px); margin-bottom: 12px"
                         >
                           <el-table-column type="index" label="序号" width="42" />
                           <el-table-column prop="storedFileName" label="文件名" min-width="155" />
@@ -1911,16 +1945,6 @@
                             </template>
                           </el-table-column>
                         </el-table>
-                      </el-card>
-                    </el-col>
-
-                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
-                      <el-card shadow="never" class="pm-attachment-card">
-                        <template #header>
-                          <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>文件</span>
-                          </div>
-                        </template>
 
                         <div style="margin: 4px 0 8px; font-weight: 600">塑胶模具检验记录单</div>
                         <el-table
@@ -1972,30 +1996,28 @@
                         </el-table>
                       </el-card>
                     </el-col>
-                  </el-row>
-                </div>
 
-                <!-- 试模单 -->
-                <div class="pm-attachments" v-loading="attachmentLoading">
-                  <el-row class="pm-attachments-row" :gutter="isMobile ? 8 : 16">
-                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
+                    <!-- 右：模具图档、试模单（由上而下） -->
+                    <el-col :xs="24" :sm="12" class="pm-attachment-col pm-attachments2-right-col">
                       <el-card shadow="never" class="pm-attachment-card">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>试模单</span>
+                            <span>模具图档</span>
                             <el-upload
-                              :action="getAttachmentAction('trial-form')"
+                              :action="getAttachmentAction('drawing')"
                               :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
+                              :multiple="true"
+                              accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
+                              :before-upload="(file) => beforeAttachmentUpload(file, 'drawing')"
                               :on-success="handleAttachmentUploadSuccess"
                               :on-error="handleAttachmentUploadError"
                             >
-                              <el-button type="primary" size="small">上传试模单</el-button>
+                              <el-button type="primary" size="small">上传模具图档</el-button>
                             </el-upload>
                           </div>
                         </template>
                         <el-table
-                          :data="trialFormAttachments"
+                          :data="drawingAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -2050,28 +2072,24 @@
                           </el-table-column>
                         </el-table>
                       </el-card>
-                    </el-col>
 
-                    <el-col :xs="24" :sm="12" class="pm-attachment-col">
-                      <el-card shadow="never" class="pm-attachment-card">
+                      <el-card shadow="never" class="pm-attachment-card" style="margin-top: 16px">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>图档</span>
+                            <span>试模单</span>
                             <el-upload
-                              :action="getAttachmentAction('drawing')"
+                              :action="getAttachmentAction('trial-form')"
                               :show-file-list="false"
-                              :multiple="true"
-                              accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
-                              :before-upload="(file) => beforeAttachmentUpload(file, 'drawing')"
+                              accept=".xls,.xlsx,.pdf,image/*"
                               :on-success="handleAttachmentUploadSuccess"
                               :on-error="handleAttachmentUploadError"
                             >
-                              <el-button type="primary" size="small">上传图档</el-button>
+                              <el-button type="primary" size="small">上传试模单</el-button>
                             </el-upload>
                           </div>
                         </template>
                         <el-table
-                          :data="drawingAttachments"
+                          :data="trialFormAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -2207,8 +2225,10 @@ import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
+import PartDrawingDrawer from '@/components/PartDrawingDrawer/PartDrawingDrawer.vue'
 import { ElMessageBox } from 'element-plus'
 import ExternalImportDialog from './components/ExternalImportDialog.vue'
+import { Document, Box, Setting, Cpu, Folder, Paperclip } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -4656,6 +4676,23 @@ const drawingAttachments = computed(() =>
 const sealSampleAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'seal-sample')
 )
+const partDrawingAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'part-drawing')
+)
+
+// 零件图纸抽屉
+const partDrawingDrawerVisible = ref(false)
+const partDrawingDrawerDrawing = ref<string | null>(null)
+const getPartDrawingCount = (drawing: string) => {
+  const d = String(drawing || '').trim()
+  if (!d) return 0
+  return partDrawingAttachments.value.filter((a) => String((a as any).drawing || '').trim() === d)
+    .length
+}
+const openPartDrawingDrawer = (drawing: string) => {
+  partDrawingDrawerDrawing.value = String(drawing || '').trim() || null
+  partDrawingDrawerVisible.value = true
+}
 
 // 检验报告（项目编号 + 产品图号/行序号 绑定）
 const inspectionReports = ref<ProjectInspectionReportAttachment[]>([])
@@ -6582,6 +6619,11 @@ watch(viewMode, (val) => {
   border-radius: 50%;
 }
 
+.pm-edit-tab-icon {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .pm-autocomplete-caret {
   color: var(--el-text-color-regular);
   cursor: pointer;
@@ -7109,6 +7151,27 @@ watch(viewMode, (val) => {
 
 .pm-attachments-row {
   width: 100%;
+}
+
+.pm-attachments2-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.pm-attachments2-row .pm-attachment-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-attachments2-left-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-attachments2-left-card :deep(.el-card__body) {
+  flex: 1;
+  overflow: auto;
 }
 
 .pm-attachment-col {

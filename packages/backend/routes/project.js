@@ -2307,7 +2307,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
     }
 
-    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单、检验报告
+    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单、检验报告、零件图纸
     const validTypes = [
       'relocation-process',
       'trial-record',
@@ -2315,7 +2315,8 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       'trial-form',
       'drawing',
       'seal-sample',
-      'inspection-report'
+      'inspection-report',
+      'part-drawing'
     ]
     if (!validTypes.includes(type)) {
       return res.status(400).json({ code: 400, success: false, message: '附件类型不合法' })
@@ -2352,7 +2353,8 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       'trial-form': '试模单',
       drawing: '图档',
       'seal-sample': '封样单',
-      'inspection-report': '检验报告'
+      'inspection-report': '检验报告',
+      'part-drawing': '零件图纸'
     }
     const typeDirName = typeDirMap[type]
 
@@ -2371,7 +2373,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       const ext = originalName.split('.').pop()?.toLowerCase() || ''
       const safeExt = ext ? `.${ext}` : ''
       newFileName = `${projectCode}_试模单_${sequence}${safeExt}`
-    } else if (type === 'drawing') {
+    } else if (type === 'drawing' || type === 'part-drawing') {
       const ext = originalName.split('.').pop()?.toLowerCase() || ''
       const extLower = ext.toLowerCase()
       const allowed3DExts = new Set([
@@ -2394,7 +2396,10 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         return res.status(400).json({
           code: 400,
           success: false,
-          message: '图档仅支持 .pdf / .dwg / 常见三维图纸格式（.prt .x_t .stp 等）'
+          message:
+            type === 'part-drawing'
+              ? '零件图纸仅支持 .pdf / .dwg / 常见三维图纸格式（.prt .x_t .stp 等）'
+              : '图档仅支持 .pdf / .dwg / 常见三维图纸格式（.prt .x_t .stp 等）'
         })
       }
       newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
@@ -2404,14 +2409,23 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
     }
 
     const safeNewFileName = safeFileName(newFileName)
-    const finalStoredFileName = ['drawing', 'inspection-report'].includes(type)
+    const finalStoredFileName = ['drawing', 'inspection-report', 'part-drawing'].includes(type)
       ? ensureUniqueFileName(finalFullDir, safeNewFileName)
       : safeNewFileName
 
-    // 检验报告绑定字段：drawing / rowIndex（0-based）
+    // 检验报告绑定字段：drawing / rowIndex（0-based）；零件图纸绑定：drawing（产品图号）
     let bindingDrawing = null
     let bindingRowIndex = null
-    if (type === 'inspection-report') {
+    if (type === 'part-drawing') {
+      bindingDrawing = String(req.body?.drawing || '').trim() || null
+      if (!bindingDrawing) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '零件图纸需要提供 drawing（产品图号）进行绑定'
+        })
+      }
+    } else if (type === 'inspection-report') {
       bindingDrawing = String(req.body?.drawing || '').trim() || null
       const rowIndexRaw = req.body?.rowIndex
       bindingRowIndex =
@@ -2619,7 +2633,8 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
         文件大小 as fileSize,
         内容类型 as contentType,
         上传时间 as uploadedAt,
-        上传人 as uploadedBy
+        上传人 as uploadedBy,
+        绑定产品图号 as drawing
       FROM 项目管理附件
       WHERE 项目编号 = @projectCode
       ${whereType}

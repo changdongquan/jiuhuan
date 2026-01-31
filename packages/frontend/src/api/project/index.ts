@@ -127,6 +127,7 @@ export type ProjectAttachmentType =
   | 'trial-form' // 试模单
   | 'drawing' // 图档
   | 'seal-sample' // 封样单
+  | 'part-drawing' // 零件图纸
 
 // 项目管理附件接口
 export interface ProjectAttachment {
@@ -140,6 +141,7 @@ export interface ProjectAttachment {
   contentType?: string
   uploadedAt: string
   uploadedBy?: string
+  drawing?: string | null // 零件图纸、检验报告等绑定产品图号
 }
 
 // 获取项目管理附件列表
