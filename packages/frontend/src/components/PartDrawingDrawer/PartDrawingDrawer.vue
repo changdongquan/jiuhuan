@@ -375,7 +375,14 @@ onBeforeUnmount(() => {
 
 .pdd__actions {
   display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 8px;
+}
+
+.pdd__actions :deep(.el-upload) {
+  display: inline-flex;
+  align-items: center;
 }
 
 .pdd__body {

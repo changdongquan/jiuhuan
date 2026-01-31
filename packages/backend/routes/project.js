@@ -11,6 +11,7 @@ const ExcelJS = require('exceljs')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
 const { parseMouldTransferPdf } = require('../utils/pdf/mouldTransferPdfParser')
+const { pdfFirstPageToPngBuffer } = require('../utils/pdf/pdfToImage')
 
 const execFileAsync = promisify(execFile)
 
@@ -40,6 +41,14 @@ const TRIAL_FORM_TEMPLATE_PATH = path.join(
   'templates',
   'project-management',
   '试模单.xlsx'
+)
+
+const SEAL_SAMPLE_TEMPLATE_PATH = path.join(
+  __dirname,
+  '..',
+  'templates',
+  'project-management',
+  '封样单.xlsx'
 )
 
 const mkLibreOfficeProfileDir = async (tmpDir) => {
@@ -252,6 +261,136 @@ const loadProjectRowForTripartiteAgreement = async (code) => {
     `
   const result = await query(queryString, { projectCode: code })
   return Array.isArray(result) && result.length ? result[0] : null
+}
+
+const loadProjectRowForSealSample = async (code) => {
+  const queryString = `
+      SELECT p.*,
+        (SELECT TOP 1 g1.产品图号 FROM 货物信息 g1
+         WHERE g1.项目编号 = p.项目编号 AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as fallbackProductDrawing,
+        (SELECT TOP 1 g1.产品名称 FROM 货物信息 g1
+         WHERE g1.项目编号 = p.项目编号 AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as fallbackProductName
+      FROM 项目管理 p
+      WHERE p.项目编号 = @projectCode
+    `
+  const result = await query(queryString, { projectCode: code })
+  return Array.isArray(result) && result.length ? result[0] : null
+}
+
+const parseJsonArray = (val, defaultValue = []) => {
+  if (!val) return defaultValue
+  if (Array.isArray(val)) return val
+  try {
+    const p = typeof val === 'string' ? JSON.parse(val) : val
+    return Array.isArray(p) ? p : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
+const buildSealSampleProducts = (row) => {
+  const drawings = parseJsonArray(row?.产品列表, []).map((d) => String(d ?? '').trim()).filter(Boolean)
+  const names = parseJsonArray(row?.产品名称列表, []).map((n) => String(n ?? '').trim())
+  const qtys = parseJsonArray(row?.产品数量列表, []).map((q) => {
+    const n = typeof q === 'number' ? q : Number(String(q || '').trim())
+    return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 1
+  })
+  if (drawings.length > 0) {
+    const maxLen = drawings.length
+    while (names.length < maxLen) names.push('')
+    while (qtys.length < maxLen) qtys.push(1)
+    return drawings.map((d, i) => ({
+      productDrawing: d,
+      productName: names[i] || '',
+      productQty: qtys[i] ?? 1
+    }))
+  }
+  const fallbackDrawing = String(row?.fallbackProductDrawing || row?.产品图号 || '').trim()
+  const fallbackName = String(row?.fallbackProductName || row?.产品名称 || '').trim()
+  if (fallbackDrawing || fallbackName) {
+    return [{ productDrawing: fallbackDrawing, productName: fallbackName, productQty: 1 }]
+  }
+  return []
+}
+
+const formatDateForSealSample = (date) => {
+  if (!date) return ''
+  const d = date instanceof Date ? date : new Date(date)
+  if (!Number.isFinite(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  return `${y}.${m}.${day}`
+}
+
+// 封样单图片位置常量（需结合模板实测微调）
+const SEAL_SAMPLE_IMAGE_CONFIG = {
+  left: {
+    // 检验报告 - 左侧区域 (约 A6:G45)
+    tl: { col: 0, row: 5 },
+    ext: { width: 640, height: 960 }  // 放大一倍：320*2, 480*2
+  },
+  right: {
+    // 零件图纸 - 右侧区域 (约 H6:Q45)
+    tl: { col: 7, row: 5 },
+    ext: { width: 800, height: 960 }  // 放大一倍：400*2, 480*2
+  }
+}
+
+// 查询封样单用的检验报告 PDF（绑定产品图号，按上传时间取最新）
+const querySealSampleInspectionReportPdf = async (projectCode, productDrawing) => {
+  if (!projectCode || !productDrawing) return null
+  const rows = await query(
+    `
+    SELECT TOP 1 附件ID as id, 存储文件名 as storedFileName, 相对路径 as relativePath, 原始文件名 as originalName
+    FROM 项目管理附件
+    WHERE 项目编号 = @projectCode
+      AND 附件类型 = N'inspection-report'
+      AND 绑定产品图号 = @productDrawing
+      AND (原始文件名 LIKE N'%.pdf' OR 内容类型 LIKE N'%pdf%')
+    ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+    { projectCode, productDrawing }
+  )
+  return rows.length > 0 ? rows[0] : null
+}
+
+// 查询封样单用的零件图纸 PDF（绑定产品图号，按上传时间取最新）
+const querySealSamplePartDrawingPdf = async (projectCode, productDrawing) => {
+  if (!projectCode || !productDrawing) return null
+  const rows = await query(
+    `
+    SELECT TOP 1 附件ID as id, 存储文件名 as storedFileName, 相对路径 as relativePath, 原始文件名 as originalName
+    FROM 项目管理附件
+    WHERE 项目编号 = @projectCode
+      AND 附件类型 = N'part-drawing'
+      AND 绑定产品图号 = @productDrawing
+      AND (原始文件名 LIKE N'%.pdf' OR 内容类型 LIKE N'%pdf%')
+    ORDER BY 上传时间 DESC, 附件ID DESC
+    `,
+    { projectCode, productDrawing }
+  )
+  return rows.length > 0 ? rows[0] : null
+}
+
+// 尝试将 PDF 附件转为 PNG buffer（出错时返回 null，不中断流程）
+const tryConvertPdfAttachmentToPng = async (attachment) => {
+  if (!attachment) return null
+  try {
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      console.warn('[封样单] PDF 文件不存在:', fullPath)
+      return null
+    }
+    const pdfBuffer = await fsp.readFile(fullPath)
+    const pngBuffer = await pdfFirstPageToPngBuffer(pdfBuffer)
+    return pngBuffer
+  } catch (e) {
+    console.warn('[封样单] PDF 转图失败:', attachment.originalName, e?.message || e)
+    return null
+  }
 }
 
 const normalizeTrialCount = (val) => {
@@ -753,8 +892,8 @@ const generateAttachmentFileName = (projectCode, customerModelNo, type, original
       fileName = originalFileName
     }
   } else if (type === 'seal-sample') {
-    // 封样单：项目编号_封样单.{扩展名}
-    fileName = `${projectCode}_封样单${safeExt}`
+    // 封样单：封样单.{扩展名}（多产品时由生成逻辑命名）
+    fileName = `封样单${safeExt}`
   } else {
     // 默认使用原始文件名
     fileName = originalFileName
@@ -1655,6 +1794,7 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
 })
 
 // 生成封样单（xlsx）并保存到“项目管理附件-封样单”（不直接下载）
+// 基于模板填充，多产品时每产品一个文件
 router.post('/seal-sample-generate-xlsx', async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
@@ -1665,69 +1805,60 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
       return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
     }
 
-    const row = await loadProjectRowForTripartiteAgreement(code)
+    if (!fs.existsSync(SEAL_SAMPLE_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '封样单模板不存在，请联系管理员'
+      })
+    }
+
+    const row = await loadProjectRowForSealSample(code)
     if (!row) {
       return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
     }
 
-    const workbook = new ExcelJS.Workbook()
-    const sheet = workbook.addWorksheet('封样单')
+    const products = buildSealSampleProducts(row)
+    if (products.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '请先填写产品列表'
+      })
+    }
 
-    sheet.columns = [
-      { header: '字段', key: 'field', width: 18 },
-      { header: '内容', key: 'value', width: 45 }
-    ]
+    const productMaterial = String(row?.产品材质 || '').trim()
+    const customerModelNo = String(row?.客户模号 || '').trim()
+    const mouldCavity = String(row?.模具穴数 || '').trim()
+    const designer = String(row?.设计师 || '').trim()
+    const todayStr = formatDateForSealSample(new Date())
 
-    const productName = row?.productName || row?.产品名称 || ''
-    const productDrawing = row?.productDrawing || row?.产品图号 || ''
-    const sealSampleNo = row?.封样单号 || ''
-    const sealSampleTime = row?.封样时间 || ''
+    // 固定值（按案例文件）
+    const FIXED = {
+      A2: '/',
+      C2: '29256',
+      D2: '合肥市久环模具设备制造有限公司',
+      E2: '/',
+      G2: '注塑模具',
+      J2: '美菱',
+      N2: '新制模封样'
+    }
 
-    const rows = [
-      ['项目编号', code],
-      ['项目名称', String(row?.项目名称 || '').trim()],
-      ['产品名称', String(productName || '').trim()],
-      ['产品图号', String(productDrawing || '').trim()],
-      ['客户模号', String(row?.客户模号 || '').trim()],
-      ['封样单号', String(sealSampleNo || '').trim()],
-      ['封样时间', String(sealSampleTime || '').trim()],
-      ['制件厂家', String(row?.制件厂家 || '').trim()],
-      ['备注', '']
-    ]
-
-    rows.forEach(([field, value]) => {
-      sheet.addRow({ field, value })
-    })
-
-    sheet.getRow(1).font = { bold: true }
-    sheet.getRow(1).alignment = { vertical: 'middle' }
-    sheet.eachRow((r) => {
-      r.alignment = { vertical: 'middle', wrapText: true }
-    })
-
-    const xlsxBuffer = await workbook.xlsx.writeBuffer()
-
-    // 单文件覆盖：删除旧文件与记录
+    // 删除该项目下所有旧封样单附件
     const existingRows = await query(
       `
-      SELECT TOP 1
-        附件ID as id,
-        存储文件名 as storedFileName,
-        相对路径 as relativePath
+      SELECT 附件ID as id, 存储文件名 as storedFileName, 相对路径 as relativePath
       FROM 项目管理附件
-      WHERE 项目编号 = @projectCode
-        AND 附件类型 = 'seal-sample'
-      ORDER BY 上传时间 DESC, 附件ID DESC
+      WHERE 项目编号 = @projectCode AND 附件类型 = 'seal-sample'
       `,
       { projectCode: code }
     )
-    if (existingRows.length > 0) {
-      const oldAttachment = existingRows[0]
-      const oldFullPath = getFileFullPath(oldAttachment.relativePath, oldAttachment.storedFileName)
+    for (const oldAtt of existingRows) {
       await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, {
-        attachmentId: oldAttachment.id
+        attachmentId: oldAtt.id
       })
       try {
+        const oldFullPath = getFileFullPath(oldAtt.relativePath, oldAtt.storedFileName)
         if (fs.existsSync(oldFullPath)) {
           await fsp.unlink(oldFullPath)
         }
@@ -1742,52 +1873,105 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
     const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
     ensureDirSync(finalFullDir)
 
-    const storedFileName = safeFileName(`${code}_封样单.xlsx`)
-    const finalFile = path.join(finalFullDir, storedFileName)
-    await fsp.writeFile(finalFile, Buffer.from(xlsxBuffer))
-
-    const inserted = await query(
-      `
-      INSERT INTO 项目管理附件 (
-        项目编号,
-        附件类型,
-        原始文件名,
-        存储文件名,
-        相对路径,
-        文件大小,
-        内容类型,
-        上传人
-      )
-      OUTPUT
-        INSERTED.附件ID as id,
-        INSERTED.上传时间 as uploadedAt
-      VALUES (
-        @projectCode,
-        'seal-sample',
-        @originalName,
-        @storedFileName,
-        @relativePath,
-        @fileSize,
-        @contentType,
-        @uploadedBy
-      )
-    `,
-      {
-        projectCode: code,
-        originalName: storedFileName,
-        storedFileName,
-        relativePath: finalRelativeDir,
-        fileSize: Buffer.byteLength(xlsxBuffer),
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        uploadedBy: null
+    const insertedIds = []
+    for (const prod of products) {
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.readFile(SEAL_SAMPLE_TEMPLATE_PATH)
+      const sheet = workbook.worksheets[0]
+      if (!sheet) {
+        throw new Error('封样单模板格式异常')
       }
-    )
+
+      sheet.getCell('A2').value = FIXED.A2
+      sheet.getCell('B2').value = `${prod.productDrawing} ${prod.productName}`.trim()
+      sheet.getCell('C2').value = FIXED.C2
+      sheet.getCell('D2').value = FIXED.D2
+      sheet.getCell('E2').value = FIXED.E2
+      sheet.getCell('F2').value = productMaterial
+      sheet.getCell('G2').value = FIXED.G2
+      sheet.getCell('H2').value = prod.productQty
+      sheet.getCell('I2').value = customerModelNo
+      sheet.getCell('J2').value = FIXED.J2
+      sheet.getCell('K2').value = mouldCavity
+      sheet.getCell('L2').value = todayStr
+      sheet.getCell('M2').value = designer
+      sheet.getCell('N2').value = FIXED.N2
+
+      // 插入图片：检验报告（左图）和零件图纸（右图）
+      // 仅处理 PDF 格式，其它格式暂不插入
+      if (prod.productDrawing) {
+        // 左图：检验报告 PDF
+        const inspectionReportAtt = await querySealSampleInspectionReportPdf(code, prod.productDrawing)
+        const inspectionReportPng = await tryConvertPdfAttachmentToPng(inspectionReportAtt)
+        if (inspectionReportPng) {
+          const leftImageId = workbook.addImage({
+            buffer: inspectionReportPng,
+            extension: 'png'
+          })
+          sheet.addImage(leftImageId, {
+            tl: SEAL_SAMPLE_IMAGE_CONFIG.left.tl,
+            ext: SEAL_SAMPLE_IMAGE_CONFIG.left.ext
+          })
+        }
+
+        // 右图：零件图纸 PDF
+        const partDrawingAtt = await querySealSamplePartDrawingPdf(code, prod.productDrawing)
+        const partDrawingPng = await tryConvertPdfAttachmentToPng(partDrawingAtt)
+        if (partDrawingPng) {
+          const rightImageId = workbook.addImage({
+            buffer: partDrawingPng,
+            extension: 'png'
+          })
+          sheet.addImage(rightImageId, {
+            tl: SEAL_SAMPLE_IMAGE_CONFIG.right.tl,
+            ext: SEAL_SAMPLE_IMAGE_CONFIG.right.ext
+          })
+        }
+      }
+
+      const xlsxBuffer = await workbook.xlsx.writeBuffer()
+
+      const safeDrawing = safeFileName(prod.productDrawing) || '产品'
+      const baseStoredFileName =
+        products.length === 1
+          ? safeFileName('封样单.xlsx')
+          : safeFileName(`${safeDrawing}_封样单.xlsx`)
+      const storedFileName = ensureUniqueFileName(finalFullDir, baseStoredFileName)
+
+      const finalFile = path.join(finalFullDir, storedFileName)
+      await fsp.writeFile(finalFile, Buffer.from(xlsxBuffer))
+
+      const inserted = await query(
+        `
+        INSERT INTO 项目管理附件 (
+          项目编号, 附件类型, 原始文件名, 存储文件名, 相对路径,
+          文件大小, 内容类型, 上传人, 绑定产品图号, 绑定行序号, 是否孤儿, 孤儿原因, 孤儿行序号
+        )
+        OUTPUT INSERTED.附件ID as id, INSERTED.上传时间 as uploadedAt
+        VALUES (
+          @projectCode, 'seal-sample', @originalName, @storedFileName, @relativePath,
+          @fileSize, @contentType, @uploadedBy, @bindingDrawing, NULL, 0, NULL, NULL
+        )
+        `,
+        {
+          projectCode: code,
+          originalName: storedFileName,
+          storedFileName,
+          relativePath: finalRelativeDir,
+          fileSize: Buffer.byteLength(xlsxBuffer),
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          uploadedBy: null,
+          bindingDrawing: prod.productDrawing || null
+        }
+      )
+      insertedIds.push(inserted?.[0]?.id)
+    }
 
     return res.json({
       code: 0,
       success: true,
       message: '生成封样单成功',
-      data: { id: inserted?.[0]?.id, storedFileName }
+      data: { ids: insertedIds, count: insertedIds.length }
     })
   } catch (error) {
     console.error('生成并保存封样单 xlsx 失败:', error)

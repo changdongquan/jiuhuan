@@ -1598,20 +1598,41 @@
                     <el-col :xs="24" :sm="12" class="pm-attachment-col">
                       <el-card shadow="never" class="pm-attachment-card">
                         <template #header>
-                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                          <div
+                            style="
+                              display: flex;
+                              justify-content: space-between;
+                              align-items: center;
+                              gap: 8px;
+                            "
+                          >
                             <span>试模记录表</span>
-                            <el-upload
-                              :action="getAttachmentAction('trial-record')"
-                              :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
-                              :before-upload="
-                                (file) => beforeAttachmentUpload(file, 'trial-record')
-                              "
-                              :on-success="handleAttachmentUploadSuccess"
-                              :on-error="handleAttachmentUploadError"
-                            >
-                              <el-button type="primary" size="small">上传试模记录表</el-button>
-                            </el-upload>
+                            <div style="display: flex; gap: 8px">
+                              <el-button
+                                v-if="editForm.项目编号 || currentProjectCode"
+                                type="primary"
+                                plain
+                                size="small"
+                                :disabled="
+                                  editSubmitting || !(editForm.项目编号 || currentProjectCode)
+                                "
+                                @click="handlePrintTrialRecord"
+                              >
+                                打印试模记录表
+                              </el-button>
+                              <el-upload
+                                :action="getAttachmentAction('trial-record')"
+                                :show-file-list="false"
+                                accept=".xls,.xlsx,.pdf,image/*"
+                                :before-upload="
+                                  (file) => beforeAttachmentUpload(file, 'trial-record')
+                                "
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small">上传试模记录表</el-button>
+                              </el-upload>
+                            </div>
                           </div>
                         </template>
                         <el-table
@@ -2164,15 +2185,6 @@
             重置初始化
           </el-button>
           <div class="pm-edit-footer__right">
-            <el-button
-              v-if="editForm.项目编号 || currentProjectCode"
-              type="primary"
-              plain
-              :disabled="editSubmitting || !(editForm.项目编号 || currentProjectCode)"
-              @click="handlePrintTrialRecord"
-            >
-              打印试模记录单
-            </el-button>
             <el-button @click="editDialogVisible = false">取消</el-button>
             <el-button type="primary" :loading="editSubmitting" @click="handleSubmitEdit"
               >保存</el-button
@@ -4673,9 +4685,22 @@ const trialFormAttachments = computed(() =>
 const drawingAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'drawing')
 )
-const sealSampleAttachments = computed(() =>
-  allAttachments.value.filter((item) => item.type === 'seal-sample')
-)
+// 封样单按产品列表顺序显示
+const sealSampleAttachments = computed(() => {
+  const list = allAttachments.value.filter((item) => item.type === 'seal-sample')
+  const productOrder = parseProductDrawingList(getProductListRawFromEditForm())
+  if (productOrder.length === 0) return list
+  return [...list].sort((a, b) => {
+    const da = String((a as any).drawing ?? '').trim()
+    const db = String((b as any).drawing ?? '').trim()
+    const ia = productOrder.indexOf(da)
+    const ib = productOrder.indexOf(db)
+    if (ia >= 0 && ib >= 0) return ia - ib
+    if (ia >= 0) return -1
+    if (ib >= 0) return 1
+    return 0
+  })
+})
 const partDrawingAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'part-drawing')
 )
@@ -5250,7 +5275,7 @@ const handlePrintTrialRecord = async () => {
   // 如果需要保存，先保存
   if (isEditFormDirty.value) {
     try {
-      await ElMessageBox.confirm('请先保存后再打印试模记录单', '提示', {
+      await ElMessageBox.confirm('请先保存后再打印试模记录表', '提示', {
         type: 'warning',
         confirmButtonText: '保存并继续',
         cancelButtonText: '取消'
