@@ -457,13 +457,15 @@ fi
 
 echo ""
 
-echo "--- 最近提交（前20条） ---"
+echo "--- 最近提交（前20条，来自 origin/main） ---"
 
 if [ -d "$SRC_DIR/.git" ]; then
 
   cd "$SRC_DIR"
 
-  git log --oneline --decorate -20 | nl
+  MAIN_REF="origin/main"
+  git rev-parse --verify origin/main >/dev/null 2>&1 || MAIN_REF="origin/master"
+  git log "$MAIN_REF" --oneline --decorate -20 | nl
 
 else
 
@@ -531,13 +533,17 @@ echo "==> 已写入 $SRC_DIR/packages/backend/.env"
 
 EOF
 
-# 04 安装后端依赖
+# 04 安装后端依赖（必须以部署用户运行，避免 node_modules 属主为 root 导致后续 EACCES）
 
 cat >/opt/deploy/jh-craftsys/bin/04_install_backend_deps.sh <<'EOF'
 
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+  exec sudo -u "$SUDO_USER" -H "$0" "$@"
+fi
 
 . /opt/deploy/jh-craftsys/conf/deploy.env
 
@@ -561,13 +567,17 @@ fi
 
 EOF
 
-# 05 前端依赖 + 6G 构建（最新版：自动识别构建脚本 & 产物目录）
+# 05 前端依赖 + 6G 构建（必须以部署用户运行，避免 node_modules 属主为 root 导致后续 EACCES）
 
 cat >/opt/deploy/jh-craftsys/bin/05_install_frontend_deps_build.sh <<'EOF'
 
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+  exec sudo -u "$SUDO_USER" -H "$0" "$@"
+fi
 
 . /opt/deploy/jh-craftsys/conf/deploy.env
 
@@ -877,10 +887,13 @@ echo "==> 已切换到 $TS 并重载后端"
 EOF
 
 # update 串联（升级常用，支持版本参数）
+# 使用 #!/bin/bash 确保 sudo 下由 bash 执行（set -o pipefail 仅 bash 支持）
 
 cat >/opt/deploy/jh-craftsys/bin/update.sh <<'EOF'
 
-#!/usr/bin/env bash
+#!/bin/bash
+# 若被 sh 调用（pipefail 报错），则用 bash 重新执行
+[ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 
 set -euo pipefail
 
