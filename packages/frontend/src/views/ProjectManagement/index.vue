@@ -5421,7 +5421,16 @@ const handleGenerateSealSample = async () => {
     sealSampleGenerating.value = true
     const resp: any = await generateSealSampleXlsxApi(projectCode)
     if (resp?.code !== 0 && resp?.success !== true) {
-      ElMessage.error(resp?.message || '生成封样单失败')
+      const missing: string[] = resp?.missing
+      if (Array.isArray(missing) && missing.length > 0) {
+        ElMessageBox.alert(
+          `缺少以下内容，请补充后再生成：<br><br>${missing.map((m) => `• ${m}`).join('<br>')}`,
+          resp?.message || '无法生成封样单',
+          { type: 'warning', dangerouslyUseHTMLString: true }
+        ).catch(() => {})
+      } else {
+        ElMessage.error(resp?.message || '生成封样单失败')
+      }
       return
     }
 
@@ -5431,15 +5440,31 @@ const handleGenerateSealSample = async () => {
     console.error('生成封样单失败:', error)
     const resp = error?.response
     const data = resp?.data
+    const showMissing = (json: any) => {
+      const missing: string[] = json?.missing
+      if (Array.isArray(missing) && missing.length > 0) {
+        ElMessageBox.alert(
+          `缺少以下内容，请补充后再生成：<br><br>${missing.map((m) => `• ${m}`).join('<br>')}`,
+          json?.message || '无法生成封样单',
+          { type: 'warning', dangerouslyUseHTMLString: true }
+        ).catch(() => {})
+      } else {
+        ElMessage.error(json?.message || '生成封样单失败')
+      }
+    }
     if (data instanceof Blob) {
       try {
         const text = await data.text()
         const json = JSON.parse(text)
-        ElMessage.error(json?.message || '生成封样单失败')
+        showMissing(json)
         return
       } catch {
         // ignore
       }
+    }
+    if (data && typeof data === 'object') {
+      showMissing(data)
+      return
     }
     ElMessage.error(resp?.data?.message || error?.message || '生成封样单失败')
   } finally {

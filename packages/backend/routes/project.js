@@ -1823,7 +1823,8 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
       return res.status(400).json({
         code: 400,
         success: false,
-        message: '请先填写产品列表'
+        message: '请先填写产品列表',
+        missing: ['产品列表']
       })
     }
 
@@ -1832,6 +1833,33 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
     const mouldCavity = String(row?.模具穴数 || '').trim()
     const designer = String(row?.设计师 || '').trim()
     const todayStr = formatDateForSealSample(new Date())
+
+    // 校验缺少的信息和附件
+    const missing = []
+    if (!productMaterial) missing.push('项目信息：产品材质')
+    if (!customerModelNo) missing.push('项目信息：客户模号')
+    if (!mouldCavity) missing.push('项目信息：模具穴数')
+    if (!designer) missing.push('项目信息：设计师')
+
+    for (const prod of products) {
+      const inspectionPdf = await querySealSampleInspectionReportPdf(code, prod.productDrawing)
+      if (!inspectionPdf) {
+        missing.push(`产品 ${prod.productDrawing}：检验报告 PDF`)
+      }
+      const partDrawingPdf = await querySealSamplePartDrawingPdf(code, prod.productDrawing)
+      if (!partDrawingPdf) {
+        missing.push(`产品 ${prod.productDrawing}：零件图纸 PDF`)
+      }
+    }
+
+    if (missing.length > 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '缺少以下信息，请补充后再生成封样单',
+        missing
+      })
+    }
 
     // 固定值（按案例文件）
     const FIXED = {
