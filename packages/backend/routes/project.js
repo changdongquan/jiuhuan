@@ -10,8 +10,9 @@ const JSZip = require('jszip')
 const ExcelJS = require('exceljs')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
-const { parseMouldTransferPdf } = require('../utils/pdf/mouldTransferPdfParser')
+const { parseMouldTransferPdf, parseMouldTransferFromTokens } = require('../utils/pdf/mouldTransferPdfParser')
 const { pdfFirstPageToPngBuffer } = require('../utils/pdf/pdfToImage')
+const { ocrMouldTransferPng } = require('../utils/ocr/mouldTransferOcrClient')
 
 const execFileAsync = promisify(execFile)
 
@@ -2493,8 +2494,43 @@ router.post('/relocation-parse-pdf', relocationPdfUpload.single('file'), async (
       return res.status(400).json({ code: 400, success: false, message: '缺少 PDF 文件（file）' })
     }
 
-    const result = await parseMouldTransferPdf(file.buffer)
-    return res.json({ code: 0, success: true, data: result })
+    try {
+      const result = await parseMouldTransferPdf(file.buffer)
+      return res.json({ code: 0, success: true, data: result })
+    } catch (error) {
+      const msg = String(error?.message || '')
+      const shouldOcrFallback =
+        /需要 OCR/.test(msg) ||
+        /未提取到任何文字/.test(msg) ||
+        /文字太少/.test(msg) ||
+        /未找到明细表表头/.test(msg) ||
+        /未识别到明细行/.test(msg)
+
+      const ocrBaseUrl = String(process.env.RELOCATION_OCR_URL || process.env.OCR_SERVICE_URL || '')
+        .trim()
+        .replace(/\/+$/, '')
+      const ocrEnabled = !!ocrBaseUrl && process.env.RELOCATION_OCR_DISABLED !== '1'
+
+      if (!shouldOcrFallback || !ocrEnabled) throw error
+
+      const scale = Number(process.env.RELOCATION_OCR_PDF_SCALE || 3)
+      const timeoutMs = Number(process.env.RELOCATION_OCR_TIMEOUT_MS || 20000)
+
+      // 1) PDF -> PNG (first page)
+      const pngBuffer = await pdfFirstPageToPngBuffer(file.buffer, { scale, page: 1 })
+
+      // 2) OCR -> tokens
+      const ocrData = await ocrMouldTransferPng(pngBuffer, { baseUrl: ocrBaseUrl, timeoutMs })
+
+      // 3) Reuse the same parser on OCR tokens (pixel coordinate system)
+      const tokens = Array.isArray(ocrData?.tokens) ? ocrData.tokens : []
+      const pageWidth = Number(ocrData?.pageWidth || 0)
+      const pageHeight = Number(ocrData?.pageHeight || 0)
+      const fullText = String(ocrData?.fullText || '')
+
+      const result = parseMouldTransferFromTokens({ tokens, pageWidth, pageHeight, fullText })
+      return res.json({ code: 0, success: true, data: result })
+    }
   } catch (error) {
     return res.status(400).json({
       code: 400,

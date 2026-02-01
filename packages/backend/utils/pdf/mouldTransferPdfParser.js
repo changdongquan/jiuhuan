@@ -191,57 +191,29 @@ const normalizePartNo = (partNo) => {
   return s
 }
 
-async function parseMouldTransferPdf(buffer) {
-  const pdfjsLib = await getPdfjs()
-  // pdf.js rejects Node Buffer (even though it's a Uint8Array subclass); ensure plain Uint8Array.
-  const data = Buffer.isBuffer(buffer)
-    ? new Uint8Array(buffer)
-    : buffer instanceof Uint8Array
-      ? buffer
-      : new Uint8Array(buffer)
-  const loadingTask = pdfjsLib.getDocument({ data, disableWorker: true })
-  const pdf = await loadingTask.promise
-  if (!pdf.numPages) throw new Error('PDF 无页面')
+function parseMouldTransferFromTokens(input) {
+  const tokens = Array.isArray(input?.tokens) ? input.tokens : []
+  const pageWidth = Number(input?.pageWidth || 0)
+  const pageHeight = Number(input?.pageHeight || 0)
 
-  const page = await pdf.getPage(1)
-  const viewport = page.getViewport({ scale: 1.0 })
-  const pageHeight = viewport.height
+  if (!tokens.length) throw new Error('未识别到任何文字（需要 OCR 或提高扫描清晰度）')
+  if (!Number.isFinite(pageWidth) || pageWidth <= 0) throw new Error('pageWidth 无效')
+  if (!Number.isFinite(pageHeight) || pageHeight <= 0) throw new Error('pageHeight 无效')
 
-  const content = await page.getTextContent()
-  const items = Array.isArray(content?.items) ? content.items : []
-  if (!items.length) throw new Error('未提取到任何文字（可能是扫描/图片版 PDF，需要 OCR）')
-
-  const tokens = []
-  for (const it of items) {
-    const str = String(it?.str || '')
-    if (!str.trim()) continue
-    const transform = it?.transform
-    if (!Array.isArray(transform) || transform.length < 6) continue
-    const x0 = Number(transform[4] || 0)
-    const y = Number(transform[5] || 0)
-    const w = Number(it?.width || 0)
-    const x1 = x0 + (Number.isFinite(w) ? w : 0)
-    const top = pageHeight - y
-    tokens.push({
-      text: str,
-      x0,
-      x1: Number.isFinite(x1) && x1 > x0 ? x1 : x0 + 1,
-      top
-    })
-  }
-
-  if (tokens.length < 30) throw new Error('提取到的文字太少（可能是扫描/图片版 PDF，需要 OCR）')
+  if (tokens.length < 30) throw new Error('识别到的文字太少（需要 OCR 或提高扫描清晰度）')
 
   // Build a rough full text (for date extraction)
   const linesAll = groupByTop(tokens, 3)
-  const fullText = linesAll
-    .map((l) =>
-      l.tokens
-        .sort((a, b) => a.x0 - b.x0)
-        .map((t) => String(t.text || '').trim())
-        .join(' ')
-    )
-    .join('\n')
+  const fullText =
+    String(input?.fullText || '') ||
+    linesAll
+      .map((l) =>
+        l.tokens
+          .sort((a, b) => a.x0 - b.x0)
+          .map((t) => String(t.text || '').trim())
+          .join(' ')
+      )
+      .join('\n')
 
   const mouldMoveDate = extractMoveDate(fullText)
   if (!mouldMoveDate) throw new Error('未能从“模具移模时间”处提取日期（YYYY-MM-DD）')
@@ -289,7 +261,7 @@ async function parseMouldTransferPdf(buffer) {
   for (let i = 0; i < centersOrder.length - 1; i++) {
     boundaries.push((centersOrder[i] + centersOrder[i + 1]) / 2)
   }
-  boundaries.push(viewport.width)
+  boundaries.push(pageWidth)
 
   // Determine data region.
   const headerTopMax = Math.max(...Object.values(headerBBoxes).map((b) => b.top))
@@ -344,13 +316,7 @@ async function parseMouldTransferPdf(buffer) {
         ? Math.min(tableEndTop + 2, (rowTops[i] + rowTops[i + 1]) / 2)
         : tableEndTop + 2
 
-    const partNoTokens = collectTokensInBand(
-      tokens,
-      bandTop,
-      bandBottom,
-      boundaries[0],
-      boundaries[1]
-    )
+    const partNoTokens = collectTokensInBand(tokens, bandTop, bandBottom, boundaries[0], boundaries[1])
     const mouldNameTokens = collectTokensInBand(
       tokens,
       bandTop,
@@ -358,34 +324,10 @@ async function parseMouldTransferPdf(buffer) {
       boundaries[1],
       boundaries[2]
     )
-    const mouldNoTokens = collectTokensInBand(
-      tokens,
-      bandTop,
-      bandBottom,
-      boundaries[2],
-      boundaries[3]
-    )
-    const factoryTokens = collectTokensInBand(
-      tokens,
-      bandTop,
-      bandBottom,
-      boundaries[3],
-      boundaries[4]
-    )
-    const moveToTokens = collectTokensInBand(
-      tokens,
-      bandTop,
-      bandBottom,
-      boundaries[4],
-      boundaries[5]
-    )
-    const sealTokens = collectTokensInBand(
-      tokens,
-      bandTop,
-      bandBottom,
-      boundaries[5],
-      boundaries[6]
-    )
+    const mouldNoTokens = collectTokensInBand(tokens, bandTop, bandBottom, boundaries[2], boundaries[3])
+    const factoryTokens = collectTokensInBand(tokens, bandTop, bandBottom, boundaries[3], boundaries[4])
+    const moveToTokens = collectTokensInBand(tokens, bandTop, bandBottom, boundaries[4], boundaries[5])
+    const sealTokens = collectTokensInBand(tokens, bandTop, bandBottom, boundaries[5], boundaries[6])
 
     const partNoRaw = joinCellText(partNoTokens, 'nospace')
     const mouldNameRaw = joinCellText(mouldNameTokens, 'space')
@@ -424,4 +366,52 @@ async function parseMouldTransferPdf(buffer) {
   return { type: 'mould-transfer', mouldMoveDate, rows }
 }
 
-module.exports = { parseMouldTransferPdf }
+async function parseMouldTransferPdf(buffer) {
+  const pdfjsLib = await getPdfjs()
+  // pdf.js rejects Node Buffer (even though it's a Uint8Array subclass); ensure plain Uint8Array.
+  const data = Buffer.isBuffer(buffer)
+    ? new Uint8Array(buffer)
+    : buffer instanceof Uint8Array
+      ? buffer
+      : new Uint8Array(buffer)
+  const loadingTask = pdfjsLib.getDocument({ data, disableWorker: true })
+  const pdf = await loadingTask.promise
+  if (!pdf.numPages) throw new Error('PDF 无页面')
+
+  const page = await pdf.getPage(1)
+  const viewport = page.getViewport({ scale: 1.0 })
+  const pageHeight = viewport.height
+
+  const content = await page.getTextContent()
+  const items = Array.isArray(content?.items) ? content.items : []
+  if (!items.length) throw new Error('未提取到任何文字（可能是扫描/图片版 PDF，需要 OCR）')
+
+  const tokens = []
+  for (const it of items) {
+    const str = String(it?.str || '')
+    if (!str.trim()) continue
+    const transform = it?.transform
+    if (!Array.isArray(transform) || transform.length < 6) continue
+    const x0 = Number(transform[4] || 0)
+    const y = Number(transform[5] || 0)
+    const w = Number(it?.width || 0)
+    const x1 = x0 + (Number.isFinite(w) ? w : 0)
+    const top = pageHeight - y
+    tokens.push({
+      text: str,
+      x0,
+      x1: Number.isFinite(x1) && x1 > x0 ? x1 : x0 + 1,
+      top
+    })
+  }
+
+  if (tokens.length < 30) throw new Error('提取到的文字太少（可能是扫描/图片版 PDF，需要 OCR）')
+  return parseMouldTransferFromTokens({
+    tokens,
+    pageWidth: viewport.width,
+    pageHeight,
+    fullText: ''
+  })
+}
+
+module.exports = { parseMouldTransferPdf, parseMouldTransferFromTokens }
