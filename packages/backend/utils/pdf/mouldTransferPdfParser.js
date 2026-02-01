@@ -275,11 +275,12 @@ function parseMouldTransferFromTokens(input) {
   const firstDataColLeft = boundaries[0] // left edge of first data column
   const anchors = tokens
     .filter((t) => t.top >= tableStartTop && t.top <= tableEndTop)
-    // Strictly keep tokens that are entirely in the index column; avoid picking up digits
-    // that wrap inside the first data cell (e.g. partNo tail `.1` / `.2` on next line).
-    .filter((t) => t.x1 <= firstDataColLeft - 1)
+    // For OCR tokens the bbox may slightly overlap the first data column;
+    // use center-x to decide whether it's in the index column.
+    .filter((t) => (t.x0 + t.x1) / 2 < firstDataColLeft)
     .map((t) => ({ text: String(t.text || '').trim(), top: t.top }))
-    .filter((t) => /^\d{1,2}$/.test(t.text))
+    // Allow "0.1" style indices from OCR.
+    .filter((t) => /^\d{1,2}(\.\d{1,2})?$/.test(t.text))
     .sort((a, b) => a.top - b.top)
 
   const rowTops = []
@@ -289,8 +290,9 @@ function parseMouldTransferFromTokens(input) {
 
   // Fallback if no index anchors: use mouldNo tokens.
   if (!rowTops.length) {
-    const mouldColLeft = boundaries[3]
-    const mouldColRight = boundaries[4]
+    // mouldNo column is boundaries[2]..boundaries[3]
+    const mouldColLeft = boundaries[2]
+    const mouldColRight = boundaries[3]
     const mouldAnchors = tokens
       .filter((t) => t.top >= tableStartTop && t.top <= tableEndTop)
       .filter((t) => {
