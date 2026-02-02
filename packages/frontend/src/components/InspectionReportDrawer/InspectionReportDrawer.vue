@@ -36,25 +36,25 @@
           <el-tabs v-model="activeGroup" class="ird__tabs">
             <el-tab-pane :label="`本行（${currentList.length}）`" name="current">
               <el-table :data="currentList" border size="small" style="width: 100%">
-                <el-table-column type="index" label="序号" width="54" align="center" />
+                <el-table-column type="index" label="序号" width="45" align="center" />
                 <el-table-column label="文件名" min-width="160" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ row.storedFileName || row.originalName }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="类型" width="80" align="center">
+                <el-table-column label="类型" width="60" align="center">
                   <template #default="{ row }">
                     <el-tag size="small">{{ fileKind(row) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="日期" width="110" show-overflow-tooltip>
+                <el-table-column label="日期" width="100" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ formatUploadedDate(row.uploadedAt) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="190" align="center">
+                <el-table-column label="操作" width="100" align="center">
                   <template #default="{ row }">
-                    <div style="display: flex; gap: 8px; justify-content: center">
+                    <div class="ird__op-btns">
                       <el-button type="primary" link size="small" @click="preview(row)"
                         >预览</el-button
                       >
@@ -78,25 +78,25 @@
 
             <el-tab-pane :label="`未绑定/已删除行（${orphanList.length}）`" name="orphan">
               <el-table :data="orphanList" border size="small" style="width: 100%">
-                <el-table-column type="index" label="序号" width="54" align="center" />
+                <el-table-column type="index" label="序号" width="45" align="center" />
                 <el-table-column label="文件名" min-width="160" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ row.storedFileName || row.originalName }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="类型" width="80" align="center">
+                <el-table-column label="类型" width="60" align="center">
                   <template #default="{ row }">
                     <el-tag size="small">{{ fileKind(row) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="日期" width="110" show-overflow-tooltip>
+                <el-table-column label="日期" width="100" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span>{{ formatUploadedDate(row.uploadedAt) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="190" align="center">
+                <el-table-column label="操作" width="100" align="center">
                   <template #default="{ row }">
-                    <div style="display: flex; gap: 8px; justify-content: center">
+                    <div class="ird__op-btns">
                       <el-button type="primary" link size="small" @click="preview(row)"
                         >预览</el-button
                       >
@@ -385,9 +385,17 @@ const remove = async (a: ProjectInspectionReportAttachment) => {
   }
 }
 
-const handleUploadSuccess = async () => {
+const handleUploadSuccess = async (response: any) => {
   await refresh()
   ElMessage.success('上传成功')
+  // 默认打开刚上传文件的预览（PDF/图片）
+  const newId = response?.data?.id ?? response?.data?.data?.id
+  if (newId != null) {
+    const item = all.value.find((a) => a.id === newId)
+    if (item && guessPreviewKind(item) !== 'none') {
+      await preview(item)
+    }
+  }
 }
 const handleUploadError = (err: any) => {
   console.error('上传失败:', err)
@@ -404,8 +412,14 @@ const handleClose = () => {
 
 watch(
   () => props.modelValue,
-  (v) => {
-    if (v) void refresh()
+  async (v) => {
+    if (!v) return
+    await refresh()
+    // 只有一个 PDF 时默认打开预览（以当前 Tab 列表为准）
+    const list = activeGroup.value === 'current' ? currentList.value : orphanList.value
+    if (list.length === 1 && guessPreviewKind(list[0]) === 'pdf') {
+      await preview(list[0])
+    }
   }
 )
 
@@ -451,6 +465,19 @@ onBeforeUnmount(() => {
 .ird__actions {
   display: flex;
   gap: 8px;
+}
+
+.ird__op-btns {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.ird__op-btns :deep(.el-button) {
+  padding-right: 6px;
+  padding-left: 6px;
+  margin: 0;
 }
 
 .ird__body {

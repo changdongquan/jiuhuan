@@ -329,14 +329,14 @@ const formatDateForSealSample = (date) => {
 // 封样单图片位置常量（需结合模板实测微调）
 const SEAL_SAMPLE_IMAGE_CONFIG = {
   left: {
-    // 检验报告 - 左侧区域 (约 A6:G45)
+    // 检验报告 - 左侧区域 (约 A6)，尺寸在原基础上放大 30%
     tl: { col: 0, row: 5 },
-    ext: { width: 640, height: 960 }  // 放大一倍：320*2, 480*2
+    ext: { width: 832, height: 1248 }  // 640*1.3, 960*1.3
   },
   right: {
-    // 零件图纸 - 右侧区域 (约 H6:Q45)
-    tl: { col: 7, row: 5 },
-    ext: { width: 800, height: 960 }  // 放大一倍：400*2, 480*2
+    // 零件图纸 - 右侧区域 G6，尺寸在原基础上放大 30%
+    tl: { col: 6, row: 5 },  // G6
+    ext: { width: 1040, height: 1248 }  // 800*1.3, 960*1.3
   }
 }
 
@@ -1960,11 +1960,9 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
 
       const xlsxBuffer = await workbook.xlsx.writeBuffer()
 
-      const safeDrawing = safeFileName(prod.productDrawing) || '产品'
-      const baseStoredFileName =
-        products.length === 1
-          ? safeFileName('封样单.xlsx')
-          : safeFileName(`${safeDrawing}_封样单.xlsx`)
+      const safeDrawing = safeFileName(prod.productDrawing) || '产品图号'
+      const safeName = safeFileName(prod.productName) || '产品名称'
+      const baseStoredFileName = safeFileName(`${safeDrawing}_${safeName}_封样单.xlsx`)
       const storedFileName = ensureUniqueFileName(finalFullDir, baseStoredFileName)
 
       const finalFile = path.join(finalFullDir, storedFileName)
@@ -2586,6 +2584,41 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
     }
 
+    // 零件图纸需先取 bindingDrawing，用于生成文件名 项目编号_产品图号_产品名称.扩展名
+    let partDrawingBinding = null
+    if (type === 'part-drawing') {
+      partDrawingBinding = String(req.body?.drawing || '').trim() || null
+      if (!partDrawingBinding) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '零件图纸需要提供 drawing（产品图号）进行绑定'
+        })
+      }
+    }
+
+    // 检验报告需先取 drawing/rowIndex，用于生成文件名 项目编号_产品图号_产品名称.扩展名
+    let inspectionReportDrawing = null
+    let inspectionReportRowIndex = null
+    if (type === 'inspection-report') {
+      inspectionReportDrawing = String(req.body?.drawing || '').trim() || null
+      const rowIndexRaw = req.body?.rowIndex
+      inspectionReportRowIndex =
+        rowIndexRaw === undefined || rowIndexRaw === null || String(rowIndexRaw).trim() === ''
+          ? null
+          : parseInt(String(rowIndexRaw), 10)
+      if (
+        !inspectionReportDrawing &&
+        (inspectionReportRowIndex === null || Number.isNaN(inspectionReportRowIndex))
+      ) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '检验报告需要提供 drawing 或 rowIndex 进行绑定'
+        })
+      }
+    }
+
     // 查询客户模号
     const customerModelNo = await getCustomerModelNo(projectCode)
 
@@ -2650,7 +2683,82 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
               : '图档仅支持 .pdf / .dwg / 常见三维图纸格式（.prt .x_t .stp 等）'
         })
       }
-      newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
+      if (type === 'part-drawing') {
+        // 零件图纸：存储文件名格式 项目编号_产品图号_产品名称.扩展名
+        let productName = partDrawingBinding
+        try {
+          const projRows = await query(
+            `SELECT TOP 1 产品列表, 产品名称列表 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+            { projectCode }
+          )
+          if (projRows.length > 0) {
+            const drawings = parseJsonArray(projRows[0].产品列表, []).map((d) =>
+              String(d ?? '').trim()
+            )
+            const names = parseJsonArray(projRows[0].产品名称列表, []).map((n) =>
+              String(n ?? '').trim()
+            )
+            const idx = drawings.findIndex((d) => d === partDrawingBinding)
+            if (idx >= 0 && names[idx]) {
+              productName = names[idx]
+            }
+          }
+        } catch (e) {
+          // 查不到时用产品图号作为产品名称
+        }
+        const safeExt = ext ? `.${ext}` : ''
+        const partProject = safeFileName(projectCode) || '项目'
+        const partDrawing = safeFileName(partDrawingBinding) || '图号'
+        const partName = safeFileName(productName) || '未命名'
+        newFileName = `${partProject}_${partDrawing}_${partName}${safeExt}`
+      } else {
+        newFileName = generateAttachmentFileName(
+          projectCode,
+          customerModelNo,
+          type,
+          originalName
+        )
+      }
+    } else if (type === 'inspection-report') {
+      // 检验报告：存储文件名格式 项目编号_产品图号_产品名称_检验报告.扩展名
+      let productDrawing = inspectionReportDrawing
+      let productName = inspectionReportDrawing || '未命名'
+      try {
+        const projRows = await query(
+          `SELECT TOP 1 产品列表, 产品名称列表 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+          { projectCode }
+        )
+        if (projRows.length > 0) {
+          const drawings = parseJsonArray(projRows[0].产品列表, []).map((d) =>
+            String(d ?? '').trim()
+          )
+          const names = parseJsonArray(projRows[0].产品名称列表, []).map((n) =>
+            String(n ?? '').trim()
+          )
+          let idx = -1
+          if (inspectionReportDrawing) {
+            idx = drawings.findIndex((d) => d === inspectionReportDrawing)
+            if (idx >= 0 && names[idx]) productName = names[idx]
+          } else if (
+            inspectionReportRowIndex !== null &&
+            !Number.isNaN(inspectionReportRowIndex) &&
+            inspectionReportRowIndex >= 0 &&
+            inspectionReportRowIndex < drawings.length
+          ) {
+            idx = inspectionReportRowIndex
+            productDrawing = drawings[idx] || '图号'
+            productName = names[idx] || productDrawing
+          }
+        }
+      } catch (e) {
+        // 查不到时用 drawing 或“未命名”
+      }
+      const ext = originalName.split('.').pop()?.toLowerCase() || ''
+      const safeExt = ext ? `.${ext}` : ''
+      const partProject = safeFileName(projectCode) || '项目'
+      const partDrawing = safeFileName(productDrawing) || '图号'
+      const partName = safeFileName(productName) || '未命名'
+      newFileName = `${partProject}_${partDrawing}_${partName}_检验报告${safeExt}`
     } else {
       // 其他类型：使用固定格式
       newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
@@ -2665,29 +2773,10 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
     let bindingDrawing = null
     let bindingRowIndex = null
     if (type === 'part-drawing') {
-      bindingDrawing = String(req.body?.drawing || '').trim() || null
-      if (!bindingDrawing) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '零件图纸需要提供 drawing（产品图号）进行绑定'
-        })
-      }
+      bindingDrawing = partDrawingBinding
     } else if (type === 'inspection-report') {
-      bindingDrawing = String(req.body?.drawing || '').trim() || null
-      const rowIndexRaw = req.body?.rowIndex
-      bindingRowIndex =
-        rowIndexRaw === undefined || rowIndexRaw === null || String(rowIndexRaw).trim() === ''
-          ? null
-          : parseInt(String(rowIndexRaw), 10)
-
-      if (!bindingDrawing && (bindingRowIndex === null || Number.isNaN(bindingRowIndex))) {
-        return res.status(400).json({
-          code: 400,
-          success: false,
-          message: '检验报告需要提供 drawing 或 rowIndex 进行绑定'
-        })
-      }
+      bindingDrawing = inspectionReportDrawing
+      bindingRowIndex = inspectionReportRowIndex
 
       const ext = String(path.extname(originalName || '') || '').toLowerCase().replace('.', '')
       const isPdf = ext === 'pdf'

@@ -3759,68 +3759,252 @@ const isPositiveInteger = (val: unknown) => {
   return Number.isInteger(n) && n > 0
 }
 
-const validateTripartiteAgreementForEdit = () => {
-  const errors: string[] = []
-  const add = (msg: string) => errors.push(msg)
+type TripartiteAgreementCheckStatus = 'ok' | 'missing' | 'invalid'
+interface TripartiteAgreementCheckItem {
+  key: string
+  title: string
+  status: TripartiteAgreementCheckStatus
+  detail?: string
+  valueText?: string
+}
+
+const getTripartiteAgreementCheckItems = (): TripartiteAgreementCheckItem[] => {
   const filled = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== ''
+  const mk = (
+    key: string,
+    title: string,
+    status: TripartiteAgreementCheckStatus,
+    detail?: string,
+    valueText?: string
+  ): TripartiteAgreementCheckItem => ({ key, title, status, detail, valueText })
 
-  // 2.1
-  if (!filled(editForm.客户模号)) add('客户模号不能为空')
-  if (!filled(editForm.productDrawing)) add('产品图号不能为空')
-  if (!filled(editForm.productName)) add('产品名称不能为空')
-  if (!filled((editForm as any).产品材质)) add('产品材质不能为空')
-  if (!filled((editForm as any).前模材质)) add('前模材质不能为空')
-  if (!filled((editForm as any).后模材质)) add('后模材质不能为空')
-  if (!filled((editForm as any).滑块材质)) add('滑块材质不能为空')
-  if (!filled((editForm as any).模具穴数)) add('模具穴数不能为空')
-  if (!filled((editForm as any).首次送样日期)) add('首次送样日期不能为空')
+  const items: TripartiteAgreementCheckItem[] = []
 
-  // 3.1.1
-  const runnerType = String((editForm as any).流道类型 || '').trim()
+  const required = (key: string, title: string, value: unknown) => {
+    const ok = filled(value)
+    items.push(
+      mk(
+        key,
+        title,
+        ok ? 'ok' : 'missing',
+        ok ? undefined : '不能为空',
+        ok ? String(value).trim() : undefined
+      )
+    )
+  }
+
+  // 2.1 必填
+  required('customerModelNo', '客户模号', editForm.客户模号)
+  required('productDrawing', '产品图号', editForm.productDrawing)
+  required('productName', '产品名称', editForm.productName)
+  required('productMaterial', '产品材质', (editForm as any).产品材质)
+  required('frontMouldMaterial', '前模材质', (editForm as any).前模材质)
+  required('backMouldMaterial', '后模材质', (editForm as any).后模材质)
+  required('cavityCount', '模具穴数', (editForm as any).模具穴数)
+  required('firstSampleDate', '首次送样日期', (editForm as any).首次送样日期)
+
+  // 2.1 互锁：滑块材质 <-> 抽芯方式(斜导柱/斜滑块/油缸)数量
+  // - 若两者都为空：允许
+  // - 若任一侧有值：另一侧必须至少满足一项
+  //   - 有滑块材质：抽芯方式三项至少一项数量 > 0
+  //   - 抽芯方式三项任一数量 > 0：滑块材质不能为空
+  const sliderMaterial = String((editForm as any).滑块材质 ?? '').trim()
+  const sliderFilled = !!sliderMaterial
+  if (isPlasticMould.value) {
+    const qtyOf = (method: string) => {
+      const raw = corePullQty[method]
+      if (raw === null || raw === undefined || String(raw).trim() === '') return null
+      const n = Number(raw)
+      return Number.isFinite(n) ? n : null
+    }
+    const qtyPairs = corePullMethodOptions.map((m) => ({ method: m, qty: qtyOf(m) }))
+    const hasAnyQty = qtyPairs.some((x) => typeof x.qty === 'number' && x.qty > 0)
+    const qtyText = qtyPairs
+      .map((x) => `${x.method}=${x.qty === null ? '（空）' : String(x.qty)}`)
+      .join('；')
+    const lockValueText = `滑块材质=${sliderFilled ? sliderMaterial : '（空）'}；${qtyText}`
+
+    if (sliderFilled && !hasAnyQty) {
+      items.push(
+        mk(
+          'sliderMaterialCorePullLock',
+          '滑块材质/抽芯互锁',
+          'invalid',
+          '已填写滑块材质时，抽芯方式（斜导柱/斜滑块/油缸）至少一项数量需大于 0',
+          lockValueText
+        )
+      )
+    } else if (!sliderFilled && hasAnyQty) {
+      items.push(
+        mk(
+          'sliderMaterialCorePullLock',
+          '滑块材质/抽芯互锁',
+          'missing',
+          '抽芯方式（斜导柱/斜滑块/油缸）存在数量时，滑块材质不能为空',
+          lockValueText
+        )
+      )
+    } else {
+      items.push(
+        mk('sliderMaterialCorePullLock', '滑块材质/抽芯互锁', 'ok', undefined, lockValueText)
+      )
+    }
+  } else {
+    // 非塑胶模具：抽芯方式不适用，此处不强制互锁，仅展示当前值
+    items.push(
+      mk(
+        'sliderMaterialCorePullLock',
+        '滑块材质',
+        'ok',
+        undefined,
+        sliderFilled ? sliderMaterial : '（空）'
+      )
+    )
+  }
+
+  // 3.1.1 枚举/数值
+  const runnerTypeRaw = (editForm as any).流道类型
+  const runnerType = String(runnerTypeRaw || '').trim()
   const runnerAllowed = ['冷流道', '开放式热流道', '点浇口热流道', '针阀式热流道']
-  if (!runnerAllowed.includes(runnerType)) add('流道及类型必须选择一项')
-  if (!isPositiveInteger((editForm as any).流道数量))
-    add('流道数量必须为正整数（不能为 0，也不能为小数）')
+  if (!runnerType) {
+    items.push(mk('runnerType', '流道类型', 'missing', '必须选择一项'))
+  } else if (!runnerAllowed.includes(runnerType)) {
+    items.push(
+      mk('runnerType', '流道类型', 'invalid', `必须为：${runnerAllowed.join(' / ')}`, runnerType)
+    )
+  } else {
+    items.push(mk('runnerType', '流道类型', 'ok', undefined, runnerType))
+  }
 
-  const gateType = String((editForm as any).浇口类型 || '').trim()
+  const runnerQtyRaw = (editForm as any).流道数量
+  const runnerQtyEmpty =
+    runnerQtyRaw === null || runnerQtyRaw === undefined || String(runnerQtyRaw).trim() === ''
+  if (runnerQtyEmpty) {
+    items.push(mk('runnerQty', '流道数量', 'missing', '不能为空（必须为正整数）'))
+  } else if (!isPositiveInteger(runnerQtyRaw)) {
+    items.push(
+      mk(
+        'runnerQty',
+        '流道数量',
+        'invalid',
+        '必须为正整数（不能为 0，也不能为小数）',
+        String(runnerQtyRaw).trim()
+      )
+    )
+  } else {
+    items.push(mk('runnerQty', '流道数量', 'ok', undefined, String(runnerQtyRaw).trim()))
+  }
+
+  const gateTypeRaw = (editForm as any).浇口类型
+  const gateType = String(gateTypeRaw || '').trim()
   const gateAllowed = ['直接浇口', '点浇口', '侧浇口', '潜伏浇口']
-  if (!gateAllowed.includes(gateType)) add('浇口类型必须选择一项')
-  if (!isPositiveInteger((editForm as any).浇口数量))
-    add('浇口数量必须为正整数（不能为 0，也不能为小数）')
+  if (!gateType) {
+    items.push(mk('gateType', '浇口类型', 'missing', '必须选择一项'))
+  } else if (!gateAllowed.includes(gateType)) {
+    items.push(
+      mk('gateType', '浇口类型', 'invalid', `必须为：${gateAllowed.join(' / ')}`, gateType)
+    )
+  } else {
+    items.push(mk('gateType', '浇口类型', 'ok', undefined, gateType))
+  }
 
-  const partWeight = toNumber((editForm as any).产品重量)
-  if (partWeight === null) add('产品重量必须有数值')
-  const cycle = toNumber((editForm as any).成型周期)
-  if (cycle === null) add('成型周期必须有数值')
+  const gateQtyRaw = (editForm as any).浇口数量
+  const gateQtyEmpty =
+    gateQtyRaw === null || gateQtyRaw === undefined || String(gateQtyRaw).trim() === ''
+  if (gateQtyEmpty) {
+    items.push(mk('gateQty', '浇口数量', 'missing', '不能为空（必须为正整数）'))
+  } else if (!isPositiveInteger(gateQtyRaw)) {
+    items.push(
+      mk(
+        'gateQty',
+        '浇口数量',
+        'invalid',
+        '必须为正整数（不能为 0，也不能为小数）',
+        String(gateQtyRaw).trim()
+      )
+    )
+  } else {
+    items.push(mk('gateQty', '浇口数量', 'ok', undefined, String(gateQtyRaw).trim()))
+  }
+
+  const partWeightRaw = (editForm as any).产品重量
+  const partWeightEmpty =
+    partWeightRaw === null || partWeightRaw === undefined || String(partWeightRaw).trim() === ''
+  if (partWeightEmpty) {
+    items.push(mk('partWeight', '产品重量', 'missing', '不能为空（必须有数值）'))
+  } else if (toNumber(partWeightRaw) === null) {
+    items.push(mk('partWeight', '产品重量', 'invalid', '必须为数值', String(partWeightRaw).trim()))
+  } else {
+    items.push(mk('partWeight', '产品重量', 'ok', undefined, String(partWeightRaw).trim()))
+  }
+
+  const cycleRaw = (editForm as any).成型周期
+  const cycleEmpty = cycleRaw === null || cycleRaw === undefined || String(cycleRaw).trim() === ''
+  if (cycleEmpty) {
+    items.push(mk('cycle', '成型周期', 'missing', '不能为空（必须有数值）'))
+  } else if (toNumber(cycleRaw) === null) {
+    items.push(mk('cycle', '成型周期', 'invalid', '必须为数值', String(cycleRaw).trim()))
+  } else {
+    items.push(mk('cycle', '成型周期', 'ok', undefined, String(cycleRaw).trim()))
+  }
 
   const sprueWeightRaw = (editForm as any).料柄重量
   const sprueEmpty =
     sprueWeightRaw === null || sprueWeightRaw === undefined || String(sprueWeightRaw).trim() === ''
   if (sprueEmpty) {
-    if (runnerType && runnerType !== '针阀式热流道')
-      add('料柄重量为空时，流道类型必须为“针阀式热流道”')
+    if (runnerType && runnerType !== '针阀式热流道') {
+      items.push(
+        mk('sprueWeight', '料柄重量', 'invalid', '为空时，流道类型必须为“针阀式热流道”', '（空）')
+      )
+    } else {
+      items.push(mk('sprueWeight', '料柄重量', 'ok', '允许为空', '（空）'))
+    }
   } else if (toNumber(sprueWeightRaw) === null) {
-    add('料柄重量必须为数值或为空')
+    items.push(
+      mk('sprueWeight', '料柄重量', 'invalid', '必须为数值或为空', String(sprueWeightRaw).trim())
+    )
+  } else {
+    items.push(mk('sprueWeight', '料柄重量', 'ok', undefined, String(sprueWeightRaw).trim()))
   }
 
-  // 3.1.2 联动
+  // 3.1.2 联动：要么都不选，要么三项都至少选一项
   const ejectTypeSelected = splitCsv((editForm as any).顶出类型).length > 0
   const ejectWaySelected = splitCsv((editForm as any).顶出方式).length > 0
   const resetWaySelected = splitCsv((editForm as any).复位方式).length > 0
   const anySelected = ejectTypeSelected || ejectWaySelected || resetWaySelected
   if (anySelected && !(ejectTypeSelected && ejectWaySelected && resetWaySelected)) {
-    add('顶出类型、顶出方式、复位方式需同时至少选择一项（或三项都不选）')
+    const types = splitCsv((editForm as any).顶出类型).join('、')
+    const ways = splitCsv((editForm as any).顶出方式).join('、')
+    const resets = splitCsv((editForm as any).复位方式).join('、')
+    const valueText = `顶出类型：${types || '（空）'}\n顶出方式：${ways || '（空）'}\n复位方式：${resets || '（空）'}`
+    items.push(
+      mk(
+        'ejectLinkage',
+        '顶出/复位联动',
+        'invalid',
+        '顶出类型、顶出方式、复位方式需同时至少选择一项（或三项都不选）',
+        valueText
+      )
+    )
+  } else {
+    const types = splitCsv((editForm as any).顶出类型).join('、')
+    const ways = splitCsv((editForm as any).顶出方式).join('、')
+    const resets = splitCsv((editForm as any).复位方式).join('、')
+    const valueText = anySelected
+      ? `顶出类型：${types}\n顶出方式：${ways}\n复位方式：${resets}`
+      : '未选择'
+    items.push(mk('ejectLinkage', '顶出/复位联动', 'ok', undefined, valueText))
   }
 
-  // 3.2
-  if (!filled((editForm as any).模具尺寸)) add('模具尺寸不能为空')
-  if (!filled((editForm as any).模具重量)) add('模具重量不能为空')
-  if (!filled((editForm as any).锁模力)) add('锁模力不能为空')
-  if (!filled((editForm as any).定位圈)) add('定位圈不能为空')
-  if (!filled((editForm as any).容模量)) add('容模量不能为空')
-  if (!filled((editForm as any).拉杆间距)) add('拉杆间距不能为空')
+  // 3.2 必填
+  required('mouldSize', '模具尺寸', (editForm as any).模具尺寸)
+  required('mouldWeight', '模具重量', (editForm as any).模具重量)
+  required('lockForce', '锁模力', (editForm as any).锁模力)
+  required('locatingRing', '定位圈', (editForm as any).定位圈)
+  required('moldCapacity', '容模量', (editForm as any).容模量)
+  required('tiebarSpacing', '拉杆间距', (editForm as any).拉杆间距)
 
-  return errors
+  return items
 }
 
 const editRules: FormRules = {
@@ -5168,6 +5352,14 @@ const handleAttachmentPdfPreview = async (attachment: ProjectAttachment) => {
   }
 }
 
+// 封样单下载文件名：产品图号_产品名称_封样单.xlsx（非法字符替换为下划线）
+const getSealSampleDownloadFileName = (): string => {
+  const drawing = String(editForm.productDrawing ?? '').trim() || '产品图号'
+  const name = String(editForm.productName ?? '').trim() || '产品名称'
+  const safe = (s: string) => s.replace(/[/\\:*?"<>|]/g, '_')
+  return `${safe(drawing)}_${safe(name)}_封样单.xlsx`
+}
+
 // 下载附件
 const downloadAttachment = async (row: ProjectAttachment) => {
   try {
@@ -5176,7 +5368,11 @@ const downloadAttachment = async (row: ProjectAttachment) => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
+    const downloadName =
+      row.type === 'seal-sample'
+        ? getSealSampleDownloadFileName()
+        : row.storedFileName || row.originalName || `附件_${row.id}`
+    a.download = downloadName
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -5227,6 +5423,176 @@ const alertMissingLines = async (lines: string[], title: string) => {
     type: 'error',
     confirmButtonText: '确定'
   })
+}
+
+const showTripartiteAgreementChecklistDialog = async (items: TripartiteAgreementCheckItem[]) => {
+  const total = items.length
+  const missingCount = items.filter((i) => i.status === 'missing').length
+  const invalidCount = items.filter((i) => i.status === 'invalid').length
+  const okCount = total - missingCount - invalidCount
+  const passed = missingCount === 0 && invalidCount === 0
+
+  const badgeStyle = (status: TripartiteAgreementCheckStatus) => {
+    if (status === 'ok') {
+      return 'background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;'
+    }
+    if (status === 'missing') {
+      return 'background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;'
+    }
+    return 'background:#fef2f2;border:1px solid #fecaca;color:#991b1b;'
+  }
+  const badgeText = (status: TripartiteAgreementCheckStatus) =>
+    status === 'ok' ? '通过' : status === 'missing' ? '缺少' : '无效'
+
+  const content = h(
+    'div',
+    {
+      style:
+        'width:100%;box-sizing:border-box;max-height:55vh;overflow:auto;display:flex;flex-direction:column;gap:8px;'
+    },
+    [
+      h(
+        'div',
+        {
+          style: 'font-size:12px;line-height:1.4;color:rgba(0,0,0,.65);white-space:pre-line;'
+        },
+        `共 ${total} 项：通过 ${okCount}，缺少 ${missingCount}，无效 ${invalidCount}`
+      ),
+      h(
+        'div',
+        {
+          style:
+            'width:100%;box-sizing:border-box;display:flex;flex-direction:column;border:1px solid #ebeef5;border-radius:8px;'
+        },
+        [
+          h(
+            'div',
+            {
+              style:
+                'display:grid;grid-template-columns:52px 132px 1fr auto;gap:12px;align-items:center;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #ebeef5;'
+            },
+            [
+              h(
+                'div',
+                {
+                  style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;text-align:center;'
+                },
+                '序号'
+              ),
+              h(
+                'div',
+                { style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;' },
+                '检查项'
+              ),
+              h('div', { style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;' }, '数据'),
+              h(
+                'div',
+                { style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;text-align:right;' },
+                '状态'
+              )
+            ]
+          ),
+          ...items.map((it, idx) => {
+            const border = idx === items.length - 1 ? '' : 'border-bottom:1px dashed #ebeef5;'
+            const normalizeOneLine = (s: string) =>
+              s
+                .replace(/[\r\n]+/g, '；')
+                .replace(/\s+/g, ' ')
+                .trim()
+            const vRaw =
+              it.valueText !== undefined &&
+              it.valueText !== null &&
+              String(it.valueText).trim() !== ''
+                ? String(it.valueText)
+                : it.status === 'missing'
+                  ? '（空）'
+                  : '—'
+            const v = normalizeOneLine(vRaw)
+            const d = it.detail ? normalizeOneLine(String(it.detail)) : ''
+            return h('div', { style: `padding:10px 12px;${border}` }, [
+              h(
+                'div',
+                {
+                  style:
+                    'display:grid;grid-template-columns:52px 132px 1fr auto;gap:12px;align-items:start;'
+                },
+                [
+                  h(
+                    'div',
+                    {
+                      style:
+                        'font-size:12px;line-height:1.4;color:rgba(0,0,0,.45);text-align:center;padding-top:1px;'
+                    },
+                    String(idx + 1)
+                  ),
+                  h(
+                    'div',
+                    {
+                      style: 'font-size:13px;line-height:1.4;color:rgba(0,0,0,.88);font-weight:600;'
+                    },
+                    it.title
+                  ),
+                  h(
+                    'div',
+                    { style: 'min-width:0;' },
+                    [
+                      h(
+                        'div',
+                        {
+                          style:
+                            'font-size:12px;line-height:1.4;color:rgba(0,0,0,.78);word-break:break-word;'
+                        },
+                        [
+                          h('span', {}, v),
+                          it.detail && it.status !== 'ok'
+                            ? h('span', { style: 'color:rgba(153,27,27,.9);' }, `  ${d}`)
+                            : null
+                        ].filter(Boolean)
+                      )
+                    ].filter(Boolean)
+                  ),
+                  h(
+                    'div',
+                    { style: 'display:flex;justify-content:flex-end;align-items:flex-start;' },
+                    [
+                      h(
+                        'span',
+                        {
+                          style:
+                            'flex:0 0 auto;font-size:12px;padding:2px 8px;border-radius:999px;' +
+                            badgeStyle(it.status)
+                        },
+                        badgeText(it.status)
+                      )
+                    ]
+                  )
+                ]
+              )
+            ])
+          })
+        ]
+      )
+    ]
+  )
+
+  if (!passed) {
+    await ElMessageBox.alert(content, '三方协议检查清单（未通过）', {
+      type: 'warning',
+      customClass: 'pm-tripartite-checklist-box',
+      confirmButtonText: '去补齐'
+    })
+    return { passed: false as const }
+  }
+
+  await ElMessageBox.confirm(content, '三方协议检查清单（已通过）', {
+    type: 'success',
+    customClass: 'pm-tripartite-checklist-box',
+    confirmButtonText: '继续生成',
+    cancelButtonText: '取消',
+    closeOnClickModal: false
+  })
+
+  return { passed: true as const }
 }
 
 const handlePrintTrialFormPreview = async () => {
@@ -5521,16 +5887,11 @@ const handleGenerateTripartiteAgreement = async () => {
 
     // 生成时才校验三方协议完整性（允许先暂存/分步填写，保存不拦截）
     syncCorePullToForm()
-    const localErrors = validateTripartiteAgreementForEdit()
-    if (localErrors.length) {
-      await alertMissingLines(localErrors, '三方协议字段缺失/不符合规则')
-      return
-    }
-
-    // 客户模号为必填项：缺失则不生成
-    const customerModelNo = String(editForm.客户模号 || '').trim()
-    if (!customerModelNo) {
-      ElMessage.error('客户模号不能为空，请先补齐后再生成三方协议')
+    const checklistItems = getTripartiteAgreementCheckItems()
+    try {
+      const { passed } = await showTripartiteAgreementChecklistDialog(checklistItems)
+      if (!passed) return
+    } catch {
       return
     }
 
@@ -6459,6 +6820,33 @@ watch(viewMode, (val) => {
   .pm-timeline-detail-table {
     min-width: 600px;
   }
+}
+
+:global(.pm-tripartite-checklist-box) {
+  width: min(600px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
+
+/* 让 message 区域真正铺满，避免右侧留白 */
+:global(.pm-tripartite-checklist-box .el-message-box__container) {
+  display: flex;
+  align-items: stretch;
+}
+
+/* 去掉 status 图标占位（warning/success）导致的宽度浪费 */
+:global(.pm-tripartite-checklist-box .el-message-box__status) {
+  display: none;
+}
+
+:global(.pm-tripartite-checklist-box .el-message-box__message) {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+}
+
+:global(.pm-tripartite-checklist-box .el-message-box__message p) {
+  width: 100%;
+  max-width: none;
 }
 
 .pm-product-drawing-list :deep(.pm-cell-input--error .el-input__wrapper) {
