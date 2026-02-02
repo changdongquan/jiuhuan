@@ -757,19 +757,6 @@
               >
                 生成试模单
               </el-button>
-              <el-button
-                type="primary"
-                plain
-                size="small"
-                :disabled="
-                  trialFormGenerating ||
-                  editSubmitting ||
-                  !(editForm.项目编号 || currentProjectCode)
-                "
-                @click="handlePrintTrialFormPreview"
-              >
-                打印试模单
-              </el-button>
             </div>
           </div>
           <div class="pm-edit-header-sub">
@@ -2098,15 +2085,38 @@
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>试模单</span>
-                            <el-upload
-                              :action="getAttachmentAction('trial-form')"
-                              :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
-                              :on-success="handleAttachmentUploadSuccess"
-                              :on-error="handleAttachmentUploadError"
+                            <div
+                              style="
+                                display: flex;
+                                gap: 8px;
+                                align-items: center;
+                                flex-wrap: wrap;
+                                justify-content: flex-end;
+                              "
                             >
-                              <el-button type="primary" size="small">上传试模单</el-button>
-                            </el-upload>
+                              <el-button
+                                type="primary"
+                                plain
+                                size="small"
+                                :disabled="
+                                  trialFormGenerating ||
+                                  editSubmitting ||
+                                  !(editForm.项目编号 || currentProjectCode)
+                                "
+                                @click="handlePrintTrialFormPreview"
+                              >
+                                打印试模单
+                              </el-button>
+                              <el-upload
+                                :action="getAttachmentAction('trial-form')"
+                                :show-file-list="false"
+                                accept=".xls,.xlsx,.pdf,image/*"
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small">上传试模单</el-button>
+                              </el-upload>
+                            </div>
                           </div>
                         </template>
                         <el-table
@@ -2197,7 +2207,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
@@ -5192,6 +5202,33 @@ const normalizeTrialCountInput = (val: any) => {
   return `第${n}次`
 }
 
+const normalizeTrialFormMissingLines = (raw: unknown): string[] => {
+  const arr = Array.isArray(raw) ? raw : []
+  const lines = arr
+    .flatMap((it: any) => {
+      if (it == null) return []
+      if (typeof it === 'string') {
+        return it
+          .split(/[\r\n]+|[，,;；]+/g)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      }
+      const label = String(it?.label || it?.field || '').trim()
+      const msg = it?.message ? `：${String(it.message).trim()}` : ''
+      const text = `${label}${msg}`.trim()
+      return text ? [text] : []
+    })
+    .filter(Boolean)
+  return Array.from(new Set(lines))
+}
+
+const alertMissingLines = async (lines: string[], title: string) => {
+  await ElMessageBox.alert(h('div', { style: 'white-space: pre-line;' }, lines.join('\n')), title, {
+    type: 'error',
+    confirmButtonText: '确定'
+  })
+}
+
 const handlePrintTrialFormPreview = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
@@ -5220,9 +5257,9 @@ const handlePrintTrialFormPreview = async () => {
     const resp: any = await validateTrialFormApi(projectCode)
     if (resp?.code !== 0 && resp?.success !== true) {
       const msg = resp?.message || '试模单数据不完整，请先补齐后再生成'
-      const errs = Array.isArray(resp?.errors) ? resp.errors : []
-      if (errs.length) {
-        await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+      const lines = normalizeTrialFormMissingLines(resp?.errors)
+      if (lines.length) {
+        await alertMissingLines(lines, msg)
       } else {
         ElMessage.error(msg)
       }
@@ -5231,9 +5268,9 @@ const handlePrintTrialFormPreview = async () => {
   } catch (error: any) {
     const data = error?.response?.data
     const msg = data?.message || '试模单数据不完整，请先补齐后再生成'
-    const errs = Array.isArray(data?.errors) ? data.errors : []
-    if (errs.length) {
-      await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+    const lines = normalizeTrialFormMissingLines(data?.errors)
+    if (lines.length) {
+      await alertMissingLines(lines, msg)
       return
     }
     ElMessage.error(msg)
@@ -5359,9 +5396,9 @@ const handleDownloadTrialFormXlsx = async () => {
     const resp: any = await validateTrialFormApi(projectCode)
     if (resp?.code !== 0 && resp?.success !== true) {
       const msg = resp?.message || '试模单数据不完整，请先补齐后再生成'
-      const errs = Array.isArray(resp?.errors) ? resp.errors : []
-      if (errs.length) {
-        await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+      const lines = normalizeTrialFormMissingLines(resp?.errors)
+      if (lines.length) {
+        await alertMissingLines(lines, msg)
       } else {
         ElMessage.error(msg)
       }
@@ -5370,9 +5407,9 @@ const handleDownloadTrialFormXlsx = async () => {
   } catch (error: any) {
     const data = error?.response?.data
     const msg = data?.message || '试模单数据不完整，请先补齐后再生成'
-    const errs = Array.isArray(data?.errors) ? data.errors : []
-    if (errs.length) {
-      await ElMessageBox.alert(errs.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+    const lines = normalizeTrialFormMissingLines(data?.errors)
+    if (lines.length) {
+      await alertMissingLines(lines, msg)
       return
     }
     ElMessage.error(msg)
@@ -5486,10 +5523,7 @@ const handleGenerateTripartiteAgreement = async () => {
     syncCorePullToForm()
     const localErrors = validateTripartiteAgreementForEdit()
     if (localErrors.length) {
-      ElMessageBox.alert(localErrors.join('\n'), '三方协议字段缺失/不符合规则', {
-        type: 'error',
-        confirmButtonText: '确定'
-      })
+      await alertMissingLines(localErrors, '三方协议字段缺失/不符合规则')
       return
     }
 
@@ -5524,7 +5558,7 @@ const handleGenerateTripartiteAgreement = async () => {
             const m = e?.message ? `：${e.message}` : ''
             return `${label}${m}`
           })
-          ElMessageBox.alert(lines.join('\n'), msg, { type: 'error', confirmButtonText: '确定' })
+          void alertMissingLines(lines, msg)
           return
         }
         ElMessage.error(msg)
