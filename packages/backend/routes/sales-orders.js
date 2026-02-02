@@ -1247,7 +1247,7 @@ router.post('/:orderNo/split', async (req, res) => {
     if (transaction) {
       try {
         await transaction.rollback()
-      } catch {}
+      } catch (e) { /* ignore */ }
     }
 
     // 注意：新路径结构下，拆分订单不需要移动文件，所以也不需要回滚文件移动

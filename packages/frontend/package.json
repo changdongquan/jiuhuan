@@ -17,7 +17,7 @@
     "clean": "pnpx rimraf node_modules",
     "clean:cache": "pnpx rimraf node_modules/.cache",
     "lint:eslint": "eslint . --fix \"src/**/*.{js,ts,tsx,vue,html}\"",
-    "lint:format": "prettier --write --loglevel warn \"src/**/*.{js,ts,json,tsx,css,less,vue,html,md}\"",
+    "lint:format": "prettier --write --log-level warn \"src/**/*.{js,ts,json,tsx,css,less,vue,html,md}\"",
     "lint:style": "stylelint --fix \"**/*.{vue,less,postcss,css,scss}\" --cache --cache-location node_modules/.cache/stylelint/",
     "lint:lint-staged": "lint-staged -c ../../.husky/lintstagedrc.cjs",
     "p": "plop",

@@ -63,7 +63,7 @@ const mkLibreOfficeProfileDir = async (tmpDir) => {
     )
     try {
       await fs.promises.mkdir(fallback, { recursive: true })
-    } catch {}
+    } catch (e) { /* ignore */ }
     return fallback
   }
 }
@@ -72,7 +72,7 @@ const rmDirRecursive = async (dir) => {
   if (!dir) return
   try {
     await fs.promises.rm(dir, { recursive: true, force: true })
-  } catch {}
+  } catch (e) { /* ignore */ }
 }
 
 // 处理上传文件名中的中文乱码
@@ -155,7 +155,7 @@ const buildTripartiteAgreementContext = (row) => {
         }, {})
       }
     }
-  } catch {}
+  } catch (e) { /* ignore */ }
 
   const corePullMarkQty = (methodLabel) => {
     const qty = corePullMap[methodLabel]
@@ -1546,7 +1546,7 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
       console.error('调用 LibreOffice 失败（三方协议）:', err)
       try {
         await fsp.unlink(docxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -1563,7 +1563,7 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
       console.error('读取生成的 PDF 文件失败（三方协议）:', err)
       try {
         await fsp.unlink(docxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -1573,10 +1573,10 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
 
     try {
       await fsp.unlink(docxPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
     try {
       await fsp.unlink(pdfPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
 
     const filenameBase = row.项目编号 ? String(row.项目编号) : code
     const encodedFilename = encodeURIComponent(`${filenameBase}_三方协议.pdf`)
@@ -1669,7 +1669,7 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
       console.error('调用 LibreOffice 失败（三方协议）:', err)
       try {
         await fsp.unlink(docxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -1686,7 +1686,7 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
       console.error('读取生成的 PDF 文件失败（三方协议）:', err)
       try {
         await fsp.unlink(docxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -1695,10 +1695,10 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
     } finally {
       try {
         await fsp.unlink(docxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       try {
         await fsp.unlink(pdfPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
     }
 
     // 单文件覆盖：删除旧文件与记录
@@ -3284,7 +3284,7 @@ router.post('/upload-part-image', (req, res) => {
     if (!allowed.includes(mime)) {
       try {
         fs.unlinkSync(file.path)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res
         .status(400)
         .json({ code: 400, success: false, message: '仅支持 png/jpg/gif/webp 图片' })
@@ -3296,7 +3296,7 @@ router.post('/upload-part-image', (req, res) => {
       if (!safeRel || safeRel.startsWith('..')) {
         try {
           fs.unlinkSync(file.path)
-        } catch {}
+        } catch (e) { /* ignore */ }
         return res.status(500).json({ code: 500, success: false, message: '生成临时预览地址失败' })
       }
       const parts = safeRel.split('/').filter(Boolean)
@@ -3305,7 +3305,7 @@ router.post('/upload-part-image', (req, res) => {
     } catch (e) {
       try {
         fs.unlinkSync(file.path)
-      } catch {}
+      } catch (e) { /* ignore */ }
       console.error('生成临时图示URL失败:', e)
       return res.status(500).json({ code: 500, success: false, message: '保存图片失败' })
     }

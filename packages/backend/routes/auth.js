@@ -603,7 +603,7 @@ router.post('/login', async (req, res) => {
             if (profile?.displayName) {
               userInfo.displayName = profile.displayName
             }
-          } catch {}
+          } catch (e) { /* ignore */ }
         } else {
           // 生产环境：真实 LDAP 验证
           await verifyDomainUser(parsed.username, password, parsed.domain)

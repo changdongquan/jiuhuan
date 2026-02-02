@@ -708,7 +708,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
                 }
               }
             }
-          } catch {}
+          } catch (e) { /* ignore */ }
         }
         if (marker === 0xc0 || marker === 0xc2) {
           const height = buffer.readUInt16BE(offset + 5)
@@ -1251,7 +1251,7 @@ const mkLibreOfficeProfileDir = async (tmpDir) => {
     )
     try {
       await fs.promises.mkdir(fallback, { recursive: true })
-    } catch {}
+    } catch (e) { /* ignore */ }
     return fallback
   }
 }
@@ -1260,7 +1260,7 @@ const rmDirRecursive = async (dir) => {
   if (!dir) return
   try {
     await fs.promises.rm(dir, { recursive: true, force: true })
-  } catch {}
+  } catch (e) { /* ignore */ }
 }
 
 // 上传零件报价单明细截图（返回匿名静态资源 URL）
@@ -1284,7 +1284,7 @@ router.post('/upload-part-item-image', (req, res) => {
     if (!allowed.includes(mime)) {
       try {
         fs.unlinkSync(file.path)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res
         .status(400)
         .json({ code: 400, success: false, message: '仅支持 png/jpg/webp 图片' })
@@ -1296,7 +1296,7 @@ router.post('/upload-part-item-image', (req, res) => {
       if (!safeRel || safeRel.startsWith('..')) {
         try {
           fs.unlinkSync(file.path)
-        } catch {}
+        } catch (e) { /* ignore */ }
         return res.status(500).json({ code: 500, success: false, message: '生成临时预览地址失败' })
       }
       const parts = safeRel.split('/').filter(Boolean)
@@ -1305,7 +1305,7 @@ router.post('/upload-part-item-image', (req, res) => {
     } catch (e) {
       try {
         fs.unlinkSync(file.path)
-      } catch {}
+      } catch (e) { /* ignore */ }
       console.error('生成临时图示URL失败:', e)
       return res.status(500).json({ code: 500, success: false, message: '保存图片失败' })
     }
@@ -2396,7 +2396,7 @@ router.get('/:id/export-pdf', async (req, res) => {
         console.error('调用 LibreOffice 失败（零件报价单）:', err)
         try {
           await fs.promises.unlink(xlsxPath)
-        } catch {}
+        } catch (e) { /* ignore */ }
         return res.status(500).json({
           code: 500,
           success: false,
@@ -2413,7 +2413,7 @@ router.get('/:id/export-pdf', async (req, res) => {
         console.error('读取生成的 PDF 文件失败（零件报价单）:', err)
         try {
           await fs.promises.unlink(xlsxPath)
-        } catch {}
+        } catch (e) { /* ignore */ }
         return res.status(500).json({
           code: 500,
           success: false,
@@ -2423,10 +2423,10 @@ router.get('/:id/export-pdf', async (req, res) => {
 
       try {
         await fs.promises.unlink(xlsxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       try {
         await fs.promises.unlink(pdfPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
 
       const filenameBase = row.quotationNo || '报价单'
       const encodedFilename = encodeURIComponent(`${filenameBase}报价.pdf`)
@@ -2601,7 +2601,7 @@ router.get('/:id/export-pdf', async (req, res) => {
       console.error('调用 LibreOffice 失败:', err)
       try {
         await fs.promises.unlink(xlsxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -2619,7 +2619,7 @@ router.get('/:id/export-pdf', async (req, res) => {
       console.error('读取生成的 PDF 文件失败:', err)
       try {
         await fs.promises.unlink(xlsxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -2630,10 +2630,10 @@ router.get('/:id/export-pdf', async (req, res) => {
     // 清理临时文件
     try {
       await fs.promises.unlink(xlsxPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
     try {
       await fs.promises.unlink(pdfPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
 
     const filenameBase = row.quotationNo || '报价单'
     const encodedFilename = encodeURIComponent(`${filenameBase}报价.pdf`)
@@ -2883,7 +2883,7 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       console.error('调用 LibreOffice 失败（完工单）:', err)
       try {
         await fs.promises.unlink(xlsxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -2900,7 +2900,7 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       console.error('读取生成的完工单 PDF 文件失败:', err)
       try {
         await fs.promises.unlink(xlsxPath)
-      } catch {}
+      } catch (e) { /* ignore */ }
       return res.status(500).json({
         code: 500,
         success: false,
@@ -2910,10 +2910,10 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
 
     try {
       await fs.promises.unlink(xlsxPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
     try {
       await fs.promises.unlink(pdfPath)
-    } catch {}
+    } catch (e) { /* ignore */ }
 
     const filenameBase = row.quotationNo || '报价单'
     const encodedFilename = encodeURIComponent(`${filenameBase}完工单.pdf`)
