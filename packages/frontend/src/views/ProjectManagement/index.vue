@@ -710,38 +710,22 @@
                 editForm.项目编号 || currentProjectCode || '新项目'
               }}</span>
               <span class="pm-edit-header-status-label">项目状态</span>
-              <el-dropdown
-                trigger="click"
-                placement="bottom-start"
-                popper-class="pm-edit-header-status-dropdown"
-                @command="
-                  (v) => {
-                    editForm.项目状态 = v as any
-                  }
-                "
+              <el-select
+                v-model="editForm.项目状态"
+                placeholder="请选择项目状态"
+                size="small"
+                :class="[
+                  'pm-edit-header-status-select',
+                  'pm-status--' + getStatusTagType(editForm.项目状态)
+                ]"
               >
-                <span class="pm-edit-header-status-trigger">
-                  <el-tag
-                    :type="getStatusTagType(editForm.项目状态)"
-                    class="pm-edit-header-status pm-status-tag pm-edit-header-status-tag"
-                    :class="getStatusTagClass(editForm.项目状态)"
-                  >
-                    {{ editForm.项目状态 || '未设置' }}
-                  </el-tag>
-                  <span class="pm-edit-header-status-caret">▾</span>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item
-                      v-for="item in projectStatusOptions"
-                      :key="item.value"
-                      :command="item.value"
-                    >
-                      {{ item.label }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+                <el-option
+                  v-for="item in projectStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </div>
             <div class="pm-edit-header-actions pm-edit-header-actions--pair">
               <el-button
@@ -2228,6 +2212,7 @@ import {
   downloadTrialFormXlsxApi,
   validateTrialFormApi,
   generateTripartiteAgreementPdfApi,
+  validateSealSampleApi,
   generateSealSampleXlsxApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
@@ -5595,6 +5580,232 @@ const showTripartiteAgreementChecklistDialog = async (items: TripartiteAgreement
   return { passed: true as const }
 }
 
+// 封样单检查清单（与三方协议同款 UI）
+type SealSampleCheckStatus = 'ok' | 'missing'
+interface SealSampleCheckItem {
+  key: string
+  title: string
+  status: SealSampleCheckStatus
+  detail?: string
+  valueText?: string
+}
+
+const getSealSampleCheckItems = (missing: string[]): SealSampleCheckItem[] => {
+  const has = (s: string) => missing.includes(s)
+  const items: SealSampleCheckItem[] = []
+  const drawings = parseProductDrawingList(getProductListRawFromEditForm()).filter(Boolean)
+
+  items.push({
+    key: 'productList',
+    title: '产品列表',
+    status: has('产品列表') ? 'missing' : 'ok',
+    detail: has('产品列表') ? '不能为空' : undefined,
+    valueText: drawings.length ? `共 ${drawings.length} 个产品` : '（空）'
+  })
+  items.push({
+    key: 'productMaterial',
+    title: '产品材质',
+    status: has('项目信息：产品材质') ? 'missing' : 'ok',
+    detail: has('项目信息：产品材质') ? '不能为空' : undefined,
+    valueText: String((editForm as any).产品材质 ?? '').trim() || '（空）'
+  })
+  items.push({
+    key: 'customerModelNo',
+    title: '客户模号',
+    status: has('项目信息：客户模号') ? 'missing' : 'ok',
+    detail: has('项目信息：客户模号') ? '不能为空' : undefined,
+    valueText: String(editForm.客户模号 ?? '').trim() || '（空）'
+  })
+  items.push({
+    key: 'mouldCavity',
+    title: '模具穴数',
+    status: has('项目信息：模具穴数') ? 'missing' : 'ok',
+    detail: has('项目信息：模具穴数') ? '不能为空' : undefined,
+    valueText: String((editForm as any).模具穴数 ?? '').trim() || '（空）'
+  })
+  items.push({
+    key: 'designer',
+    title: '设计师',
+    status: has('项目信息：设计师') ? 'missing' : 'ok',
+    detail: has('项目信息：设计师') ? '不能为空' : undefined,
+    valueText: String((editForm as any).设计师 ?? '').trim() || '（空）'
+  })
+  for (const drawing of drawings) {
+    const inspectionKey = `产品 ${drawing}：检验报告 PDF`
+    const partDrawingKey = `产品 ${drawing}：零件图纸 PDF`
+    items.push({
+      key: `inspection-${drawing}`,
+      title: inspectionKey,
+      status: has(inspectionKey) ? 'missing' : 'ok',
+      valueText: has(inspectionKey) ? '未上传' : '已上传'
+    })
+    items.push({
+      key: `partDrawing-${drawing}`,
+      title: partDrawingKey,
+      status: has(partDrawingKey) ? 'missing' : 'ok',
+      valueText: has(partDrawingKey) ? '未上传' : '已上传'
+    })
+  }
+  return items
+}
+
+const showSealSampleChecklistDialog = async (items: SealSampleCheckItem[]) => {
+  const total = items.length
+  const missingCount = items.filter((i) => i.status === 'missing').length
+  const okCount = total - missingCount
+  const passed = missingCount === 0
+
+  const badgeStyle = (status: SealSampleCheckStatus) =>
+    status === 'ok'
+      ? 'background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;'
+      : 'background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;'
+  const badgeText = (status: SealSampleCheckStatus) => (status === 'ok' ? '通过' : '缺少')
+
+  const content = h(
+    'div',
+    {
+      style:
+        'width:100%;box-sizing:border-box;max-height:55vh;overflow:auto;display:flex;flex-direction:column;gap:8px;'
+    },
+    [
+      h(
+        'div',
+        {
+          style: 'font-size:12px;line-height:1.4;color:rgba(0,0,0,.65);white-space:pre-line;'
+        },
+        `共 ${total} 项：通过 ${okCount}，缺少 ${missingCount}`
+      ),
+      h(
+        'div',
+        {
+          style:
+            'width:100%;box-sizing:border-box;display:flex;flex-direction:column;border:1px solid #ebeef5;border-radius:8px;'
+        },
+        [
+          h(
+            'div',
+            {
+              style:
+                'display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #ebeef5;'
+            },
+            [
+              h(
+                'div',
+                {
+                  style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;text-align:center;'
+                },
+                '序号'
+              ),
+              h(
+                'div',
+                { style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;' },
+                '检查项'
+              ),
+              h(
+                'div',
+                { style: 'font-size:12px;color:rgba(0,0,0,.55);font-weight:600;text-align:right;' },
+                '状态'
+              )
+            ]
+          ),
+          ...items.map((it, idx) => {
+            const border = idx === items.length - 1 ? '' : 'border-bottom:1px dashed #ebeef5;'
+            const vRaw =
+              it.valueText !== undefined && String(it.valueText).trim() !== ''
+                ? String(it.valueText)
+                : it.status === 'missing'
+                  ? '（空）'
+                  : '—'
+            const v = vRaw
+              .replace(/[\r\n]+/g, '；')
+              .replace(/\s+/g, ' ')
+              .trim()
+            const d = it.detail
+              ? String(it.detail)
+                  .replace(/[\r\n]+/g, '；')
+                  .trim()
+              : ''
+            return h('div', { style: `padding:10px 12px;${border}` }, [
+              h(
+                'div',
+                {
+                  style:
+                    'display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:start;'
+                },
+                [
+                  h(
+                    'div',
+                    {
+                      style:
+                        'font-size:12px;line-height:1.4;color:rgba(0,0,0,.45);text-align:center;padding-top:1px;'
+                    },
+                    String(idx + 1)
+                  ),
+                  h(
+                    'div',
+                    { style: 'min-width:0;' },
+                    [
+                      h(
+                        'div',
+                        {
+                          style:
+                            'font-size:13px;line-height:1.4;color:rgba(0,0,0,.88);font-weight:600;'
+                        },
+                        it.title
+                      ),
+                      it.detail && it.status !== 'ok'
+                        ? h('span', { style: 'font-size:12px;color:rgba(153,27,27,.9);' }, `  ${d}`)
+                        : null,
+                      v && v !== '—'
+                        ? h(
+                            'div',
+                            { style: 'font-size:12px;color:rgba(0,0,0,.65);margin-top:2px;' },
+                            v
+                          )
+                        : null
+                    ].filter(Boolean)
+                  ),
+                  h(
+                    'div',
+                    { style: 'display:flex;justify-content:flex-end;align-items:flex-start;' },
+                    h(
+                      'span',
+                      {
+                        style:
+                          'flex:0 0 auto;font-size:12px;padding:2px 8px;border-radius:999px;' +
+                          badgeStyle(it.status)
+                      },
+                      badgeText(it.status)
+                    )
+                  )
+                ]
+              )
+            ])
+          })
+        ]
+      )
+    ]
+  )
+
+  if (!passed) {
+    await ElMessageBox.alert(content, '封样单检查清单（未通过）', {
+      type: 'warning',
+      customClass: 'pm-tripartite-checklist-box',
+      confirmButtonText: '去补齐'
+    })
+    return { passed: false as const }
+  }
+
+  await ElMessageBox.confirm(content, '封样单检查清单（已通过）', {
+    type: 'success',
+    customClass: 'pm-tripartite-checklist-box',
+    confirmButtonText: '继续生成',
+    cancelButtonText: '取消',
+    closeOnClickModal: false
+  })
+  return { passed: true as const }
+}
+
 const handlePrintTrialFormPreview = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
@@ -5820,56 +6031,74 @@ const handleGenerateSealSample = async () => {
     return
   }
 
+  // 1. 先校验，拿到 missing 列表
+  let missing: string[] = []
+  let gotValidateResponse = false
   try {
-    sealSampleGenerating.value = true
-    const resp: any = await generateSealSampleXlsxApi(projectCode)
-    if (resp?.code !== 0 && resp?.success !== true) {
-      const missing: string[] = resp?.missing
-      if (Array.isArray(missing) && missing.length > 0) {
-        ElMessageBox.alert(
-          `缺少以下内容，请补充后再生成：<br><br>${missing.map((m) => `• ${m}`).join('<br>')}`,
-          resp?.message || '无法生成封样单',
-          { type: 'warning', dangerouslyUseHTMLString: true }
-        ).catch(() => {})
-      } else {
-        ElMessage.error(resp?.message || '生成封样单失败')
-      }
-      return
+    const validateResp: any = await validateSealSampleApi(projectCode)
+    gotValidateResponse = true
+    if (validateResp?.success === true && validateResp?.code === 0) {
+      missing = []
+    } else {
+      missing = Array.isArray(validateResp?.missing) ? validateResp.missing : []
     }
-
-    ElMessage.success('封样单已生成并保存到附件')
-    await loadAttachments()
   } catch (error: any) {
-    console.error('生成封样单失败:', error)
-    const resp = error?.response
-    const data = resp?.data
-    const showMissing = (json: any) => {
-      const missing: string[] = json?.missing
-      if (Array.isArray(missing) && missing.length > 0) {
-        ElMessageBox.alert(
-          `缺少以下内容，请补充后再生成：<br><br>${missing.map((m) => `• ${m}`).join('<br>')}`,
-          json?.message || '无法生成封样单',
-          { type: 'warning', dangerouslyUseHTMLString: true }
-        ).catch(() => {})
-      } else {
-        ElMessage.error(json?.message || '生成封样单失败')
-      }
-    }
-    if (data instanceof Blob) {
+    const data = error?.response?.data
+    if (data && typeof data === 'object' && Array.isArray(data.missing)) {
+      gotValidateResponse = true
+      missing = data.missing
+    } else if (data instanceof Blob) {
       try {
         const text = await data.text()
         const json = JSON.parse(text)
-        showMissing(json)
-        return
+        if (Array.isArray(json?.missing)) {
+          gotValidateResponse = true
+          missing = json.missing
+        }
       } catch {
         // ignore
       }
     }
-    if (data && typeof data === 'object') {
-      showMissing(data)
+  }
+  if (!gotValidateResponse) {
+    ElMessage.error('校验失败，请稍后重试')
+    return
+  }
+
+  // 2. 弹检查清单（与三方协议同款）
+  const checklistItems = getSealSampleCheckItems(missing)
+  try {
+    const { passed } = await showSealSampleChecklistDialog(checklistItems)
+    if (!passed) return
+  } catch {
+    return
+  }
+
+  // 3. 通过后生成
+  try {
+    sealSampleGenerating.value = true
+    const resp: any = await generateSealSampleXlsxApi(projectCode)
+    if (resp?.code !== 0 && resp?.success !== true) {
+      ElMessage.error(resp?.message || '生成封样单失败')
       return
     }
-    ElMessage.error(resp?.data?.message || error?.message || '生成封样单失败')
+    ElMessage.success('封样单已生成并保存到附件')
+    await loadAttachments()
+  } catch (error: any) {
+    console.error('生成封样单失败:', error)
+    const data = error?.response?.data
+    const msg = data?.message || error?.message || '生成封样单失败'
+    if (
+      data &&
+      typeof data === 'object' &&
+      Array.isArray(data.missing) &&
+      data.missing.length > 0
+    ) {
+      const checklistItemsRetry = getSealSampleCheckItems(data.missing)
+      await showSealSampleChecklistDialog(checklistItemsRetry)
+    } else {
+      ElMessage.error(msg)
+    }
   } finally {
     sealSampleGenerating.value = false
   }
@@ -6997,46 +7226,34 @@ watch(viewMode, (val) => {
   color: #909399;
 }
 
-.pm-edit-header-status {
-  margin-left: 8px;
-  cursor: pointer;
+.pm-edit-header-status-select {
+  width: 120px;
 }
 
-.pm-edit-header-status-trigger {
-  display: inline-flex;
-  align-items: center;
+/* 项目状态按类型着色（与生产任务编辑弹窗一致），Select 使用 .el-select__wrapper */
+.pm-edit-header-status-select.pm-status--success :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-success-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-success) inset;
 }
 
-.pm-edit-header-status-tag {
-  width: 112px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  justify-content: center;
+.pm-edit-header-status-select.pm-status--warning :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-warning-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-warning) inset;
 }
 
-.pm-edit-header-status-caret {
-  margin-left: 4px;
-  font-size: 16px;
-  line-height: 1;
-  color: #909399;
+.pm-edit-header-status-select.pm-status--danger :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-danger-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
 }
 
-:deep(.pm-edit-header-status-dropdown) {
-  min-width: 112px !important;
-  font-size: 16px !important;
+.pm-edit-header-status-select.pm-status--info :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-info-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-info) inset;
 }
 
-:deep(.pm-edit-header-status-dropdown .el-dropdown-menu) {
-  width: 112px !important;
-  min-width: 112px !important;
-}
-
-:deep(.pm-edit-header-status-dropdown .el-dropdown-menu__item) {
-  overflow: hidden;
-  font-size: 16px !important;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.pm-edit-header-status-select.pm-status--primary :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-primary-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
 }
 
 .pm-edit-header-sub {

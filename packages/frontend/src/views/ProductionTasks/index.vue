@@ -342,7 +342,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      :width="isMobile ? '100%' : '1220px'"
+      :width="isMobile ? '100%' : '1200px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="pt-detail-dialog"
@@ -373,14 +373,25 @@
         <div class="pt-edit-header">
           <div class="pt-edit-header-main">
             <span class="pt-edit-header-code">{{ dialogForm.项目编号 || '-' }}</span>
-            <el-tag
-              v-if="dialogForm.生产状态"
-              :type="getStatusTagType(dialogForm.生产状态)"
-              size="small"
-              class="pt-edit-header-status"
-            >
-              {{ dialogForm.生产状态 }}
-            </el-tag>
+            <div class="pt-edit-header-status-wrap">
+              <span class="pt-edit-header-status-label">生产状态</span>
+              <el-select
+                v-model="dialogForm.生产状态"
+                placeholder="请选择生产状态"
+                size="small"
+                :class="[
+                  'pt-edit-header-status-select',
+                  'pt-status--' + getStatusTagType(dialogForm.生产状态)
+                ]"
+              >
+                <el-option
+                  v-for="item in statusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </div>
           </div>
           <div class="pt-edit-header-meta">
             <div class="pt-meta-item">
@@ -400,6 +411,10 @@
               <span class="value">{{ dialogForm.产品材质 || '-' }}</span>
             </div>
             <div class="pt-meta-item">
+              <span class="label">订单数量</span>
+              <span class="value">{{ formatValue(dialogForm.订单数量) }}</span>
+            </div>
+            <div class="pt-meta-item">
               <span class="label">图纸下发日期</span>
               <span class="value">{{ formatDate(dialogForm.图纸下发日期 as any) }}</span>
             </div>
@@ -414,7 +429,7 @@
           ref="dialogFormRef"
           :model="dialogForm"
           :rules="dialogRules"
-          label-width="120px"
+          :label-width="isMobile ? 'auto' : '120px'"
           class="production-task-form"
         >
           <div class="pt-edit-tabs-wrapper">
@@ -425,89 +440,89 @@
                   投产信息
                   <span v-if="productionTabCompleted" class="pt-tab-complete-dot"></span>
                 </template>
-                <div class="pt-edit-section">
-                  <div class="pt-edit-section-title">投产信息</div>
-                  <el-row :gutter="isMobile ? 8 : 20">
-                    <el-col :xs="24" :sm="12" :lg="8">
-                      <el-form-item label="开始日期" prop="开始日期">
-                        <el-date-picker
-                          v-model="dialogForm.开始日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="开始日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="结束日期" prop="结束日期">
-                        <el-date-picker
-                          v-model="dialogForm.结束日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="结束日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="下达日期">
-                        <el-date-picker
-                          v-model="dialogForm.下达日期"
-                          type="date"
-                          value-format="YYYY-MM-DD"
-                          placeholder="下达日期"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :xs="24" :sm="12" :lg="8">
-                      <el-form-item label="生产状态" prop="生产状态">
-                        <el-select
-                          v-model="dialogForm.生产状态"
-                          placeholder="请选择生产状态"
-                          style="width: 100%"
-                        >
-                          <el-option
-                            v-for="item in statusOptions"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value"
+                <!-- 左右排布：投产信息在左，图示在右（flex 固定不换行） -->
+                <div class="pt-production-layout">
+                  <div class="pt-production-left">
+                    <div class="pt-edit-section pt-edit-section--shrink">
+                      <div class="pt-edit-section-title">投产信息</div>
+                      <el-row :gutter="isMobile ? 8 : 6">
+                        <el-col :xs="24" :sm="12" :lg="12" class="pt-production-inner-col">
+                          <el-form-item label="开始日期" prop="开始日期">
+                            <el-date-picker
+                              v-model="dialogForm.开始日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="开始日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="结束日期" prop="结束日期">
+                            <el-date-picker
+                              v-model="dialogForm.结束日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="结束日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="下达日期">
+                            <el-date-picker
+                              v-model="dialogForm.下达日期"
+                              type="date"
+                              value-format="YYYY-MM-DD"
+                              placeholder="下达日期"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :xs="24" :sm="12" :lg="12" class="pt-production-inner-col">
+                          <el-form-item label="投产数量" prop="投产数量">
+                            <el-input-number
+                              v-model="dialogForm.投产数量"
+                              :min="0"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="已完成数量" prop="已完成数量">
+                            <el-input-number
+                              v-model="dialogForm.已完成数量"
+                              :min="0"
+                              style="width: 100%"
+                            />
+                          </el-form-item>
+                          <el-form-item label="负责人">
+                            <el-select
+                              v-model="dialogForm.负责人"
+                              placeholder="请选择负责人"
+                              style="width: 100%"
+                            >
+                              <el-option label="张晓龙" value="张晓龙" />
+                              <el-option label="丁忠寻" value="丁忠寻" />
+                            </el-select>
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </div>
+                  </div>
+                  <div class="pt-production-right">
+                    <div class="pt-edit-section pt-edit-section--shrink">
+                      <div class="pt-edit-section-title">图示</div>
+                      <div class="pt-part-image-container">
+                        <template v-if="projectPartImageUrl">
+                          <el-image
+                            class="pt-part-image-thumb"
+                            :src="toPartImageDisplayUrl(projectPartImageUrl)"
+                            :preview-src-list="[toPartImageDisplayUrl(projectPartImageUrl)]"
+                            :preview-teleported="true"
+                            fit="contain"
                           />
-                        </el-select>
-                      </el-form-item>
-                      <el-form-item label="负责人">
-                        <el-select
-                          v-model="dialogForm.负责人"
-                          placeholder="请选择负责人"
-                          style="width: 100%"
-                        >
-                          <el-option label="张晓龙" value="张晓龙" />
-                          <el-option label="丁忠寻" value="丁忠寻" />
-                        </el-select>
-                      </el-form-item>
-                    </el-col>
-                    <el-col :xs="24" :sm="12" :lg="8">
-                      <el-form-item label="订单数量">
-                        <el-input-number
-                          v-model="dialogForm.订单数量"
-                          :min="0"
-                          style="width: 100%"
-                          disabled
-                        />
-                      </el-form-item>
-                      <el-form-item label="投产数量" prop="投产数量">
-                        <el-input-number
-                          v-model="dialogForm.投产数量"
-                          :min="0"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                      <el-form-item label="已完成数量" prop="已完成数量">
-                        <el-input-number
-                          v-model="dialogForm.已完成数量"
-                          :min="0"
-                          style="width: 100%"
-                        />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
+                        </template>
+                        <div v-else class="pt-part-image-empty">
+                          <div class="pt-part-image-empty__text">暂无图示</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </el-tab-pane>
 
@@ -1109,6 +1124,7 @@ type ProjectProductRow = {
 
 const productListLoading = ref(false)
 const projectProductRows = ref<ProjectProductRow[]>([])
+const projectPartImageUrl = ref<string>('')
 const inspectionReports = ref<ProjectInspectionReportAttachment[]>([])
 
 const inspectionDrawerVisible = ref(false)
@@ -1160,12 +1176,15 @@ const loadProjectProductList = async () => {
   const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
   if (!projectCode) {
     projectProductRows.value = []
+    projectPartImageUrl.value = ''
     return
   }
   productListLoading.value = true
   try {
     const resp: any = await getProjectDetailApi(projectCode)
     const detail = resp?.data?.data || resp?.data || {}
+
+    projectPartImageUrl.value = String(detail.零件图示URL ?? '').trim()
 
     const drawings = normalizeStringArray(detail.产品列表 ?? detail.产品图号列表)
     const names = normalizeStringArray(detail.产品名称列表)
@@ -1192,9 +1211,16 @@ const loadProjectProductList = async () => {
     console.error('加载项目产品列表失败:', error)
     ElMessage.error('加载产品列表失败')
     projectProductRows.value = []
+    projectPartImageUrl.value = ''
   } finally {
     productListLoading.value = false
   }
+}
+
+const toPartImageDisplayUrl = (imageUrl: string | undefined) => {
+  const url = String(imageUrl || '').trim()
+  if (!url) return ''
+  return `/api/project/part-image?url=${encodeURIComponent(url)}`
 }
 
 // 零件图纸（来自项目管理）
@@ -1890,6 +1916,7 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
     })
     Object.assign(dialogForm, detailData)
     dialogVisible.value = true
+    void loadProjectProductList()
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
@@ -1930,6 +1957,7 @@ const handleView = async (row: Partial<ProductionTaskInfo>) => {
     })
     Object.assign(dialogForm, detailData)
     dialogVisible.value = true
+    void loadProjectProductList()
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
@@ -1978,6 +2006,7 @@ const handleDialogClosed = () => {
   moldDrawingAttachments.value = []
   partDrawingAttachments.value = []
   projectProductRows.value = []
+  projectPartImageUrl.value = ''
   inspectionReports.value = []
   inspectionDrawerVisible.value = false
   inspectionDrawerDrawing.value = null
@@ -2119,6 +2148,48 @@ onMounted(() => {
   }
 }
 
+/* PC 端弹窗：与项目管理编辑弹窗一致，固定高度 + body overflow:hidden 避免横滚 */
+@media (width >= 769px) {
+  :deep(.pt-detail-dialog) {
+    display: flex;
+    height: 800px;
+    max-height: 800px;
+    min-height: 800px;
+    margin: auto;
+    flex-direction: column;
+  }
+
+  :deep(.pt-detail-dialog .el-dialog__body) {
+    display: flex;
+    min-height: 0;
+    padding: 14px 16px;
+    overflow: hidden;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  :deep(.pt-detail-dialog .el-dialog__footer) {
+    padding: 12px 16px 14px;
+  }
+}
+
+@media (width < 768px) {
+  .pt-production-layout {
+    flex-flow: column wrap;
+    min-height: 0;
+  }
+
+  .pt-production-left,
+  .pt-production-right {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .pt-production-right .pt-part-image-container {
+    flex: none;
+  }
+}
+
 .pt-attachments-row {
   align-items: stretch;
 }
@@ -2142,13 +2213,6 @@ onMounted(() => {
   margin: 4px 0 10px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-}
-
-/* PC 端弹窗：固定 body 高度，避免切换页签导致弹窗高度变化 */
-:deep(.pt-detail-dialog .el-dialog__body) {
-  height: 580px;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
 }
 
 .pt-page {
@@ -2205,13 +2269,20 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+.production-task-form {
+  min-width: 0;
+  flex: 1;
+}
+
 .production-task-form :deep(.el-form-item) {
   margin-bottom: 18px;
 }
 
 .pt-edit-body {
   display: flex;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   flex: 1;
   flex-direction: column;
   gap: 12px;
@@ -2239,8 +2310,42 @@ onMounted(() => {
   color: #303133;
 }
 
-.pt-edit-header-status {
-  margin-left: 4px;
+.pt-edit-header-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.pt-edit-header-status-label {
+  font-size: 13px;
+  color: #606266;
+  flex-shrink: 0;
+}
+
+.pt-edit-header-status-select {
+  width: 120px;
+}
+
+/* 生产状态按类型着色（与列表 el-tag 一致），Select 使用 .el-select__wrapper */
+.pt-edit-header-status-select.pt-status--success :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-success-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-success) inset;
+}
+
+.pt-edit-header-status-select.pt-status--warning :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-warning-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-warning) inset;
+}
+
+.pt-edit-header-status-select.pt-status--danger :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-danger-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+}
+
+.pt-edit-header-status-select.pt-status--info :deep(.el-select__wrapper) {
+  background-color: rgba(var(--el-color-info-rgb), 0.12);
+  box-shadow: 0 0 0 1px var(--el-color-info) inset;
 }
 
 .pt-edit-header-meta {
@@ -2270,18 +2375,20 @@ onMounted(() => {
 }
 
 .pt-edit-tabs-wrapper {
-  flex: 1;
   display: flex;
-  flex-direction: column;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
+  flex: 1;
+  flex-direction: column;
 }
 
 :deep(.pt-edit-tabs) {
-  flex: 1;
   display: flex;
-  flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 :deep(.pt-edit-tabs .el-tabs__header) {
@@ -2289,10 +2396,16 @@ onMounted(() => {
 }
 
 :deep(.pt-edit-tabs .el-tabs__content) {
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden auto;
   order: 1;
   flex: 1;
+}
+
+:deep(.pt-edit-tabs .el-tab-pane) {
+  height: 100%;
+  min-width: 0;
 }
 
 .pt-tab-complete-dot {
@@ -2317,11 +2430,140 @@ onMounted(() => {
   border-radius: 8px;
 }
 
+/* 投产信息页签：左投产信息、右图示，固定左右排布不换行，两容器等高（高度由内容决定，不设最小高度） */
+.pt-production-layout {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.pt-production-left,
+.pt-production-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pt-production-left {
+  flex: 0 0 62.5%;
+}
+
+.pt-production-right {
+  flex: 0 0 calc(37.5% - 8px);
+}
+
+/* 左列 section 由表单内容撑开高度，右列 section 填满列高，使行高=左列、两列等高 */
+.pt-production-left .pt-edit-section--shrink {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.pt-production-right .pt-edit-section--shrink {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* 图示列：section、标题与项目管理-基本信息-图示一致 */
+.pt-production-right .pt-edit-section--shrink {
+  padding: 12px 14px 4px;
+  margin-bottom: 12px;
+}
+
+.pt-production-right .pt-edit-section-title {
+  margin-bottom: 8px;
+}
+
+.pt-production-right .pt-part-image-container {
+  flex: 1;
+  min-height: 200px;
+
+  /* 拉伸与左侧投产信息容器等高 */
+}
+
+.pt-production-inner-col {
+  min-width: 0;
+}
+
+.pt-edit-section--shrink {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.production-task-form .pt-edit-section--shrink :deep(.el-form-item__content) {
+  min-width: 0;
+}
+
+.production-task-form .pt-edit-section--shrink :deep(.el-date-editor),
+.production-task-form .pt-edit-section--shrink :deep(.el-select),
+.production-task-form .pt-edit-section--shrink :deep(.el-input-number) {
+  max-width: 100%;
+}
+
 .pt-edit-section-title {
   margin-bottom: 10px;
   font-size: 13px;
   font-weight: 600;
   color: #606266;
+}
+
+/* 图示展示区域：与项目管理-编辑项目-基本信息-图示完全一致 */
+.pt-part-image-container {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-height: 400px;
+  min-height: 200px;
+  cursor: default;
+  background: #fafafa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-part-image-thumb {
+  width: 100%;
+  max-height: 300px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.pt-part-image-thumb :deep(.el-image__inner) {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+.pt-part-image-empty {
+  display: flex;
+  width: 100%;
+  min-height: 200px;
+  font-size: 12px;
+  color: #909399;
+  background: #fafafa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-part-image-empty__text {
+  line-height: 1.1;
+  text-align: center;
+  user-select: none;
 }
 
 /* 查看表格样式 - 紧凑布局 */
