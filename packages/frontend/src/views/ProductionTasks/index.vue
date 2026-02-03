@@ -2443,9 +2443,11 @@ onMounted(() => {
 
 .pt-production-left,
 .pt-production-right {
+  /* 两列作为 flex-item 被 stretch 出相同高度；列内 section 用 flex:1 填满列高 */
   display: flex;
   flex-direction: column;
   min-width: 0;
+  align-self: stretch;
 }
 
 .pt-production-left {
@@ -2456,10 +2458,11 @@ onMounted(() => {
   flex: 0 0 calc(37.5% - 8px);
 }
 
-/* 左列 section 由表单内容撑开高度，右列 section 填满列高，使行高=左列、两列等高 */
+/* 左右两列等高：由较高一侧决定行高，左右 section 均填满列高 */
 .pt-production-left .pt-edit-section--shrink {
   display: flex;
   min-height: 0;
+  flex: 1;
   flex-direction: column;
 }
 
@@ -2470,10 +2473,15 @@ onMounted(() => {
   flex-direction: column;
 }
 
+/* 该页签左右等高时，section 若保留 margin 会导致溢出出现纵向滚动条 */
+.pt-production-layout .pt-edit-section {
+  margin-top: 0;
+}
+
 /* 图示列：section、标题与项目管理-基本信息-图示一致 */
 .pt-production-right .pt-edit-section--shrink {
   padding: 12px 14px 4px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .pt-production-right .pt-edit-section-title {

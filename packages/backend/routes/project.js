@@ -1439,6 +1439,83 @@ router.post('/trial-form-validate', async (req, res) => {
   }
 })
 
+// 校验封样单数据完整性：用于生成前检查（不生成文件、不改附件）
+router.post('/seal-sample-validate', async (req, res) => {
+  try {
+    await ensureProjectAttachmentsTable()
+
+    const { projectCode } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    if (!fs.existsSync(SEAL_SAMPLE_TEMPLATE_PATH)) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '封样单模板不存在，请联系管理员'
+      })
+    }
+
+    const row = await loadProjectRowForSealSample(code)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '项目信息不存在' })
+    }
+
+    const products = buildSealSampleProducts(row)
+    if (products.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '请先填写产品列表',
+        missing: ['产品列表']
+      })
+    }
+
+    const productMaterial = String(row?.产品材质 || '').trim()
+    const customerModelNo = String(row?.客户模号 || '').trim()
+    const mouldCavity = String(row?.模具穴数 || '').trim()
+    const designer = String(row?.设计师 || '').trim()
+
+    const missing = []
+    if (!productMaterial) missing.push('项目信息：产品材质')
+    if (!customerModelNo) missing.push('项目信息：客户模号')
+    if (!mouldCavity) missing.push('项目信息：模具穴数')
+    if (!designer) missing.push('项目信息：设计师')
+
+    for (const prod of products) {
+      const inspectionPdf = await querySealSampleInspectionReportPdf(code, prod.productDrawing)
+      if (!inspectionPdf) {
+        missing.push(`产品 ${prod.productDrawing}：检验报告 PDF`)
+      }
+      const partDrawingPdf = await querySealSamplePartDrawingPdf(code, prod.productDrawing)
+      if (!partDrawingPdf) {
+        missing.push(`产品 ${prod.productDrawing}：零件图纸 PDF`)
+      }
+    }
+
+    if (missing.length > 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '缺少以下信息，请补充后再生成封样单',
+        missing
+      })
+    }
+
+    return res.json({ code: 0, success: true })
+  } catch (error) {
+    console.error('校验封样单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '校验封样单失败',
+      error: error.message
+    })
+  }
+})
+
 // 生成三方协议（docx）：基于模板占位符填充，返回 docx 文件
 router.get('/tripartite-agreement-docx', async (req, res) => {
   try {
