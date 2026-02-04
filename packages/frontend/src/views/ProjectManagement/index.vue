@@ -2091,6 +2091,17 @@
                               >
                                 打印试模单
                               </el-button>
+                              <el-button
+                                type="success"
+                                plain
+                                size="small"
+                                :disabled="
+                                  editSubmitting || !(editForm.项目编号 || currentProjectCode)
+                                "
+                                @click="handleOpenTrialProcessPage"
+                              >
+                                试模过程
+                              </el-button>
                               <el-upload
                                 :action="getAttachmentAction('trial-form')"
                                 :show-file-list="false"
@@ -5876,6 +5887,37 @@ const handlePrintTrialFormPreview = async () => {
     name: 'TrialFormPrintPreview',
     params: { projectCode },
     query: { trialCount: normalizedTrialCount, from: fromPath }
+  })
+}
+
+const handleOpenTrialProcessPage = async () => {
+  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
+  if (!projectCode) {
+    ElMessage.warning('请先填写项目编号')
+    return
+  }
+  if (editSubmitting.value) return
+
+  // 如果需要保存，先保存（避免项目编号为空或数据未落库）
+  if (isEditFormDirty.value) {
+    try {
+      await ElMessageBox.confirm('请先保存后再进入试模过程页面', '提示', {
+        type: 'warning',
+        confirmButtonText: '保存并继续',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await handleSubmitEdit()
+    if (editDialogVisible.value) return
+  }
+
+  const fromPath = route.path
+  router.push({
+    name: 'TrialProcessIndex',
+    params: { projectCode },
+    query: { from: fromPath }
   })
 }
 

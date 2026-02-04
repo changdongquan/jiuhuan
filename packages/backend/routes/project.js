@@ -993,6 +993,103 @@ const ensureProjectAttachmentsTable = async () => {
   `)
 }
 
+// === 试模过程（多次记录） ===
+
+const TRIAL_PROCESS_ALLOWED_CATEGORIES = ['T0', '工程变更', '细节优化', '客户更改', '封样']
+
+const resolveUsernameFromReq = (req) => {
+  const raw = req?.headers?.['x-username']
+  const username = Array.isArray(raw) ? raw[0] : raw
+  const s = String(username || '').trim()
+  return s || null
+}
+
+const normalizeTrialCategory = (trialNo, input) => {
+  const n = Number(trialNo)
+  const raw = String(input || '').trim()
+  if (n === 1) return 'T0'
+  if (!raw) return null
+  return TRIAL_PROCESS_ALLOWED_CATEGORIES.includes(raw) && raw !== 'T0' ? raw : null
+}
+
+const parsePositiveInt = (val) => {
+  const n = parseInt(String(val ?? ''), 10)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+const parseOptionalDecimal = (val) => {
+  if (val === null || val === undefined || String(val).trim() === '') return null
+  const n = Number(val)
+  return Number.isFinite(n) ? n : null
+}
+
+const ensureTrialProcessTables = async () => {
+  await query(`
+    IF OBJECT_ID(N'dbo.试模过程', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.试模过程 (
+        试模过程ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        项目编号 NVARCHAR(50) NOT NULL,
+        试模次数 INT NOT NULL,
+        试模日期 DATE NULL,
+        试模类别 NVARCHAR(50) NOT NULL,
+        -- 兼容历史：产品颜色不在业务中维护（以项目管理表为准）
+        产品颜色 NVARCHAR(100) NULL,
+        -- 兼容历史：产品数量不在业务中展示，写入时与“试模产品数量”一致
+        产品数量 INT NOT NULL,
+        试模产品数量 INT NOT NULL,
+        注塑机吨位 INT NULL,
+        -- 兼容历史：成型周期不在业务中维护
+        成型周期 DECIMAL(10,2) NULL,
+        色母型号 NVARCHAR(100) NULL,
+        试模单位 NVARCHAR(100) NULL,
+        试模时长 DECIMAL(10,2) NULL,
+        外协试模 BIT NOT NULL CONSTRAINT DF_试模过程_外协试模 DEFAULT (0),
+        备注 NVARCHAR(1000) NULL,
+        是否作废 BIT NOT NULL CONSTRAINT DF_试模过程_是否作废 DEFAULT (0),
+        创建时间 DATETIME2 NOT NULL CONSTRAINT DF_试模过程_创建时间 DEFAULT (SYSDATETIME()),
+        创建人 NVARCHAR(100) NULL,
+        更新时间 DATETIME2 NULL,
+        更新人 NVARCHAR(100) NULL
+      );
+
+      CREATE UNIQUE INDEX UX_试模过程_项目_次数 ON dbo.试模过程 (项目编号, 试模次数);
+      CREATE INDEX IX_试模过程_项目 ON dbo.试模过程 (项目编号, 是否作废, 试模次数 DESC, 试模过程ID DESC);
+    END
+  `)
+
+  await query(`
+    IF OBJECT_ID(N'dbo.试模过程附件', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.试模过程附件 (
+        附件ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        试模过程ID INT NOT NULL,
+        项目编号 NVARCHAR(50) NOT NULL,
+        原始文件名 NVARCHAR(255) NOT NULL,
+        存储文件名 NVARCHAR(255) NOT NULL,
+        相对路径 NVARCHAR(255) NOT NULL,
+        文件大小 BIGINT NOT NULL,
+        内容类型 NVARCHAR(100) NULL,
+        上传时间 DATETIME2 NOT NULL CONSTRAINT DF_试模过程附件_上传时间 DEFAULT (SYSDATETIME()),
+        上传人 NVARCHAR(100) NULL,
+        排序 INT NULL
+      );
+
+      CREATE INDEX IX_试模过程附件_过程 ON dbo.试模过程附件 (试模过程ID, 上传时间 DESC, 附件ID DESC);
+      CREATE INDEX IX_试模过程附件_项目 ON dbo.试模过程附件 (项目编号, 上传时间 DESC, 附件ID DESC);
+
+      BEGIN TRY
+        ALTER TABLE dbo.试模过程附件
+          ADD CONSTRAINT FK_试模过程附件_试模过程
+          FOREIGN KEY (试模过程ID) REFERENCES dbo.试模过程(试模过程ID);
+      END TRY
+      BEGIN CATCH
+        -- ignore
+      END CATCH
+    END
+  `)
+}
+
 // 获取项目统计信息（需要在其他路由之前定义）
 router.get('/statistics', async (req, res) => {
   try {
@@ -3064,6 +3161,716 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
       code: 500,
       success: false,
       message: '获取项目管理附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// === 试模过程（独立页面）===
+
+const uploadTrialProcessAttachments = (req, res, next) => {
+  uploadAttachment.array('file', 20)(req, res, (err) => {
+    if (!err) return next()
+    const message =
+      err?.code === 'LIMIT_FILE_SIZE'
+        ? `上传失败：单个附件不能超过 ${Math.round(MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024)}MB`
+        : err?.message || '上传失败'
+    res.status(400).json({ code: 400, success: false, message })
+  })
+}
+
+const getTrialProcessRow = async (projectCode, trialNo) => {
+  const rows = await query(
+    `
+    SELECT TOP 1
+      试模过程ID as id,
+      项目编号 as projectCode,
+      试模次数 as trialNo,
+      试模日期 as trialDate,
+      试模类别 as trialCategory,
+      pm.产品材质 as productMaterial,
+      pm.产品颜色 as productColor,
+      试模产品数量 as trialProductQty,
+      注塑机吨位 as machineTonnage,
+      色母型号 as masterbatchModel,
+      试模单位 as trialUnit,
+      试模时长 as trialDuration,
+      外协试模 as isOutsourced,
+      备注 as remark,
+      是否作废 as isVoid,
+      创建时间 as createdAt,
+      创建人 as createdBy,
+      更新时间 as updatedAt,
+      更新人 as updatedBy
+    FROM 试模过程 tp
+    LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
+    WHERE 项目编号 = @projectCode
+      AND 试模次数 = @trialNo
+  `,
+    { projectCode, trialNo }
+  )
+  return rows?.[0] || null
+}
+
+// 获取试模过程列表
+router.get('/:projectCode(*)/trial-processes', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        tp.试模过程ID as id,
+        tp.项目编号 as projectCode,
+        tp.试模次数 as trialNo,
+        CONVERT(varchar(10), tp.试模日期, 23) as trialDate,
+        tp.试模类别 as trialCategory,
+        pm.产品材质 as productMaterial,
+        pm.产品颜色 as productColor,
+        tp.试模产品数量 as trialProductQty,
+        tp.注塑机吨位 as machineTonnage,
+        tp.色母型号 as masterbatchModel,
+        tp.试模单位 as trialUnit,
+        tp.试模时长 as trialDuration,
+        tp.外协试模 as isOutsourced,
+        tp.备注 as remark,
+        tp.创建时间 as createdAt,
+        tp.创建人 as createdBy,
+        tp.更新时间 as updatedAt,
+        tp.更新人 as updatedBy,
+        (SELECT COUNT(1) FROM 试模过程附件 a WHERE a.试模过程ID = tp.试模过程ID) as attachmentCount
+      FROM 试模过程 tp
+      LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
+      WHERE tp.项目编号 = @projectCode
+        AND tp.是否作废 = 0
+      ORDER BY tp.试模次数 DESC, tp.试模过程ID DESC
+    `,
+      { projectCode }
+    )
+
+    return res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取试模过程列表失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取试模过程列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取试模过程详情
+router.get('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const trialNo = parseInt(String(req.params.trialNo || ''), 10)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+    if (!Number.isInteger(trialNo) || trialNo <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '试模次数不合法' })
+    }
+
+    const row = await getTrialProcessRow(projectCode, trialNo)
+    if (!row || row.isVoid) {
+      return res.status(404).json({ code: 404, success: false, message: '试模过程不存在' })
+    }
+
+    row.trialDate = formatDateYYYYMMDD(row.trialDate)
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('获取试模过程详情失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取试模过程详情失败',
+      error: error.message
+    })
+  }
+})
+
+// 新建试模过程：同一项目内试模次数从 1 递增（并发安全）
+router.post('/:projectCode(*)/trial-processes', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const projectRows = await query(
+      `SELECT TOP 1 项目编号 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+      { projectCode }
+    )
+    if (!projectRows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '项目不存在' })
+    }
+
+    const body = req.body || {}
+    const trialDate = formatDateYYYYMMDD(body.trialDate || body.试模日期 || '')
+    const trialProductQty = parsePositiveInt(body.trialProductQty ?? body.试模产品数量)
+    if (!trialProductQty) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模产品数量不能为空且必须为正整数'
+      })
+    }
+
+    const machineTonnage = parsePositiveInt(body.machineTonnage ?? body.注塑机吨位)
+    const trialDuration = parseOptionalDecimal(body.trialDuration ?? body.试模时长)
+    const isOutsourcedRaw = body.isOutsourced ?? body.外协试模
+    const isOutsourced =
+      isOutsourcedRaw === true ||
+      isOutsourcedRaw === 1 ||
+      String(isOutsourcedRaw || '').trim() === '1' ||
+      String(isOutsourcedRaw || '').trim().toLowerCase() === 'true'
+
+    const createdBy = resolveUsernameFromReq(req)
+
+    const masterbatchModel = String(body.masterbatchModel ?? body.色母型号 ?? '').trim() || null
+    const trialUnit = String(body.trialUnit ?? body.试模单位 ?? '').trim() || null
+    const remark = String(body.remark ?? body.备注 ?? '').trim() || null
+
+    const requestedCategory = String(body.trialCategory ?? body.试模类别 ?? '').trim()
+
+    const inserted = await query(
+      `
+      ;WITH nextNo AS (
+        SELECT ISNULL(MAX(试模次数), 0) + 1 AS n
+        FROM dbo.试模过程 WITH (UPDLOCK, HOLDLOCK)
+        WHERE 项目编号 = @projectCode
+      )
+      INSERT INTO dbo.试模过程 (
+        项目编号,
+        试模次数,
+        试模日期,
+        试模类别,
+        产品数量,
+        试模产品数量,
+        注塑机吨位,
+        成型周期,
+        色母型号,
+        试模单位,
+        试模时长,
+        外协试模,
+        备注,
+        创建人
+      )
+      OUTPUT
+        INSERTED.试模过程ID as id,
+        INSERTED.试模次数 as trialNo
+      SELECT
+        @projectCode,
+        n,
+        @trialDate,
+        CASE
+          WHEN n = 1 THEN N'T0'
+          WHEN @trialCategory IN (N'工程变更', N'细节优化', N'客户更改', N'封样') THEN @trialCategory
+          ELSE NULL
+        END,
+        @trialProductQty,
+        @trialProductQty,
+        @machineTonnage,
+        NULL,
+        @masterbatchModel,
+        @trialUnit,
+        @trialDuration,
+        @isOutsourced,
+        @remark,
+        @createdBy
+      FROM nextNo
+    `,
+      {
+        projectCode,
+        trialDate: trialDate || null,
+        trialCategory: requestedCategory || null,
+        trialProductQty,
+        machineTonnage: machineTonnage || null,
+        masterbatchModel,
+        trialUnit,
+        trialDuration,
+        isOutsourced,
+        remark,
+        createdBy
+      }
+    )
+
+    const id = inserted?.[0]?.id
+    const trialNo = inserted?.[0]?.trialNo
+    if (!id || !trialNo) {
+      return res.status(500).json({ code: 500, success: false, message: '创建试模过程失败' })
+    }
+
+    const row = await getTrialProcessRow(projectCode, trialNo)
+    if (row) row.trialDate = formatDateYYYYMMDD(row.trialDate)
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('创建试模过程失败:', error)
+    const msg = String(error?.message || '')
+    if (/试模类别/.test(msg) || /cannot insert the value NULL/i.test(msg)) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: `试模类别不合法（第 1 次固定为 T0；其它仅支持：${TRIAL_PROCESS_ALLOWED_CATEGORIES.filter((c) => c !== 'T0').join('、')}）`
+      })
+    }
+    return res.status(500).json({ code: 500, success: false, message: '创建试模过程失败', error: msg })
+  }
+})
+
+// 更新试模过程
+router.put('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const trialNo = parseInt(String(req.params.trialNo || ''), 10)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+    if (!Number.isInteger(trialNo) || trialNo <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '试模次数不合法' })
+    }
+
+    const existing = await getTrialProcessRow(projectCode, trialNo)
+    if (!existing || existing.isVoid) {
+      return res.status(404).json({ code: 404, success: false, message: '试模过程不存在' })
+    }
+
+    const body = req.body || {}
+    const trialDate = formatDateYYYYMMDD(body.trialDate || body.试模日期 || '')
+    const trialProductQty = parsePositiveInt(body.trialProductQty ?? body.试模产品数量)
+    if (!trialProductQty) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模产品数量不能为空且必须为正整数'
+      })
+    }
+
+    const requestedCategory = String(body.trialCategory ?? body.试模类别 ?? '').trim()
+    const normalizedCategory = normalizeTrialCategory(trialNo, requestedCategory)
+    if (!normalizedCategory) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message:
+          trialNo === 1
+            ? '第 1 次试模类别固定为 T0'
+            : `试模类别不合法（仅支持：${TRIAL_PROCESS_ALLOWED_CATEGORIES.filter((c) => c !== 'T0').join('、')}）`
+      })
+    }
+
+    const machineTonnage = parsePositiveInt(body.machineTonnage ?? body.注塑机吨位)
+    const trialDuration = parseOptionalDecimal(body.trialDuration ?? body.试模时长)
+    const isOutsourcedRaw = body.isOutsourced ?? body.外协试模
+    const isOutsourced =
+      isOutsourcedRaw === true ||
+      isOutsourcedRaw === 1 ||
+      String(isOutsourcedRaw || '').trim() === '1' ||
+      String(isOutsourcedRaw || '').trim().toLowerCase() === 'true'
+
+    const updatedBy = resolveUsernameFromReq(req)
+
+    const masterbatchModel = String(body.masterbatchModel ?? body.色母型号 ?? '').trim() || null
+    const trialUnit = String(body.trialUnit ?? body.试模单位 ?? '').trim() || null
+    const remark = String(body.remark ?? body.备注 ?? '').trim() || null
+
+    await query(
+      `
+      UPDATE dbo.试模过程
+      SET
+        试模日期 = @trialDate,
+        试模类别 = @trialCategory,
+        产品数量 = @trialProductQty,
+        试模产品数量 = @trialProductQty,
+        注塑机吨位 = @machineTonnage,
+        成型周期 = NULL,
+        色母型号 = @masterbatchModel,
+        试模单位 = @trialUnit,
+        试模时长 = @trialDuration,
+        外协试模 = @isOutsourced,
+        备注 = @remark,
+        更新时间 = SYSDATETIME(),
+        更新人 = @updatedBy
+      WHERE 项目编号 = @projectCode
+        AND 试模次数 = @trialNo
+        AND 是否作废 = 0
+    `,
+      {
+        projectCode,
+        trialNo,
+        trialDate: trialDate || null,
+        trialCategory: normalizedCategory,
+        trialProductQty,
+        machineTonnage: machineTonnage || null,
+        masterbatchModel,
+        trialUnit,
+        trialDuration,
+        isOutsourced,
+        remark,
+        updatedBy
+      }
+    )
+
+    const row = await getTrialProcessRow(projectCode, trialNo)
+    if (row) row.trialDate = formatDateYYYYMMDD(row.trialDate)
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('更新试模过程失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '更新试模过程失败',
+      error: error.message
+    })
+  }
+})
+
+// 作废试模过程（不物理删除）
+router.delete('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const trialNo = parseInt(String(req.params.trialNo || ''), 10)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+    if (!Number.isInteger(trialNo) || trialNo <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '试模次数不合法' })
+    }
+
+    const existing = await getTrialProcessRow(projectCode, trialNo)
+    if (!existing || existing.isVoid) {
+      return res.status(404).json({ code: 404, success: false, message: '试模过程不存在' })
+    }
+
+    const updatedBy = resolveUsernameFromReq(req)
+    await query(
+      `
+      UPDATE dbo.试模过程
+      SET 是否作废 = 1, 更新时间 = SYSDATETIME(), 更新人 = @updatedBy
+      WHERE 项目编号 = @projectCode AND 试模次数 = @trialNo AND 是否作废 = 0
+    `,
+      { projectCode, trialNo, updatedBy }
+    )
+
+    return res.json({ code: 0, success: true, message: '作废成功' })
+  } catch (error) {
+    console.error('作废试模过程失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '作废试模过程失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取某次试模过程附件列表
+router.get('/:projectCode(*)/trial-processes/:trialNo/attachments', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    const trialNo = parseInt(String(req.params.trialNo || ''), 10)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+    if (!Number.isInteger(trialNo) || trialNo <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '试模次数不合法' })
+    }
+
+    const process = await getTrialProcessRow(projectCode, trialNo)
+    if (!process || process.isVoid) {
+      return res.status(404).json({ code: 404, success: false, message: '试模过程不存在' })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        附件ID as id,
+        试模过程ID as trialProcessId,
+        项目编号 as projectCode,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy,
+        排序 as sortOrder
+      FROM 试模过程附件
+      WHERE 试模过程ID = @trialProcessId
+      ORDER BY ISNULL(排序, 999999) ASC, 上传时间 DESC, 附件ID DESC
+    `,
+      { trialProcessId: process.id }
+    )
+
+    return res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取试模过程附件列表失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取试模过程附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 上传试模过程附件（仅 PDF / 图片，支持多文件）
+router.post(
+  '/:projectCode(*)/trial-processes/:trialNo/attachments',
+  uploadTrialProcessAttachments,
+  async (req, res) => {
+    try {
+      await ensureTrialProcessTables()
+      const projectCode = String(req.params.projectCode || '').trim()
+      const trialNo = parseInt(String(req.params.trialNo || ''), 10)
+      if (!projectCode) {
+        return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+      }
+      if (!Number.isInteger(trialNo) || trialNo <= 0) {
+        return res.status(400).json({ code: 400, success: false, message: '试模次数不合法' })
+      }
+
+      const process = await getTrialProcessRow(projectCode, trialNo)
+      if (!process || process.isVoid) {
+        return res.status(404).json({ code: 404, success: false, message: '试模过程不存在' })
+      }
+
+      const files = Array.isArray(req.files) ? req.files : []
+      if (!files.length) {
+        return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+      }
+
+      const uploadedBy = resolveUsernameFromReq(req)
+
+      const category = getCategoryFromProjectCode(projectCode)
+      const safeProjectCode = safeProjectCodeForPath(projectCode)
+      const trialDirName = `第${String(trialNo)}次`
+      const finalRelativeDir = path.posix.join(
+        category,
+        safeProjectCode,
+        '项目管理',
+        '试模过程',
+        trialDirName
+      )
+      const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+      ensureDirSync(finalFullDir)
+
+      const insertedRows = []
+      const tempDirs = new Set()
+
+      for (const file of files) {
+        const originalName = normalizeAttachmentFileName(file.originalname)
+        const ext = String(path.extname(originalName || '') || '').toLowerCase()
+        const isPdf = ext === '.pdf'
+        const isImage = String(file.mimetype || '').toLowerCase().startsWith('image/')
+        if (!isPdf && !isImage) {
+          return res.status(400).json({
+            code: 400,
+            success: false,
+            message: '试模过程附件仅支持 PDF / 图片文件'
+          })
+        }
+
+        const seqRows = await query(
+          `
+          SELECT ISNULL(MAX(ISNULL(排序, 0)), 0) as maxSort
+          FROM 试模过程附件
+          WHERE 试模过程ID = @trialProcessId
+        `,
+          { trialProcessId: process.id }
+        )
+        const nextSort = (seqRows?.[0]?.maxSort || 0) + 1
+
+        const baseName = `${projectCode}_试模过程_第${String(trialNo)}次_${String(nextSort).padStart(2, '0')}`
+        const storedFileName = ensureUniqueFileName(finalFullDir, safeFileName(`${baseName}${ext}`))
+
+        const tempFile = file.path
+        if (file.destination) tempDirs.add(file.destination)
+        const finalFile = path.join(finalFullDir, storedFileName)
+        await moveFileWithFallback(tempFile, finalFile)
+
+        const inserted = await query(
+          `
+          INSERT INTO dbo.试模过程附件 (
+            试模过程ID,
+            项目编号,
+            原始文件名,
+            存储文件名,
+            相对路径,
+            文件大小,
+            内容类型,
+            上传人,
+            排序
+          )
+          OUTPUT INSERTED.附件ID as id, INSERTED.上传时间 as uploadedAt
+          VALUES (
+            @trialProcessId,
+            @projectCode,
+            @originalName,
+            @storedFileName,
+            @relativePath,
+            @fileSize,
+            @contentType,
+            @uploadedBy,
+            @sortOrder
+          )
+        `,
+          {
+            trialProcessId: process.id,
+            projectCode,
+            originalName,
+            storedFileName,
+            relativePath: finalRelativeDir,
+            fileSize: file.size,
+            contentType: file.mimetype || null,
+            uploadedBy,
+            sortOrder: nextSort
+          }
+        )
+
+        insertedRows.push({
+          id: inserted?.[0]?.id,
+          trialProcessId: process.id,
+          projectCode,
+          originalName,
+          storedFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedAt: inserted?.[0]?.uploadedAt,
+          uploadedBy,
+          sortOrder: nextSort
+        })
+      }
+
+      // 清理空临时目录（multer 每个文件可能分配不同的 temp dir）
+      for (const dir of tempDirs) {
+        try {
+          if (dir && fs.existsSync(dir)) {
+            const dirFiles = await fsp.readdir(dir)
+            if (dirFiles.length === 0) {
+              await fsp.rmdir(dir)
+              const parentTempDir = path.dirname(dir)
+              const parentFiles = await fsp.readdir(parentTempDir).catch(() => [])
+              if (parentFiles.length === 0) {
+                await fsp.rmdir(parentTempDir).catch(() => {})
+              }
+            }
+          }
+        } catch (cleanupErr) {
+          console.warn('清理试模过程临时目录失败:', cleanupErr)
+        }
+      }
+
+      return res.json({ code: 0, success: true, data: insertedRows })
+    } catch (error) {
+      console.error('上传试模过程附件失败:', error)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '上传试模过程附件失败',
+        error: error.message
+      })
+    }
+  }
+)
+
+// 下载试模过程附件
+router.get('/trial-process-attachments/:attachmentId/download', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 试模过程附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    return res.download(fullPath, att.originalName)
+  } catch (error) {
+    console.error('下载试模过程附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载试模过程附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 删除试模过程附件
+router.delete('/trial-process-attachments/:attachmentId', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 试模过程附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    await query(`DELETE FROM 试模过程附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    try {
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath)
+      }
+    } catch (fileErr) {
+      console.warn('删除试模过程附件文件失败（已删除数据库记录）:', fileErr)
+    }
+
+    return res.json({ code: 0, success: true, message: '删除成功' })
+  } catch (error) {
+    console.error('删除试模过程附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除试模过程附件失败',
       error: error.message
     })
   }

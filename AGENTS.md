@@ -36,6 +36,14 @@
 
 > 目标：避免“远端 update.sh 才发现构建/校验失败”，避免夹带无关改动上线。
 
+### 日常迭代（默认）
+
+> 目标：加快开发迭代速度，同时保持基本质量门槛。
+
+- 平时改代码默认只跑（前端）：`pnpm ts:check`
+- 如涉及样式/ESLint 相关问题或准备收尾，再补跑：`pnpm lint:eslint`
+- **仅在“准备提交/准备发版/准备部署”阶段**再跑完整构建：`pnpm build:pro`
+
 - 提交前必须执行（前端）：
   - `pnpm ts:check`
   - `pnpm lint:eslint`（必要时可再跑 `pnpm lint:style` / `pnpm lint:format`）

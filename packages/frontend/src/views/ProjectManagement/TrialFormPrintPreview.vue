@@ -54,15 +54,15 @@
                 >
                 <td class="trial-form-label-cell">项目编号</td>
                 <td colspan="3" class="trial-form-value-cell" data-cell="C2">{{
-                  projectData.项目编号 ?? ''
+                  displayData.projectCode
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">产品名称</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="H2">
-                  {{ projectData.productName || projectData.产品名称 || '' }}
+                  {{ displayData.productName }}
                 </td>
                 <td colspan="2" class="trial-form-label-cell">模具穴数</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="L2">{{
-                  projectData.模具穴数 ?? ''
+                  displayData.mouldCavity
                 }}</td>
               </tr>
 
@@ -70,15 +70,15 @@
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">模具尺寸 宽长高/CM</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="D3">{{
-                  projectData.模具尺寸 ?? ''
+                  displayData.mouldSize
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">模具重量</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="H3">
-                  {{ projectData.模具重量 != null ? projectData.模具重量 : '' }}
+                  {{ displayData.mouldWeight }}
                 </td>
                 <td colspan="2" class="trial-form-label-cell">产品理论重量</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="L3">
-                  {{ projectData.产品重量 != null ? projectData.产品重量 : '' }}
+                  {{ displayData.productWeight }}
                 </td>
               </tr>
 
@@ -86,14 +86,14 @@
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">产品材料</td>
                 <td colspan="2" class="trial-form-value-cell" data-cell="D4">{{
-                  projectData.产品材质 ?? ''
+                  displayData.productMaterial
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">色母型号/颜色</td>
                 <td colspan="4" class="trial-form-value-cell" data-cell="H4">{{
-                  projectData.产品颜色 ?? ''
+                  displayData.masterbatchAndColor
                 }}</td>
                 <td class="trial-form-label-cell">试模类别</td>
-                <td class="trial-form-value-cell">试封样</td>
+                <td class="trial-form-value-cell">{{ displayData.trialCategory || '试封样' }}</td>
               </tr>
 
               <!-- 模板第5行 (20pt): 试模次数 / 试模产品数量 / 交样时间 -->
@@ -103,10 +103,10 @@
                   trialCount || ''
                 }}</td>
                 <td colspan="2" class="trial-form-label-cell">试模产品数量</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">{{ displayData.trialProductQty || '' }}</td>
                 <td class="trial-form-label-cell">Pcs</td>
                 <td colspan="2" class="trial-form-label-cell">交样时间</td>
-                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="2" class="trial-form-value-cell">{{ displayData.trialDate || '' }}</td>
               </tr>
 
               <!-- 模板第6行 (43pt): 试模目标 / 注意事项 / 试模要求 (合并) -->
@@ -123,7 +123,7 @@
                 <td rowspan="4" class="trial-form-label-cell trial-form-vertical-text">生产</td>
                 <td colspan="2" class="trial-form-label-cell">☐注塑试模 ☐外协试模</td>
                 <td colspan="2" class="trial-form-label-cell">试模时间</td>
-                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="2" class="trial-form-value-cell">{{ displayData.trialDate || '' }}</td>
                 <td class="trial-form-label-cell">试模人员</td>
                 <td colspan="5" class="trial-form-value-cell">☐设计 ☐钳工 ☐检验 ☐客户</td>
               </tr>
@@ -131,7 +131,9 @@
               <!-- 模板第8行 (20pt): 注塑机大小 / 预计用料重量 -->
               <tr class="trial-form-row" style="height: 20pt">
                 <td class="trial-form-label-cell">注塑机大小</td>
-                <td class="trial-form-label-cell" style="text-align: right">T</td>
+                <td class="trial-form-label-cell" style="text-align: right">
+                  {{ displayData.machineTonnage ? String(displayData.machineTonnage) + 'T' : 'T' }}
+                </td>
                 <td colspan="2" class="trial-form-label-cell">预计用料重量</td>
                 <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">KG</td>
@@ -158,7 +160,7 @@
                 <td colspan="2" class="trial-form-label-cell">仓库确认</td>
                 <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td colspan="2" class="trial-form-label-cell">试模工时</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
+                <td class="trial-form-value-cell">{{ displayData.trialDuration || '' }}</td>
                 <td class="trial-form-label-cell">H</td>
               </tr>
 
@@ -352,7 +354,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Loading, Printer } from '@element-plus/icons-vue'
-import { getProjectDetailApi } from '@/api/project'
+import { getProjectDetailApi, getTrialProcessDetailApi } from '@/api/project'
 
 type ProcessRow = {
   leftName: string
@@ -368,20 +370,51 @@ const route = useRoute()
 const zoom = ref<number>(1)
 const loading = ref(false)
 const projectData = ref<any>(null)
+const trialProcess = ref<any>(null)
 const trialCount = ref<string>('')
+const trialNo = ref<number | null>(null)
 
 const paperPreviewStyle = computed(() => ({ zoom: zoom.value }) as any)
 
-const processRows: ProcessRow[] = [
-  { leftName: '射胶1', rightName: '熔胶1', other: '射胶时间' },
-  { leftName: '射胶2', rightName: '熔胶2', other: '冷却时间' },
-  { leftName: '射胶3', rightName: '熔胶3', other: '前模水路' },
-  { leftName: '射胶4', rightName: '松退', other: '后模水路' },
-  { leftName: '射胶5', rightName: '入芯', other: '其他水路' },
-  { leftName: '保压1', rightName: '退芯', other: '气路' },
-  { leftName: '保压2', rightName: '', other: '成型周期' },
-  { leftName: '保压3', rightName: '', other: '机台类型', otherLeft: '☐卧式', otherRight: '☐立式' }
-]
+const displayData = computed(() => {
+  const p = projectData.value || {}
+  const t = trialProcess.value || {}
+  const productColor = String(p.产品颜色 ?? '').trim()
+  const masterbatchModel = String(t.masterbatchModel ?? '').trim()
+  const masterbatchAndColor =
+    masterbatchModel && productColor
+      ? `${masterbatchModel}/${productColor}`
+      : masterbatchModel || productColor || ''
+
+  return {
+    projectCode: p.项目编号 ?? '',
+    productName: p.productName || p.产品名称 || '',
+    mouldCavity: p.模具穴数 ?? '',
+    mouldSize: p.模具尺寸 ?? '',
+    mouldWeight: p.模具重量 != null ? p.模具重量 : '',
+    productWeight: p.产品重量 != null ? p.产品重量 : '',
+    productMaterial: String(p.产品材质 ?? '').trim(),
+    masterbatchAndColor,
+    trialCategory: String(t.trialCategory ?? '').trim(),
+    trialDate: String(t.trialDate ?? '').trim(),
+    trialProductQty: t.trialProductQty ?? '',
+    machineTonnage: t.machineTonnage ?? '',
+    trialDuration: t.trialDuration ?? ''
+  }
+})
+
+const processRows = computed<ProcessRow[]>(() => {
+  return [
+    { leftName: '射胶1', rightName: '熔胶1', other: '射胶时间' },
+    { leftName: '射胶2', rightName: '熔胶2', other: '冷却时间' },
+    { leftName: '射胶3', rightName: '熔胶3', other: '前模水路' },
+    { leftName: '射胶4', rightName: '松退', other: '后模水路' },
+    { leftName: '射胶5', rightName: '入芯', other: '其他水路' },
+    { leftName: '保压1', rightName: '退芯', other: '气路' },
+    { leftName: '保压2', rightName: '', other: '成型周期' },
+    { leftName: '保压3', rightName: '', other: '机台类型', otherLeft: '☐卧式', otherRight: '☐立式' }
+  ]
+})
 
 const timerRows = [
   { left: '①', right: '④' },
@@ -410,6 +443,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 const loadData = async () => {
   const projectCode = route.params.projectCode as string
   const trialCountParam = route.query.trialCount as string
+  const trialNoParamRaw = route.query.trialNo as string
 
   if (!projectCode) {
     ElMessage.error('项目编号不能为空')
@@ -422,6 +456,9 @@ const loadData = async () => {
 
   loading.value = true
   try {
+    const parsedTrialNo = trialNoParamRaw ? parseInt(String(trialNoParamRaw), 10) : NaN
+    trialNo.value = Number.isInteger(parsedTrialNo) && parsedTrialNo > 0 ? parsedTrialNo : null
+
     const response: any = await getProjectDetailApi(projectCode)
     const data = response?.data?.data || response?.data || response
     if (!data) {
@@ -431,10 +468,27 @@ const loadData = async () => {
     }
 
     projectData.value = data
+
+    // 若从“试模过程”入口进入，优先加载某次试模记录（用于材质/颜色/数量/类别/日期等可变字段）
+    if (trialNo.value) {
+      try {
+        const resp: any = await getTrialProcessDetailApi(projectCode, trialNo.value)
+        const tData = resp?.data?.data || resp?.data || resp
+        trialProcess.value = tData || null
+        if (!trialCountParam) {
+          trialCount.value = `第${trialNo.value}次`
+        }
+      } catch (e) {
+        trialProcess.value = null
+      }
+    } else {
+      trialProcess.value = null
+    }
   } catch (error) {
     console.error('加载试模单数据失败:', error)
     ElMessage.error('加载试模单数据失败')
     projectData.value = null
+    trialProcess.value = null
   } finally {
     loading.value = false
   }

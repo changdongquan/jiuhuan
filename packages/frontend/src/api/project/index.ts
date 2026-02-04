@@ -448,3 +448,111 @@ export const getProjectPartImageApi = (url: string) => {
     responseType: 'blob'
   })
 }
+
+// === 项目管理：试模过程（多次记录 + 多附件） ===
+
+export type TrialProcessCategory = 'T0' | '工程变更' | '细节优化' | '客户更改' | '封样'
+
+export interface TrialProcessRecord {
+  id: number
+  projectCode: string
+  trialNo: number
+  trialDate?: string | null
+  trialCategory: TrialProcessCategory
+  // 由“项目管理”表提供（不在试模过程记录里维护）
+  productMaterial?: string | null
+  productColor?: string | null
+  trialProductQty: number
+  machineTonnage?: number | null
+  masterbatchModel?: string | null
+  trialUnit?: string | null
+  trialDuration?: number | null
+  isOutsourced?: boolean | null
+  remark?: string | null
+  attachmentCount?: number
+  createdAt?: string
+  createdBy?: string | null
+  updatedAt?: string | null
+  updatedBy?: string | null
+}
+
+export type TrialProcessUpsertPayload = {
+  trialDate?: string | null
+  trialCategory: TrialProcessCategory
+  trialProductQty: number
+  machineTonnage?: number | null
+  masterbatchModel?: string | null
+  trialUnit?: string | null
+  trialDuration?: number | null
+  isOutsourced?: boolean | null
+  remark?: string | null
+}
+
+export interface TrialProcessAttachment {
+  id: number
+  trialProcessId: number
+  projectCode: string
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string | null
+  uploadedAt: string
+  uploadedBy?: string | null
+  sortOrder?: number | null
+}
+
+export const getTrialProcessListApi = (projectCode: string) => {
+  return request.get<{ code: number; success: boolean; data: TrialProcessRecord[] }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes`
+  })
+}
+
+export const getTrialProcessDetailApi = (projectCode: string, trialNo: number) => {
+  return request.get<{ code: number; success: boolean; data: TrialProcessRecord }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}`
+  })
+}
+
+export const createTrialProcessApi = (projectCode: string, data: TrialProcessUpsertPayload) => {
+  return request.post<{ code: number; success: boolean; data: TrialProcessRecord }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes`,
+    data
+  })
+}
+
+export const updateTrialProcessApi = (
+  projectCode: string,
+  trialNo: number,
+  data: TrialProcessUpsertPayload
+) => {
+  return request.put<{ code: number; success: boolean; data: TrialProcessRecord }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}`,
+    data
+  })
+}
+
+export const voidTrialProcessApi = (projectCode: string, trialNo: number) => {
+  return request.delete<{ code: number; success: boolean; message?: string }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}`
+  })
+}
+
+export const getTrialProcessAttachmentsApi = (projectCode: string, trialNo: number) => {
+  return request.get<{ code: number; success: boolean; data: TrialProcessAttachment[] }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}/attachments`
+  })
+}
+
+export const downloadTrialProcessAttachmentApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/trial-process-attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+export const deleteTrialProcessAttachmentApi = (attachmentId: number) => {
+  return request.delete<{ code: number; success: boolean; message?: string }>({
+    url: `/api/project/trial-process-attachments/${attachmentId}`
+  })
+}
