@@ -3204,8 +3204,8 @@ const getTrialProcessRow = async (projectCode, trialNo) => {
       更新人 as updatedBy
     FROM 试模过程 tp
     LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
-    WHERE 项目编号 = @projectCode
-      AND 试模次数 = @trialNo
+    WHERE tp.项目编号 = @projectCode
+      AND tp.试模次数 = @trialNo
   `,
     { projectCode, trialNo }
   )
