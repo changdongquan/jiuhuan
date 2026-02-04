@@ -2453,6 +2453,9 @@ const editTitle = ref('编辑项目')
 const editActiveTab = ref<
   'basic' | 'part' | 'mould' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2'
 >('basic')
+const preferredEditTabOnOpen = ref<
+  'basic' | 'part' | 'mould' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2' | ''
+>('')
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
@@ -4840,18 +4843,19 @@ const getQueryStringValue = (value: unknown) => {
 }
 
 const openProjectFromQuery = async () => {
-  if (restoringProjectFromQuery.value) return
+  if (restoringProjectFromQuery.value) return false
 
   const projectCode = getQueryStringValue(
     route.query.openProjectCode || route.query.openTrialProcess
   )
-  if (!projectCode) return
+  if (!projectCode) return false
 
   const requestedTab = getQueryStringValue(route.query.openProjectTab)
   const fallbackTab = getQueryStringValue(route.query.openTrialProcess) ? 'trialProcess' : ''
   const targetTab = isProjectTabKey(requestedTab) ? requestedTab : fallbackTab
 
   restoringProjectFromQuery.value = true
+  preferredEditTabOnOpen.value = isProjectTabKey(targetTab) ? targetTab : ''
   try {
     await handleEdit({ 项目编号: projectCode } as Partial<ProjectInfo>)
     if (editDialogVisible.value && isProjectTabKey(targetTab)) {
@@ -4865,6 +4869,39 @@ const openProjectFromQuery = async () => {
     router.replace({ path: route.path, query: nextQuery })
     restoringProjectFromQuery.value = false
   }
+  return true
+}
+
+const openProjectFromReturnContext = async () => {
+  if (restoringProjectFromQuery.value) return false
+  const raw = sessionStorage.getItem('pm:return-context')
+  if (!raw) return false
+
+  let projectCode = ''
+  let targetTab = ''
+  try {
+    const parsed = JSON.parse(raw) as { projectCode?: string; tab?: string; at?: number }
+    projectCode = String(parsed?.projectCode || '').trim()
+    targetTab = String(parsed?.tab || '').trim()
+  } catch {
+    sessionStorage.removeItem('pm:return-context')
+    return false
+  }
+  sessionStorage.removeItem('pm:return-context')
+  if (!projectCode) return false
+
+  const tab = isProjectTabKey(targetTab) ? targetTab : 'basic'
+  restoringProjectFromQuery.value = true
+  preferredEditTabOnOpen.value = tab
+  try {
+    await handleEdit({ 项目编号: projectCode } as Partial<ProjectInfo>)
+    if (editDialogVisible.value) {
+      editActiveTab.value = tab
+    }
+  } finally {
+    restoringProjectFromQuery.value = false
+  }
+  return true
 }
 
 // 附件相关状态
@@ -6581,7 +6618,8 @@ watch(
   () => editDialogVisible.value,
   (visible) => {
     if (visible) {
-      editActiveTab.value = 'basic'
+      editActiveTab.value = preferredEditTabOnOpen.value || 'basic'
+      preferredEditTabOnOpen.value = ''
       nextTick(() => {
         initCorePullFromForm()
         setEditDialogBaseHeight()
@@ -6616,12 +6654,20 @@ watch(
 
 onMounted(async () => {
   await loadData()
-  await openProjectFromQuery()
+  const openedFromQuery = await openProjectFromQuery()
+  if (!openedFromQuery) {
+    await openProjectFromReturnContext()
+  }
   loadStatistics()
 })
 
 onActivated(() => {
-  void openProjectFromQuery()
+  void (async () => {
+    const openedFromQuery = await openProjectFromQuery()
+    if (!openedFromQuery) {
+      await openProjectFromReturnContext()
+    }
+  })()
 })
 
 watch(

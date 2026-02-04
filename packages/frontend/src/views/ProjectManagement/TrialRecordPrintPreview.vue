@@ -241,18 +241,47 @@ const handlePrint = () => {
 const handleBack = () => {
   const fromRaw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from
   const fromPath = String(fromRaw || '').trim()
-  if (fromPath) {
+  const saveReturnContext = (hrefLike: string) => {
     try {
-      const fromUrl = new URL(fromPath, window.location.origin)
-      router.push({
-        path: fromUrl.pathname,
-        query: Object.fromEntries(fromUrl.searchParams.entries())
-      })
+      const hashIndex = hrefLike.indexOf('#')
+      const normalized = hashIndex >= 0 ? hrefLike.slice(hashIndex + 1) : hrefLike
+      const queryString = normalized.includes('?')
+        ? normalized.slice(normalized.indexOf('?') + 1)
+        : ''
+      const params = new URLSearchParams(queryString)
+      const projectCode = String(
+        params.get('openProjectCode') || route.params.projectCode || ''
+      ).trim()
+      const tab = String(params.get('openProjectTab') || 'attachments').trim()
+      if (projectCode) {
+        sessionStorage.setItem(
+          'pm:return-context',
+          JSON.stringify({ projectCode, tab, at: Date.now() })
+        )
+      }
     } catch {
-      router.push(fromPath)
+      // ignore
     }
+  }
+  const resolveView = (hrefLike: string) => {
+    const hashIndex = hrefLike.indexOf('#')
+    const normalized = hashIndex >= 0 ? hrefLike.slice(hashIndex + 1) : hrefLike
+    const queryString = normalized.includes('?')
+      ? normalized.slice(normalized.indexOf('?') + 1)
+      : ''
+    const params = new URLSearchParams(queryString)
+    const view = String(params.get('view') || '').trim()
+    return view === 'timeline' ? 'timeline' : 'table'
+  }
+  if (fromPath) {
+    saveReturnContext(fromPath)
+    router.push({
+      path: '/project-management/index',
+      query: { view: resolveView(fromPath) }
+    })
   } else {
-    router.back()
+    saveReturnContext('')
+    router.push({ path: '/project-management/index', query: { view: 'table' } })
   }
 }
 

@@ -429,25 +429,51 @@ const handlePrint = () => {
 const handleBack = () => {
   const fromRaw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from
   const from = String(fromRaw || '').trim()
-  if (from) {
+  const saveReturnContext = (hrefLike: string) => {
     try {
-      const fromUrl = new URL(from, window.location.origin)
-      router.push({
-        path: fromUrl.pathname,
-        query: Object.fromEntries(fromUrl.searchParams.entries())
-      })
+      const hashIndex = hrefLike.indexOf('#')
+      const normalized = hashIndex >= 0 ? hrefLike.slice(hashIndex + 1) : hrefLike
+      const queryString = normalized.includes('?')
+        ? normalized.slice(normalized.indexOf('?') + 1)
+        : ''
+      const params = new URLSearchParams(queryString)
+      const projectCode = String(
+        params.get('openProjectCode') || route.params.projectCode || ''
+      ).trim()
+      const tab = String(params.get('openProjectTab') || 'trialProcess').trim()
+      if (projectCode) {
+        sessionStorage.setItem(
+          'pm:return-context',
+          JSON.stringify({ projectCode, tab, at: Date.now() })
+        )
+      }
     } catch {
-      router.push(from)
+      // ignore
     }
+  }
+  const resolveView = (hrefLike: string) => {
+    const hashIndex = hrefLike.indexOf('#')
+    const normalized = hashIndex >= 0 ? hrefLike.slice(hashIndex + 1) : hrefLike
+    const queryString = normalized.includes('?')
+      ? normalized.slice(normalized.indexOf('?') + 1)
+      : ''
+    const params = new URLSearchParams(queryString)
+    const view = String(params.get('view') || '').trim()
+    return view === 'timeline' ? 'timeline' : 'table'
+  }
+  if (from) {
+    saveReturnContext(from)
+    router.push({
+      path: '/project-management/index',
+      query: { view: resolveView(from) }
+    })
     return
   }
 
   const projectCode = String(route.params.projectCode || '').trim()
   if (projectCode) {
-    router.push({
-      path: '/project-management/index',
-      query: { view: 'table', openTrialProcess: projectCode }
-    })
+    saveReturnContext('')
+    router.push({ path: '/project-management/index', query: { view: 'table' } })
     return
   }
 
