@@ -427,6 +427,21 @@ const handlePrint = () => {
 }
 
 const handleBack = () => {
+  const from = String(route.query.from || '').trim()
+  if (from) {
+    router.push(from)
+    return
+  }
+
+  const projectCode = String(route.params.projectCode || '').trim()
+  if (projectCode) {
+    router.push({
+      path: '/project-management/index',
+      query: { view: 'table', openTrialProcess: projectCode }
+    })
+    return
+  }
+
   if (window.history.length > 1) {
     router.back()
   } else {

@@ -1,52 +1,54 @@
 <template>
   <div class="tp-page p-4 space-y-4">
-    <div class="tp-header">
-      <div class="tp-header__left">
-        <el-button :icon="ArrowLeft" @click="handleBack">返回</el-button>
-        <div class="tp-header__title">
-          <div class="tp-header__title-main">试模过程</div>
-          <div class="tp-header__title-sub">项目：{{ projectCode }}</div>
-        </div>
-      </div>
-      <div class="tp-header__right">
-        <el-button type="primary" @click="openCreateDialog(false)">新建记录</el-button>
-        <el-button type="primary" plain @click="openCreateDialog(true)">新建并打印</el-button>
-      </div>
+    <div v-if="!embedded" class="tp-header">
+      <el-button :icon="ArrowLeft" @click="handleBack">返回</el-button>
     </div>
 
     <el-card shadow="never">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>试模记录</span>
-          <el-button :loading="loading" @click="loadList">刷新</el-button>
+          <el-button type="primary" @click="openCreateDialog(false)">新建记录</el-button>
         </div>
       </template>
 
       <el-table :data="records" border size="small" v-loading="loading" style="width: 100%">
-        <el-table-column prop="trialNo" label="次数" width="70" align="center" />
+        <el-table-column prop="trialNo" label="次数" width="50" align="center" />
         <el-table-column prop="trialDate" label="试模日期" width="120" />
-        <el-table-column prop="trialCategory" label="类别" width="110" />
+        <el-table-column prop="trialCategory" label="类别" width="100" />
         <el-table-column
           prop="productMaterial"
           label="产品材质"
-          min-width="110"
+          min-width="80"
           show-overflow-tooltip
         />
-        <el-table-column prop="trialProductQty" label="试模产品数" width="110" align="right" />
-        <el-table-column label="外协" width="60" align="center">
+        <el-table-column
+          prop="productColor"
+          label="产品颜色"
+          min-width="80"
+          show-overflow-tooltip
+        />
+        <el-table-column prop="trialProductQty" label="试模产品数" width="80" align="right" />
+        <el-table-column prop="createdBy" label="创建人" width="100" show-overflow-tooltip />
+        <el-table-column label="创建时间" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatDateTime(row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="外协" width="50" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.isOutsourced" type="warning" size="small">是</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="附件" width="70" align="center">
+        <el-table-column label="附件" width="50" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openAttachmentDrawer(row)">
               {{ row.attachmentCount ?? 0 }}
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" align="center">
+        <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handlePrint(row)">打印</el-button>
             <el-button type="primary" link size="small" @click="openEditDialog(row)"
@@ -79,6 +81,9 @@
           <el-descriptions-item label="产品名称">{{
             projectInfo?.productName || projectInfo?.产品名称 || '-'
           }}</el-descriptions-item>
+          <el-descriptions-item label="客户模号">{{
+            projectInfo?.客户模号 || '-'
+          }}</el-descriptions-item>
           <el-descriptions-item label="模具穴数">{{
             projectInfo?.模具穴数 || '-'
           }}</el-descriptions-item>
@@ -89,7 +94,7 @@
             projectInfo?.模具重量 != null ? projectInfo.模具重量 : '-'
           }}</el-descriptions-item>
           <el-descriptions-item label="产品重量">{{
-            projectInfo?.产品重量 != null ? projectInfo.产品重量 : '-'
+            projectProductWeightDisplay
           }}</el-descriptions-item>
           <el-descriptions-item label="产品材质">{{
             projectInfo?.产品材质 || '-'
@@ -202,22 +207,47 @@
           </el-table-column>
           <el-table-column label="操作" width="140" align="center">
             <template #default="{ row }">
-              <el-button type="primary" link size="small" @click="downloadAttachment(row)"
-                >下载</el-button
-              >
-              <el-button type="danger" link size="small" @click="deleteAttachment(row)"
-                >删除</el-button
-              >
+              <el-button type="primary" link size="small" @click="previewAttachment(row)">
+                预览
+              </el-button>
+              <el-button type="primary" link size="small" @click="downloadAttachment(row)">
+                下载
+              </el-button>
+              <el-button type="danger" link size="small" @click="deleteAttachment(row)">
+                删除
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
       </div>
     </el-drawer>
+
+    <el-dialog v-model="previewVisible" title="附件预览" width="80vw" :close-on-click-modal="false">
+      <div v-if="previewLoading" style="padding: 24px; text-align: center">加载中...</div>
+      <template v-else>
+        <img
+          v-if="previewKind === 'image' && previewUrl"
+          :src="previewUrl"
+          style="max-width: 100%"
+        />
+        <iframe
+          v-else-if="previewKind === 'pdf' && previewUrl"
+          :src="previewUrl"
+          style="width: 100%; height: 75vh; border: 0"
+        ></iframe>
+        <div v-else style="padding: 24px; color: rgb(0 0 0 / 55%); text-align: center">
+          无法预览该文件，请下载后查看
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="previewVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -236,11 +266,19 @@ import {
 } from '@/api/project'
 import { useUserStoreWithOut } from '@/store/modules/user'
 
+const props = defineProps<{
+  projectCode?: string
+  embedded?: boolean
+}>()
+
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStoreWithOut()
 
-const projectCode = computed(() => String(route.params.projectCode || '').trim())
+const projectCode = computed(() =>
+  String(props.projectCode || route.params.projectCode || '').trim()
+)
+const embedded = computed(() => props.embedded === true)
 const projectInfo = ref<any>(null)
 
 const loading = ref(false)
@@ -249,9 +287,157 @@ const records = ref<TrialProcessRecord[]>([])
 const categoryOptions: TrialProcessCategory[] = ['T0', '工程变更', '细节优化', '客户更改', '封样']
 
 const nextTrialNoGuess = computed(() => {
-  const max = records.value.reduce((m, r) => Math.max(m, Number(r.trialNo || 0)), 0)
-  return max + 1
+  const used = new Set(
+    records.value
+      .map((r) => Number(r.trialNo || 0))
+      .filter((n) => Number.isInteger(n) && n > 0)
+      .sort((a, b) => a - b)
+  )
+  let next = 1
+  while (used.has(next)) next += 1
+  return next
 })
+
+const previousActiveRecord = computed(() => {
+  if (!records.value.length) return null
+  const sorted = [...records.value].sort((a, b) => Number(a.trialNo || 0) - Number(b.trialNo || 0))
+  return sorted[sorted.length - 1] || null
+})
+
+const parseProductWeightList = (info: any): number[] => {
+  const raw = info?.产品重量列表
+  if (raw === null || raw === undefined || raw === '') return []
+  let arr: unknown[] = []
+  if (Array.isArray(raw)) {
+    arr = raw
+  } else if (typeof raw === 'string') {
+    const text = raw.trim()
+    if (!text) return []
+    try {
+      const parsed = JSON.parse(text)
+      if (Array.isArray(parsed)) arr = parsed
+    } catch (_e) {
+      return []
+    }
+  }
+  return arr
+    .map((v) => (typeof v === 'number' ? v : Number(String(v ?? '').trim())))
+    .filter((v) => Number.isFinite(v))
+}
+
+const resolveProjectProductWeight = (info: any): number | null => {
+  const weightList = parseProductWeightList(info)
+  if (weightList.length > 0) {
+    return weightList.reduce((sum, n) => sum + n, 0)
+  }
+  const single = info?.产品重量
+  if (single === null || single === undefined || single === '') return null
+  const n = typeof single === 'number' ? single : Number(String(single).trim())
+  return Number.isFinite(n) ? n : null
+}
+
+const projectProductWeightDisplay = computed(() => {
+  const weight = resolveProjectProductWeight(projectInfo.value || {})
+  if (weight === null) return '-'
+  return Number.isInteger(weight) ? String(weight) : String(Number(weight.toFixed(3)))
+})
+
+type TrialCreateCheckStatus = 'ok' | 'missing'
+type TrialCreateCheckItem = {
+  key: string
+  label: string
+  status: TrialCreateCheckStatus
+  detail: string
+}
+
+const hasProjectValue = (value: unknown) => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'number') return Number.isFinite(value)
+  return String(value).trim().length > 0
+}
+
+const getTrialCreateCheckItems = (): TrialCreateCheckItem[] => {
+  const info = projectInfo.value || {}
+  const totalProductWeight = resolveProjectProductWeight(info)
+  const fields = [
+    { key: 'mouldSize', label: '模具尺寸', value: info.模具尺寸 },
+    { key: 'mouldWeight', label: '模具重量', value: info.模具重量 },
+    { key: 'productWeight', label: '产品重量', value: totalProductWeight },
+    { key: 'productMaterial', label: '产品材质', value: info.产品材质 },
+    { key: 'productColor', label: '产品颜色', value: info.产品颜色 }
+  ]
+  return fields.map((field) => {
+    const ok = hasProjectValue(field.value)
+    return {
+      key: field.key,
+      label: field.label,
+      status: ok ? 'ok' : 'missing',
+      detail: ok ? '已填写' : '不能为空（请先在项目管理补全）'
+    }
+  })
+}
+
+const showTrialCreateChecklistDialog = async (items: TrialCreateCheckItem[]) => {
+  const total = items.length
+  const missingCount = items.filter((i) => i.status === 'missing').length
+  const okCount = total - missingCount
+  const passed = missingCount === 0
+
+  const badge = (status: TrialCreateCheckStatus) => {
+    if (status === 'ok') {
+      return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#f0f9eb;color:#67c23a;font-weight:600;">通过</span>'
+    }
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#fef0f0;color:#f56c6c;font-weight:600;">缺少</span>'
+  }
+
+  const rows = items
+    .map(
+      (item, idx) =>
+        `<tr>
+          <td style="padding:8px;border:1px solid #ebeef5;text-align:center;">${idx + 1}</td>
+          <td style="padding:8px;border:1px solid #ebeef5;">${item.label}</td>
+          <td style="padding:8px;border:1px solid #ebeef5;text-align:center;">${badge(item.status)}</td>
+          <td style="padding:8px;border:1px solid #ebeef5;color:${item.status === 'ok' ? '#606266' : '#f56c6c'};">${item.detail}</td>
+        </tr>`
+    )
+    .join('')
+
+  const content = `
+    <div style="line-height:1.6;">
+      <div style="margin-bottom:8px;font-weight:600;">共 ${total} 项：通过 ${okCount}，缺少 ${missingCount}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr>
+            <th style="padding:8px;border:1px solid #ebeef5;background:#f5f7fa;width:56px;">序号</th>
+            <th style="padding:8px;border:1px solid #ebeef5;background:#f5f7fa;width:120px;">检查项</th>
+            <th style="padding:8px;border:1px solid #ebeef5;background:#f5f7fa;width:88px;">状态</th>
+            <th style="padding:8px;border:1px solid #ebeef5;background:#f5f7fa;">说明</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `
+
+  if (!passed) {
+    await ElMessageBox.alert(content, '新建试模记录检查清单（未通过）', {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '我知道了',
+      closeOnClickModal: false,
+      customClass: 'trial-checklist-dialog'
+    })
+    return { passed: false }
+  }
+
+  await ElMessageBox.confirm(content, '新建试模记录检查清单（已通过）', {
+    dangerouslyUseHTMLString: true,
+    confirmButtonText: '继续新建',
+    cancelButtonText: '取消',
+    closeOnClickModal: false,
+    customClass: 'trial-checklist-dialog'
+  })
+  return { passed: true }
+}
 
 const loadList = async () => {
   if (!projectCode.value) return
@@ -279,6 +465,7 @@ const loadProjectInfo = async () => {
 }
 
 const handleBack = () => {
+  if (embedded.value) return
   const from = String(route.query.from || '').trim()
   if (from) {
     router.push(from)
@@ -294,6 +481,17 @@ const formatFileSize = (size: number) => {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)}MB`
   return `${(n / 1024 / 1024 / 1024).toFixed(1)}GB`
+}
+
+const formatDateTime = (value?: string | null) => {
+  const s = String(value || '').trim()
+  if (!s) return '-'
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return s
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`
 }
 
 type EditMode = 'create' | 'edit'
@@ -317,6 +515,22 @@ const editForm = reactive({
 })
 
 const rules: FormRules = {
+  trialDate: [
+    { required: true, message: '请选择试模日期', trigger: 'change' },
+    {
+      validator: (_rule, value, callback) => {
+        if (editMode.value !== 'create') return callback()
+        const current = String(value || '').trim()
+        if (!current) return callback()
+        const previousDate = String(previousActiveRecord.value?.trialDate || '').trim()
+        if (previousDate && current < previousDate) {
+          return callback(new Error(`试模日期不能早于上一次试模日期（${previousDate}）`))
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
   trialCategory: [{ required: true, message: '请选择试模类别', trigger: 'change' }],
   trialProductQty: [{ required: true, message: '请输入试模产品数量', trigger: 'blur' }]
 }
@@ -340,7 +554,23 @@ const resetEditForm = () => {
   editForm.remark = ''
 }
 
-const openCreateDialog = (andPrint: boolean) => {
+const openCreateDialog = async (andPrint: boolean) => {
+  if (!projectInfo.value) {
+    await loadProjectInfo()
+  }
+  const checklistItems = getTrialCreateCheckItems()
+  try {
+    const { passed } = await showTrialCreateChecklistDialog(checklistItems)
+    if (!passed) return
+  } catch (_e) {
+    return
+  }
+
+  const previous = previousActiveRecord.value
+  if (previous && Number(previous.attachmentCount || 0) <= 0) {
+    ElMessage.warning('请先上传本次试模附件后，再新建下一次试模记录')
+    return
+  }
   editMode.value = 'create'
   editTrialNo.value = 0
   printAfterSave.value = andPrint
@@ -408,10 +638,19 @@ const handleSave = async () => {
 
 const handlePrint = (row: TrialProcessRecord) => {
   if (!projectCode.value) return
+  const from = embedded.value
+    ? router.resolve({
+        path: '/project-management/index',
+        query: {
+          view: String(route.query.view || 'table'),
+          openTrialProcess: projectCode.value
+        }
+      }).fullPath
+    : route.fullPath
   router.push({
     name: 'TrialFormPrintPreview',
     params: { projectCode: projectCode.value },
-    query: { trialNo: String(row.trialNo), from: route.fullPath }
+    query: { trialNo: String(row.trialNo), from }
   })
 }
 
@@ -423,7 +662,7 @@ const handleVoid = async (row: TrialProcessRecord) => {
       confirmButtonText: '作废',
       cancelButtonText: '取消'
     })
-  } catch {
+  } catch (_e) {
     return
   }
 
@@ -448,13 +687,19 @@ const attachmentDrawerTitle = computed(() =>
 )
 
 const getTrialProcessAttachmentAction = (trialNo: number) => {
-  return `/api/project/${encodeURIComponent(projectCode.value)}/trial-processes/${trialNo}/attachments`
+  return `/api/project/${encodeURIComponent(projectCode.value)}/trial-processes/${trialNo}/trial-attachments`
 }
 
-const uploadHeaders = computed(() => ({
-  [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
-  'X-Username': userStore.getUserInfo?.username || ''
-}))
+const uploadHeaders = computed(() => {
+  const userInfo: any = userStore.getUserInfo || {}
+  const displayNameRaw = String(userInfo.realName || userInfo.displayName || '').trim()
+  const displayNameHeader = displayNameRaw ? encodeURIComponent(displayNameRaw) : ''
+  return {
+    [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
+    'X-Username': userInfo.username || '',
+    'X-Display-Name': displayNameHeader
+  }
+})
 
 const loadAttachments = async () => {
   if (!projectCode.value || !currentAttachmentTrialNo.value) return
@@ -516,7 +761,7 @@ const deleteAttachment = async (row: TrialProcessAttachment) => {
       confirmButtonText: '删除',
       cancelButtonText: '取消'
     })
-  } catch {
+  } catch (_e) {
     return
   }
   try {
@@ -529,10 +774,68 @@ const deleteAttachment = async (row: TrialProcessAttachment) => {
   }
 }
 
-onMounted(() => {
-  void loadList()
-  void loadProjectInfo()
+// === 预览 ===
+
+type PreviewKind = 'image' | 'pdf' | 'unknown'
+
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewUrl = ref<string>('')
+const previewKind = ref<PreviewKind>('unknown')
+
+const resolvePreviewKind = (row: TrialProcessAttachment): PreviewKind => {
+  const ct = String(row.contentType || '').toLowerCase()
+  if (ct.startsWith('image/')) return 'image'
+  if (ct.includes('pdf')) return 'pdf'
+  const name = String(row.originalName || row.storedFileName || '').toLowerCase()
+  if (name.endsWith('.pdf')) return 'pdf'
+  if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) return 'image'
+  return 'unknown'
+}
+
+const cleanupPreviewUrl = () => {
+  if (!previewUrl.value) return
+  try {
+    URL.revokeObjectURL(previewUrl.value)
+  } catch (e) {
+    // ignore
+  }
+  previewUrl.value = ''
+}
+
+const previewAttachment = (row: TrialProcessAttachment) => {
+  void (async () => {
+    cleanupPreviewUrl()
+    previewKind.value = resolvePreviewKind(row)
+    previewVisible.value = true
+    previewLoading.value = true
+    try {
+      const resp: any = await downloadTrialProcessAttachmentApi(row.id)
+      const blob = ((resp as any)?.data ?? resp) as Blob
+      previewUrl.value = URL.createObjectURL(blob)
+    } catch (e: any) {
+      ElMessage.error(e?.message || '预览失败')
+      cleanupPreviewUrl()
+      previewKind.value = 'unknown'
+    } finally {
+      previewLoading.value = false
+    }
+  })()
+}
+
+watch(previewVisible, (v) => {
+  if (!v) cleanupPreviewUrl()
 })
+
+watch(
+  projectCode,
+  (code) => {
+    if (!code) return
+    void loadList()
+    void loadProjectInfo()
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

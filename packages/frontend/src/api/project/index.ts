@@ -125,6 +125,7 @@ export type ProjectAttachmentType =
   | 'trial-record' // 试模记录表
   | 'tripartite-agreement' // 三方协议
   | 'trial-form' // 试模单
+  | 'technical-spec' // 技术规格表
   | 'drawing' // 图档
   | 'seal-sample' // 封样单
   | 'part-drawing' // 零件图纸
@@ -540,7 +541,7 @@ export const voidTrialProcessApi = (projectCode: string, trialNo: number) => {
 
 export const getTrialProcessAttachmentsApi = (projectCode: string, trialNo: number) => {
   return request.get<{ code: number; success: boolean; data: TrialProcessAttachment[] }>({
-    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}/attachments`
+    url: `/api/project/${encodeURIComponent(projectCode)}/trial-processes/${trialNo}/trial-attachments`
   })
 }
 

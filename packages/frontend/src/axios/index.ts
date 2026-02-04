@@ -6,6 +6,9 @@ const request = (option: AxiosConfig) => {
   const { url, method, params, data, headers, responseType, withCredentials, timeout } = option
 
   const userStore = useUserStoreWithOut()
+  const userInfo: any = userStore.getUserInfo || {}
+  const displayNameRaw = String(userInfo.realName || userInfo.displayName || '').trim()
+  const displayNameHeader = displayNameRaw ? encodeURIComponent(displayNameRaw) : ''
   const isFormData =
     typeof FormData !== 'undefined' &&
     data !== null &&
@@ -14,7 +17,8 @@ const request = (option: AxiosConfig) => {
 
   const mergedHeaders: Record<string, any> = {
     [userStore.getTokenKey ?? 'Authorization']: userStore.getToken ?? '',
-    'X-Username': userStore.getUserInfo?.username || '',
+    'X-Username': userInfo.username || '',
+    'X-Display-Name': displayNameHeader,
     ...headers
   }
 

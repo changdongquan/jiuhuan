@@ -727,21 +727,6 @@
                 />
               </el-select>
             </div>
-            <div class="pm-edit-header-actions pm-edit-header-actions--pair">
-              <el-button
-                type="primary"
-                size="small"
-                :loading="trialFormGenerating"
-                :disabled="
-                  trialFormGenerating ||
-                  editSubmitting ||
-                  !(editForm.项目编号 || currentProjectCode)
-                "
-                @click="handleDownloadTrialFormXlsx"
-              >
-                生成试模单
-              </el-button>
-            </div>
           </div>
           <div class="pm-edit-header-sub">
             <span class="pm-edit-header-name">{{ editForm.productName || '-' }}</span>
@@ -1482,6 +1467,20 @@
                 </div>
               </el-tab-pane>
 
+              <el-tab-pane
+                v-if="(editForm.项目编号 || currentProjectCode) && isPlasticMould"
+                name="trialProcess"
+              >
+                <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Document /></el-icon>
+                  试模过程
+                </template>
+                <TrialProcess
+                  embedded
+                  :project-code="String(currentProjectCode || editForm.项目编号 || '')"
+                />
+              </el-tab-pane>
+
               <el-tab-pane name="attachments">
                 <template #label>
                   <el-icon class="pm-edit-tab-icon"><Folder /></el-icon>
@@ -1989,7 +1988,7 @@
                       </el-card>
                     </el-col>
 
-                    <!-- 右：模具图档、试模单（由上而下） -->
+                    <!-- 右：模具图档、技术规格表（由上而下） -->
                     <el-col :xs="24" :sm="12" class="pm-attachment-col pm-attachments2-right-col">
                       <el-card shadow="never" class="pm-attachment-card">
                         <template #header>
@@ -2068,54 +2067,23 @@
                       <el-card shadow="never" class="pm-attachment-card" style="margin-top: 16px">
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
-                            <span>试模单</span>
-                            <div
-                              style="
-                                display: flex;
-                                gap: 8px;
-                                align-items: center;
-                                flex-wrap: wrap;
-                                justify-content: flex-end;
+                            <span>技术规格表</span>
+                            <el-upload
+                              :action="getAttachmentAction('technical-spec')"
+                              :show-file-list="false"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'technical-spec')
                               "
+                              :on-success="handleAttachmentUploadSuccess"
+                              :on-error="handleAttachmentUploadError"
                             >
-                              <el-button
-                                type="primary"
-                                plain
-                                size="small"
-                                :disabled="
-                                  trialFormGenerating ||
-                                  editSubmitting ||
-                                  !(editForm.项目编号 || currentProjectCode)
-                                "
-                                @click="handlePrintTrialFormPreview"
-                              >
-                                打印试模单
-                              </el-button>
-                              <el-button
-                                type="success"
-                                plain
-                                size="small"
-                                :disabled="
-                                  editSubmitting || !(editForm.项目编号 || currentProjectCode)
-                                "
-                                @click="handleOpenTrialProcessPage"
-                              >
-                                试模过程
-                              </el-button>
-                              <el-upload
-                                :action="getAttachmentAction('trial-form')"
-                                :show-file-list="false"
-                                accept=".xls,.xlsx,.pdf,image/*"
-                                :on-success="handleAttachmentUploadSuccess"
-                                :on-error="handleAttachmentUploadError"
-                              >
-                                <el-button type="primary" size="small">上传试模单</el-button>
-                              </el-upload>
-                            </div>
+                              <el-button type="primary" size="small">上传技术规格表</el-button>
+                            </el-upload>
                           </div>
                         </template>
                         <el-table
-                          :data="trialFormAttachments"
+                          :data="technicalSpecAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -2207,6 +2175,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
 import ProjectInitDialog from './components/ProjectInitDialog.vue'
+import TrialProcess from './TrialProcess/index.vue'
 import {
   getProjectListApi,
   getProjectDetailApi,
@@ -2220,8 +2189,6 @@ import {
   orphanProjectInspectionReportsApi,
   downloadProjectAttachmentApi,
   deleteProjectAttachmentApi,
-  downloadTrialFormXlsxApi,
-  validateTrialFormApi,
   generateTripartiteAgreementPdfApi,
   validateSealSampleApi,
   generateSealSampleXlsxApi,
@@ -2483,13 +2450,12 @@ const viewData = ref<Partial<ProjectInfo>>({})
 
 const editDialogVisible = ref(false)
 const editTitle = ref('编辑项目')
-const editActiveTab = ref<'basic' | 'part' | 'mould' | 'machine' | 'attachments' | 'attachments2'>(
-  'basic'
-)
+const editActiveTab = ref<
+  'basic' | 'part' | 'mould' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2'
+>('basic')
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
-const trialFormGenerating = ref(false)
 
 const stableStringify = (input: any) => {
   const seen = new WeakSet()
@@ -4856,6 +4822,22 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
   openEditDialog()
 }
 
+const openTrialProcessFromQuery = async () => {
+  const projectCode = String(route.query.openTrialProcess || '').trim()
+  if (!projectCode) return
+
+  try {
+    await handleEdit({ 项目编号: projectCode } as Partial<ProjectInfo>)
+    if (editDialogVisible.value) {
+      editActiveTab.value = 'trialProcess'
+    }
+  } finally {
+    const nextQuery: Record<string, any> = { ...route.query }
+    delete nextQuery.openTrialProcess
+    router.replace({ path: route.path, query: nextQuery })
+  }
+}
+
 // 附件相关状态
 const attachmentLoading = ref(false)
 const allAttachments = ref<ProjectAttachment[]>([])
@@ -4869,8 +4851,8 @@ const trialRecordAttachments = computed(() =>
 const tripartiteAgreementAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'tripartite-agreement')
 )
-const trialFormAttachments = computed(() =>
-  allAttachments.value.filter((item) => item.type === 'trial-form')
+const technicalSpecAttachments = computed(() =>
+  allAttachments.value.filter((item) => item.type === 'technical-spec')
 )
 const drawingAttachments = computed(() =>
   allAttachments.value.filter((item) => item.type === 'drawing')
@@ -5171,7 +5153,8 @@ const beforeAttachmentUpload = async (_file: File, type: ProjectAttachmentType) 
     'relocation-process',
     'trial-record',
     'tripartite-agreement',
-    'seal-sample'
+    'seal-sample',
+    'technical-spec'
   ]
 
   if (singleFileTypes.includes(type)) {
@@ -5185,6 +5168,8 @@ const beforeAttachmentUpload = async (_file: File, type: ProjectAttachmentType) 
       existingAttachments = tripartiteAgreementAttachments.value
     } else if (type === 'seal-sample') {
       existingAttachments = sealSampleAttachments.value
+    } else if (type === 'technical-spec') {
+      existingAttachments = technicalSpecAttachments.value
     }
 
     if (existingAttachments.length > 0) {
@@ -5377,41 +5362,6 @@ const downloadAttachment = async (row: ProjectAttachment) => {
     console.error('下载附件失败:', error)
     ElMessage.error(error?.message || '下载失败')
   }
-}
-
-const normalizeTrialCountInput = (val: any) => {
-  const raw = String(val || '')
-    .trim()
-    .replace(/\s+/g, '')
-  if (!raw) return null
-  let n: number | null = null
-  if (/^\d+$/.test(raw)) {
-    n = parseInt(raw, 10)
-  } else if (/^第\d+次$/.test(raw)) {
-    n = parseInt(raw.slice(1, -1), 10)
-  }
-  if (!Number.isInteger(n) || !n || n <= 0) return null
-  return `第${n}次`
-}
-
-const normalizeTrialFormMissingLines = (raw: unknown): string[] => {
-  const arr = Array.isArray(raw) ? raw : []
-  const lines = arr
-    .flatMap((it: any) => {
-      if (it == null) return []
-      if (typeof it === 'string') {
-        return it
-          .split(/[\r\n]+|[，,;；]+/g)
-          .map((s) => s.trim())
-          .filter(Boolean)
-      }
-      const label = String(it?.label || it?.field || '').trim()
-      const msg = it?.message ? `：${String(it.message).trim()}` : ''
-      const text = `${label}${msg}`.trim()
-      return text ? [text] : []
-    })
-    .filter(Boolean)
-  return Array.from(new Set(lines))
 }
 
 const alertMissingLines = async (lines: string[], title: string) => {
@@ -5817,110 +5767,6 @@ const showSealSampleChecklistDialog = async (items: SealSampleCheckItem[]) => {
   return { passed: true as const }
 }
 
-const handlePrintTrialFormPreview = async () => {
-  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
-  if (!projectCode) {
-    ElMessage.warning('请先填写项目编号')
-    return
-  }
-  if (trialFormGenerating.value || editSubmitting.value) return
-
-  // 如果需要保存，先保存
-  if (isEditFormDirty.value) {
-    try {
-      await ElMessageBox.confirm('请先保存后再打印试模单', '提示', {
-        type: 'warning',
-        confirmButtonText: '保存并继续',
-        cancelButtonText: '取消'
-      })
-    } catch {
-      return
-    }
-    await handleSubmitEdit()
-    if (editDialogVisible.value) return
-  }
-
-  // 保存后校验（打印预览也需要与“生成试模单”一致的完整性校验）
-  try {
-    const resp: any = await validateTrialFormApi(projectCode)
-    if (resp?.code !== 0 && resp?.success !== true) {
-      const msg = resp?.message || '试模单数据不完整，请先补齐后再生成'
-      const lines = normalizeTrialFormMissingLines(resp?.errors)
-      if (lines.length) {
-        await alertMissingLines(lines, msg)
-      } else {
-        ElMessage.error(msg)
-      }
-      return
-    }
-  } catch (error: any) {
-    const data = error?.response?.data
-    const msg = data?.message || '试模单数据不完整，请先补齐后再生成'
-    const lines = normalizeTrialFormMissingLines(data?.errors)
-    if (lines.length) {
-      await alertMissingLines(lines, msg)
-      return
-    }
-    ElMessage.error(msg)
-    return
-  }
-
-  // 先输入试模次数
-  let normalizedTrialCount = '第1次'
-  try {
-    const { value } = await ElMessageBox.prompt('请输入试模次数（例如：第1次 或 1）', '试模次数', {
-      inputValue: '第1次',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputValidator: (v) => {
-        return normalizeTrialCountInput(v) ? true : '仅支持"第N次"或数字 N（N 为正整数）'
-      }
-    })
-    normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
-  } catch {
-    return
-  }
-
-  // 跳转到打印预览页面
-  const fromPath = route.path
-  router.push({
-    name: 'TrialFormPrintPreview',
-    params: { projectCode },
-    query: { trialCount: normalizedTrialCount, from: fromPath }
-  })
-}
-
-const handleOpenTrialProcessPage = async () => {
-  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
-  if (!projectCode) {
-    ElMessage.warning('请先填写项目编号')
-    return
-  }
-  if (editSubmitting.value) return
-
-  // 如果需要保存，先保存（避免项目编号为空或数据未落库）
-  if (isEditFormDirty.value) {
-    try {
-      await ElMessageBox.confirm('请先保存后再进入试模过程页面', '提示', {
-        type: 'warning',
-        confirmButtonText: '保存并继续',
-        cancelButtonText: '取消'
-      })
-    } catch {
-      return
-    }
-    await handleSubmitEdit()
-    if (editDialogVisible.value) return
-  }
-
-  const fromPath = route.path
-  router.push({
-    name: 'TrialProcessIndex',
-    params: { projectCode },
-    query: { from: fromPath }
-  })
-}
-
 const handlePrintTrialRecord = async () => {
   const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
   if (!projectCode) {
@@ -5936,7 +5782,7 @@ const handlePrintTrialRecord = async () => {
         confirmButtonText: '保存并继续',
         cancelButtonText: '取消'
       })
-    } catch {
+    } catch (_e) {
       return
     }
     await handleSubmitEdit()
@@ -5950,120 +5796,6 @@ const handlePrintTrialRecord = async () => {
     params: { projectCode },
     query: { from: fromPath }
   })
-}
-
-const resolveDownloadFilename = (resp: any, fallback: string) => {
-  const headers = resp?.headers || {}
-  const disposition = headers['content-disposition'] || headers['Content-Disposition'] || ''
-  const raw = String(disposition)
-  let fileName = ''
-
-  const matchUtf8 = raw.match(/filename\\*=(?:UTF-8''|utf-8'')?([^;]+)/)
-  if (matchUtf8?.[1]) {
-    fileName = matchUtf8[1].trim().replace(/^\"|\"$/g, '')
-    try {
-      fileName = decodeURIComponent(fileName)
-    } catch {
-      // ignore
-    }
-  } else {
-    const match = raw.match(/filename=([^;]+)/)
-    if (match?.[1]) {
-      fileName = match[1].trim().replace(/^\"|\"$/g, '')
-    }
-  }
-
-  return fileName || fallback
-}
-
-const downloadBlobAsFile = (blob: Blob, fileName: string) => {
-  const url = window.URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  window.URL.revokeObjectURL(url)
-}
-
-const handleDownloadTrialFormXlsx = async () => {
-  const projectCode = String(editForm.项目编号 || currentProjectCode.value || '').trim()
-  if (!projectCode) {
-    ElMessage.warning('请先填写项目编号')
-    return
-  }
-  if (trialFormGenerating.value || editSubmitting.value) return
-
-  // 如果需要保存，先保存（生成基于数据库数据）
-  if (isEditFormDirty.value) {
-    try {
-      await ElMessageBox.confirm('请先保存后再生成试模单', '提示', {
-        type: 'warning',
-        confirmButtonText: '保存并继续',
-        cancelButtonText: '取消'
-      })
-    } catch {
-      return
-    }
-    await handleSubmitEdit()
-    if (editDialogVisible.value) return
-  }
-
-  // 保存后校验（与“打印试模单”保持一致）
-  try {
-    const resp: any = await validateTrialFormApi(projectCode)
-    if (resp?.code !== 0 && resp?.success !== true) {
-      const msg = resp?.message || '试模单数据不完整，请先补齐后再生成'
-      const lines = normalizeTrialFormMissingLines(resp?.errors)
-      if (lines.length) {
-        await alertMissingLines(lines, msg)
-      } else {
-        ElMessage.error(msg)
-      }
-      return
-    }
-  } catch (error: any) {
-    const data = error?.response?.data
-    const msg = data?.message || '试模单数据不完整，请先补齐后再生成'
-    const lines = normalizeTrialFormMissingLines(data?.errors)
-    if (lines.length) {
-      await alertMissingLines(lines, msg)
-      return
-    }
-    ElMessage.error(msg)
-    return
-  }
-
-  // 先输入试模次数
-  let normalizedTrialCount = '第1次'
-  try {
-    const { value } = await ElMessageBox.prompt('请输入试模次数（例如：第1次 或 1）', '试模次数', {
-      inputValue: '第1次',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputValidator: (v) => {
-        return normalizeTrialCountInput(v) ? true : '仅支持"第N次"或数字 N（N 为正整数）'
-      }
-    })
-    normalizedTrialCount = normalizeTrialCountInput(value) || '第1次'
-  } catch {
-    return
-  }
-
-  try {
-    trialFormGenerating.value = true
-    const resp: any = await downloadTrialFormXlsxApi(projectCode, normalizedTrialCount)
-    const blob = ((resp as any)?.data ?? resp) as Blob
-    const fallbackName = `${projectCode}_${normalizedTrialCount}.xlsx`
-    const fileName = resolveDownloadFilename(resp, fallbackName)
-    downloadBlobAsFile(blob, fileName)
-  } catch (error: any) {
-    console.error('生成试模单失败:', error)
-    ElMessage.error(error?.message || '生成试模单失败')
-  } finally {
-    trialFormGenerating.value = false
-  }
 }
 
 const handleGenerateSealSample = async () => {
@@ -6846,8 +6578,9 @@ watch(
   }
 )
 
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  await loadData()
+  await openTrialProcessFromQuery()
   loadStatistics()
 })
 

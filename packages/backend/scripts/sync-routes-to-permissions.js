@@ -53,12 +53,6 @@ const routesToSync = [
     page_title: '试模记录单打印预览',
     parent_route: 'ProjectManagement'
   },
-  {
-    route_name: 'TrialProcessIndex',
-    route_path: '/project-management/trial-process/:projectCode',
-    page_title: '试模过程',
-    parent_route: 'ProjectManagement'
-  },
 
   // 报价单（项目管理下）
   {

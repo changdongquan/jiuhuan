@@ -861,6 +861,9 @@ const generateAttachmentFileName = (projectCode, customerModelNo, type, original
     // 试模单：项目编号_试模单_序号.{扩展名}，序号从01开始
     // 这个会在上传时动态计算序号
     fileName = `${projectCode}_试模单_序号${safeExt}`
+  } else if (type === 'technical-spec') {
+    // 技术规格表：项目编号_技术规格表.{扩展名}
+    fileName = `${projectCode}_技术规格表${safeExt}`
   } else if (type === 'drawing') {
     // 图档：根据扩展名决定命名规则
     // .pdf  => 项目编号_2D.pdf
@@ -998,16 +1001,27 @@ const ensureProjectAttachmentsTable = async () => {
 const TRIAL_PROCESS_ALLOWED_CATEGORIES = ['T0', '工程变更', '细节优化', '客户更改', '封样']
 
 const resolveUsernameFromReq = (req) => {
+  const displayNameRaw = req?.headers?.['x-display-name']
+  const displayName = Array.isArray(displayNameRaw) ? displayNameRaw[0] : displayNameRaw
+  const displayNameStr = String(displayName || '').trim()
+  if (displayNameStr) {
+    try {
+      const decoded = decodeURIComponent(displayNameStr).trim()
+      if (decoded) return decoded
+    } catch (_e) {
+      if (displayNameStr) return displayNameStr
+    }
+  }
+
   const raw = req?.headers?.['x-username']
   const username = Array.isArray(raw) ? raw[0] : raw
   const s = String(username || '').trim()
   return s || null
 }
 
-const normalizeTrialCategory = (trialNo, input) => {
-  const n = Number(trialNo)
+const normalizeTrialCategory = (isFirstActiveRecord, input) => {
   const raw = String(input || '').trim()
-  if (n === 1) return 'T0'
+  if (isFirstActiveRecord) return 'T0'
   if (!raw) return null
   return TRIAL_PROCESS_ALLOWED_CATEGORIES.includes(raw) && raw !== 'T0' ? raw : null
 }
@@ -1020,6 +1034,33 @@ const parsePositiveInt = (val) => {
 const parseOptionalDecimal = (val) => {
   if (val === null || val === undefined || String(val).trim() === '') return null
   const n = Number(val)
+  return Number.isFinite(n) ? n : null
+}
+
+const resolveProductWeightFromProjectRow = (projectRow) => {
+  const listRaw = projectRow?.产品重量列表
+  if (listRaw !== null && listRaw !== undefined && String(listRaw).trim() !== '') {
+    let list = []
+    if (Array.isArray(listRaw)) {
+      list = listRaw
+    } else if (typeof listRaw === 'string') {
+      try {
+        const parsed = JSON.parse(listRaw)
+        if (Array.isArray(parsed)) list = parsed
+      } catch (_e) {
+        list = []
+      }
+    }
+    const numbers = list
+      .map((v) => (typeof v === 'number' ? v : Number(String(v ?? '').trim())))
+      .filter((v) => Number.isFinite(v))
+    if (numbers.length > 0) {
+      return numbers.reduce((sum, n) => sum + n, 0)
+    }
+  }
+  const single = projectRow?.产品重量
+  if (single === null || single === undefined || String(single).trim() === '') return null
+  const n = typeof single === 'number' ? single : Number(String(single).trim())
   return Number.isFinite(n) ? n : null
 }
 
@@ -1053,8 +1094,34 @@ const ensureTrialProcessTables = async () => {
         更新人 NVARCHAR(100) NULL
       );
 
-      CREATE UNIQUE INDEX UX_试模过程_项目_次数 ON dbo.试模过程 (项目编号, 试模次数);
+      CREATE UNIQUE INDEX UX_试模过程_项目_次数_有效
+      ON dbo.试模过程 (项目编号, 试模次数)
+      WHERE 是否作废 = 0;
       CREATE INDEX IX_试模过程_项目 ON dbo.试模过程 (项目编号, 是否作废, 试模次数 DESC, 试模过程ID DESC);
+    END
+  `)
+
+  await query(`
+    IF EXISTS (
+      SELECT 1
+      FROM sys.indexes
+      WHERE name = N'UX_试模过程_项目_次数'
+        AND object_id = OBJECT_ID(N'dbo.试模过程')
+    )
+    BEGIN
+      DROP INDEX UX_试模过程_项目_次数 ON dbo.试模过程;
+    END
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM sys.indexes
+      WHERE name = N'UX_试模过程_项目_次数_有效'
+        AND object_id = OBJECT_ID(N'dbo.试模过程')
+    )
+    BEGIN
+      CREATE UNIQUE INDEX UX_试模过程_项目_次数_有效
+      ON dbo.试模过程 (项目编号, 试模次数)
+      WHERE 是否作废 = 0;
     END
   `)
 
@@ -2727,12 +2794,13 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
     }
 
-    // 附件类型：移模流程单、试模记录表、三方协议、试模单、图档、封样单、检验报告、零件图纸
+    // 附件类型：移模流程单、试模记录表、三方协议、试模单、技术规格表、图档、封样单、检验报告、零件图纸
     const validTypes = [
       'relocation-process',
       'trial-record',
       'tripartite-agreement',
       'trial-form',
+      'technical-spec',
       'drawing',
       'seal-sample',
       'inspection-report',
@@ -2806,6 +2874,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       'trial-record': '试模记录表',
       'tripartite-agreement': '三方协议',
       'trial-form': '试模单',
+      'technical-spec': '技术规格表',
       drawing: '图档',
       'seal-sample': '封样单',
       'inspection-report': '检验报告',
@@ -2828,6 +2897,8 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       const ext = originalName.split('.').pop()?.toLowerCase() || ''
       const safeExt = ext ? `.${ext}` : ''
       newFileName = `${projectCode}_试模单_${sequence}${safeExt}`
+    } else if (type === 'technical-spec') {
+      newFileName = generateAttachmentFileName(projectCode, customerModelNo, type, originalName)
     } else if (type === 'drawing' || type === 'part-drawing') {
       const ext = originalName.split('.').pop()?.toLowerCase() || ''
       const extLower = ext.toLowerCase()
@@ -2965,12 +3036,13 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       }
     }
 
-    // 单文件类型（移模流程单、试模记录表、三方协议）：删除旧文件
+    // 单文件类型（移模流程单、试模记录表、三方协议、封样单、技术规格表）：删除旧文件
     const singleFileTypes = [
       'relocation-process',
       'trial-record',
       'tripartite-agreement',
-      'seal-sample'
+      'seal-sample',
+      'technical-spec'
     ]
     if (singleFileTypes.includes(type)) {
       const existingRows = await query(
@@ -3206,6 +3278,7 @@ const getTrialProcessRow = async (projectCode, trialNo) => {
     LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
     WHERE tp.项目编号 = @projectCode
       AND tp.试模次数 = @trialNo
+      AND tp.是否作废 = 0
   `,
     { projectCode, trialNo }
   )
@@ -3247,7 +3320,7 @@ router.get('/:projectCode(*)/trial-processes', async (req, res) => {
       LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
       WHERE tp.项目编号 = @projectCode
         AND tp.是否作废 = 0
-      ORDER BY tp.试模次数 DESC, tp.试模过程ID DESC
+      ORDER BY tp.试模次数 ASC, tp.试模过程ID ASC
     `,
       { projectCode }
     )
@@ -3305,15 +3378,59 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
     }
 
     const projectRows = await query(
-      `SELECT TOP 1 项目编号 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+      `
+      SELECT TOP 1
+        项目编号,
+        模具尺寸,
+        模具重量,
+        产品重量,
+        产品重量列表,
+        产品材质,
+        产品颜色
+      FROM 项目管理
+      WHERE 项目编号 = @projectCode
+    `,
       { projectCode }
     )
     if (!projectRows.length) {
       return res.status(404).json({ code: 404, success: false, message: '项目不存在' })
     }
+    const projectRow = projectRows[0] || {}
+    const productWeightSum = resolveProductWeightFromProjectRow(projectRow)
+    const requiredChecks = [
+      { key: '模具尺寸', label: '模具尺寸' },
+      { key: '模具重量', label: '模具重量' },
+      { key: '__productWeight', label: '产品重量' },
+      { key: '产品材质', label: '产品材质' },
+      { key: '产品颜色', label: '产品颜色' }
+    ]
+    const missingFields = requiredChecks
+      .filter((item) => {
+        if (item.key === '__productWeight') return productWeightSum === null
+        const value = projectRow[item.key]
+        if (value === null || value === undefined) return true
+        if (typeof value === 'number') return !Number.isFinite(value)
+        return String(value).trim().length === 0
+      })
+      .map((item) => item.label)
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '新建试模记录前，请先补全项目信息检查清单',
+        missing: missingFields
+      })
+    }
 
     const body = req.body || {}
     const trialDate = formatDateYYYYMMDD(body.trialDate || body.试模日期 || '')
+    if (!trialDate) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '试模日期不能为空'
+      })
+    }
     const trialProductQty = parsePositiveInt(body.trialProductQty ?? body.试模产品数量)
     if (!trialProductQty) {
       return res.status(400).json({
@@ -3342,10 +3459,46 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
 
     const inserted = await query(
       `
-      ;WITH nextNo AS (
-        SELECT ISNULL(MAX(试模次数), 0) + 1 AS n
+      ;WITH activeNo AS (
+        SELECT 试模次数 AS n
         FROM dbo.试模过程 WITH (UPDLOCK, HOLDLOCK)
         WHERE 项目编号 = @projectCode
+          AND 是否作废 = 0
+      ),
+      nextNo AS (
+        SELECT
+          CASE
+            WHEN NOT EXISTS (SELECT 1 FROM activeNo WHERE n = 1) THEN 1
+            ELSE (
+              SELECT TOP 1 a.n + 1
+              FROM activeNo a
+              LEFT JOIN activeNo b ON b.n = a.n + 1
+              WHERE b.n IS NULL
+              ORDER BY a.n
+            )
+          END AS n,
+          (SELECT COUNT(1) FROM activeNo) AS activeCount
+      ),
+      prevNo AS (
+        SELECT MAX(n) AS prevTrialNo
+        FROM activeNo
+        WHERE n < (SELECT n FROM nextNo)
+      ),
+      prevProcess AS (
+        SELECT TOP 1
+          p.试模过程ID AS prevProcessId,
+          p.试模日期 AS prevTrialDate
+        FROM dbo.试模过程 p
+        CROSS JOIN prevNo
+        WHERE p.项目编号 = @projectCode
+          AND p.是否作废 = 0
+          AND p.试模次数 = prevNo.prevTrialNo
+      ),
+      prevAttachment AS (
+        SELECT COUNT(1) AS prevAttachmentCount
+        FROM dbo.试模过程附件 a
+        CROSS JOIN prevProcess
+        WHERE a.试模过程ID = prevProcess.prevProcessId
       )
       INSERT INTO dbo.试模过程 (
         项目编号,
@@ -3371,7 +3524,7 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
         n,
         @trialDate,
         CASE
-          WHEN n = 1 THEN N'T0'
+          WHEN activeCount = 0 THEN N'T0'
           WHEN @trialCategory IN (N'工程变更', N'细节优化', N'客户更改', N'封样') THEN @trialCategory
           ELSE NULL
         END,
@@ -3386,6 +3539,17 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
         @remark,
         @createdBy
       FROM nextNo
+      LEFT JOIN prevProcess ON 1 = 1
+      LEFT JOIN prevAttachment ON 1 = 1
+      WHERE
+        nextNo.activeCount = 0
+        OR (
+          ISNULL(prevAttachment.prevAttachmentCount, 0) > 0
+          AND (
+            prevProcess.prevTrialDate IS NULL
+            OR CONVERT(date, @trialDate) >= CONVERT(date, prevProcess.prevTrialDate)
+          )
+        )
     `,
       {
         projectCode,
@@ -3405,6 +3569,76 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
     const id = inserted?.[0]?.id
     const trialNo = inserted?.[0]?.trialNo
     if (!id || !trialNo) {
+      const checkRows = await query(
+        `
+        ;WITH activeNo AS (
+          SELECT 试模次数 AS n
+          FROM dbo.试模过程
+          WHERE 项目编号 = @projectCode
+            AND 是否作废 = 0
+        ),
+        nextNo AS (
+          SELECT
+            CASE
+              WHEN NOT EXISTS (SELECT 1 FROM activeNo WHERE n = 1) THEN 1
+              ELSE (
+                SELECT TOP 1 a.n + 1
+                FROM activeNo a
+                LEFT JOIN activeNo b ON b.n = a.n + 1
+                WHERE b.n IS NULL
+                ORDER BY a.n
+              )
+            END AS n,
+            (SELECT COUNT(1) FROM activeNo) AS activeCount
+        ),
+        prevNo AS (
+          SELECT MAX(n) AS prevTrialNo
+          FROM activeNo
+          WHERE n < (SELECT n FROM nextNo)
+        ),
+        prevProcess AS (
+          SELECT TOP 1
+            p.试模过程ID AS prevProcessId,
+            CONVERT(varchar(10), p.试模日期, 23) AS prevTrialDate
+          FROM dbo.试模过程 p
+          CROSS JOIN prevNo
+          WHERE p.项目编号 = @projectCode
+            AND p.是否作废 = 0
+            AND p.试模次数 = prevNo.prevTrialNo
+        ),
+        prevAttachment AS (
+          SELECT COUNT(1) AS prevAttachmentCount
+          FROM dbo.试模过程附件 a
+          CROSS JOIN prevProcess
+          WHERE a.试模过程ID = prevProcess.prevProcessId
+        )
+        SELECT
+          nextNo.activeCount AS activeCount,
+          prevNo.prevTrialNo AS prevTrialNo,
+          prevProcess.prevTrialDate AS prevTrialDate,
+          ISNULL(prevAttachment.prevAttachmentCount, 0) AS prevAttachmentCount
+        FROM nextNo
+        LEFT JOIN prevNo ON 1 = 1
+        LEFT JOIN prevProcess ON 1 = 1
+        LEFT JOIN prevAttachment ON 1 = 1
+      `,
+        { projectCode }
+      )
+      const check = checkRows?.[0] || null
+      if (check?.activeCount > 0 && Number(check?.prevAttachmentCount || 0) <= 0) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '请先上传本次试模附件后，再新建下一次试模记录'
+        })
+      }
+      if (check?.prevTrialDate && trialDate < String(check.prevTrialDate)) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: `试模日期不能早于上一次试模日期（${check.prevTrialDate}）`
+        })
+      }
       return res.status(500).json({ code: 500, success: false, message: '创建试模过程失败' })
     }
 
@@ -3418,7 +3652,7 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
       return res.status(400).json({
         code: 400,
         success: false,
-        message: `试模类别不合法（第 1 次固定为 T0；其它仅支持：${TRIAL_PROCESS_ALLOWED_CATEGORIES.filter((c) => c !== 'T0').join('、')}）`
+        message: `试模类别不合法（首条有效记录固定为 T0；其它仅支持：${TRIAL_PROCESS_ALLOWED_CATEGORIES.filter((c) => c !== 'T0').join('、')}）`
       })
     }
     return res.status(500).json({ code: 500, success: false, message: '创建试模过程失败', error: msg })
@@ -3455,14 +3689,25 @@ router.put('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
     }
 
     const requestedCategory = String(body.trialCategory ?? body.试模类别 ?? '').trim()
-    const normalizedCategory = normalizeTrialCategory(trialNo, requestedCategory)
+    const earlierActiveRows = await query(
+      `
+      SELECT TOP 1 1 AS hasEarlier
+      FROM dbo.试模过程
+      WHERE 项目编号 = @projectCode
+        AND 是否作废 = 0
+        AND 试模次数 < @trialNo
+    `,
+      { projectCode, trialNo }
+    )
+    const isFirstActiveRecord = !earlierActiveRows?.length
+    const normalizedCategory = normalizeTrialCategory(isFirstActiveRecord, requestedCategory)
     if (!normalizedCategory) {
       return res.status(400).json({
         code: 400,
         success: false,
         message:
-          trialNo === 1
-            ? '第 1 次试模类别固定为 T0'
+          isFirstActiveRecord
+            ? '首条有效试模记录类别固定为 T0'
             : `试模类别不合法（仅支持：${TRIAL_PROCESS_ALLOWED_CATEGORIES.filter((c) => c !== 'T0').join('、')}）`
       })
     }
@@ -3574,7 +3819,8 @@ router.delete('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
 })
 
 // 获取某次试模过程附件列表
-router.get('/:projectCode(*)/trial-processes/:trialNo/attachments', async (req, res) => {
+// 注意：不能使用末尾 '/attachments'，否则会被 '/:projectCode(*)/attachments' 误匹配
+router.get('/:projectCode(*)/trial-processes/:trialNo/trial-attachments', async (req, res) => {
   try {
     await ensureTrialProcessTables()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -3626,7 +3872,7 @@ router.get('/:projectCode(*)/trial-processes/:trialNo/attachments', async (req, 
 
 // 上传试模过程附件（仅 PDF / 图片，支持多文件）
 router.post(
-  '/:projectCode(*)/trial-processes/:trialNo/attachments',
+  '/:projectCode(*)/trial-processes/:trialNo/trial-attachments',
   uploadTrialProcessAttachments,
   async (req, res) => {
     try {
@@ -3685,14 +3931,15 @@ router.post(
           `
           SELECT ISNULL(MAX(ISNULL(排序, 0)), 0) as maxSort
           FROM 试模过程附件
-          WHERE 试模过程ID = @trialProcessId
+          WHERE 项目编号 = @projectCode
         `,
-          { trialProcessId: process.id }
+          { projectCode }
         )
         const nextSort = (seqRows?.[0]?.maxSort || 0) + 1
 
-        const baseName = `${projectCode}_试模过程_第${String(trialNo)}次_${String(nextSort).padStart(2, '0')}`
-        const storedFileName = ensureUniqueFileName(finalFullDir, safeFileName(`${baseName}${ext}`))
+        const baseName = `${projectCode}_试模过程单_${String(nextSort).padStart(2, '0')}`
+        const generatedFileName = safeFileName(`${baseName}${ext}`)
+        const storedFileName = ensureUniqueFileName(finalFullDir, generatedFileName)
 
         const tempFile = file.path
         if (file.destination) tempDirs.add(file.destination)
@@ -3728,7 +3975,7 @@ router.post(
           {
             trialProcessId: process.id,
             projectCode,
-            originalName,
+            originalName: generatedFileName,
             storedFileName,
             relativePath: finalRelativeDir,
             fileSize: file.size,
@@ -3823,6 +4070,53 @@ router.get('/trial-process-attachments/:attachmentId/download', async (req, res)
       code: 500,
       success: false,
       message: '下载试模过程附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 预览试模过程附件（inline，便于浏览器直接打开预览）
+router.get('/trial-process-attachments/:attachmentId/preview', async (req, res) => {
+  try {
+    await ensureTrialProcessTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        内容类型 as contentType
+      FROM 试模过程附件
+      WHERE 附件ID = @attachmentId
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const att = rows[0]
+    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    const encodedFilename = encodeURIComponent(String(att.originalName || att.storedFileName || '附件'))
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFilename}`)
+    if (att.contentType) res.setHeader('Content-Type', att.contentType)
+    return res.sendFile(fullPath)
+  } catch (error) {
+    console.error('预览试模过程附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '预览试模过程附件失败',
       error: error.message
     })
   }

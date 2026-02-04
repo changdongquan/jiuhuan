@@ -700,6 +700,93 @@
                 />
               </el-tab-pane>
 
+              <el-tab-pane name="trialRecords">
+                <template #label>
+                  <el-icon class="pt-edit-tab-icon"><Document /></el-icon>
+                  试模记录
+                </template>
+                <div class="pt-product-list" v-loading="trialProcessLoading">
+                  <el-empty
+                    v-if="!trialProcessRows.length"
+                    description="暂无试模记录"
+                    :image-size="isMobile ? 60 : 80"
+                  />
+                  <el-table v-else :data="trialProcessRows" border size="small" style="width: 100%">
+                    <el-table-column type="index" label="序号" width="60" align="center" />
+                    <el-table-column prop="trialNo" label="次数" width="70" align="center" />
+                    <el-table-column prop="trialDate" label="试模日期" width="120" />
+                    <el-table-column prop="trialCategory" label="试模类别" width="110" />
+                    <el-table-column prop="productMaterial" label="产品材质" min-width="110" />
+                    <el-table-column prop="productColor" label="产品颜色" min-width="110" />
+                    <el-table-column
+                      prop="trialProductQty"
+                      label="试模产品数"
+                      width="110"
+                      align="right"
+                    />
+                    <el-table-column
+                      prop="createdBy"
+                      label="创建人"
+                      width="100"
+                      show-overflow-tooltip
+                    />
+                    <el-table-column label="创建时间" width="120">
+                      <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+                    </el-table-column>
+                    <el-table-column label="附件" width="120" align="center">
+                      <template #default="{ row }">
+                        <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          @click="openTrialAttachmentsDrawer(row)"
+                        >
+                          查看（{{ row.attachmentCount || 0 }}）
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+
+                <el-drawer
+                  v-model="trialAttachmentDrawerVisible"
+                  :title="trialAttachmentDrawerTitle"
+                  size="520px"
+                >
+                  <el-table
+                    :data="trialAttachmentRows"
+                    border
+                    size="small"
+                    v-loading="trialAttachmentLoading"
+                  >
+                    <el-table-column prop="originalName" label="文件名" min-width="180" />
+                    <el-table-column label="大小" width="80" align="right">
+                      <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="120" align="center">
+                      <template #default="{ row }">
+                        <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          @click="previewTrialAttachment(row)"
+                        >
+                          预览
+                        </el-button>
+                        <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          @click="downloadTrialAttachment(row)"
+                        >
+                          下载
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-drawer>
+              </el-tab-pane>
+
               <el-tab-pane name="attachments">
                 <template #label>
                   <el-icon class="pt-edit-tab-icon"><Paperclip /></el-icon>
@@ -1019,15 +1106,20 @@ import {
   getProjectInspectionReportsApi,
   getProjectAttachmentsApi,
   downloadProjectAttachmentApi,
+  getTrialProcessListApi,
+  getTrialProcessAttachmentsApi,
+  downloadTrialProcessAttachmentApi,
   type ProjectInspectionReportAttachment,
-  type ProjectAttachment
+  type ProjectAttachment,
+  type TrialProcessAttachment,
+  type TrialProcessRecord
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
 import PartDrawingDrawer from '@/components/PartDrawingDrawer/PartDrawingDrawer.vue'
-import { Calendar, Clock, Box, Paperclip } from '@element-plus/icons-vue'
+import { Calendar, Clock, Box, Paperclip, Document } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProductionTaskInfo>[]>([])
@@ -1088,7 +1180,9 @@ const dialogFormRef = ref<FormInstance>()
 const dialogForm = reactive<Partial<ProductionTaskInfo>>({})
 const currentProjectCode = ref('')
 const isViewMode = ref(false)
-const dialogActiveTab = ref<'production' | 'productList' | 'hours' | 'attachments'>('production')
+const dialogActiveTab = ref<
+  'production' | 'productList' | 'trialRecords' | 'hours' | 'attachments'
+>('production')
 
 // 判断字段是否已填写
 const isFieldFilled = (value: unknown) => {
@@ -1126,6 +1220,15 @@ const productListLoading = ref(false)
 const projectProductRows = ref<ProjectProductRow[]>([])
 const projectPartImageUrl = ref<string>('')
 const inspectionReports = ref<ProjectInspectionReportAttachment[]>([])
+const trialProcessLoading = ref(false)
+const trialProcessRows = ref<TrialProcessRecord[]>([])
+const trialAttachmentDrawerVisible = ref(false)
+const trialAttachmentLoading = ref(false)
+const trialAttachmentRows = ref<TrialProcessAttachment[]>([])
+const currentTrialProcess = ref<TrialProcessRecord | null>(null)
+const trialAttachmentDrawerTitle = computed(() =>
+  currentTrialProcess.value ? `第${currentTrialProcess.value.trialNo}次试模附件` : '试模附件'
+)
 
 const inspectionDrawerVisible = ref(false)
 const inspectionDrawerDrawing = ref<string | null>(null)
@@ -1282,6 +1385,113 @@ const openInspectionDrawer = (row: ProjectProductRow, rowIndex: number) => {
   inspectionDrawerDrawing.value = String(row.图号 || '').trim() || null
   inspectionDrawerRowIndex.value = inspectionDrawerDrawing.value ? null : rowIndex
   inspectionDrawerVisible.value = true
+}
+
+const loadTrialProcessList = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) {
+    trialProcessRows.value = []
+    return
+  }
+  trialProcessLoading.value = true
+  try {
+    const resp: any = await getTrialProcessListApi(projectCode)
+    trialProcessRows.value = resp?.data?.data || resp?.data || []
+  } catch (error: any) {
+    console.error('加载试模记录失败:', error)
+    ElMessage.error(error?.message || '加载试模记录失败')
+    trialProcessRows.value = []
+  } finally {
+    trialProcessLoading.value = false
+  }
+}
+
+const openTrialAttachmentsDrawer = async (row: TrialProcessRecord) => {
+  currentTrialProcess.value = row
+  trialAttachmentDrawerVisible.value = true
+  trialAttachmentLoading.value = true
+  try {
+    const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+    const resp: any = await getTrialProcessAttachmentsApi(projectCode, row.trialNo)
+    trialAttachmentRows.value = resp?.data?.data || resp?.data || []
+  } catch (error: any) {
+    console.error('加载试模附件失败:', error)
+    ElMessage.error(error?.message || '加载试模附件失败')
+    trialAttachmentRows.value = []
+  } finally {
+    trialAttachmentLoading.value = false
+  }
+}
+
+const isTrialAttachmentImage = (attachment: TrialProcessAttachment): boolean => {
+  const fileName = (attachment.originalName || attachment.storedFileName || '').toLowerCase()
+  const contentType = (attachment.contentType || '').toLowerCase()
+  return (
+    contentType.startsWith('image/') ||
+    /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff|ico|avif|heic|heif)$/i.test(fileName)
+  )
+}
+
+const isTrialAttachmentPdf = (attachment: TrialProcessAttachment): boolean => {
+  const fileName = (attachment.originalName || attachment.storedFileName || '').toLowerCase()
+  const contentType = (attachment.contentType || '').toLowerCase()
+  return contentType.includes('pdf') || fileName.endsWith('.pdf')
+}
+
+const previewTrialAttachment = async (attachment: TrialProcessAttachment) => {
+  try {
+    const resp = await downloadTrialProcessAttachmentApi(attachment.id)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const url = window.URL.createObjectURL(blob)
+    if (isTrialAttachmentImage(attachment)) {
+      createImageViewer({
+        urlList: [url],
+        initialIndex: 0,
+        infinite: false,
+        hideOnClickModal: true,
+        zIndex: 3000,
+        teleported: true
+      })
+      return
+    }
+    if (isTrialAttachmentPdf(attachment)) {
+      if (isMobile.value) {
+        const newWindow = window.open(url, '_blank')
+        if (!newWindow) {
+          ElMessage.warning('请允许弹出窗口以预览 PDF')
+          window.URL.revokeObjectURL(url)
+        }
+      } else {
+        createPdfViewer({
+          url,
+          fileName: attachment.storedFileName || attachment.originalName || 'PDF 文件'
+        })
+      }
+      return
+    }
+    ElMessage.warning('该文件暂不支持预览，请下载后查看')
+  } catch (error: any) {
+    console.error('预览试模附件失败:', error)
+    ElMessage.error(error?.message || '预览失败')
+  }
+}
+
+const downloadTrialAttachment = async (row: TrialProcessAttachment) => {
+  try {
+    const resp: any = await downloadTrialProcessAttachmentApi(row.id)
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.storedFileName || row.originalName || `附件_${row.id}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    console.error('下载试模附件失败:', error)
+    ElMessage.error(error?.message || '下载失败')
+  }
 }
 
 watch(
@@ -1917,6 +2127,7 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
     Object.assign(dialogForm, detailData)
     dialogVisible.value = true
     void loadProjectProductList()
+    void loadTrialProcessList()
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
@@ -1933,6 +2144,8 @@ watch(
   (tab) => {
     if (tab === 'attachments') {
       void loadAttachments()
+    } else if (tab === 'trialRecords') {
+      void loadTrialProcessList()
     } else if (tab === 'productList') {
       void loadProjectProductList()
       void loadInspectionReports()
@@ -1958,6 +2171,7 @@ const handleView = async (row: Partial<ProductionTaskInfo>) => {
     Object.assign(dialogForm, detailData)
     dialogVisible.value = true
     void loadProjectProductList()
+    void loadTrialProcessList()
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   }
@@ -2013,6 +2227,10 @@ const handleDialogClosed = () => {
   partDrawingDrawerVisible.value = false
   partDrawingDrawerDrawing.value = null
   inspectionDrawerRowIndex.value = null
+  trialProcessRows.value = []
+  trialAttachmentRows.value = []
+  trialAttachmentDrawerVisible.value = false
+  currentTrialProcess.value = null
 }
 
 onMounted(() => {

@@ -91,19 +91,6 @@ export const constantRouterMap: AppRouteRecordRaw[] = [
 
 export const asyncRouterMap: AppRouteRecordRaw[] = [
   {
-    path: '/project-management/trial-process/:projectCode',
-    component: () => import('@/views/ProjectManagement/TrialProcess/index.vue'),
-    name: 'TrialProcessIndex',
-    meta: {
-      title: '试模过程',
-      hidden: true,
-      noCache: true,
-      canTo: true,
-      roles: ['*'],
-      activeMenu: '/project-management/index'
-    }
-  },
-  {
     path: '/outbound-document/print/:documentNo',
     component: () => import('@/views/OutboundDocument/PrintPreview.vue'),
     name: 'OutboundDocumentPrint',
