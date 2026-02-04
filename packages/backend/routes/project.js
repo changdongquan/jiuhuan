@@ -3183,25 +3183,25 @@ const getTrialProcessRow = async (projectCode, trialNo) => {
   const rows = await query(
     `
     SELECT TOP 1
-      试模过程ID as id,
-      项目编号 as projectCode,
-      试模次数 as trialNo,
-      试模日期 as trialDate,
-      试模类别 as trialCategory,
+      tp.试模过程ID as id,
+      tp.项目编号 as projectCode,
+      tp.试模次数 as trialNo,
+      tp.试模日期 as trialDate,
+      tp.试模类别 as trialCategory,
       pm.产品材质 as productMaterial,
       pm.产品颜色 as productColor,
-      试模产品数量 as trialProductQty,
-      注塑机吨位 as machineTonnage,
-      色母型号 as masterbatchModel,
-      试模单位 as trialUnit,
-      试模时长 as trialDuration,
-      外协试模 as isOutsourced,
-      备注 as remark,
-      是否作废 as isVoid,
-      创建时间 as createdAt,
-      创建人 as createdBy,
-      更新时间 as updatedAt,
-      更新人 as updatedBy
+      tp.试模产品数量 as trialProductQty,
+      tp.注塑机吨位 as machineTonnage,
+      tp.色母型号 as masterbatchModel,
+      tp.试模单位 as trialUnit,
+      tp.试模时长 as trialDuration,
+      tp.外协试模 as isOutsourced,
+      tp.备注 as remark,
+      tp.是否作废 as isVoid,
+      tp.创建时间 as createdAt,
+      tp.创建人 as createdBy,
+      tp.更新时间 as updatedAt,
+      tp.更新人 as updatedBy
     FROM 试模过程 tp
     LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
     WHERE tp.项目编号 = @projectCode
