@@ -643,7 +643,8 @@ const handlePrint = (row: TrialProcessRecord) => {
         path: '/project-management/index',
         query: {
           view: String(route.query.view || 'table'),
-          openTrialProcess: projectCode.value
+          openProjectCode: projectCode.value,
+          openProjectTab: 'trialProcess'
         }
       }).fullPath
     : route.fullPath

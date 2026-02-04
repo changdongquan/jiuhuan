@@ -2170,7 +2170,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch, h } from 'vue'
+import { computed, nextTick, onActivated, onMounted, reactive, ref, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElRadioButton, ElRadioGroup, ElEmpty, ElTag } from 'element-plus'
@@ -4822,19 +4822,48 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
   openEditDialog()
 }
 
-const openTrialProcessFromQuery = async () => {
-  const projectCode = String(route.query.openTrialProcess || '').trim()
+const restoringProjectFromQuery = ref(false)
+const projectQueryTabList = [
+  'basic',
+  'part',
+  'mould',
+  'machine',
+  'trialProcess',
+  'attachments',
+  'attachments2'
+] as const
+const isProjectTabKey = (value: string): value is (typeof projectQueryTabList)[number] =>
+  projectQueryTabList.includes(value as (typeof projectQueryTabList)[number])
+const getQueryStringValue = (value: unknown) => {
+  if (Array.isArray(value)) return String(value[0] || '').trim()
+  return String(value || '').trim()
+}
+
+const openProjectFromQuery = async () => {
+  if (restoringProjectFromQuery.value) return
+
+  const projectCode = getQueryStringValue(
+    route.query.openProjectCode || route.query.openTrialProcess
+  )
   if (!projectCode) return
 
+  const requestedTab = getQueryStringValue(route.query.openProjectTab)
+  const fallbackTab = getQueryStringValue(route.query.openTrialProcess) ? 'trialProcess' : ''
+  const targetTab = isProjectTabKey(requestedTab) ? requestedTab : fallbackTab
+
+  restoringProjectFromQuery.value = true
   try {
     await handleEdit({ 项目编号: projectCode } as Partial<ProjectInfo>)
-    if (editDialogVisible.value) {
-      editActiveTab.value = 'trialProcess'
+    if (editDialogVisible.value && isProjectTabKey(targetTab)) {
+      editActiveTab.value = targetTab
     }
   } finally {
     const nextQuery: Record<string, any> = { ...route.query }
+    delete nextQuery.openProjectCode
+    delete nextQuery.openProjectTab
     delete nextQuery.openTrialProcess
     router.replace({ path: route.path, query: nextQuery })
+    restoringProjectFromQuery.value = false
   }
 }
 
@@ -5790,7 +5819,14 @@ const handlePrintTrialRecord = async () => {
   }
 
   // 跳转到打印预览页面
-  const fromPath = route.path
+  const fromPath = router.resolve({
+    path: '/project-management/index',
+    query: {
+      view: String(route.query.view || 'table'),
+      openProjectCode: projectCode,
+      openProjectTab: 'attachments'
+    }
+  }).fullPath
   void router.push({
     name: 'TrialRecordPrintPreview',
     params: { projectCode },
@@ -6580,9 +6616,20 @@ watch(
 
 onMounted(async () => {
   await loadData()
-  await openTrialProcessFromQuery()
+  await openProjectFromQuery()
   loadStatistics()
 })
+
+onActivated(() => {
+  void openProjectFromQuery()
+})
+
+watch(
+  () => [route.query.openProjectCode, route.query.openProjectTab, route.query.openTrialProcess],
+  () => {
+    void openProjectFromQuery()
+  }
+)
 
 // 监听视图模式切换，重置选中状态
 watch(viewMode, (val) => {

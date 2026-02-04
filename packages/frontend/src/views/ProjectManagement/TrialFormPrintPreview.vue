@@ -427,9 +427,18 @@ const handlePrint = () => {
 }
 
 const handleBack = () => {
-  const from = String(route.query.from || '').trim()
+  const fromRaw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from
+  const from = String(fromRaw || '').trim()
   if (from) {
-    router.push(from)
+    try {
+      const fromUrl = new URL(from, window.location.origin)
+      router.push({
+        path: fromUrl.pathname,
+        query: Object.fromEntries(fromUrl.searchParams.entries())
+      })
+    } catch {
+      router.push(from)
+    }
     return
   }
 
