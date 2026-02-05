@@ -3892,15 +3892,51 @@ const getTripartiteAgreementCheckItems = (): TripartiteAgreementCheckItem[] => {
     items.push(mk('gateQty', '浇口数量', 'ok', undefined, String(gateQtyRaw).trim()))
   }
 
-  const partWeightRaw = (editForm as any).产品重量
-  const partWeightEmpty =
-    partWeightRaw === null || partWeightRaw === undefined || String(partWeightRaw).trim() === ''
-  if (partWeightEmpty) {
-    items.push(mk('partWeight', '产品重量', 'missing', '不能为空（必须有数值）'))
-  } else if (toNumber(partWeightRaw) === null) {
-    items.push(mk('partWeight', '产品重量', 'invalid', '必须为数值', String(partWeightRaw).trim()))
+  // 产品重量：使用产品列表中的产品重量（产品重量列表），不再使用单个产品重量字段
+  const 图号列表 = parseProductDrawingList(getProductListRawFromEditForm()).map((d) =>
+    String(d ?? '').trim()
+  )
+  const 有效产品数 = 图号列表.filter(Boolean).length
+  const 重量列表Raw = (editForm as any).产品重量列表
+  let 重量数组: unknown[] = []
+  if (Array.isArray(重量列表Raw)) {
+    重量数组 = 重量列表Raw
+  } else if (typeof 重量列表Raw === 'string' && 重量列表Raw.trim()) {
+    try {
+      const parsed = JSON.parse(重量列表Raw)
+      if (Array.isArray(parsed)) 重量数组 = parsed
+    } catch {
+      // ignore
+    }
+  }
+  const 产品重量有效 =
+    有效产品数 > 0 &&
+    有效产品数 <= 重量数组.length &&
+    图号列表.slice(0, 有效产品数).every((_, i) => {
+      const v = 重量数组[i]
+      if (v === null || v === undefined || v === '') return false
+      const n = typeof v === 'number' ? v : Number(String(v).trim())
+      return Number.isFinite(n)
+    })
+  const 产品重量展示 = 重量数组
+    .slice(0, 有效产品数)
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean)
+    .join('、')
+  if (有效产品数 === 0) {
+    items.push(mk('partWeight', '产品重量', 'missing', '产品列表至少需有一项产品'))
+  } else if (!产品重量有效) {
+    items.push(
+      mk(
+        'partWeight',
+        '产品重量',
+        'missing',
+        '产品列表中每项产品重量不能为空且必须为有效数值',
+        产品重量展示 || '（未填写或格式有误）'
+      )
+    )
   } else {
-    items.push(mk('partWeight', '产品重量', 'ok', undefined, String(partWeightRaw).trim()))
+    items.push(mk('partWeight', '产品重量', 'ok', undefined, 产品重量展示 || '-'))
   }
 
   const cycleRaw = (editForm as any).成型周期

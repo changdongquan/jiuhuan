@@ -126,11 +126,34 @@ const hasCsvItem = (val, item) => splitCsv(val).includes(item)
 
 const mark = (checked) => (checked ? '■' : '□')
 
+/** 从产品重量列表中取第一个有效数值；若无则回退到单个产品重量 */
+const resolveFirstProductWeight = (row) => {
+  const listRaw = row?.产品重量列表
+  if (listRaw !== null && listRaw !== undefined && String(listRaw).trim() !== '') {
+    let list = []
+    if (Array.isArray(listRaw)) {
+      list = listRaw
+    } else if (typeof listRaw === 'string') {
+      try {
+        const parsed = JSON.parse(listRaw)
+        if (Array.isArray(parsed)) list = parsed
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    const first = list
+      .map((v) => (typeof v === 'number' ? v : Number(String(v ?? '').trim())))
+      .find((v) => Number.isFinite(v))
+    if (first !== undefined) return first
+  }
+  return toNumber(row?.产品重量)
+}
+
 const buildTripartiteAgreementContext = (row) => {
   const runnerType = String(row?.流道类型 || '').trim()
   const gateType = String(row?.浇口类型 || '').trim()
 
-  const productWeight = toNumber(row?.产品重量)
+  const productWeight = resolveFirstProductWeight(row)
   const sprueWeight = toNumber(row?.料柄重量)
   const density =
     productWeight && productWeight > 0 && sprueWeight !== null
@@ -205,9 +228,9 @@ const buildTripartiteAgreementContext = (row) => {
     gate_sub_mark: mark(gateType === '潜伏浇口'),
     gate_count: row?.浇口数量 === null || row?.浇口数量 === undefined ? '' : String(row.浇口数量),
 
-    // weights/cycle
+    // weights/cycle（产品重量：取产品列表中第一个有效值）
     part_weight_g:
-      row?.产品重量 === null || row?.产品重量 === undefined ? '' : String(row.产品重量),
+      productWeight === null || productWeight === undefined ? '' : String(productWeight),
     sprue_weight_g:
       row?.料柄重量 === null || row?.料柄重量 === undefined ? '' : String(row.料柄重量),
     density,
@@ -491,10 +514,10 @@ const validateTripartiteAgreementRow = (row) => {
     add('gate_count', '浇口数量', '必须为正整数（不能为 0，也不能为小数）')
   }
 
-  // 3.1.1 产品重量/成型周期 必填数值；料柄重量可空
-  const partWeight = row?.产品重量
-  const partWeightNum = typeof partWeight === 'number' ? partWeight : Number(partWeight)
-  if (!Number.isFinite(partWeightNum)) add('part_weight_g', '产品重量', '必须有数值')
+  // 3.1.1 产品重量/成型周期 必填数值；料柄重量可空（产品重量取自产品列表中第一个有效值）
+  const partWeight = resolveFirstProductWeight(row)
+  const partWeightNum = partWeight === null ? NaN : partWeight
+  if (!Number.isFinite(partWeightNum)) add('part_weight_g', '产品重量', '产品列表中至少需有一项有效重量')
 
   const cycle = row?.成型周期
   const cycleNum = typeof cycle === 'number' ? cycle : Number(cycle)
@@ -3270,9 +3293,9 @@ const getTrialProcessRow = async (projectCode, trialNo) => {
       tp.外协试模 as isOutsourced,
       tp.备注 as remark,
       tp.是否作废 as isVoid,
-      tp.创建时间 as createdAt,
+      CONVERT(varchar(23), tp.创建时间, 126) + '+08:00' as createdAt,
       tp.创建人 as createdBy,
-      tp.更新时间 as updatedAt,
+      CONVERT(varchar(23), tp.更新时间, 126) + '+08:00' as updatedAt,
       tp.更新人 as updatedBy
     FROM 试模过程 tp
     LEFT JOIN 项目管理 pm ON tp.项目编号 = pm.项目编号
@@ -3311,9 +3334,9 @@ router.get('/:projectCode(*)/trial-processes', async (req, res) => {
         tp.试模时长 as trialDuration,
         tp.外协试模 as isOutsourced,
         tp.备注 as remark,
-        tp.创建时间 as createdAt,
+        CONVERT(varchar(23), tp.创建时间, 126) + '+08:00' as createdAt,
         tp.创建人 as createdBy,
-        tp.更新时间 as updatedAt,
+        CONVERT(varchar(23), tp.更新时间, 126) + '+08:00' as updatedAt,
         tp.更新人 as updatedBy,
         (SELECT COUNT(1) FROM 试模过程附件 a WHERE a.试模过程ID = tp.试模过程ID) as attachmentCount
       FROM 试模过程 tp
