@@ -19,9 +19,10 @@
             v-if="!readonly"
             :action="uploadAction"
             :data="uploadData"
-            multiple
+            :multiple="uploadMultiple"
             :show-file-list="false"
-            accept=".pdf,.xls,.xlsx,image/*"
+            :accept="uploadAccept"
+            :capture="uploadCapture"
             :on-success="handleUploadSuccess"
             :on-error="handleUploadError"
           >
@@ -200,6 +201,11 @@ const formatUploadedDate = (val?: string | null) => {
 const uploadAction = computed(
   () => `/api/project/${encodeURIComponent(props.projectCode)}/attachments/inspection-report`
 )
+const uploadAccept = computed(() =>
+  isMobile.value ? '.pdf,application/pdf,image/*' : '.pdf,.xls,.xlsx,image/*'
+)
+const uploadMultiple = computed(() => !isMobile.value)
+const uploadCapture = computed(() => (isMobile.value ? 'environment' : undefined))
 const uploadData = computed(() => ({
   drawing: String(props.drawing || '').trim() || '',
   rowIndex:
