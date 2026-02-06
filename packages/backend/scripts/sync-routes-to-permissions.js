@@ -222,6 +222,32 @@ const routesToSync = [
     route_path: '/authorization/role',
     page_title: '角色管理',
     parent_route: 'Authorization'
+  },
+
+  // 小憩
+  {
+    route_name: 'BreakSnakeGame',
+    route_path: '/break/snake-game',
+    page_title: '贪吃蛇',
+    parent_route: 'Break'
+  },
+  {
+    route_name: 'BreakGomoku',
+    route_path: '/break/gomoku',
+    page_title: '五子棋',
+    parent_route: 'Break'
+  },
+  {
+    route_name: 'BreakTicTacToe',
+    route_path: '/break/tic-tac-toe',
+    page_title: '井字棋',
+    parent_route: 'Break'
+  },
+  {
+    route_name: 'BreakTetris',
+    route_path: '/break/tetris',
+    page_title: '俄罗斯方块',
+    parent_route: 'Break'
   }
 ]
 

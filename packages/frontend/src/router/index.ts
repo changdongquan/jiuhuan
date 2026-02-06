@@ -1079,6 +1079,51 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/break',
+    component: Layout,
+    redirect: '/break/snake-game',
+    name: 'Break',
+    meta: {
+      title: t('router.break'),
+      icon: 'vi-ep:coffee',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'snake-game',
+        component: () => import('@/views/Game/Page/SnakeGame.vue'),
+        name: 'BreakSnakeGame',
+        meta: {
+          title: t('router.snakeGame')
+        }
+      },
+      {
+        path: 'gomoku',
+        component: () => import('@/views/Game/Page/GomokuGame.vue'),
+        name: 'BreakGomoku',
+        meta: {
+          title: t('router.gomoku')
+        }
+      },
+      {
+        path: 'tic-tac-toe',
+        component: () => import('@/views/Game/Page/TicTacToe.vue'),
+        name: 'BreakTicTacToe',
+        meta: {
+          title: t('router.ticTacToe')
+        }
+      },
+      {
+        path: 'tetris',
+        component: () => import('@/views/Game/Page/TetrisGame.vue'),
+        name: 'BreakTetris',
+        meta: {
+          title: t('router.tetris')
+        }
+      }
+    ]
+  },
+  {
     path: '/error',
     component: Layout,
     redirect: '/error/404',
