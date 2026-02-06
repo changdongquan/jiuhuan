@@ -916,55 +916,111 @@ TARGET_VERSION="${1:-}"
 if [ -z "$TARGET_VERSION" ]; then
 
   echo "==> 未指定版本，将显示可用版本供选择"
-
   echo ""
-
   "$DIR/list_versions.sh"
-
   echo ""
+
+  if [ ! -d "$SRC_DIR/.git" ]; then
+    echo "ERROR: 仓库未克隆，无法选择版本"
+    exit 1
+  fi
+
+  cd "$SRC_DIR"
+  git fetch --all --prune --tags >/dev/null 2>&1 || true
+
+  select_from_tags() {
+    local tags
+    mapfile -t tags < <(git tag -l --sort=-version:refname | head -20)
+    if [ "${#tags[@]}" -eq 0 ]; then
+      echo "ERROR: 未找到任何标签"
+      return 1
+    fi
+    echo "--- Git Tags（前20） ---"
+    printf "%s\n" "${tags[@]}" | nl
+    read -rp "请输入标签序号: " IDX
+    [ -n "${IDX:-}" ] || { echo "ERROR: 序号不能为空"; return 1; }
+    TARGET_VERSION="${tags[$((IDX-1))]:-}"
+    [ -n "$TARGET_VERSION" ] || { echo "ERROR: 无效序号"; return 1; }
+  }
+
+  select_from_main_commits() {
+    local main_ref commits
+    main_ref="origin/main"
+    git rev-parse --verify origin/main >/dev/null 2>&1 || main_ref="origin/master"
+    mapfile -t commits < <(git log "$main_ref" --oneline -20 | awk '{print $1}')
+    if [ "${#commits[@]}" -eq 0 ]; then
+      echo "ERROR: 未找到提交记录"
+      return 1
+    fi
+    echo "--- 最近提交（前20，来自 ${main_ref}） ---"
+    git log "$main_ref" --oneline --decorate -20 | nl
+    read -rp "请输入提交序号: " IDX
+    [ -n "${IDX:-}" ] || { echo "ERROR: 序号不能为空"; return 1; }
+    TARGET_VERSION="${commits[$((IDX-1))]:-}"
+    [ -n "$TARGET_VERSION" ] || { echo "ERROR: 无效序号"; return 1; }
+  }
+
+  select_from_branch_commits() {
+    local branches branch_name commits
+    mapfile -t branches < <(git branch -r | grep -v HEAD | sed 's/origin\///')
+    if [ "${#branches[@]}" -eq 0 ]; then
+      echo "ERROR: 未找到远程分支"
+      return 1
+    fi
+    echo "--- 远程分支 ---"
+    printf "%s\n" "${branches[@]}" | nl
+    read -rp "请输入分支序号: " BIDX
+    [ -n "${BIDX:-}" ] || { echo "ERROR: 序号不能为空"; return 1; }
+    branch_name="${branches[$((BIDX-1))]:-}"
+    [ -n "$branch_name" ] || { echo "ERROR: 无效序号"; return 1; }
+
+    mapfile -t commits < <(git log "origin/${branch_name}" --oneline -20 | awk '{print $1}')
+    if [ "${#commits[@]}" -eq 0 ]; then
+      echo "ERROR: 分支 ${branch_name} 无提交记录"
+      return 1
+    fi
+    echo "--- 分支 ${branch_name} 最近提交（前20） ---"
+    git log "origin/${branch_name}" --oneline --decorate -20 | nl
+    read -rp "请输入提交序号: " CIDX
+    [ -n "${CIDX:-}" ] || { echo "ERROR: 序号不能为空"; return 1; }
+    TARGET_VERSION="${commits[$((CIDX-1))]:-}"
+    [ -n "$TARGET_VERSION" ] || { echo "ERROR: 无效序号"; return 1; }
+  }
 
   echo "选项："
-
   echo "  1) 升级到最新版本（latest/main/master）"
-
-  echo "  2) 输入特定版本（tag/commit/branch）"
-
-  echo "  3) 退出"
-
-  read -rp "请选择 [1-3]: " CHOICE
+  echo "  2) 从标签列表按序号选择"
+  echo "  3) 从主分支提交列表按序号选择"
+  echo "  4) 选择远程分支，再按序号选择该分支提交"
+  echo "  5) 手动输入版本（tag/commit/branch）"
+  echo "  6) 退出"
+  read -rp "请选择 [1-6]: " CHOICE
 
   case "$CHOICE" in
-
     1)
-
       TARGET_VERSION="latest"
-
       ;;
-
     2)
-
-      read -rp "请输入版本（tag/commit/branch）: " TARGET_VERSION
-
-      [ -n "$TARGET_VERSION" ] || { echo "ERROR: 版本不能为空"; exit 1; }
-
+      select_from_tags
       ;;
-
     3)
-
+      select_from_main_commits
+      ;;
+    4)
+      select_from_branch_commits
+      ;;
+    5)
+      read -rp "请输入版本（tag/commit/branch）: " TARGET_VERSION
+      [ -n "$TARGET_VERSION" ] || { echo "ERROR: 版本不能为空"; exit 1; }
+      ;;
+    6)
       echo "已取消"
-
       exit 0
-
       ;;
-
     *)
-
       echo "ERROR: 无效选择"
-
       exit 1
-
       ;;
-
   esac
 
 fi
