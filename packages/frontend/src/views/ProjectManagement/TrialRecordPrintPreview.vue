@@ -542,8 +542,8 @@ onUnmounted(() => {
   }
 
   .trial-record-table td.trial-record-mould-no {
-    font-family: Arial, sans-serif;
-    font-size: 20pt;
+    font-family: SimSun, '宋体', serif;
+    font-size: 14pt;
     font-weight: 400;
     letter-spacing: 0.5px;
   }
@@ -776,8 +776,8 @@ onUnmounted(() => {
 }
 
 .trial-record-table td.trial-record-mould-no {
-  font-family: Arial, sans-serif;
-  font-size: 20pt;
+  font-family: SimSun, '宋体', serif;
+  font-size: 14pt;
   font-weight: 400;
   letter-spacing: 0.5px;
 }
