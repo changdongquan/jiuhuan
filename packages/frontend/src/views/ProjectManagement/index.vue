@@ -21,29 +21,43 @@
     <!-- 统计卡片：手机端在内容区显示，PC端在顶部工具栏显示 -->
     <el-row :gutter="12" class="pm-summary-row" v-if="isMobile && showMobileSummary">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--blue"
+          @click="handleSummaryClick('')"
+        >
           <div class="summary-title">项目总数</div>
-          <div class="summary-value">{{
-            Math.max(0, (summary.totalProjects || 0) - (summary.completedProjects || 0))
-          }}</div>
+          <div class="summary-value">{{ summary.totalProjects }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--green">
-          <div class="summary-title">设计中</div>
-          <div class="summary-value">{{ summary.designingProjects }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--green"
+          @click="handleSummaryClick('塑胶模具')"
+        >
+          <div class="summary-title">塑胶模具</div>
+          <div class="summary-value">{{ summary.plasticMould }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
-          <div class="summary-title">加工中</div>
-          <div class="summary-value">{{ summary.processingProjects }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--orange"
+          @click="handleSummaryClick('修改模具')"
+        >
+          <div class="summary-title">修改模具</div>
+          <div class="summary-value">{{ summary.modifyMould }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--purple">
-          <div class="summary-title">已经移模</div>
-          <div class="summary-value">{{ summary.completedProjects }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--purple"
+          @click="handleSummaryClick('零件加工')"
+        >
+          <div class="summary-title">零件加工</div>
+          <div class="summary-value">{{ summary.partsProcessing }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -2226,11 +2240,9 @@ const sortState = reactive({
 })
 const summary = reactive({
   totalProjects: 0,
-  t0Projects: 0,
-  designingProjects: 0,
-  processingProjects: 0,
-  surfaceTreatingProjects: 0,
-  completedProjects: 0
+  plasticMould: 0,
+  modifyMould: 0,
+  partsProcessing: 0
 })
 
 type ViewMode = 'table' | 'card' | 'timeline'
@@ -2245,6 +2257,7 @@ const route = useRoute()
 const router = useRouter()
 const isMobile = computed(() => appStore.getMobile)
 const externalImportVisible = ref(false)
+const projectManagementFilterCategory = computed(() => appStore.getProjectManagementFilterCategory)
 
 const resolvePcViewModeFromRoute = (): ViewMode => {
   const v = route.query.view
@@ -2268,7 +2281,7 @@ const paginationLayout = computed(() =>
 // 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
-const queryForm = reactive({ keyword: '', status: '', category: '塑胶模具' })
+const queryForm = reactive({ keyword: '', status: '', category: '' })
 const categoryOptions = [
   { label: '塑胶模具', value: '塑胶模具' },
   { label: '零件加工', value: '零件加工' },
@@ -2282,8 +2295,7 @@ const projectStatusOptions = [
   { label: '加工中', value: '加工中' },
   { label: '表面处理', value: '表面处理' },
   { label: '封样', value: '封样' },
-  { label: '待移模', value: '待移模' },
-  { label: '已经移模', value: '已经移模' }
+  { label: '待移模', value: '待移模' }
 ]
 
 const updateViewQuery = (mode: 'table' | 'timeline') => {
@@ -4132,18 +4144,16 @@ const loadStatistics = async () => {
     const response: any = await getProjectStatisticsApi()
     if (response?.code === 0 && response?.data) {
       summary.totalProjects = response.data.totalProjects || 0
-      summary.t0Projects = response.data.t0Projects || 0
-      summary.designingProjects = response.data.designingProjects || 0
-      summary.processingProjects = response.data.processingProjects || 0
-      summary.surfaceTreatingProjects = response.data.surfaceTreatingProjects || 0
-      summary.completedProjects = response.data.completedProjects || 0
+      summary.plasticMould = response.data.plasticMould || 0
+      summary.modifyMould = response.data.modifyMould || 0
+      summary.partsProcessing = response.data.partsProcessing || 0
 
       // 同步到store，用于工具栏显示
       appStore.setProjectManagementSummary({
         totalProjects: summary.totalProjects,
-        designingProjects: summary.designingProjects,
-        processingProjects: summary.processingProjects,
-        completedProjects: summary.completedProjects
+        plasticMould: summary.plasticMould,
+        modifyMould: summary.modifyMould,
+        partsProcessing: summary.partsProcessing
       })
     }
   } catch (error) {
@@ -4151,10 +4161,24 @@ const loadStatistics = async () => {
   }
 }
 
+watch(projectManagementFilterCategory, (category) => {
+  const nextCategory = category || ''
+  if (queryForm.category === nextCategory) return
+  queryForm.category = nextCategory
+  pagination.page = 1
+  loadData()
+})
+
 const handleSearch = () => {
   pagination.page = 1
   loadData()
   loadStatistics()
+}
+
+const handleSummaryClick = (category: string) => {
+  queryForm.category = category || ''
+  pagination.page = 1
+  loadData()
 }
 
 const handleReset = () => {
@@ -7601,6 +7625,7 @@ watch(viewMode, (val) => {
 .summary-card {
   display: flex;
   height: 56px;
+  cursor: pointer;
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;

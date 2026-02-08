@@ -1185,14 +1185,50 @@ router.get('/statistics', async (req, res) => {
   try {
     console.log('[项目统计] 开始查询')
     const queryString = `
+      WITH proj AS (
+        SELECT 项目编号, 项目状态
+        FROM 项目管理
+      ),
+      goods AS (
+        SELECT DISTINCT 项目编号, 分类
+        FROM 货物信息
+        WHERE CAST(IsNew AS INT) != 1
+      )
       SELECT 
-        COUNT(*) as totalProjects,
-        SUM(CASE WHEN 项目状态 = 'T0' THEN 1 ELSE 0 END) as t0Projects,
-        SUM(CASE WHEN 项目状态 = '设计中' THEN 1 ELSE 0 END) as designingProjects,
-        SUM(CASE WHEN 项目状态 = '加工中' THEN 1 ELSE 0 END) as processingProjects,
-        SUM(CASE WHEN 项目状态 = '表面处理' THEN 1 ELSE 0 END) as surfaceTreatingProjects,
-        SUM(CASE WHEN 项目状态 = '已经移模' THEN 1 ELSE 0 END) as completedProjects
-      FROM 项目管理
+        COUNT(
+          DISTINCT CASE 
+            WHEN proj.项目状态 IS NULL OR proj.项目状态 <> N'已经移模'
+            THEN proj.项目编号 
+          END
+        ) as totalProjects,
+        COUNT(DISTINCT CASE WHEN proj.项目状态 = 'T0' THEN proj.项目编号 END) as t0Projects,
+        COUNT(DISTINCT CASE WHEN proj.项目状态 = '设计中' THEN proj.项目编号 END) as designingProjects,
+        COUNT(DISTINCT CASE WHEN proj.项目状态 = '加工中' THEN proj.项目编号 END) as processingProjects,
+        COUNT(DISTINCT CASE WHEN proj.项目状态 = '表面处理' THEN proj.项目编号 END) as surfaceTreatingProjects,
+        COUNT(DISTINCT CASE WHEN proj.项目状态 = '已经移模' THEN proj.项目编号 END) as completedProjects,
+        COUNT(
+          DISTINCT CASE 
+            WHEN (proj.项目状态 IS NULL OR proj.项目状态 <> N'已经移模')
+              AND goods.分类 = N'塑胶模具'
+            THEN proj.项目编号
+          END
+        ) as plasticMould,
+        COUNT(
+          DISTINCT CASE 
+            WHEN (proj.项目状态 IS NULL OR proj.项目状态 <> N'已经移模')
+              AND goods.分类 = N'修改模具'
+            THEN proj.项目编号
+          END
+        ) as modifyMould,
+        COUNT(
+          DISTINCT CASE 
+            WHEN (proj.项目状态 IS NULL OR proj.项目状态 <> N'已经移模')
+              AND goods.分类 = N'零件加工'
+            THEN proj.项目编号
+          END
+        ) as partsProcessing
+      FROM proj
+      LEFT JOIN goods ON goods.项目编号 = proj.项目编号
     `
 
     console.log('[项目统计] 执行查询:', queryString)
@@ -1263,14 +1299,12 @@ router.get('/list', async (req, res) => {
     }
 
     // 项目状态条件：
-    // - 当显式传入 status 时：按指定状态精确筛选（可以单独查“已经移模”）
-    // - 当未传 status 且没有关键词查询时：默认排除“已经移模”项目
-    // - 当有关键词查询但未传 status 时：不过滤状态（查询结果可包含“已经移模”）
-    if (status) {
+    // - 不显示“已经移模”记录（无论是否传入关键词或状态）
+    // - 如需精确筛选其他状态，仍可传 status
+    whereConditions.push(`(p.项目状态 IS NULL OR p.项目状态 <> N'已经移模')`)
+    if (status && status !== '已经移模') {
       whereConditions.push(`p.项目状态 = @status`)
       params.status = status
-    } else if (!keyword) {
-      whereConditions.push(`(p.项目状态 IS NULL OR p.项目状态 <> N'已经移模')`)
     }
 
     // 构建完整的 WHERE 子句

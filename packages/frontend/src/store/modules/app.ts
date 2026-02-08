@@ -41,10 +41,11 @@ interface AppState {
   }
   projectManagementSummary: {
     totalProjects: number
-    designingProjects: number
-    processingProjects: number
-    completedProjects: number
+    plasticMould: number
+    modifyMould: number
+    partsProcessing: number
   }
+  projectManagementFilterCategory: string
 }
 
 export const useAppStore = defineStore('app', {
@@ -115,10 +116,11 @@ export const useAppStore = defineStore('app', {
       // 项目管理顶部统计信息
       projectManagementSummary: {
         totalProjects: 0,
-        designingProjects: 0,
-        processingProjects: 0,
-        completedProjects: 0
-      }
+        plasticMould: 0,
+        modifyMould: 0,
+        partsProcessing: 0
+      },
+      projectManagementFilterCategory: ''
     }
   },
   getters: {
@@ -202,6 +204,9 @@ export const useAppStore = defineStore('app', {
     },
     getProjectManagementSummary(): AppState['projectManagementSummary'] {
       return this.projectManagementSummary
+    },
+    getProjectManagementFilterCategory(): AppState['projectManagementFilterCategory'] {
+      return this.projectManagementFilterCategory
     }
   },
   actions: {
@@ -300,6 +305,9 @@ export const useAppStore = defineStore('app', {
     },
     setProjectManagementSummary(payload: Partial<AppState['projectManagementSummary']>) {
       this.projectManagementSummary = Object.assign({}, this.projectManagementSummary, payload)
+    },
+    setProjectManagementFilterCategory(category: string) {
+      this.projectManagementFilterCategory = category
     },
     setPrimaryLight() {
       if (this.theme.elColorPrimary) {

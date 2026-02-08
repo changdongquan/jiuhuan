@@ -166,27 +166,33 @@ export default defineComponent({
         {isProjectManagementPage.value && !isMobile.value ? (
           <div class="tool-header-summary-center">
             <div class="tool-header-summary-cards">
-              <div class="tool-header-summary-card tool-header-summary-card--blue">
+              <div
+                class="tool-header-summary-card tool-header-summary-card--blue tool-header-summary-card--clickable"
+                onClick={() => appStore.setProjectManagementFilterCategory('')}
+              >
                 <div class="title">项目总数</div>
-                <div class="value">
-                  {Math.max(
-                    0,
-                    (projectManagementSummary.value.totalProjects || 0) -
-                      (projectManagementSummary.value.completedProjects || 0)
-                  )}
-                </div>
+                <div class="value">{projectManagementSummary.value.totalProjects ?? 0}</div>
               </div>
-              <div class="tool-header-summary-card tool-header-summary-card--green">
-                <div class="title">设计中</div>
-                <div class="value">{projectManagementSummary.value.designingProjects ?? 0}</div>
+              <div
+                class="tool-header-summary-card tool-header-summary-card--green tool-header-summary-card--clickable"
+                onClick={() => appStore.setProjectManagementFilterCategory('塑胶模具')}
+              >
+                <div class="title">塑胶模具</div>
+                <div class="value">{projectManagementSummary.value.plasticMould ?? 0}</div>
               </div>
-              <div class="tool-header-summary-card tool-header-summary-card--orange">
-                <div class="title">加工中</div>
-                <div class="value">{projectManagementSummary.value.processingProjects ?? 0}</div>
+              <div
+                class="tool-header-summary-card tool-header-summary-card--orange tool-header-summary-card--clickable"
+                onClick={() => appStore.setProjectManagementFilterCategory('修改模具')}
+              >
+                <div class="title">修改模具</div>
+                <div class="value">{projectManagementSummary.value.modifyMould ?? 0}</div>
               </div>
-              <div class="tool-header-summary-card tool-header-summary-card--purple">
-                <div class="title">已经移模</div>
-                <div class="value">{projectManagementSummary.value.completedProjects ?? 0}</div>
+              <div
+                class="tool-header-summary-card tool-header-summary-card--purple tool-header-summary-card--clickable"
+                onClick={() => appStore.setProjectManagementFilterCategory('零件加工')}
+              >
+                <div class="title">零件加工</div>
+                <div class="value">{projectManagementSummary.value.partsProcessing ?? 0}</div>
               </div>
             </div>
           </div>
@@ -319,6 +325,10 @@ export default defineComponent({
     pointer-events: auto;
     background: #f5f7fa;
     border-radius: 6px;
+  }
+
+  .tool-header-summary-card--clickable {
+    cursor: pointer;
   }
 
   .tool-header-summary-card .title {
