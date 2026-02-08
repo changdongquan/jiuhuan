@@ -23,6 +23,10 @@ const INSPECTION_TEMPLATE_PATH = path.resolve(
   __dirname,
   '../templates/production-task/塑胶模具检验记录单.docx'
 )
+const INSPECTION_TEMPLATE_DEFAULT_PATH = path.resolve(
+  __dirname,
+  '../templates/production-task/塑胶模具检验记录单_副本.docx'
+)
 const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 const normalizeAttachmentFileName = (name) => {
@@ -174,13 +178,21 @@ const assertProjectExists = async (projectCode) => {
   return !!rows.length
 }
 
-// 根据项目编号查询客户模号
-const getCustomerModelNo = async (projectCode) => {
+// 根据项目编号查询项目管理信息（客户模号 / 前模材质 / 后模材质）
+const getProjectMaterialInfo = async (projectCode) => {
   const rows = await query(
-    `SELECT TOP 1 客户模号 as customerModelNo FROM 项目管理 WHERE 项目编号 = @projectCode`,
+    `
+      SELECT TOP 1
+        客户模号 as customerModelNo,
+        前模材质 as frontMaterial,
+        后模材质 as backMaterial
+      FROM 项目管理
+      WHERE 项目编号 = @projectCode
+    `,
     { projectCode }
   )
-  return rows.length > 0 ? rows[0].customerModelNo || null : null
+  if (!rows.length) return null
+  return rows[0]
 }
 
 // 生成新的文件名（基于客户模号和附件类型）
@@ -254,6 +266,7 @@ const replaceDocxPlaceholders = (xml, data) => {
   return xml.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (match, openTag, text, closeTag) => {
     if (!text || !text.includes('{{')) return match
     const replaced = text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, key) => {
+      if (String(key).trim().startsWith('检验结果_')) return m
       const value = resolveTemplateValue(data, String(key).trim())
       return toDocxText(value)
     })
@@ -261,7 +274,143 @@ const replaceDocxPlaceholders = (xml, data) => {
   })
 }
 
-const renderDocxTemplate = async (templateBuffer, data) => {
+const decodeXmlEntities = (text) => {
+  if (!text) return ''
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+}
+
+const extractDefaultResultChoiceList = (xml) => {
+  if (!xml) return []
+  const rows = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
+  const results = []
+  rows.forEach((row) => {
+    const plain = decodeXmlEntities(String(row).replace(/<[^>]+>/g, ' '))
+    const normalized = plain.replace(/\s+/g, '')
+    if (!normalized.includes('是【') || !normalized.includes('】')) return
+    if (normalized.includes('是【/】')) {
+      results.push('yes')
+      return
+    }
+    if (normalized.includes('否【/】')) {
+      results.push('no')
+      return
+    }
+    if (normalized.includes('无【/】')) {
+      results.push('none')
+    }
+  })
+  return results
+}
+
+const buildDefaultResultChoiceMap = (templateXml, defaultXml) => {
+  const map = {}
+  if (!templateXml || !defaultXml) return map
+
+  const templateRows = templateXml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
+  const defaultResults = extractDefaultResultChoiceList(defaultXml)
+
+  let defaultIndex = 0
+  templateRows.forEach((row) => {
+    const m = row.match(/\{\{检验结果_(\d+)(?::[^}]+)?\}\}/)
+    if (!m) return
+    const seq = m[1]
+    if (defaultIndex >= defaultResults.length) return
+    map[seq] = defaultResults[defaultIndex]
+    defaultIndex += 1
+  })
+
+  return map
+}
+
+const extractInspectionItemsFromTemplateXml = (xml) => {
+  if (!xml) return []
+  const rows = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
+  const items = []
+
+  const stripTags = (input) => decodeXmlEntities(String(input || '').replace(/<[^>]+>/g, ''))
+
+  rows.forEach((row) => {
+    if (!row.includes('w:highlight') || !row.includes('yellow')) return
+    const placeholderMatch = row.match(/\{\{检验结果_(\d+)(?::([^}]+))?\}\}/)
+    if (!placeholderMatch) return
+    const seq = placeholderMatch[1]
+    const optionText = placeholderMatch[2] || 'yes,no,none'
+    const options = optionText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const cells = row.match(/<w:tc[\s\S]*?<\/w:tc>/g) || []
+    if (!cells.length) return
+
+    const texts = cells.map((cell) => stripTags(cell).trim())
+
+    const contentCandidates = texts.filter(
+      (t) =>
+        t &&
+        !t.includes('检验') &&
+        !t.includes('目测') &&
+        !t.includes(`{{检验结果_${seq}}}`) &&
+        !t.includes('检验结果_')
+    )
+    const content = contentCandidates.length
+      ? contentCandidates.reduce((a, b) => (a.length >= b.length ? a : b))
+      : ''
+
+    if (seq && content) {
+      if (seq === '2') {
+        return
+      }
+      items.push({ seq, content, options })
+    }
+  })
+  return items
+}
+
+const renderResultText = (choice, options) => {
+  const opts = options && options.length ? options : ['yes', 'no', 'none']
+  const hasNo = opts.includes('no')
+  const hasNone = opts.includes('none')
+
+  if (!hasNo && hasNone) {
+    return choice === 'yes' ? '是【/】无【】' : '是【】无【/】'
+  }
+  if (hasNo && !hasNone) {
+    return choice === 'yes' ? '是【/】否【】' : '是【】否【/】'
+  }
+  return choice === 'yes'
+    ? '是【/】否【】无【】'
+    : choice === 'no'
+      ? '是【】否【/】无【】'
+      : '是【】否【】无【/】'
+}
+
+const applyInspectionResultsToXml = (xml, results, defaultMap, manualSeqs) => {
+  if (!xml) return xml
+  const manualSeqSet = new Set(
+    Array.isArray(manualSeqs) ? manualSeqs.map((s) => String(s).trim()).filter(Boolean) : []
+  )
+  return xml.replace(/\{\{检验结果_(\d+)(?::([^}]+))?\}\}/g, (match, seq, optionText) => {
+    const options = String(optionText || 'yes,no,none')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const choice = results && results[seq] ? results[seq] : ''
+    if (choice) return renderResultText(choice, options)
+
+    if (manualSeqSet.has(String(seq))) return ''
+
+    const defChoice = defaultMap && defaultMap[seq] ? defaultMap[seq] : ''
+    if (!defChoice) return match
+    return renderResultText(defChoice, options)
+  })
+}
+
+const renderDocxTemplate = async (templateBuffer, data, inspectionResults, defaultMap, manualSeqs) => {
   const zip = await JSZip.loadAsync(templateBuffer)
   const targetNames = Object.keys(zip.files).filter((name) =>
     /^word\/(document|header\d+|footer\d+)\.xml$/i.test(name)
@@ -273,7 +422,10 @@ const renderDocxTemplate = async (templateBuffer, data) => {
     targetNames.map(async (name) => {
       const file = zip.file(name)
       if (!file) return
-      const xml = await file.async('string')
+      let xml = await file.async('string')
+      if (name === 'word/document.xml') {
+        xml = applyInspectionResultsToXml(xml, inspectionResults || {}, defaultMap, manualSeqs)
+      }
       const nextXml = replaceDocxPlaceholders(xml, data)
       zip.file(name, nextXml)
     })
@@ -670,8 +822,9 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
     }
 
-    // 查询客户模号
-    const customerModelNo = await getCustomerModelNo(projectCode)
+    // 查询客户模号/材质
+    const materialInfo = await getProjectMaterialInfo(projectCode)
+    const customerModelNo = materialInfo?.customerModelNo || null
 
     // 安全化项目编号（用于路径）
     const category = getCategoryFromProjectCode(projectCode)
@@ -886,16 +1039,53 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
 
     const payload = req.body && typeof req.body === 'object' ? req.body : {}
     const data = payload.data && typeof payload.data === 'object' ? payload.data : {}
+    const inspectionResults =
+      payload.inspectionResults && typeof payload.inspectionResults === 'object'
+        ? payload.inspectionResults
+        : null
+    const manualSeqs = Array.isArray(payload.manualSeqs)
+      ? payload.manualSeqs.map((s) => String(s).trim()).filter(Boolean)
+      : null
     const uploadedBy = (payload && (payload.uploadedBy || payload.uploader)) || null
 
-    const customerModelNo = await getCustomerModelNo(projectCode)
+    const materialInfo = await getProjectMaterialInfo(projectCode)
+    const customerModelNo = materialInfo?.customerModelNo || null
     const mergedData = {
       客户模号: customerModelNo || '',
+      前模材质: materialInfo?.frontMaterial || '',
+      后模材质: materialInfo?.backMaterial || '',
       ...data
     }
 
     const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
-    const generatedBuffer = await renderDocxTemplate(templateBuffer, mergedData)
+    let defaultMap = null
+    try {
+      const defaultBuffer = await fsp.readFile(INSPECTION_TEMPLATE_DEFAULT_PATH)
+      const defaultZip = await JSZip.loadAsync(defaultBuffer)
+      const defaultDoc = defaultZip.file('word/document.xml')
+      const templateZip = await JSZip.loadAsync(templateBuffer)
+      const templateDoc = templateZip.file('word/document.xml')
+      if (defaultDoc && templateDoc) {
+        const [defaultXml, templateXml] = await Promise.all([
+          defaultDoc.async('string'),
+          templateDoc.async('string')
+        ])
+      defaultMap = buildDefaultResultChoiceMap(templateXml, defaultXml)
+      }
+    } catch (e) {
+      console.warn('读取默认检验结果模板失败:', e)
+    }
+    if (!defaultMap || Object.keys(defaultMap).length === 0) {
+      console.warn('默认检验结果映射为空，未能应用默认勾选')
+    }
+
+    const generatedBuffer = await renderDocxTemplate(
+      templateBuffer,
+      mergedData,
+      inspectionResults,
+      defaultMap,
+      manualSeqs
+    )
     const category = getCategoryFromProjectCode(projectCode)
     const safeProjectCode = safeProjectCodeForPath(projectCode)
     const typeDirName = '塑胶模具检验记录单'
@@ -1010,6 +1200,37 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
       code: 500,
       success: false,
       message: '生成模具检验记录单失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取检验结果需要填充的行（模板中黄色高亮的行）
+router.get('/inspection-template/items', async (req, res) => {
+  try {
+    const templateExists = await ensureTemplateExists(INSPECTION_TEMPLATE_PATH)
+    if (!templateExists) {
+      return res
+        .status(500)
+        .json({ code: 500, success: false, message: '模板文件不存在' })
+    }
+    const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
+    const zip = await JSZip.loadAsync(templateBuffer)
+    const docFile = zip.file('word/document.xml')
+    if (!docFile) {
+      return res
+        .status(500)
+        .json({ code: 500, success: false, message: '模板内容不完整' })
+    }
+    const xml = await docFile.async('string')
+    const items = extractInspectionItemsFromTemplateXml(xml)
+    res.json({ code: 0, success: true, data: items })
+  } catch (error) {
+    console.error('读取检验模板失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取检验模板失败',
       error: error.message
     })
   }

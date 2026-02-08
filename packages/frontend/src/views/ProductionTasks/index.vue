@@ -853,7 +853,7 @@
                           style="width: calc(100% - 2px); margin-bottom: 12px"
                         >
                           <el-table-column type="index" label="序号" width="42" />
-                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="170" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -911,7 +911,7 @@
                           style="width: calc(100% - 2px)"
                         >
                           <el-table-column type="index" label="序号" width="42" />
-                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="170" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -1007,7 +1007,7 @@
                           style="width: calc(100% - 2px)"
                         >
                           <el-table-column type="index" label="序号" width="42" />
-                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="170" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -1065,7 +1065,7 @@
                           style="width: calc(100% - 2px)"
                         >
                           <el-table-column type="index" label="序号" width="42" />
-                          <el-table-column prop="storedFileName" label="文件名" min-width="175" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="170" />
                           <el-table-column label="大小" width="70" align="right">
                             <template #default="{ row }">{{
                               formatFileSize(row.fileSize)
@@ -1126,31 +1126,40 @@
     <el-dialog
       v-model="inspectionGenerateDialogVisible"
       title="生成模具检验记录单"
-      :width="isMobile ? '100%' : '720px'"
+      :width="isMobile ? '100%' : '770px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="pt-inspection-generate-dialog"
     >
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="请输入模板占位符对应的值。键名需与模板中的 {{字段名}} 一致。"
-        style="margin-bottom: 12px"
-      />
-      <div style="margin-bottom: 12px; font-size: 12px; color: var(--el-text-color-secondary)">
-        默认会带入当前生产任务字段（如 项目编号、客户模号、生产状态 等）。下面 JSON
-        可用于补充或覆盖同名字段。
-      </div>
-      <el-form label-position="top">
-        <el-form-item label="自定义字段（JSON）">
-          <el-input
-            v-model="inspectionGenerateForm.customJson"
-            type="textarea"
-            :rows="6"
-            placeholder='例如：{"检验日期":"2025-02-01","检验员":"张三"}'
-          />
-        </el-form-item>
-      </el-form>
+      <el-table
+        v-loading="inspectionTemplateLoading"
+        :data="inspectionTemplateItems"
+        :height="isMobile ? 360 : 600"
+        border
+        size="small"
+        style="width: 100%"
+      >
+        <el-table-column label="序号" width="60" align="center">
+          <template #default="{ $index }">{{ $index + 1 }}</template>
+        </el-table-column>
+        <el-table-column label="编号" width="90" align="center">
+          <template #default="{ row }">{{ row.seq }}</template>
+        </el-table-column>
+        <el-table-column label="检验内容" min-width="320">
+          <template #default="{ row }">{{ row.content }}</template>
+        </el-table-column>
+        <el-table-column label="检验结果" width="200" align="center">
+          <template #default="{ row }">
+            <el-radio-group v-model="inspectionResultMap[row.seq]" size="small">
+              <el-radio-button label="yes">是</el-radio-button>
+              <el-radio-button v-if="row.options?.includes('no')" label="no">否</el-radio-button>
+              <el-radio-button v-if="row.options?.includes('none')" label="none"
+                >无</el-radio-button
+              >
+            </el-radio-group>
+          </template>
+        </el-table-column>
+      </el-table>
       <template #footer>
         <el-button @click="inspectionGenerateDialogVisible = false">取消</el-button>
         <el-button
@@ -1176,11 +1185,14 @@ import {
   getProductionTaskStatisticsApi,
   getProductionTaskAttachmentsApi,
   generateProductionTaskInspectionApi,
+  getInspectionTemplateItemsApi,
   deleteProductionTaskAttachmentApi,
   downloadProductionTaskAttachmentApi,
   type ProductionTaskAttachment,
   type ProductionTaskAttachmentType,
-  type ProductionTaskInfo
+  type ProductionTaskInfo,
+  type InspectionTemplateItem,
+  type InspectionTemplateResult
 } from '@/api/production-task'
 import {
   getProjectDetailApi,
@@ -1269,9 +1281,9 @@ const dialogActiveTab = ref<
 
 const inspectionGenerateDialogVisible = ref(false)
 const inspectionGenerateSubmitting = ref(false)
-const inspectionGenerateForm = reactive({
-  customJson: ''
-})
+const inspectionTemplateLoading = ref(false)
+const inspectionTemplateItems = ref<InspectionTemplateItem[]>([])
+const inspectionResultMap = reactive<Record<string, InspectionTemplateResult>>({})
 
 // 判断字段是否已填写
 const isFieldFilled = (value: unknown) => {
@@ -1647,8 +1659,8 @@ const handleAttachmentUploadError = (err: any, uploadFile?: any) => {
 
 const openGenerateInspectionDialog = () => {
   if (isViewMode.value) return
-  inspectionGenerateForm.customJson = ''
   inspectionGenerateDialogVisible.value = true
+  void loadInspectionTemplateItems()
 }
 
 const buildInspectionTemplateData = () => {
@@ -1672,20 +1684,22 @@ const buildInspectionTemplateData = () => {
   } as Record<string, any>
 }
 
-const parseInspectionCustomJson = (): Record<string, any> | null => {
-  const raw = String(inspectionGenerateForm.customJson || '').trim()
-  if (!raw) return {}
+const loadInspectionTemplateItems = async () => {
+  inspectionTemplateLoading.value = true
   try {
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      ElMessage.error('自定义字段必须是 JSON 对象')
-      return null
-    }
-    return parsed as Record<string, any>
+    const resp: any = await getInspectionTemplateItemsApi()
+    const items = resp?.data?.data || resp?.data || []
+    inspectionTemplateItems.value = items
+    Object.keys(inspectionResultMap).forEach((k) => delete inspectionResultMap[k])
+    items.forEach((item: InspectionTemplateItem) => {
+      inspectionResultMap[item.seq] = '' as InspectionTemplateResult
+    })
   } catch (error) {
-    console.error('解析自定义字段失败:', error)
-    ElMessage.error('自定义字段 JSON 格式不正确')
-    return null
+    console.error('加载检验模板条目失败:', error)
+    ElMessage.error('加载检验模板条目失败')
+    inspectionTemplateItems.value = []
+  } finally {
+    inspectionTemplateLoading.value = false
   }
 }
 
@@ -1695,13 +1709,17 @@ const submitGenerateInspection = async () => {
     ElMessage.error('项目编号不能为空')
     return
   }
-  const customData = parseInspectionCustomJson()
-  if (customData === null) return
   const baseData = buildInspectionTemplateData()
-  const data = { ...baseData, ...customData }
+  const data = { ...baseData }
+  const inspectionResults: Record<string, InspectionTemplateResult> = {}
+  inspectionTemplateItems.value.forEach((item) => {
+    const value = inspectionResultMap[item.seq]
+    if (value) inspectionResults[item.seq] = value
+  })
+  const manualSeqs = inspectionTemplateItems.value.map((item) => String(item.seq))
   inspectionGenerateSubmitting.value = true
   try {
-    await generateProductionTaskInspectionApi(projectCode, data)
+    await generateProductionTaskInspectionApi(projectCode, data, inspectionResults, manualSeqs)
     inspectionGenerateDialogVisible.value = false
     await loadAttachments()
     ElMessage.success('生成成功')
@@ -2928,6 +2946,10 @@ onMounted(() => {
 .production-task-form .pt-edit-section--shrink :deep(.el-select),
 .production-task-form .pt-edit-section--shrink :deep(.el-input-number) {
   max-width: 100%;
+}
+
+.pt-inspection-generate-dialog :deep(.el-dialog__body) {
+  padding: 12px 16px;
 }
 
 .pt-edit-section-title {

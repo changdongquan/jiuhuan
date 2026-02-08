@@ -48,6 +48,14 @@ export interface ProductionTaskAttachment {
   uploadedBy?: string
 }
 
+export type InspectionTemplateResult = 'yes' | 'no' | 'none' | ''
+
+export interface InspectionTemplateItem {
+  seq: string
+  content: string
+  options?: Array<'yes' | 'no' | 'none'>
+}
+
 // 生产任务查询参数
 export interface ProductionTaskQueryParams {
   keyword?: string // 项目编号/负责人
@@ -118,5 +126,34 @@ export const deleteProductionTaskAttachmentApi = (attachmentId: number) => {
     message?: string
   }>({
     url: `/api/production-task/attachments/${attachmentId}`
+  })
+}
+
+// 获取检验模板中需要填写结果的条目
+export const getInspectionTemplateItemsApi = () => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: InspectionTemplateItem[]
+  }>({
+    url: '/api/production-task/inspection-template/items'
+  })
+}
+
+// 生成模具检验记录单（基于模板）
+export const generateProductionTaskInspectionApi = (
+  projectCode: string,
+  data: Record<string, any>,
+  inspectionResults?: Record<string, InspectionTemplateResult>,
+  manualSeqs?: string[]
+) => {
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: ProductionTaskAttachment
+  }>({
+    url: `/api/production-task/${encodeURIComponent(projectCode)}/attachments/inspection/generate`,
+    data: { data, inspectionResults, manualSeqs }
   })
 }
