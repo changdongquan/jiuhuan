@@ -77,29 +77,43 @@
     <!-- 统计卡片 -->
     <el-row :gutter="16" v-show="!isMobile || showMobileSummary">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--blue"
+          @click="handleSummaryClick('')"
+        >
           <div class="summary-title">总任务数</div>
-          <div class="summary-value">{{
-            Math.max(0, (statistics.total || 0) - (statistics.completed || 0))
-          }}</div>
+          <div class="summary-value">{{ statistics.total }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--green">
-          <div class="summary-title">进行中</div>
-          <div class="summary-value">{{ statistics.inProgress }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--green"
+          @click="handleSummaryClick('塑胶模具')"
+        >
+          <div class="summary-title">塑胶模具</div>
+          <div class="summary-value">{{ statistics.plasticMould }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
-          <div class="summary-title">已完成</div>
-          <div class="summary-value">{{ statistics.completed }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--orange"
+          @click="handleSummaryClick('修改模具')"
+        >
+          <div class="summary-title">修改模具</div>
+          <div class="summary-value">{{ statistics.modifyMould }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover" class="summary-card summary-card--gray">
-          <div class="summary-title">待开始</div>
-          <div class="summary-value">{{ statistics.pending }}</div>
+        <el-card
+          shadow="hover"
+          class="summary-card summary-card--gray"
+          @click="handleSummaryClick('零件加工')"
+        >
+          <div class="summary-title">零件加工</div>
+          <div class="summary-value">{{ statistics.partsProcessing }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -952,17 +966,36 @@
                     <el-col :xs="24" :lg="12" class="pt-attachment-col">
                       <el-card shadow="never" class="pt-attachment-card">
                         <template #header>
-                          <div style="display: flex; justify-content: space-between; gap: 8px">
+                          <div
+                            style="
+                              display: flex;
+                              justify-content: space-between;
+                              align-items: center;
+                              gap: 8px;
+                            "
+                          >
                             <span>文件</span>
-                            <el-upload
-                              :action="getAttachmentAction('inspection')"
-                              :show-file-list="false"
-                              accept=".xls,.xlsx,.pdf,image/*"
-                              :on-success="handleAttachmentUploadSuccess"
-                              :on-error="handleAttachmentUploadError"
-                            >
-                              <el-button type="primary" size="small">上传模具检验记录单</el-button>
-                            </el-upload>
+                            <div style="display: flex; align-items: center; gap: 8px">
+                              <el-button
+                                type="success"
+                                size="small"
+                                :disabled="isViewMode"
+                                @click="openGenerateInspectionDialog"
+                              >
+                                生成模具检验记录单
+                              </el-button>
+                              <el-upload
+                                :action="getAttachmentAction('inspection')"
+                                :show-file-list="false"
+                                accept=".xls,.xlsx,.pdf,.doc,.docx,image/*"
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small"
+                                  >上传模具检验记录单</el-button
+                                >
+                              </el-upload>
+                            </div>
                           </div>
                         </template>
 
@@ -1089,6 +1122,46 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="inspectionGenerateDialogVisible"
+      title="生成模具检验记录单"
+      :width="isMobile ? '100%' : '720px'"
+      :fullscreen="isMobile"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="请输入模板占位符对应的值。键名需与模板中的 {{字段名}} 一致。"
+        style="margin-bottom: 12px"
+      />
+      <div style="margin-bottom: 12px; font-size: 12px; color: var(--el-text-color-secondary)">
+        默认会带入当前生产任务字段（如 项目编号、客户模号、生产状态 等）。下面 JSON
+        可用于补充或覆盖同名字段。
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="自定义字段（JSON）">
+          <el-input
+            v-model="inspectionGenerateForm.customJson"
+            type="textarea"
+            :rows="6"
+            placeholder='例如：{"检验日期":"2025-02-01","检验员":"张三"}'
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="inspectionGenerateDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="inspectionGenerateSubmitting"
+          @click="submitGenerateInspection"
+        >
+          生成
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1102,6 +1175,7 @@ import {
   updateProductionTaskApi,
   getProductionTaskStatisticsApi,
   getProductionTaskAttachmentsApi,
+  generateProductionTaskInspectionApi,
   deleteProductionTaskAttachmentApi,
   downloadProductionTaskAttachmentApi,
   type ProductionTaskAttachment,
@@ -1137,14 +1211,16 @@ const statistics = reactive({
   total: 0,
   inProgress: 0,
   completed: 0,
-  pending: 0
+  pending: 0,
+  plasticMould: 0,
+  modifyMould: 0,
+  partsProcessing: 0
 })
 
 const queryForm = reactive({ keyword: '', status: '', category: '' })
 const statusOptions = [
   { label: '待开始', value: '待开始' },
   { label: '进行中', value: '进行中' },
-  { label: '已完成', value: '已完成' },
   { label: '已暂停', value: '已暂停' },
   { label: '已取消', value: '已取消' }
 ]
@@ -1190,6 +1266,12 @@ const isViewMode = ref(false)
 const dialogActiveTab = ref<
   'production' | 'productList' | 'trialRecords' | 'hours' | 'attachments'
 >('production')
+
+const inspectionGenerateDialogVisible = ref(false)
+const inspectionGenerateSubmitting = ref(false)
+const inspectionGenerateForm = reactive({
+  customJson: ''
+})
 
 // 判断字段是否已填写
 const isFieldFilled = (value: unknown) => {
@@ -1561,6 +1643,74 @@ const handleAttachmentUploadError = (err: any, uploadFile?: any) => {
   const message = respMessage || err?.message || '上传失败'
   console.error('上传失败:', err, uploadFile)
   ElMessage.error(message)
+}
+
+const openGenerateInspectionDialog = () => {
+  if (isViewMode.value) return
+  inspectionGenerateForm.customJson = ''
+  inspectionGenerateDialogVisible.value = true
+}
+
+const buildInspectionTemplateData = () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  const productNames = projectProductRows.value
+    .map((row) => String(row.名称 || '').trim())
+    .filter(Boolean)
+  const productDrawings = projectProductRows.value
+    .map((row) => String(row.图号 || '').trim())
+    .filter(Boolean)
+  const uniqueJoin = (items: string[]) => Array.from(new Set(items)).filter(Boolean).join('/')
+  const now = new Date()
+  const checkDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return {
+    ...dialogForm,
+    项目编号: projectCode,
+    客户模号: String(dialogForm.客户模号 || '').trim(),
+    产品名称: uniqueJoin(productNames),
+    产品图号: uniqueJoin(productDrawings),
+    检查日期: checkDate
+  } as Record<string, any>
+}
+
+const parseInspectionCustomJson = (): Record<string, any> | null => {
+  const raw = String(inspectionGenerateForm.customJson || '').trim()
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      ElMessage.error('自定义字段必须是 JSON 对象')
+      return null
+    }
+    return parsed as Record<string, any>
+  } catch (error) {
+    console.error('解析自定义字段失败:', error)
+    ElMessage.error('自定义字段 JSON 格式不正确')
+    return null
+  }
+}
+
+const submitGenerateInspection = async () => {
+  const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+  if (!projectCode) {
+    ElMessage.error('项目编号不能为空')
+    return
+  }
+  const customData = parseInspectionCustomJson()
+  if (customData === null) return
+  const baseData = buildInspectionTemplateData()
+  const data = { ...baseData, ...customData }
+  inspectionGenerateSubmitting.value = true
+  try {
+    await generateProductionTaskInspectionApi(projectCode, data)
+    inspectionGenerateDialogVisible.value = false
+    await loadAttachments()
+    ElMessage.success('生成成功')
+  } catch (error: any) {
+    console.error('生成模具检验记录单失败:', error)
+    ElMessage.error(error?.message || '生成失败')
+  } finally {
+    inspectionGenerateSubmitting.value = false
+  }
 }
 
 // 判断附件是否为图片
@@ -2086,6 +2236,9 @@ const loadStatistics = async () => {
       statistics.inProgress = response.data.inProgress || 0
       statistics.completed = response.data.completed || 0
       statistics.pending = response.data.pending || 0
+      statistics.plasticMould = response.data.plasticMould || 0
+      statistics.modifyMould = response.data.modifyMould || 0
+      statistics.partsProcessing = response.data.partsProcessing || 0
     }
   } catch (error: any) {
     console.error('获取统计数据失败:', error)
@@ -2128,6 +2281,12 @@ const handleSearch = () => {
   pagination.page = 1
   loadData()
   loadStatistics()
+}
+
+const handleSummaryClick = (category: string) => {
+  queryForm.category = category || ''
+  pagination.page = 1
+  loadData()
 }
 
 const handleReset = () => {
@@ -2925,6 +3084,7 @@ onMounted(() => {
 .summary-card {
   display: flex;
   height: 64px;
+  cursor: pointer;
   border: none;
   transition: all 0.3s ease;
   align-items: stretch;

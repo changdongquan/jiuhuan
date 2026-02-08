@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs')
 const fsp = fs.promises
 const multer = require('multer')
+const JSZip = require('jszip')
 
 // 生产任务附件存储配置
 // 使用统一文件根目录配置，生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -18,6 +19,11 @@ const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.PRODUCTION_TASK_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
   10
 )
+const INSPECTION_TEMPLATE_PATH = path.resolve(
+  __dirname,
+  '../templates/production-task/塑胶模具检验记录单.docx'
+)
+const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 const normalizeAttachmentFileName = (name) => {
   if (!name) return name
@@ -201,6 +207,91 @@ const generateAttachmentFileName = (customerModelNo, type, tag, originalFileName
   return ext ? `${namePrefix}.${ext}` : namePrefix
 }
 
+const ensureTemplateExists = async (templatePath) => {
+  try {
+    await fsp.access(templatePath, fs.constants.R_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const escapeXmlText = (value) => {
+  if (value === null || value === undefined) return ''
+  const str = String(value)
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+const toDocxText = (value) => {
+  const escaped = escapeXmlText(value)
+  return escaped.replace(/\r?\n/g, ' ')
+}
+
+const resolveTemplateValue = (data, key) => {
+  if (!data) return ''
+  if (Object.prototype.hasOwnProperty.call(data, key)) return data[key]
+  if (key.includes('.')) {
+    const parts = key.split('.')
+    let current = data
+    for (const part of parts) {
+      if (current && Object.prototype.hasOwnProperty.call(current, part)) {
+        current = current[part]
+      } else {
+        current = undefined
+        break
+      }
+    }
+    return current
+  }
+  return ''
+}
+
+const replaceDocxPlaceholders = (xml, data) => {
+  if (!xml) return xml
+  return xml.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (match, openTag, text, closeTag) => {
+    if (!text || !text.includes('{{')) return match
+    const replaced = text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, key) => {
+      const value = resolveTemplateValue(data, String(key).trim())
+      return toDocxText(value)
+    })
+    return `${openTag}${replaced}${closeTag}`
+  })
+}
+
+const renderDocxTemplate = async (templateBuffer, data) => {
+  const zip = await JSZip.loadAsync(templateBuffer)
+  const targetNames = Object.keys(zip.files).filter((name) =>
+    /^word\/(document|header\d+|footer\d+)\.xml$/i.test(name)
+  )
+  if (!targetNames.length) {
+    throw new Error('模板文件内容不完整')
+  }
+  await Promise.all(
+    targetNames.map(async (name) => {
+      const file = zip.file(name)
+      if (!file) return
+      const xml = await file.async('string')
+      const nextXml = replaceDocxPlaceholders(xml, data)
+      zip.file(name, nextXml)
+    })
+  )
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+  // 清理掉目录项，避免部分 Word 版本提示修复
+  const cleaned = await JSZip.loadAsync(buffer)
+  const outZip = new JSZip()
+  await Promise.all(
+    Object.values(cleaned.files).map(async (file) => {
+      if (file.dir) return
+      const content = await file.async('nodebuffer')
+      outZip.file(file.name, content)
+    })
+  )
+  return outZip.generateAsync({ type: 'nodebuffer' })
+}
+
 const getFileFullPath = (relativePath, storedFileName) => {
   return path.join(FILE_ROOT, relativePath, storedFileName)
 }
@@ -309,15 +400,14 @@ router.get('/list', async (req, res) => {
     }
 
     // 生产状态条件：
-    // - 当显式传入 status 时：按指定状态精确筛选（可以单独查“已完成”）
-    // - 当未传 status 且没有关键词查询时：默认排除“已完成”的任务
-    // - 当有关键词查询但未传 status 时：不过滤状态（查询结果可包含“已完成”）
-    if (status) {
+    // - 不显示“已完成”记录（无论是否传入关键词或状态）
+    // - 如需精确筛选其他状态，仍可传 status
+    whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
+    params.excludeStatus = '已完成'
+
+    if (status && status !== '已完成') {
       whereConditions.push(`pt.生产状态 = @status`)
       params.status = status
-    } else if (!keyword) {
-      whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
-      params.excludeStatus = '已完成'
     }
 
     if (category) {
@@ -411,11 +501,30 @@ router.get('/statistics', async (req, res) => {
   try {
     const statisticsQuery = `
       SELECT 
-        COUNT(*) as total,
+        SUM(CASE WHEN pt.生产状态 IS NULL OR pt.生产状态 <> '已完成' THEN 1 ELSE 0 END) as total,
         SUM(CASE WHEN pt.生产状态 = '进行中' THEN 1 ELSE 0 END) as inProgress,
         SUM(CASE WHEN pt.生产状态 = '已完成' THEN 1 ELSE 0 END) as completed,
-        SUM(CASE WHEN pt.生产状态 = '待开始' THEN 1 ELSE 0 END) as pending
+        SUM(CASE WHEN pt.生产状态 = '待开始' THEN 1 ELSE 0 END) as pending,
+        SUM(
+          CASE 
+            WHEN (pt.生产状态 IS NULL OR pt.生产状态 <> '已完成') AND g.分类 = '塑胶模具'
+            THEN 1 ELSE 0 
+          END
+        ) as plasticMould,
+        SUM(
+          CASE 
+            WHEN (pt.生产状态 IS NULL OR pt.生产状态 <> '已完成') AND g.分类 = '修改模具'
+            THEN 1 ELSE 0 
+          END
+        ) as modifyMould,
+        SUM(
+          CASE 
+            WHEN (pt.生产状态 IS NULL OR pt.生产状态 <> '已完成') AND g.分类 = '零件加工'
+            THEN 1 ELSE 0 
+          END
+        ) as partsProcessing
       FROM 生产任务 pt
+      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
     `
     const result = await query(statisticsQuery)
     const stats = result[0] || {}
@@ -427,7 +536,10 @@ router.get('/statistics', async (req, res) => {
         total: stats.total || 0,
         inProgress: stats.inProgress || 0,
         completed: stats.completed || 0,
-        pending: stats.pending || 0
+        pending: stats.pending || 0,
+        plasticMould: stats.plasticMould || 0,
+        modifyMould: stats.modifyMould || 0,
+        partsProcessing: stats.partsProcessing || 0
       }
     })
   } catch (error) {
@@ -746,6 +858,158 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       code: 500,
       success: false,
       message: '上传生产任务附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 生成模具检验记录单（基于模板）
+router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res) => {
+  try {
+    await ensureTaskAttachmentsTable()
+    const projectCode = getProjectCodeParam(req)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const existed = await assertProjectExists(projectCode)
+    if (!existed) {
+      return res.status(404).json({ code: 404, success: false, message: '生产任务不存在' })
+    }
+
+    const templateExists = await ensureTemplateExists(INSPECTION_TEMPLATE_PATH)
+    if (!templateExists) {
+      return res
+        .status(500)
+        .json({ code: 500, success: false, message: '模板文件不存在' })
+    }
+
+    const payload = req.body && typeof req.body === 'object' ? req.body : {}
+    const data = payload.data && typeof payload.data === 'object' ? payload.data : {}
+    const uploadedBy = (payload && (payload.uploadedBy || payload.uploader)) || null
+
+    const customerModelNo = await getCustomerModelNo(projectCode)
+    const mergedData = {
+      客户模号: customerModelNo || '',
+      ...data
+    }
+
+    const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
+    const generatedBuffer = await renderDocxTemplate(templateBuffer, mergedData)
+    const category = getCategoryFromProjectCode(projectCode)
+    const safeProjectCode = safeProjectCodeForPath(projectCode)
+    const typeDirName = '塑胶模具检验记录单'
+    const finalRelativeDir = path.posix.join(category, safeProjectCode, '生产任务', typeDirName)
+    const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+    ensureDirSync(finalFullDir)
+
+    const templateBaseName = path.basename(INSPECTION_TEMPLATE_PATH)
+    const newFileName = generateAttachmentFileName(
+      customerModelNo,
+      'inspection',
+      null,
+      templateBaseName
+    )
+    const safeNewFileName = safeFileName(newFileName)
+    const finalFile = path.join(finalFullDir, safeNewFileName)
+
+    const existedRows = await query(
+      `
+        SELECT TOP 1
+          附件ID as id,
+          存储文件名 as storedFileName,
+          相对路径 as relativePath
+        FROM 生产任务附件
+        WHERE 项目编号 = @projectCode
+          AND 附件类型 = @type
+          AND 存储文件名 = @storedFileName
+        ORDER BY 上传时间 DESC, 附件ID DESC
+      `,
+      { projectCode, type: 'inspection', storedFileName: safeNewFileName }
+    )
+    if (existedRows.length) {
+      const prev = existedRows[0]
+      try {
+        const prevPath = getFileFullPath(prev.relativePath, prev.storedFileName)
+        if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath)
+      } catch (fileErr) {
+        console.warn('生成检验记录单时删除旧文件失败:', fileErr)
+      }
+      await query(`DELETE FROM 生产任务附件 WHERE 附件ID = @id`, { id: Number(prev.id) })
+    }
+
+    await fsp.writeFile(finalFile, generatedBuffer)
+
+    const storedFileName = safeNewFileName
+    const relativePath = finalRelativeDir
+    const fileSize = generatedBuffer.length
+    const contentType = DOCX_CONTENT_TYPE
+    const originalName = templateBaseName
+
+    const inserted = await query(
+      `
+      INSERT INTO 生产任务附件 (
+        项目编号,
+        附件类型,
+        附件标签,
+        原始文件名,
+        存储文件名,
+        相对路径,
+        文件大小,
+        内容类型,
+        上传人
+      )
+      OUTPUT
+        INSERTED.附件ID as id,
+        INSERTED.上传时间 as uploadedAt
+      VALUES (
+        @projectCode,
+        @type,
+        @tag,
+        @originalName,
+        @storedFileName,
+        @relativePath,
+        @fileSize,
+        @contentType,
+        @uploadedBy
+      )
+    `,
+      {
+        projectCode,
+        type: 'inspection',
+        tag: null,
+        originalName,
+        storedFileName,
+        relativePath,
+        fileSize,
+        contentType,
+        uploadedBy
+      }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      message: '生成模具检验记录单成功',
+      data: {
+        id: inserted?.[0]?.id,
+        projectCode,
+        type: 'inspection',
+        tag: null,
+        originalName,
+        storedFileName,
+        relativePath,
+        fileSize,
+        contentType,
+        uploadedAt: inserted?.[0]?.uploadedAt
+      }
+    })
+  } catch (error) {
+    console.error('生成模具检验记录单失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '生成模具检验记录单失败',
       error: error.message
     })
   }
