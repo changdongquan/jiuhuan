@@ -962,7 +962,7 @@ if [ -z "$TARGET_VERSION" ]; then
 
   select_from_branch_commits() {
     local branches branch_name commits
-    mapfile -t branches < <(git branch -r | grep -v HEAD | sed 's/origin\///')
+    mapfile -t branches < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v '^HEAD$')
     if [ "${#branches[@]}" -eq 0 ]; then
       echo "ERROR: 未找到远程分支"
       return 1
