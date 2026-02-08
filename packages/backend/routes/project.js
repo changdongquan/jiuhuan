@@ -1519,9 +1519,6 @@ router.get('/detail', async (req, res) => {
     }
 
     const detail = result[0]
-    console.log('[项目详情] 项目编号:', projectCode)
-    console.log('[项目详情] 零件图示URL:', detail.零件图示URL)
-    console.log('[项目详情] 所有字段:', Object.keys(detail))
 
     res.json({
       code: 0,
