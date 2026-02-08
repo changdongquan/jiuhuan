@@ -1183,7 +1183,6 @@ const ensureTrialProcessTables = async () => {
 // 获取项目统计信息（需要在其他路由之前定义）
 router.get('/statistics', async (req, res) => {
   try {
-    console.log('[项目统计] 开始查询')
     const queryString = `
       WITH proj AS (
         SELECT 项目编号, 项目状态
@@ -1231,9 +1230,7 @@ router.get('/statistics', async (req, res) => {
       LEFT JOIN goods ON goods.项目编号 = proj.项目编号
     `
 
-    console.log('[项目统计] 执行查询:', queryString)
     const result = await query(queryString)
-    console.log('[项目统计] 查询成功，结果:', result?.[0])
 
     res.json({
       code: 0,
@@ -1254,7 +1251,6 @@ router.get('/statistics', async (req, res) => {
 // 获取项目信息列表
 router.get('/list', async (req, res) => {
   try {
-    console.log('[项目列表] 开始查询，参数:', req.query)
     const { keyword, status, category, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
     let whereConditions = []
@@ -1391,9 +1387,7 @@ router.get('/list', async (req, res) => {
       FETCH NEXT ${pageSizeNum} ROWS ONLY
     `
 
-    console.log('[项目列表] 执行查询:', dataQuery.substring(0, 200))
     const data = await query(dataQuery, params)
-    console.log('[项目列表] 查询成功，返回', data?.length || 0, '条记录')
     // 解决 p.* 与格式化列重名导致的数组问题：用格式化后的值覆盖
     const mapped = (data || []).map((row) => {
       if (row && row['图纸下发日期_fmt'] !== undefined) {
