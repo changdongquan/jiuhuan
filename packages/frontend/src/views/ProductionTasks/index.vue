@@ -605,6 +605,13 @@
                       </el-form-item>
                     </el-col>
                   </el-row>
+                  <el-row :gutter="isMobile ? 8 : 20">
+                    <el-col :xs="24" :sm="12" :lg="8">
+                      <el-form-item label="工时合计">
+                        <el-input :model-value="hoursTotalDisplay" disabled />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
                 </div>
               </el-tab-pane>
 
@@ -1888,7 +1895,8 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { label: '机加工时', value: formatValue(dialogForm.机加工时) },
     { label: '抛光工时', value: formatValue(dialogForm.抛光工时) },
     { label: '装配工时', value: formatValue(dialogForm.装配工时) },
-    { label: '试模工时', value: formatValue(dialogForm.试模工时) }
+    { label: '试模工时', value: formatValue(dialogForm.试模工时) },
+    { label: '工时合计', value: hoursTotalDisplay.value }
   ]
 
   return [
@@ -1898,6 +1906,36 @@ const viewDetailSections = computed<DetailSection[]>(() => {
     { title: '工时信息', items: hoursInfo }
   ]
 })
+
+const hoursTotal = computed<number | null>(() => {
+  if (!dialogForm) return null
+  const fields = [
+    dialogForm.电极加工工时,
+    dialogForm.加工中心工时,
+    dialogForm.线切割工时,
+    dialogForm.放电工时,
+    dialogForm.机加工时,
+    dialogForm.抛光工时,
+    dialogForm.装配工时,
+    dialogForm.试模工时
+  ]
+  let hasValue = false
+  let total = 0
+  fields.forEach((value) => {
+    if (value !== null && value !== undefined) {
+      hasValue = true
+      const numberValue = Number(value)
+      if (!Number.isNaN(numberValue)) {
+        total += numberValue
+      }
+    }
+  })
+  return hasValue ? Number(total.toFixed(1)) : null
+})
+
+const hoursTotalDisplay = computed(() =>
+  hoursTotal.value === null ? '-' : String(hoursTotal.value)
+)
 
 // 校验：结束日期不得早于开始日期；当状态为“已完成”时，相关字段必须填写
 const validateStartDate = (_rule: any, value: any, callback: any) => {
@@ -2194,6 +2232,7 @@ const submitDialogForm = async () => {
   try {
     // 过滤掉只读字段
     const { 项目编号, productName, productDrawing, 客户模号, ...updateData } = dialogForm
+    updateData.合计工时 = hoursTotal.value ?? undefined
 
     await updateProductionTaskApi(currentProjectCode.value, updateData)
     ElMessage.success('更新成功')

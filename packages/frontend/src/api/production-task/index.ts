@@ -23,6 +23,7 @@ export interface ProductionTaskInfo {
   加工中心工时?: number
   线切割工时?: number
   抛光工时?: number
+  合计工时?: number
   productName?: string // 产品名称（从货物信息表获取）
   productDrawing?: string // 产品图号（从货物信息表获取）
   客户模号?: string // 客户模号（从项目管理表获取）

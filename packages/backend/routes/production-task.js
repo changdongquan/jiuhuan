@@ -28,6 +28,32 @@ const normalizeAttachmentFileName = (name) => {
   }
 }
 
+const computeTotalHours = (hours) => {
+  const fields = [
+    '电极加工工时',
+    '加工中心工时',
+    '线切割工时',
+    '放电工时',
+    '机加工时',
+    '抛光工时',
+    '装配工时',
+    '试模工时'
+  ]
+  let hasValue = false
+  let total = 0
+  fields.forEach((field) => {
+    const value = hours ? hours[field] : null
+    if (value !== null && value !== undefined && value !== '') {
+      hasValue = true
+      const numberValue = Number(value)
+      if (!Number.isNaN(numberValue)) {
+        total += numberValue
+      }
+    }
+  })
+  return hasValue ? Number(total.toFixed(1)) : null
+}
+
 // 根据项目编号获取分类名称
 const getCategoryFromProjectCode = (projectCode) => {
   if (!projectCode) return '其他'
@@ -337,6 +363,7 @@ router.get('/list', async (req, res) => {
         pt.装配工时,
         pt.加工中心工时,
         pt.线切割工时,
+        pt.合计工时,
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
         p.客户模号 as 客户模号,
@@ -446,6 +473,7 @@ router.get('/detail', async (req, res) => {
         pt.装配工时,
         pt.加工中心工时,
         pt.线切割工时,
+        pt.合计工时,
         g.产品名称 as productName,
         g.产品图号 as productDrawing,
         p.客户模号 as 客户模号,
@@ -877,6 +905,46 @@ router.put('/update', async (req, res) => {
       })
     }
 
+    const hourFields = [
+      '电极加工工时',
+      '加工中心工时',
+      '线切割工时',
+      '放电工时',
+      '机加工时',
+      '抛光工时',
+      '装配工时',
+      '试模工时'
+    ]
+    const hasHourUpdate =
+      hourFields.some((field) => Object.prototype.hasOwnProperty.call(data, field)) ||
+      Object.prototype.hasOwnProperty.call(data, '合计工时')
+    if (hasHourUpdate) {
+      const currentRows = await query(
+        `
+        SELECT
+          电极加工工时,
+          加工中心工时,
+          线切割工时,
+          放电工时,
+          机加工时,
+          抛光工时,
+          装配工时,
+          试模工时
+        FROM 生产任务
+        WHERE 项目编号 = @projectCode
+        `,
+        { projectCode }
+      )
+      const currentHours = currentRows[0] || {}
+      const mergedHours = { ...currentHours }
+      hourFields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(data, field)) {
+          mergedHours[field] = data[field]
+        }
+      })
+      data.合计工时 = computeTotalHours(mergedHours)
+    }
+
     // 构建动态更新字段
     const updates = []
     const params = { projectCode }
@@ -900,7 +968,8 @@ router.put('/update', async (req, res) => {
       '机加工时',
       '装配工时',
       '加工中心工时',
-      '线切割工时'
+      '线切割工时',
+      '合计工时'
     ]
 
     Object.keys(data).forEach((key) => {

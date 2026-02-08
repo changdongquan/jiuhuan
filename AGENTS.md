@@ -54,6 +54,24 @@
   - **只提交本需求相关文件**；如工作区还有无关改动（例如 `.gitignore`、`package.json`、其它页面样式等），必须拆分到另一个明确的提交，或直接还原。
   - 尽量做到“一件事一个 commit”（或一组强相关 commit）。
 
+## 数据库迁移（执行规范）
+
+> 目标：迁移执行方式与后端一致，避免环境差异导致失败。
+
+- 优先使用 **Node + mssql** 执行迁移（与后端运行时一致）。
+- 迁移脚本来源：`packages/backend/migrations/`。
+- 本机 DNS/网络不稳定时，改在 `ssh jiuhuan` 上执行。
+- 不使用 `nc/ping` 作为 DB 可达性判断依据（本机可能被限制）。
+- 推荐执行方式（示例）：
+  - 本机执行示例：
+```bash
+node -e "const fs=require('fs');const path='packages/backend/migrations/<file>.sql';const {query,closeDatabase}=require('./packages/backend/database');const sql=fs.readFileSync(path,'utf8');const batches=sql.split(/^\\s*GO\\s*$/gmi).map(s=>s.trim()).filter(Boolean);(async()=>{for(const b of batches){await query(b);}await closeDatabase();console.log('✅ migration executed:', path);})().catch(async e=>{console.error('❌ migration failed:', e.message||e);try{await closeDatabase();}catch{}process.exit(1);});"
+```
+  - 远端执行示例（`ssh jiuhuan`）：
+```bash
+ssh jiuhuan "node -e \"const fs=require('fs');const path='/opt/jh-craftsys/source/packages/backend/migrations/<file>.sql';const {query,closeDatabase}=require('/opt/jh-craftsys/source/packages/backend/database');const sql=fs.readFileSync(path,'utf8');const batches=sql.split(/^\\\\s*GO\\\\s*$/gmi).map(s=>s.trim()).filter(Boolean);(async()=>{for(const b of batches){await query(b);}await closeDatabase();console.log('✅ migration executed:', path);})().catch(async e=>{console.error('❌ migration failed:', e.message||e);try{await closeDatabase();}catch{}process.exit(1);});\""
+```
+
 ## 部署（jiuhuan）
 
 > 目标：统一部署入口，减少跑错脚本/漏验收。
