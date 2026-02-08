@@ -23,10 +23,6 @@ const INSPECTION_TEMPLATE_PATH = path.resolve(
   __dirname,
   '../templates/production-task/塑胶模具检验记录单.docx'
 )
-const INSPECTION_TEMPLATE_DEFAULT_PATH = path.resolve(
-  __dirname,
-  '../templates/production-task/塑胶模具检验记录单_副本.docx'
-)
 const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 const normalizeAttachmentFileName = (name) => {
@@ -284,47 +280,93 @@ const decodeXmlEntities = (text) => {
     .replace(/&apos;/g, "'")
 }
 
-const extractDefaultResultChoiceList = (xml) => {
-  if (!xml) return []
-  const rows = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
-  const results = []
-  rows.forEach((row) => {
-    const plain = decodeXmlEntities(String(row).replace(/<[^>]+>/g, ' '))
-    const normalized = plain.replace(/\s+/g, '')
-    if (!normalized.includes('是【') || !normalized.includes('】')) return
-    if (normalized.includes('是【/】')) {
-      results.push('yes')
-      return
-    }
-    if (normalized.includes('否【/】')) {
-      results.push('no')
-      return
-    }
-    if (normalized.includes('无【/】')) {
-      results.push('none')
-    }
-  })
-  return results
-}
-
-const buildDefaultResultChoiceMap = (templateXml, defaultXml) => {
-  const map = {}
-  if (!templateXml || !defaultXml) return map
-
-  const templateRows = templateXml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
-  const defaultResults = extractDefaultResultChoiceList(defaultXml)
-
-  let defaultIndex = 0
-  templateRows.forEach((row) => {
-    const m = row.match(/\{\{检验结果_(\d+)(?::[^}]+)?\}\}/)
-    if (!m) return
-    const seq = m[1]
-    if (defaultIndex >= defaultResults.length) return
-    map[seq] = defaultResults[defaultIndex]
-    defaultIndex += 1
-  })
-
-  return map
+const DEFAULT_INSPECTION_RESULT_MAP = {
+  '1': 'yes',
+  '2': 'yes',
+  '3': 'yes',
+  '4': 'none',
+  '5': 'yes',
+  '6': 'yes',
+  '7': 'yes',
+  '8': 'no',
+  '9': 'yes',
+  '10': 'no',
+  '11': 'yes',
+  '12': 'yes',
+  '13': 'yes',
+  '14': 'yes',
+  '15': 'yes',
+  '16': 'none',
+  '17': 'yes',
+  '18': 'yes',
+  '19': 'yes',
+  '20': 'yes',
+  '21': 'yes',
+  '22': 'yes',
+  '23': 'yes',
+  '24': 'yes',
+  '25': 'yes',
+  '26': 'yes',
+  '27': 'yes',
+  '28': 'yes',
+  '29': 'yes',
+  '30': 'yes',
+  '31': 'yes',
+  '32': 'none',
+  '33': 'none',
+  '34': 'none',
+  '35': 'none',
+  '36': 'none',
+  '37': 'none',
+  '38': 'yes',
+  '39': 'yes',
+  '40': 'yes',
+  '41': 'yes',
+  '42': 'yes',
+  '43': 'yes',
+  '44': 'yes',
+  '45': 'yes',
+  '46': 'none',
+  '47': 'none',
+  '48': 'none',
+  '49': 'none',
+  '50': 'none',
+  '51': 'none',
+  '52': 'none',
+  '53': 'none',
+  '54': 'none',
+  '55': 'yes',
+  '56': 'yes',
+  '57': 'yes',
+  '58': 'no',
+  '59': 'yes',
+  '60': 'no',
+  '61': 'yes',
+  '62': 'yes',
+  '63': 'yes',
+  '64': 'yes',
+  '65': 'yes',
+  '66': 'yes',
+  '67': 'none',
+  '68': 'no',
+  '69': 'yes',
+  '70': 'yes',
+  '71': 'yes',
+  '72': 'none',
+  '73': 'yes',
+  '74': 'yes',
+  '75': 'none',
+  '76': 'yes',
+  '77': 'yes',
+  '78': 'none',
+  '79': 'yes',
+  '80': 'yes',
+  '81': 'yes',
+  '82': 'yes',
+  '83': 'yes',
+  '84': 'yes',
+  '85': 'yes',
+  '86': 'yes'
 }
 
 const extractInspectionItemsFromTemplateXml = (xml) => {
@@ -1058,26 +1100,7 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
     }
 
     const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
-    let defaultMap = null
-    try {
-      const defaultBuffer = await fsp.readFile(INSPECTION_TEMPLATE_DEFAULT_PATH)
-      const defaultZip = await JSZip.loadAsync(defaultBuffer)
-      const defaultDoc = defaultZip.file('word/document.xml')
-      const templateZip = await JSZip.loadAsync(templateBuffer)
-      const templateDoc = templateZip.file('word/document.xml')
-      if (defaultDoc && templateDoc) {
-        const [defaultXml, templateXml] = await Promise.all([
-          defaultDoc.async('string'),
-          templateDoc.async('string')
-        ])
-      defaultMap = buildDefaultResultChoiceMap(templateXml, defaultXml)
-      }
-    } catch (e) {
-      console.warn('读取默认检验结果模板失败:', e)
-    }
-    if (!defaultMap || Object.keys(defaultMap).length === 0) {
-      console.warn('默认检验结果映射为空，未能应用默认勾选')
-    }
+    const defaultMap = DEFAULT_INSPECTION_RESULT_MAP
 
     const generatedBuffer = await renderDocxTemplate(
       templateBuffer,
