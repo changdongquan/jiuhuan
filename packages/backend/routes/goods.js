@@ -1,6 +1,8 @@
 const express = require('express')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
+const { resolveActorFromReq } = require('../utils/actor')
+const { softDeleteByProjectCode, restoreByProjectCode, SOFT_DELETED } = require('../services/projectSoftDelete')
 const router = express.Router()
 
 // 获取新品货物列表（IsNew=1）
@@ -20,7 +22,9 @@ router.get('/new-products', async (req, res) => {
       FROM 货物信息 g
       INNER JOIN 项目管理 p ON g.项目编号 = p.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
-      WHERE g.IsNew = 1 AND g.项目编号 IS NOT NULL AND g.项目编号 != ''
+      WHERE g.IsNew = 1
+        AND g.项目编号 IS NOT NULL AND g.项目编号 != ''
+        AND (g.状态 IS NULL OR g.状态 <> N'${SOFT_DELETED}')
       -- 按项目编号正序排列，确保“从新品中选择”弹窗中项目编号从小到大显示
       ORDER BY g.项目编号 ASC, g.货物ID ASC
     `
@@ -51,6 +55,7 @@ router.get('/list', async (req, res) => {
       keyword,
       customerName,
       category,
+      status,
       page = 1,
       pageSize = 10,
       sortField,
@@ -77,6 +82,21 @@ router.get('/list', async (req, res) => {
     if (category) {
       whereConditions.push(`g.分类 = @category`)
       params.category = category
+    }
+
+    // 软删过滤：
+    // - 默认不返回已删除
+    // - status=已删除 仅返回已删除
+    // - status=all 返回全部
+    const statusText = String(status || '').trim()
+    if (statusText === SOFT_DELETED) {
+      whereConditions.push(`g.状态 = @status`)
+      params.status = SOFT_DELETED
+    } else if (statusText && statusText !== 'all') {
+      whereConditions.push(`g.状态 = @status`)
+      params.status = statusText
+    } else if (statusText !== 'all') {
+      whereConditions.push(`(g.状态 IS NULL OR g.状态 <> N'${SOFT_DELETED}')`)
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -120,6 +140,7 @@ router.get('/list', async (req, res) => {
         g.产品名称 as productName,
         g.分类 as category,
         g.备注 as remarks,
+        g.状态 as status,
         c.客户名称 as customerName,
         p.客户模号 as customerModelNo
       FROM 货物信息 g
@@ -166,6 +187,7 @@ router.get('/:id', async (req, res) => {
         g.产品名称 as productName,
         g.分类 as category,
         g.备注 as remarks,
+        g.状态 as status,
         c.客户名称 as customerName,
         p.客户模号 as customerModelNo
       FROM 货物信息 g
@@ -195,6 +217,48 @@ router.get('/:id', async (req, res) => {
       message: '获取货物信息失败',
       error: error.message
     })
+  }
+})
+
+// 批量删除货物信息（软删整套项目）
+// 注意：必须放在 /:id 之前，否则会被当作 id 路由命中
+router.delete('/batch', async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ code: 400, success: false, message: '请提供有效的ID列表' })
+    }
+
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const getReq = new sql.Request(tx)
+      const placeholders = ids.map((_, i) => `@id${i}`).join(', ')
+      ids.forEach((v, i) => getReq.input(`id${i}`, sql.Int, parseInt(v, 10)))
+      const rows = await getReq.query(`
+        SELECT DISTINCT 项目编号 as projectCode
+        FROM 货物信息
+        WHERE 货物ID IN (${placeholders})
+          AND 项目编号 IS NOT NULL AND 项目编号 <> ''
+      `)
+      const codes = Array.from(new Set((rows.recordset || []).map((r) => String(r.projectCode || '').trim()).filter(Boolean)))
+      for (const projectCode of codes) {
+        await softDeleteByProjectCode({ pool, tx, projectCode, actor })
+      }
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
+
+    res.json({ code: 0, success: true, message: '批量删除成功（已软删除）' })
+  } catch (error) {
+    console.error('批量删除货物信息失败:', error)
+    res.status(500).json({ code: 500, success: false, message: '批量删除失败', error: error.message })
   }
 })
 
@@ -507,63 +571,47 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// 删除货物信息
+// 删除货物信息（软删整套项目：货物信息 + 项目管理 + 生产任务 + 单据 + 附件）
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const actor = resolveActorFromReq(req)
     const pool = await getPool()
 
-    // 首先获取要删除的货物信息的项目编号
-    const getProjectCodeRequest = pool.request()
-    getProjectCodeRequest.input('id', sql.Int, parseInt(id))
-    const goodsResult = await getProjectCodeRequest.query(`
-      SELECT 项目编号 
-      FROM 货物信息 
-      WHERE 货物ID = @id
-    `)
-
-    if (goodsResult.recordset.length === 0) {
-      return res.status(404).json({
-        code: 404,
-        success: false,
-        message: '货物信息不存在'
-      })
-    }
-
-    const projectCode = goodsResult.recordset[0].项目编号
-
-    // 检查该项目编号是否在生产任务表中存在（外键约束）
-    if (projectCode) {
-      const checkProductionTaskRequest = pool.request()
-      checkProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
-      const productionTaskResult = await checkProductionTaskRequest.query(`
-        SELECT COUNT(*) as count 
-        FROM 生产任务 
-        WHERE 项目编号 = @projectCode
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const getReq = new sql.Request(tx)
+      getReq.input('id', sql.Int, parseInt(id, 10))
+      const goodsResult = await getReq.query(`
+        SELECT TOP 1 项目编号, 状态
+        FROM 货物信息
+        WHERE 货物ID = @id
       `)
-
-      if (productionTaskResult.recordset[0].count > 0) {
-        // 如果存在生产任务记录，需要先删除生产任务记录（因为外键约束）
-        // 或者给出明确的错误提示
-        const deleteProductionTaskRequest = pool.request()
-        deleteProductionTaskRequest.input('projectCode', sql.NVarChar, projectCode)
-        await deleteProductionTaskRequest.query(`
-          DELETE FROM 生产任务 
-          WHERE 项目编号 = @projectCode
-        `)
-        console.log(`[删除] 已删除生产任务记录，项目编号: ${projectCode}`)
+      if (!goodsResult.recordset || goodsResult.recordset.length === 0) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '货物信息不存在' })
       }
-    }
 
-    // 删除货物信息
-    const deleteRequest = pool.request()
-    deleteRequest.input('id', sql.Int, parseInt(id))
-    await deleteRequest.query(`DELETE FROM 货物信息 WHERE 货物ID = @id`)
+      const projectCode = String(goodsResult.recordset[0].项目编号 || '').trim()
+      if (!projectCode) {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '记录缺少项目编号，无法删除' })
+      }
+
+      await softDeleteByProjectCode({ pool, tx, projectCode, actor })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
 
     res.json({
       code: 0,
       success: true,
-      message: '删除货物信息成功'
+      message: '删除成功（已软删除）'
     })
   } catch (error) {
     console.error('删除货物信息失败:', error)
@@ -591,84 +639,34 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// 批量删除货物信息
-router.delete('/batch', async (req, res) => {
+// 恢复整套项目（按项目编号）
+router.post('/restore', async (req, res) => {
   try {
-    const { ids } = req.body
-
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '请提供有效的ID列表'
-      })
-    }
+    const { projectCode } = req.body || {}
+    const code = String(projectCode || '').trim()
+    if (!code) return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
 
     const pool = await getPool()
-
-    // 首先获取要删除的所有货物信息的项目编号
-    const placeholders = ids.map((_, index) => `@id${index}`).join(',')
-    const getProjectCodesRequest = pool.request()
-    ids.forEach((id, index) => {
-      getProjectCodesRequest.input(`id${index}`, sql.Int, parseInt(id))
-    })
-    const goodsResult = await getProjectCodesRequest.query(`
-      SELECT DISTINCT 项目编号 
-      FROM 货物信息 
-      WHERE 货物ID IN (${placeholders}) AND 项目编号 IS NOT NULL AND 项目编号 != ''
-    `)
-
-    // 删除相关的生产任务记录（如果存在）
-    if (goodsResult.recordset.length > 0) {
-      const projectCodes = goodsResult.recordset.map((row) => row.项目编号).filter(Boolean)
-      if (projectCodes.length > 0) {
-        const projectCodePlaceholders = projectCodes.map((_, index) => `@pc${index}`).join(',')
-        const deleteProductionTaskRequest = pool.request()
-        projectCodes.forEach((projectCode, index) => {
-          deleteProductionTaskRequest.input(`pc${index}`, sql.NVarChar, projectCode)
-        })
-        await deleteProductionTaskRequest.query(`
-          DELETE FROM 生产任务 
-          WHERE 项目编号 IN (${projectCodePlaceholders})
-        `)
-        console.log(`[批量删除] 已删除 ${projectCodes.length} 条生产任务记录`)
-      }
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await restoreByProjectCode({ pool, tx, projectCode: code })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
     }
 
-    // 删除货物信息
-    const deleteRequest = pool.request()
-    ids.forEach((id, index) => {
-      deleteRequest.input(`id${index}`, sql.Int, parseInt(id))
-    })
-    await deleteRequest.query(`DELETE FROM 货物信息 WHERE 货物ID IN (${placeholders})`)
-
-    res.json({
-      code: 0,
-      success: true,
-      message: '批量删除货物信息成功'
-    })
+    res.json({ code: 0, success: true, message: '恢复成功' })
   } catch (error) {
-    console.error('批量删除货物信息失败:', error)
-    console.error('错误详情:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      number: error.number,
-      originalError: error.originalError
-    })
+    console.error('恢复项目失败:', error)
     res.status(500).json({
       code: 500,
       success: false,
-      message: '批量删除货物信息失败',
-      error: error.message || '未知错误',
-      details:
-        process.env.NODE_ENV === 'development'
-          ? {
-              code: error.code,
-              number: error.number,
-              originalError: error.originalError
-            }
-          : undefined
+      message: '恢复失败',
+      error: error.message || '未知错误'
     })
   }
 })

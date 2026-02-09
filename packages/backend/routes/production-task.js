@@ -6,6 +6,7 @@ const fs = require('fs')
 const fsp = fs.promises
 const multer = require('multer')
 const JSZip = require('jszip')
+const { resolveActorFromReq } = require('../utils/actor')
 
 // 生产任务附件存储配置
 // 使用统一文件根目录配置，生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -166,7 +167,7 @@ const getProjectCodeParam = (req) =>
 
 const assertProjectExists = async (projectCode) => {
   const rows = await query(
-    `SELECT TOP 1 项目编号 as projectCode FROM 生产任务 WHERE 项目编号 = @projectCode`,
+    `SELECT TOP 1 项目编号 as projectCode FROM 生产任务 WHERE 项目编号 = @projectCode AND (状态 IS NULL OR 状态 <> N'已删除')`,
     {
       projectCode
     }
@@ -184,6 +185,7 @@ const getProjectMaterialInfo = async (projectCode) => {
         后模材质 as backMaterial
       FROM 项目管理
       WHERE 项目编号 = @projectCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
     { projectCode }
   )
@@ -523,6 +525,16 @@ const ensureTaskAttachmentsTable = async () => {
     BEGIN
       ALTER TABLE dbo.生产任务附件 ADD 附件标签 NVARCHAR(20) NULL;
     END
+
+    -- Soft delete columns
+    IF COL_LENGTH(N'dbo.生产任务附件', N'状态') IS NULL
+      ALTER TABLE dbo.生产任务附件 ADD 状态 NVARCHAR(20) NULL;
+    IF COL_LENGTH(N'dbo.生产任务附件', N'删除前状态') IS NULL
+      ALTER TABLE dbo.生产任务附件 ADD 删除前状态 NVARCHAR(20) NULL;
+    IF COL_LENGTH(N'dbo.生产任务附件', N'删除时间') IS NULL
+      ALTER TABLE dbo.生产任务附件 ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'dbo.生产任务附件', N'删除人') IS NULL
+      ALTER TABLE dbo.生产任务附件 ADD 删除人 NVARCHAR(100) NULL;
   `)
 }
 
@@ -582,6 +594,9 @@ router.get('/list', async (req, res) => {
     let whereConditions = []
     let params = {}
 
+    // 软删过滤：默认不显示已删除记录
+    whereConditions.push(`(pt.状态 IS NULL OR pt.状态 <> N'已删除')`)
+
     // 构建查询条件
     if (keyword) {
       whereConditions.push(`(
@@ -618,8 +633,8 @@ router.get('/list', async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM 生产任务 pt
-      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
-      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
+      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       ${whereClause}
     `
     const countResult = await query(countQuery, params)
@@ -660,8 +675,8 @@ router.get('/list', async (req, res) => {
         CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
         p.计划首样日期 as 计划首样日期
       FROM 生产任务 pt
-      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
-      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
+      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       ${whereClause}
       ${buildOrderByClause(sortField, sortOrder)}
       OFFSET ${offset} ROWS
@@ -718,7 +733,8 @@ router.get('/statistics', async (req, res) => {
           END
         ) as partsProcessing
       FROM 生产任务 pt
-      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
+      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      WHERE (pt.状态 IS NULL OR pt.状态 <> N'已删除')
     `
     const result = await query(statisticsQuery)
     const stats = result[0] || {}
@@ -798,9 +814,10 @@ router.get('/detail', async (req, res) => {
         CONVERT(varchar(10), p.图纸下发日期, 23) as 图纸下发日期,
         p.计划首样日期 as 计划首样日期
       FROM 生产任务 pt
-      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1
-      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号
+      LEFT JOIN 货物信息 g ON pt.项目编号 = g.项目编号 AND CAST(g.IsNew AS INT) != 1 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      LEFT JOIN 项目管理 p ON pt.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       WHERE pt.项目编号 = @projectCode
+        AND (pt.状态 IS NULL OR pt.状态 <> N'已删除')
     `
 
     const result = await query(queryString, { projectCode })
@@ -1291,6 +1308,7 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
         上传人 as uploadedBy
       FROM 生产任务附件
       WHERE 项目编号 = @projectCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ${whereType}
       ORDER BY 上传时间 DESC, 附件ID DESC
     `,
@@ -1327,6 +1345,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
         相对路径 as relativePath
       FROM 生产任务附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -1369,6 +1388,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
         相对路径 as relativePath
       FROM 生产任务附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -1376,18 +1396,22 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
     }
 
-    const att = rows[0]
-    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
-
-    await query(`DELETE FROM 生产任务附件 WHERE 附件ID = @attachmentId`, { attachmentId })
-
-    try {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (fileErr) {
-      console.warn('删除附件文件失败（已删除数据库记录）:', fileErr)
-    }
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 生产任务附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
 
     res.json({ code: 0, success: true, message: '删除成功' })
   } catch (error) {

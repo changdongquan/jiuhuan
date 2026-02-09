@@ -6,6 +6,7 @@ const { query, getPool } = require('../database')
 const sql = require('mssql')
 const router = express.Router()
 const fsp = fs.promises
+const { resolveActorFromReq } = require('../utils/actor')
 
 // 销售订单附件存储配置
 // 生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -257,7 +258,8 @@ router.get('/list', async (req, res) => {
     const params = {}
 
     // 构建 WHERE 条件，注意所有条件字段都需要使用表别名 so.
-    let whereConditionsWithAlias = []
+    // 软删过滤：默认不显示已删除记录
+    let whereConditionsWithAlias = [`(so.状态 IS NULL OR so.状态 <> N'已删除')`]
 
     if (customerId) {
       whereConditionsWithAlias.push('so.客户ID = @customerId')
@@ -357,8 +359,8 @@ router.get('/list', async (req, res) => {
         p.客户模号 as customerPartNo,
         c.客户名称 as customerName
       FROM 销售订单 so
-      LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号
-      LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号
+      LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       LEFT JOIN 客户信息 c ON so.客户ID = c.客户ID
       ${whereClause}
       ORDER BY so.订单日期 DESC, so.订单ID DESC
@@ -481,9 +483,10 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
         g.产品图号 as productDrawingNo,
         p.客户模号 as customerPartNo
       FROM 销售订单 so
-      LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号
-      LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号
+      LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       WHERE so.订单编号 = @orderNo
+        AND (so.状态 IS NULL OR so.状态 <> N'已删除')
       ORDER BY so.订单ID
     `
 
@@ -597,6 +600,7 @@ router.get('/statistics', async (req, res) => {
         -- 待出运（已入库但未出运的数量）
         SUM(CASE WHEN 是否入库 = 1 AND 是否出运 = 0 THEN 数量 ELSE 0 END) as pendingShipped
       FROM 销售订单
+      WHERE (状态 IS NULL OR 状态 <> N'已删除')
     `
 
     const result = await query(queryString, {
@@ -647,6 +651,7 @@ router.get('/:id', async (req, res) => {
         出运日期 as shippingDate
       FROM 销售订单 
       WHERE 订单ID = @id
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `
 
     const result = await query(queryString, { id: parseInt(id) })
@@ -1056,6 +1061,7 @@ router.delete('/delete/:orderNo', async (req, res) => {
       SELECT COUNT(*) as count 
       FROM 销售订单 
       WHERE 订单编号 = @orderNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `
     const checkResult = await query(checkQuery, { orderNo })
 
@@ -1067,18 +1073,47 @@ router.delete('/delete/:orderNo', async (req, res) => {
       })
     }
 
-    // 删除该订单号下的所有明细记录
-    const deleteQuery = `
-      DELETE FROM 销售订单 
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 销售订单
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
       WHERE 订单编号 = @orderNo
-    `
+      `,
+      { orderNo, actor }
+    )
 
-    await query(deleteQuery, { orderNo })
+    // 软删附件（按订单编号）
+    await query(
+      `
+      IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
+      BEGIN
+        UPDATE dbo.销售订单附件
+        SET
+          删除前状态 = CASE
+            WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+            ELSE 删除前状态
+          END,
+          状态 = N'已删除',
+          删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+          删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+        WHERE 订单编号 = @orderNo
+      END
+      `,
+      { orderNo, actor }
+    )
 
     res.json({
       code: 0,
       success: true,
-      message: '删除销售订单成功'
+      message: '删除销售订单成功（已软删除）'
     })
   } catch (error) {
     console.error('删除销售订单失败:', error)
@@ -1299,6 +1334,7 @@ router.post(
           项目编号 as itemCode
         FROM 销售订单
         WHERE 订单ID = @detailId
+          AND (状态 IS NULL OR 状态 <> N'已删除')
       `,
         { detailId: numericDetailId }
       )
@@ -1481,6 +1517,7 @@ router.get('/:orderNo/details/:detailId/attachments', async (req, res) => {
       FROM 销售订单附件
       WHERE 订单ID = @detailId
         AND 订单编号 = @orderNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ORDER BY 上传时间 DESC, 附件ID DESC
     `,
       { detailId: numericDetailId, orderNo }
@@ -1521,6 +1558,7 @@ router.get('/:orderNo/attachments/summary', async (req, res) => {
         COUNT(*) as attachmentCount
       FROM 销售订单附件
       WHERE 订单编号 = @orderNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       GROUP BY 订单ID
     `,
       { orderNo }
@@ -1564,6 +1602,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
         内容类型 as contentType
       FROM 销售订单附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -1627,6 +1666,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
         相对路径 as relativePath
       FROM 销售订单附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -1639,31 +1679,27 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
       })
     }
 
-    const attachment = rows[0]
-    const fullPath = path.join(FILE_ROOT, attachment.relativePath, attachment.storedFileName)
-
-    try {
-      await fs.promises.unlink(fullPath)
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        console.error('删除附件文件失败:', err)
-      } else {
-        console.warn('附件文件不存在，直接删除数据库记录')
-      }
-    }
-
+    const actor = resolveActorFromReq(req)
     await query(
       `
-      DELETE FROM 销售订单附件
+      UPDATE 销售订单附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
       WHERE 附件ID = @attachmentId
-    `,
-      { attachmentId }
+      `,
+      { attachmentId, actor }
     )
 
     res.json({
       code: 0,
       success: true,
-      message: '删除附件成功'
+      message: '删除附件成功（已软删除）'
     })
   } catch (error) {
     console.error('删除销售订单附件失败:', error)

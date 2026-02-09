@@ -13,6 +13,7 @@ const { promisify } = require('util')
 const { parseMouldTransferPdf, parseMouldTransferFromTokens } = require('../utils/pdf/mouldTransferPdfParser')
 const { pdfFirstPageToPngBuffer } = require('../utils/pdf/pdfToImage')
 const { ocrMouldTransferPng } = require('../utils/ocr/mouldTransferOcrClient')
+const { resolveActorFromReq } = require('../utils/actor')
 
 const execFileAsync = promisify(execFile)
 
@@ -373,6 +374,7 @@ const querySealSampleInspectionReportPdf = async (projectCode, productDrawing) =
     WHERE 项目编号 = @projectCode
       AND 附件类型 = N'inspection-report'
       AND 绑定产品图号 = @productDrawing
+      AND (状态 IS NULL OR 状态 <> N'已删除')
       AND (原始文件名 LIKE N'%.pdf' OR 内容类型 LIKE N'%pdf%')
     ORDER BY 上传时间 DESC, 附件ID DESC
     `,
@@ -391,6 +393,7 @@ const querySealSamplePartDrawingPdf = async (projectCode, productDrawing) => {
     WHERE 项目编号 = @projectCode
       AND 附件类型 = N'part-drawing'
       AND 绑定产品图号 = @productDrawing
+      AND (状态 IS NULL OR 状态 <> N'已删除')
       AND (原始文件名 LIKE N'%.pdf' OR 内容类型 LIKE N'%pdf%')
     ORDER BY 上传时间 DESC, 附件ID DESC
     `,
@@ -1017,6 +1020,21 @@ const ensureProjectAttachmentsTable = async () => {
       ON dbo.项目管理附件 (项目编号, 附件类型, 绑定产品图号, 绑定行序号, 是否孤儿, 上传时间 DESC, 附件ID DESC);
     END
   `)
+
+  // Soft delete columns
+  await query(`
+    IF OBJECT_ID(N'dbo.项目管理附件', N'U') IS NOT NULL
+    BEGIN
+      IF COL_LENGTH(N'dbo.项目管理附件', N'状态') IS NULL
+        ALTER TABLE dbo.项目管理附件 ADD 状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.项目管理附件', N'删除前状态') IS NULL
+        ALTER TABLE dbo.项目管理附件 ADD 删除前状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.项目管理附件', N'删除时间') IS NULL
+        ALTER TABLE dbo.项目管理附件 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'dbo.项目管理附件', N'删除人') IS NULL
+        ALTER TABLE dbo.项目管理附件 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `)
 }
 
 // === 试模过程（多次记录） ===
@@ -1178,6 +1196,35 @@ const ensureTrialProcessTables = async () => {
       END CATCH
     END
   `)
+
+  // Soft delete columns
+  await query(`
+    IF OBJECT_ID(N'dbo.试模过程', N'U') IS NOT NULL
+    BEGIN
+      IF COL_LENGTH(N'dbo.试模过程', N'状态') IS NULL
+        ALTER TABLE dbo.试模过程 ADD 状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.试模过程', N'删除前状态') IS NULL
+        ALTER TABLE dbo.试模过程 ADD 删除前状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.试模过程', N'删除时间') IS NULL
+        ALTER TABLE dbo.试模过程 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'dbo.试模过程', N'删除人') IS NULL
+        ALTER TABLE dbo.试模过程 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `)
+
+  await query(`
+    IF OBJECT_ID(N'dbo.试模过程附件', N'U') IS NOT NULL
+    BEGIN
+      IF COL_LENGTH(N'dbo.试模过程附件', N'状态') IS NULL
+        ALTER TABLE dbo.试模过程附件 ADD 状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.试模过程附件', N'删除前状态') IS NULL
+        ALTER TABLE dbo.试模过程附件 ADD 删除前状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'dbo.试模过程附件', N'删除时间') IS NULL
+        ALTER TABLE dbo.试模过程附件 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'dbo.试模过程附件', N'删除人') IS NULL
+        ALTER TABLE dbo.试模过程附件 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `)
 }
 
 // 获取项目统计信息（需要在其他路由之前定义）
@@ -1187,11 +1234,13 @@ router.get('/statistics', async (req, res) => {
       WITH proj AS (
         SELECT 项目编号, 项目状态
         FROM 项目管理
+        WHERE (状态 IS NULL OR 状态 <> N'已删除')
       ),
       goods AS (
         SELECT DISTINCT 项目编号, 分类
         FROM 货物信息
         WHERE CAST(IsNew AS INT) != 1
+          AND (状态 IS NULL OR 状态 <> N'已删除')
       )
       SELECT 
         COUNT(
@@ -1255,6 +1304,9 @@ router.get('/list', async (req, res) => {
 
     let whereConditions = []
     let params = {}
+
+    // 软删过滤：默认不显示已删除项目
+    whereConditions.push(`(p.状态 IS NULL OR p.状态 <> N'已删除')`)
 
     // 构建查询条件
     if (keyword) {
@@ -1442,6 +1494,7 @@ router.get('/goods', async (req, res) => {
       LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
       WHERE g.项目编号 = @projectCode
         AND (g.IsNew IS NULL OR CAST(g.IsNew AS INT) != 1)
+        AND (g.状态 IS NULL OR g.状态 <> N'已删除')
       ORDER BY g.货物ID
     `
 
@@ -1498,6 +1551,7 @@ router.get('/detail', async (req, res) => {
          ORDER BY g1.货物ID) as productDrawing
       FROM 项目管理 p 
       WHERE p.项目编号 = @projectCode
+        AND (p.状态 IS NULL OR p.状态 <> N'已删除')
     `
 
     const result = await query(queryString, { projectCode })
@@ -3269,6 +3323,7 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
         绑定产品图号 as drawing
       FROM 项目管理附件
       WHERE 项目编号 = @projectCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ${whereType}
       ORDER BY 上传时间 DESC, 附件ID DESC
     `,
@@ -3902,6 +3957,7 @@ router.get('/:projectCode(*)/trial-processes/:trialNo/trial-attachments', async 
         排序 as sortOrder
       FROM 试模过程附件
       WHERE 试模过程ID = @trialProcessId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ORDER BY ISNULL(排序, 999999) ASC, 上传时间 DESC, 附件ID DESC
     `,
       { trialProcessId: process.id }
@@ -4099,6 +4155,7 @@ router.get('/trial-process-attachments/:attachmentId/download', async (req, res)
         相对路径 as relativePath
       FROM 试模过程附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4143,6 +4200,7 @@ router.get('/trial-process-attachments/:attachmentId/preview', async (req, res) 
         内容类型 as contentType
       FROM 试模过程附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4188,6 +4246,7 @@ router.delete('/trial-process-attachments/:attachmentId', async (req, res) => {
         相对路径 as relativePath
       FROM 试模过程附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4195,19 +4254,24 @@ router.delete('/trial-process-attachments/:attachmentId', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
     }
 
-    const att = rows[0]
-    await query(`DELETE FROM 试模过程附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 试模过程附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
 
-    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
-    try {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (fileErr) {
-      console.warn('删除试模过程附件文件失败（已删除数据库记录）:', fileErr)
-    }
-
-    return res.json({ code: 0, success: true, message: '删除成功' })
+    return res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
   } catch (error) {
     console.error('删除试模过程附件失败:', error)
     return res.status(500).json({
@@ -4251,6 +4315,7 @@ router.get('/:projectCode(*)/inspection-reports', async (req, res) => {
       FROM 项目管理附件
       WHERE 项目编号 = @projectCode
         AND 附件类型 = N'inspection-report'
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ORDER BY 上传时间 DESC, 附件ID DESC
     `,
       { projectCode }
@@ -4410,6 +4475,7 @@ router.get('/inspection-reports/:attachmentId/download', async (req, res) => {
       FROM 项目管理附件
       WHERE 附件ID = @attachmentId
         AND 附件类型 = N'inspection-report'
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4453,6 +4519,7 @@ router.delete('/inspection-reports/:attachmentId', async (req, res) => {
       FROM 项目管理附件
       WHERE 附件ID = @attachmentId
         AND 附件类型 = N'inspection-report'
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4460,20 +4527,24 @@ router.delete('/inspection-reports/:attachmentId', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
     }
 
-    const att = rows[0]
-    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 项目管理附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
 
-    await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, { attachmentId })
-
-    try {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (fileErr) {
-      console.warn('删除检验报告文件失败（已删除数据库记录）:', fileErr)
-    }
-
-    return res.json({ code: 0, success: true, message: '删除成功' })
+    return res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
   } catch (error) {
     console.error('删除检验报告失败:', error)
     return res.status(500).json({
@@ -4503,6 +4574,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
         相对路径 as relativePath
       FROM 项目管理附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4545,6 +4617,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
         相对路径 as relativePath
       FROM 项目管理附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -4552,20 +4625,24 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
     }
 
-    const att = rows[0]
-    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 项目管理附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
 
-    await query(`DELETE FROM 项目管理附件 WHERE 附件ID = @attachmentId`, { attachmentId })
-
-    try {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (fileErr) {
-      console.warn('删除附件文件失败（已删除数据库记录）:', fileErr)
-    }
-
-    res.json({ code: 0, success: true, message: '删除成功' })
+    res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
   } catch (error) {
     console.error('删除项目管理附件失败:', error)
     res.status(500).json({

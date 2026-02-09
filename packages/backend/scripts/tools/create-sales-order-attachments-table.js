@@ -40,7 +40,11 @@ async function createSalesOrderAttachmentsTable() {
         文件大小 BIGINT NOT NULL,
         内容类型 NVARCHAR(100) NULL,
         上传时间 DATETIME2 NOT NULL CONSTRAINT DF_销售订单附件_上传时间 DEFAULT (GETDATE()),
-        上传人 NVARCHAR(100) NULL
+        上传人 NVARCHAR(100) NULL,
+        状态 NVARCHAR(20) NULL,
+        删除前状态 NVARCHAR(20) NULL,
+        删除时间 DATETIME2 NULL,
+        删除人 NVARCHAR(100) NULL
       );
 
       -- 按明细ID和订单编号建立索引，加快查询

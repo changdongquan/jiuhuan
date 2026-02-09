@@ -44,6 +44,18 @@
           <el-option label="修改模具" value="修改模具" />
         </el-select>
       </el-form-item>
+      <el-form-item label="状态">
+        <el-select
+          v-model="queryForm.status"
+          placeholder="请选择状态"
+          clearable
+          :style="{ width: isMobile ? '100%' : '150px' }"
+        >
+          <el-option label="正常" value="" />
+          <el-option label="已删除" value="已删除" />
+          <el-option label="全部" value="all" />
+        </el-select>
+      </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
           <el-button type="primary" @click="handleQuery">查询</el-button>
@@ -91,7 +103,14 @@
         <div class="pi-mobile-card__actions">
           <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
           <el-button size="small" @click="handleEdit(item)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+          <el-button
+            v-if="item.status === '已删除'"
+            size="small"
+            type="warning"
+            @click="handleRestore(item)"
+            >恢复</el-button
+          >
+          <el-button v-else size="small" type="danger" @click="handleDelete(item)">删除</el-button>
         </div>
       </el-card>
     </div>
@@ -154,12 +173,27 @@
             sortable="custom"
           />
           <el-table-column prop="remarks" label="备注" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === '已删除'" type="danger" size="small">已删除</el-tag>
+              <el-tag v-else type="success" size="small">正常</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="220" align="center" fixed="right">
             <template #default="{ row }">
               <div class="operation-buttons">
                 <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
                 <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-                <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+                <el-button
+                  v-if="row.status === '已删除'"
+                  type="warning"
+                  size="small"
+                  @click="handleRestore(row)"
+                  >恢复</el-button
+                >
+                <el-button v-else type="danger" size="small" @click="handleDelete(row)"
+                  >删除</el-button
+                >
               </div>
             </template>
           </el-table-column>
@@ -377,6 +411,7 @@ import {
   createGoodsApi,
   updateGoodsApi,
   deleteGoodsApi,
+  restoreGoodsProjectApi,
   getMaxSerialApi,
   type GoodsInfo,
   type GoodsQueryParams
@@ -428,7 +463,8 @@ const paginationPagerCount = computed(() => (isMobile.value || viewMode.value ==
 // 查询表单
 const queryForm = reactive({
   keyword: '',
-  category: ''
+  category: '',
+  status: ''
 })
 
 // 表格数据与排序
@@ -575,6 +611,7 @@ const fetchData = async () => {
     const params: GoodsQueryParams = {
       keyword: queryForm.keyword || undefined,
       category: queryForm.category || undefined,
+      status: queryForm.status || undefined,
       page: currentPage.value,
       pageSize: pageSize.value,
       sortField: sortState.prop || undefined,
@@ -656,6 +693,7 @@ const handleQuery = () => {
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.category = ''
+  queryForm.status = ''
   currentPage.value = 1
   fetchData()
 }
@@ -771,6 +809,41 @@ const handleDelete = async (row: any) => {
       ElMessage.error('删除失败')
     }
     // 用户取消操作时不显示错误
+  }
+}
+
+// 恢复（整套项目）
+const handleRestore = async (row: any) => {
+  try {
+    const message = `<div style="line-height: 1.8;">
+      <div>确定要恢复项目"${row.productName}"（${row.projectCode}）吗？</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认恢复：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '确认恢复', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认恢复',
+      dangerouslyUseHTMLString: true
+    })
+
+    if (value && value.toUpperCase() === 'Y') {
+      const projectCode = String(row.projectCode || '').trim()
+      if (!projectCode) {
+        ElMessage.error('缺少项目编号，无法恢复')
+        return
+      }
+      await restoreGoodsProjectApi(projectCode)
+      ElMessage.success('恢复成功')
+      await fetchData()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('恢复失败:', error)
+      ElMessage.error('恢复失败')
+    }
   }
 }
 
