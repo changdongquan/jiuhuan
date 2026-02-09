@@ -1,5 +1,22 @@
 module.exports = {
   extends: ['@commitlint/config-conventional'],
+  plugins: [
+    {
+      rules: {
+        // Enforce: the main description (subject) should be primarily Chinese,
+        // while still allowing English letters/numbers/symbols mixed in.
+        'subject-has-chinese': (parsed, when) => {
+          const subject = String(parsed?.subject ?? '').trim()
+          const hasChinese = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(subject)
+          const ok = when === 'never' ? !hasChinese : hasChinese
+          return [
+            ok,
+            'subject 必须包含中文（主要描述用中文，可夹杂英文/数字/符号），例如：fix: 修复工资个税导入列（AW）'
+          ]
+        }
+      }
+    }
+  ],
   rules: {
     'type-enum': [
       2,
@@ -23,6 +40,7 @@ module.exports = {
       ]
     ],
     'subject-full-stop': [0, 'never'],
-    'subject-case': [0, 'never']
+    'subject-case': [0, 'never'],
+    'subject-has-chinese': [2, 'always']
   }
 }
