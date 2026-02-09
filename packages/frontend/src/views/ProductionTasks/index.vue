@@ -1233,6 +1233,7 @@ const queryForm = reactive({ keyword: '', status: '', category: '' })
 const statusOptions = [
   { label: '待开始', value: '待开始' },
   { label: '进行中', value: '进行中' },
+  { label: '已完成', value: '已完成' },
   { label: '已暂停', value: '已暂停' },
   { label: '已取消', value: '已取消' }
 ]

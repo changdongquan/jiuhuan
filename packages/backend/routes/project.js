@@ -1295,12 +1295,13 @@ router.get('/list', async (req, res) => {
     }
 
     // 项目状态条件：
-    // - 不显示“已经移模”记录（无论是否传入关键词或状态）
-    // - 如需精确筛选其他状态，仍可传 status
-    whereConditions.push(`(p.项目状态 IS NULL OR p.项目状态 <> N'已经移模')`)
-    if (status && status !== '已经移模') {
+    // - 默认不显示“已经移模”记录（未传 status 时）
+    // - 如显式传入 status，则按指定状态精确筛选（允许查询“已经移模”）
+    if (status) {
       whereConditions.push(`p.项目状态 = @status`)
       params.status = status
+    } else if (!keyword) {
+      whereConditions.push(`(p.项目状态 IS NULL OR p.项目状态 <> N'已经移模')`)
     }
 
     // 构建完整的 WHERE 子句

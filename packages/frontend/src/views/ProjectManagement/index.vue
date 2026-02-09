@@ -2295,7 +2295,8 @@ const projectStatusOptions = [
   { label: '加工中', value: '加工中' },
   { label: '表面处理', value: '表面处理' },
   { label: '封样', value: '封样' },
-  { label: '待移模', value: '待移模' }
+  { label: '待移模', value: '待移模' },
+  { label: '已经移模', value: '已经移模' }
 ]
 
 const updateViewQuery = (mode: 'table' | 'timeline') => {

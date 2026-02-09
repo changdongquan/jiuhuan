@@ -594,14 +594,14 @@ router.get('/list', async (req, res) => {
     }
 
     // 生产状态条件：
-    // - 不显示“已完成”记录（无论是否传入关键词或状态）
-    // - 如需精确筛选其他状态，仍可传 status
-    whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
-    params.excludeStatus = '已完成'
-
-    if (status && status !== '已完成') {
+    // - 默认不显示“已完成”记录（未传 status 时）
+    // - 如显式传入 status，则按指定状态精确筛选（允许查询“已完成”）
+    if (status) {
       whereConditions.push(`pt.生产状态 = @status`)
       params.status = status
+    } else if (!keyword) {
+      whereConditions.push(`(pt.生产状态 IS NULL OR pt.生产状态 <> @excludeStatus)`)
+      params.excludeStatus = '已完成'
     }
 
     if (category) {
