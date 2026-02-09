@@ -1502,11 +1502,11 @@ router.post('/tax-import/read', uploadTaxFile.single('file'), async (req, res) =
     const START_ROW_NUMBER = 9
     const rStart = Math.max(range.s.r, START_ROW_NUMBER - 1)
 
-    // B=姓名(1), D=身份证(3), AO=个税(40)
+    // B=姓名(1), D=身份证(3), AW=个税(48)
     for (let r = rStart; r <= range.e.r; r += 1) {
       const employeeName = getCellText(1, r)
       const idCard = getCellText(3, r)
-      const incomeTaxRawCell = worksheet[XLSX.utils.encode_cell({ c: 40, r })]
+      const incomeTaxRawCell = worksheet[XLSX.utils.encode_cell({ c: 48, r })]
       const incomeTax = parseMoney(
         incomeTaxRawCell ? (incomeTaxRawCell.w ?? incomeTaxRawCell.v) : ''
       )
