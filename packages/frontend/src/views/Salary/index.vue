@@ -109,7 +109,7 @@
               formatMoneyWithThousands(row.baseSalaryTotal)
             }}</template>
           </el-table-column>
-          <el-table-column prop="overtimePayTotal" label="加班费合计" min-width="90" align="right">
+          <el-table-column prop="overtimePayTotal" label="加班费合计" min-width="100" align="right">
             <template #default="{ row }">{{
               formatMoneyWithThousands(row.overtimePayTotal)
             }}</template>
@@ -933,7 +933,7 @@
                 formatMoneyWithThousands(getRowPaySplit(row).second)
               }}</template>
             </el-table-column>
-            <el-table-column label="个税" width="85" align="right">
+            <el-table-column label="个税" width="95" align="right">
               <template #default="{ row }">{{
                 formatMoneyWithThousandsDashZero(row.incomeTax)
               }}</template>
