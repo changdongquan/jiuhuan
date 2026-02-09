@@ -712,6 +712,7 @@ router.post('/create', async (req, res) => {
       SELECT COUNT(*) as count 
       FROM 销售订单 
       WHERE 订单编号 = @orderNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `
     const checkResult = await query(checkQuery, { orderNo })
     if (checkResult[0].count > 0) {

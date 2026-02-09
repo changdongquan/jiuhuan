@@ -14,6 +14,9 @@ const { parseMouldTransferPdf, parseMouldTransferFromTokens } = require('../util
 const { pdfFirstPageToPngBuffer } = require('../utils/pdf/pdfToImage')
 const { ocrMouldTransferPng } = require('../utils/ocr/mouldTransferOcrClient')
 const { resolveActorFromReq } = require('../utils/actor')
+const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
+const sql = require('mssql')
+const { getPool } = require('../database')
 
 const execFileAsync = promisify(execFile)
 
@@ -2660,14 +2663,24 @@ router.delete('/delete', async (req, res) => {
       })
     }
 
-    const queryString = `DELETE FROM 项目管理 WHERE 项目编号 = @projectCode`
-
-    await query(queryString, { projectCode })
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await softDeleteByProjectCode({ pool, tx, projectCode: String(projectCode).trim(), actor })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
 
     res.json({
       code: 0,
       success: true,
-      message: '删除项目信息成功'
+      message: '删除项目信息成功（已软删除）'
     })
   } catch (error) {
     console.error('删除项目信息失败:', error)

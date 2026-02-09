@@ -1030,7 +1030,7 @@ router.post('/', async (req, res) => {
       const existsReq = new sql.Request(tx)
       existsReq.input('documentNo', sql.NVarChar, documentNo)
       const existsRes = await existsReq.query(
-        `SELECT TOP 1 1 as ok FROM 出库单明细 WHERE 出库单号 = @documentNo`
+        `SELECT TOP 1 1 as ok FROM 出库单明细 WHERE 出库单号 = @documentNo AND (状态 IS NULL OR 状态 <> N'已删除')`
       )
       if (existsRes.recordset?.length) {
         await tx.rollback()

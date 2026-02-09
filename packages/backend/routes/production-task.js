@@ -1,5 +1,5 @@
 const express = require('express')
-const { query } = require('../database')
+const { query, getPool } = require('../database')
 const router = express.Router()
 const path = require('path')
 const fs = require('fs')
@@ -7,6 +7,8 @@ const fsp = fs.promises
 const multer = require('multer')
 const JSZip = require('jszip')
 const { resolveActorFromReq } = require('../utils/actor')
+const sql = require('mssql')
+const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
 
 // 生产任务附件存储配置
 // 使用统一文件根目录配置，生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -1556,14 +1558,24 @@ router.delete('/delete', async (req, res) => {
       })
     }
 
-    const queryString = `DELETE FROM 生产任务 WHERE 项目编号 = @projectCode`
-
-    await query(queryString, { projectCode })
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await softDeleteByProjectCode({ pool, tx, projectCode: String(projectCode).trim(), actor })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
 
     res.json({
       code: 0,
       success: true,
-      message: '删除生产任务成功'
+      message: '删除生产任务成功（已软删除）'
     })
   } catch (error) {
     console.error('删除生产任务失败:', error)
