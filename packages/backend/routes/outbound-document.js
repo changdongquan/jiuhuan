@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs')
 const fsp = fs.promises
 const multer = require('multer')
+const { resolveActorFromReq } = require('../utils/actor')
 
 const router = express.Router()
 
@@ -130,6 +131,22 @@ const ensureTables = async () => {
   `
   await query(alterSql)
 
+  // Soft delete columns (for environments where table is created by this route)
+  const softDeleteColsSql = `
+    IF OBJECT_ID(N'出库单明细', N'U') IS NOT NULL
+    BEGIN
+      IF COL_LENGTH(N'出库单明细', N'状态') IS NULL
+        ALTER TABLE 出库单明细 ADD 状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'出库单明细', N'删除前状态') IS NULL
+        ALTER TABLE 出库单明细 ADD 删除前状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'出库单明细', N'删除时间') IS NULL
+        ALTER TABLE 出库单明细 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'出库单明细', N'删除人') IS NULL
+        ALTER TABLE 出库单明细 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `
+  await query(softDeleteColsSql)
+
   tablesReady = true
 }
 
@@ -158,6 +175,22 @@ const ensureAttachmentsTable = async () => {
   `
 
   await query(createSql)
+
+  const softDeleteColsSql = `
+    IF OBJECT_ID(N'出库单附件', N'U') IS NOT NULL
+    BEGIN
+      IF COL_LENGTH(N'出库单附件', N'状态') IS NULL
+        ALTER TABLE 出库单附件 ADD 状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'出库单附件', N'删除前状态') IS NULL
+        ALTER TABLE 出库单附件 ADD 删除前状态 NVARCHAR(20) NULL;
+      IF COL_LENGTH(N'出库单附件', N'删除时间') IS NULL
+        ALTER TABLE 出库单附件 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'出库单附件', N'删除人') IS NULL
+        ALTER TABLE 出库单附件 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `
+  await query(softDeleteColsSql)
+
   attachmentsTableReady = true
 }
 
@@ -362,6 +395,7 @@ const getProductionTaskSnapshot = async (tx, projectCode) => {
       已完成数量
     FROM 生产任务 WITH (UPDLOCK, HOLDLOCK)
     WHERE 项目编号 = @projectCode
+      AND (状态 IS NULL OR 状态 <> N'已删除')
   `)
   return res.recordset?.[0] || null
 }
@@ -374,12 +408,15 @@ const getShippedQuantity = async (tx, projectCode, excludeDocumentNo) => {
     ? `
       SELECT SUM(ISNULL(出库数量, 0)) as shipped
       FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK)
-      WHERE 项目编号 = @projectCode AND 出库单号 <> @excludeDocumentNo
+      WHERE 项目编号 = @projectCode
+        AND 出库单号 <> @excludeDocumentNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `
     : `
       SELECT SUM(ISNULL(出库数量, 0)) as shipped
       FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK)
       WHERE 项目编号 = @projectCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `
   const res = await req.query(sqlText)
   return res.recordset?.[0]?.shipped ?? 0
@@ -420,7 +457,12 @@ router.get('/inventory', async (req, res) => {
     const offset = (pageNum - 1) * sizeNum
 
     const params = {}
-    const where = [`pt.已完成数量 IS NOT NULL`, `pt.已完成数量 > 0`]
+    const where = [
+      `(p.状态 IS NULL OR p.状态 <> N'已删除')`,
+      `(pt.状态 IS NULL OR pt.状态 <> N'已删除')`,
+      `pt.已完成数量 IS NOT NULL`,
+      `pt.已完成数量 > 0`
+    ]
 
     if (customerId) {
       where.push(`p.客户ID = @customerId`)
@@ -465,6 +507,7 @@ router.get('/inventory', async (req, res) => {
           g.产品图号
         FROM 货物信息 g
         WHERE g.项目编号 = p.项目编号
+          AND (g.状态 IS NULL OR g.状态 <> N'已删除')
         ORDER BY
           CASE WHEN CAST(ISNULL(g.IsNew, 0) AS INT) = 1 THEN 1 ELSE 0 END ASC,
           g.货物ID DESC
@@ -473,6 +516,7 @@ router.get('/inventory', async (req, res) => {
         SELECT SUM(ISNULL(出库数量, 0)) as 已出货数量
         FROM 出库单明细 od
         WHERE od.项目编号 = p.项目编号
+          AND (od.状态 IS NULL OR od.状态 <> N'已删除')
       ) od_sum
       ${whereSql}
         AND (pt.已完成数量 - ISNULL(od_sum.已出货数量, 0)) > 0
@@ -522,7 +566,7 @@ router.get('/list', async (req, res) => {
     const offset = (pageNum - 1) * sizeNum
 
     const params = {}
-    const where = []
+    const where = [`(od.状态 IS NULL OR od.状态 <> N'已删除')`]
 
     if (keyword) {
       where.push(`(
@@ -561,7 +605,7 @@ router.get('/list', async (req, res) => {
         p.流道类型,
         p.流道数量
       FROM 出库单明细 od
-      LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号
+      LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
       ${whereSql}
     `
     const allRows = await query(allSql, params)
@@ -673,8 +717,9 @@ router.get('/detail', async (req, res) => {
           p.流道数量,
           p.零件图示URL
         FROM 出库单明细 od
-        LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号
+        LEFT JOIN 项目管理 p ON od.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
         WHERE od.出库单号 = @documentNo
+          AND (od.状态 IS NULL OR od.状态 <> N'已删除')
         ORDER BY od.id ASC
       `,
       { documentNo }
@@ -708,7 +753,7 @@ router.post(
       }
 
       const existed = await query(
-        `SELECT TOP 1 1 as ok FROM 出库单明细 WHERE 出库单号 = @documentNo AND 项目编号 = @itemCode`,
+        `SELECT TOP 1 1 as ok FROM 出库单明细 WHERE 出库单号 = @documentNo AND 项目编号 = @itemCode AND (状态 IS NULL OR 状态 <> N'已删除')`,
         { documentNo, itemCode }
       )
       if (!existed.length) {
@@ -812,6 +857,7 @@ router.get('/:documentNo/items/:itemCode(*)/attachments', async (req, res) => {
         上传人 as uploadedBy
       FROM 出库单附件
       WHERE 出库单号 = @documentNo AND 项目编号 = @itemCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       ORDER BY 上传时间 DESC, 附件ID DESC
     `,
       { documentNo, itemCode }
@@ -840,6 +886,7 @@ router.get('/:documentNo/attachments/summary', async (req, res) => {
         COUNT(1) as attachmentCount
       FROM 出库单附件
       WHERE 出库单号 = @documentNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
       GROUP BY 项目编号
     `,
       { documentNo }
@@ -872,6 +919,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
         相对路径 as relativePath
       FROM 出库单附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -913,6 +961,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
         相对路径 as relativePath
       FROM 出库单附件
       WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
     `,
       { attachmentId }
     )
@@ -920,20 +969,24 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
     }
 
-    const att = rows[0]
-    const fullPath = getFileFullPath(att.relativePath, att.storedFileName)
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 出库单附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
 
-    await query(`DELETE FROM 出库单附件 WHERE 附件ID = @attachmentId`, { attachmentId })
-
-    try {
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (fileErr) {
-      console.warn('删除附件文件失败（已删除数据库记录）:', fileErr)
-    }
-
-    res.json({ code: 0, success: true, message: '删除成功' })
+    res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
   } catch (error) {
     console.error('删除出库单附件失败:', error)
     res.status(500).json({ code: 500, success: false, message: '删除出库单附件失败' })
@@ -1200,7 +1253,7 @@ router.put('/update', async (req, res) => {
         const oldProjectsReq = new sql.Request(tx)
         oldProjectsReq.input('documentNo', sql.NVarChar, documentNo)
         const oldProjectsRes = await oldProjectsReq.query(
-          `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo`
+          `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo AND (状态 IS NULL OR 状态 <> N'已删除')`
         )
         const oldProjects = new Set(
           (oldProjectsRes.recordset || [])
@@ -1211,7 +1264,7 @@ router.put('/update', async (req, res) => {
         const headerReq = new sql.Request(tx)
         headerReq.input('documentNo', sql.NVarChar, documentNo)
         const headerRes = await headerReq.query(
-          `SELECT TOP 1 * FROM 出库单明细 WHERE 出库单号 = @documentNo ORDER BY id ASC`
+          `SELECT TOP 1 * FROM 出库单明细 WHERE 出库单号 = @documentNo AND (状态 IS NULL OR 状态 <> N'已删除') ORDER BY id ASC`
         )
         const header = headerRes.recordset?.[0]
         if (!header) {
@@ -1363,9 +1416,22 @@ router.put('/update', async (req, res) => {
           }
         }
 
+        const actor = resolveActorFromReq(req)
         const delReq = new sql.Request(tx)
         delReq.input('documentNo', sql.NVarChar, documentNo)
-        await delReq.query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`)
+        delReq.input('actor', sql.NVarChar, actor || null)
+        await delReq.query(`
+          UPDATE 出库单明细
+          SET
+            删除前状态 = CASE
+              WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+              ELSE 删除前状态
+            END,
+            状态 = N'已删除',
+            删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+            删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+          WHERE 出库单号 = @documentNo
+        `)
 
         for (const d of normalizedDetails) {
           const insReq = new sql.Request(tx)
@@ -1497,12 +1563,14 @@ router.put('/update', async (req, res) => {
 router.delete('/delete', async (req, res) => {
   try {
     await ensureTables()
+    await ensureAttachmentsTable()
     const documentNo = String(req.query.documentNo || '').trim()
     if (!documentNo) {
       res.status(400).json({ code: 400, success: false, message: 'documentNo 不能为空' })
       return
     }
 
+    const actor = resolveActorFromReq(req)
     const pool = await getPool()
     const tx = new sql.Transaction(pool)
     await tx.begin()
@@ -1510,7 +1578,7 @@ router.delete('/delete', async (req, res) => {
       const oldProjectsReq = new sql.Request(tx)
       oldProjectsReq.input('documentNo', sql.NVarChar, documentNo)
       const oldProjectsRes = await oldProjectsReq.query(
-        `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo`
+        `SELECT DISTINCT 项目编号 FROM 出库单明细 WITH (UPDLOCK, HOLDLOCK) WHERE 出库单号 = @documentNo AND (状态 IS NULL OR 状态 <> N'已删除')`
       )
       const oldProjects = new Set(
         (oldProjectsRes.recordset || [])
@@ -1520,7 +1588,39 @@ router.delete('/delete', async (req, res) => {
 
       const delReq = new sql.Request(tx)
       delReq.input('documentNo', sql.NVarChar, documentNo)
-      await delReq.query(`DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo`)
+      delReq.input('actor', sql.NVarChar, actor || null)
+      await delReq.query(`
+        UPDATE 出库单明细
+        SET
+          删除前状态 = CASE
+            WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+            ELSE 删除前状态
+          END,
+          状态 = N'已删除',
+          删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+          删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+        WHERE 出库单号 = @documentNo
+      `)
+
+      // 同步软删附件（按出库单号）
+      const delAttReq = new sql.Request(tx)
+      delAttReq.input('documentNo', sql.NVarChar, documentNo)
+      delAttReq.input('actor', sql.NVarChar, actor || null)
+      await delAttReq.query(`
+        IF OBJECT_ID(N'出库单附件', N'U') IS NOT NULL
+        BEGIN
+          UPDATE 出库单附件
+          SET
+            删除前状态 = CASE
+              WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+              ELSE 删除前状态
+            END,
+            状态 = N'已删除',
+            删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+            删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+          WHERE 出库单号 = @documentNo
+        END
+      `)
 
       // 同步项目状态（删除不会产生“触发清零”的出库日期，因此不写移模日期，只在需要回退时清空）
       for (const projectCode of oldProjects) {
@@ -1538,7 +1638,7 @@ router.delete('/delete', async (req, res) => {
       }
 
       await tx.commit()
-      res.json({ code: 0, success: true, message: '删除成功' })
+      res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
     } catch (e) {
       await tx.rollback()
       throw e
@@ -1559,6 +1659,7 @@ router.get('/statistics', async (_req, res) => {
         SUM(ISNULL(出库数量, 0)) as totalQuantity,
         SUM(ISNULL(金额, 0)) as totalAmount
       FROM 出库单明细
+      WHERE (状态 IS NULL OR 状态 <> N'已删除')
     `)
     const s = rows[0] || {}
     res.json({ code: 0, success: true, data: s })

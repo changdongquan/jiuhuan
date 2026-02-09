@@ -8,6 +8,7 @@ export interface GoodsInfo {
   productName: string // 产品名称
   category: string // 分类
   remarks: string // 备注
+  status?: string // 状态（软删：已删除）
   customerName?: string // 客户名称
   customerModelNo?: string // 客户模号
 }
@@ -17,6 +18,7 @@ export interface GoodsQueryParams {
   keyword?: string // 模糊查询关键词
   customerName?: string // 客户名称
   category?: string // 分类
+  status?: string // 记录状态：已删除 / all / (默认不传=排除已删除)
   page?: number // 页码
   pageSize?: number // 每页大小
   sortField?: string // 排序字段
@@ -61,6 +63,11 @@ export const updateGoodsApi = (id: number, data: Partial<GoodsInfo>) => {
 // 删除货物信息
 export const deleteGoodsApi = (id: number) => {
   return request.delete({ url: `/api/goods/${id}` })
+}
+
+// 恢复整套项目（按项目编号）
+export const restoreGoodsProjectApi = (projectCode: string) => {
+  return request.post({ url: `/api/goods/restore`, data: { projectCode } })
 }
 
 // 批量删除货物信息
