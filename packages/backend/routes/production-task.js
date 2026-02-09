@@ -370,7 +370,8 @@ const DEFAULT_INSPECTION_RESULT_MAP = {
   '83': 'yes',
   '84': 'yes',
   '85': 'yes',
-  '86': 'yes'
+  '86': 'yes',
+  '87': 'yes'
 }
 
 const extractInspectionItemsFromTemplateXml = (xml) => {
