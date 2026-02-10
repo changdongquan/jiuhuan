@@ -4,6 +4,8 @@ const router = express.Router()
 const path = require('path')
 const fs = require('fs')
 const fsp = fs.promises
+const os = require('os')
+const { spawn } = require('child_process')
 const multer = require('multer')
 const JSZip = require('jszip')
 const { resolveActorFromReq } = require('../utils/actor')
@@ -301,6 +303,50 @@ const stripHighlightsAndForceBlack = (xml) => {
   out = out.replace(/<w:color\b[^/>]*\/>/gi, '<w:color w:val="000000"/>')
 
   return out
+}
+
+const convertDocxToPdfBuffer = async (docxFullPath) => {
+  const tmpBase = path.join(os.tmpdir(), 'jh-docx-to-pdf-')
+  const tmpDir = await fsp.mkdtemp(tmpBase)
+  try {
+    await new Promise((resolve, reject) => {
+      const args = [
+        '--headless',
+        '--nologo',
+        '--nofirststartwizard',
+        '--norestore',
+        '--convert-to',
+        'pdf',
+        '--outdir',
+        tmpDir,
+        docxFullPath
+      ]
+      const child = spawn('soffice', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, HOME: tmpDir }
+      })
+      let stderr = ''
+      child.stderr.on('data', (d) => {
+        stderr += String(d || '')
+      })
+      child.on('error', (err) => reject(err))
+      child.on('close', (code) => {
+        if (code === 0) return resolve(null)
+        reject(new Error(stderr || `soffice exited with code ${code}`))
+      })
+    })
+
+    const files = await fsp.readdir(tmpDir)
+    const pdfName = files.find((n) => /\.pdf$/i.test(n))
+    if (!pdfName) throw new Error('PDF 转换失败：未生成 PDF 文件')
+    return await fsp.readFile(path.join(tmpDir, pdfName))
+  } finally {
+    try {
+      await fsp.rm(tmpDir, { recursive: true, force: true })
+    } catch (e) {
+      // ignore
+    }
+  }
 }
 
 const DEFAULT_INSPECTION_RESULT_MAP = {
@@ -1728,6 +1774,75 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
       code: 500,
       success: false,
       message: '下载生产任务附件失败',
+      error: error.message
+    })
+  }
+})
+
+// 预览 PDF（将 docx 按需转换为 pdf）
+router.get('/attachments/:attachmentId/preview-pdf', async (req, res) => {
+  try {
+    await ensureTaskAttachmentsTable()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        内容类型 as contentType
+      FROM 生产任务附件
+      WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    const fileName = String(attachment.originalName || attachment.storedFileName || '').toLowerCase()
+    const contentType = String(attachment.contentType || '').toLowerCase()
+    const isDocx = contentType === DOCX_CONTENT_TYPE.toLowerCase() || fileName.endsWith('.docx')
+    if (!isDocx) {
+      return res.status(400).json({ code: 400, success: false, message: '仅支持 docx 转 PDF 预览' })
+    }
+
+    let pdfBuffer = null
+    try {
+      pdfBuffer = await convertDocxToPdfBuffer(fullPath)
+    } catch (e) {
+      const msg = String(e?.message || e || '')
+      if (msg.includes('spawn soffice') || msg.includes('ENOENT')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message: '服务器未安装 LibreOffice（soffice），无法转换 PDF'
+        })
+      }
+      throw e
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'inline; filename=\"preview.pdf\"')
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('预览 PDF 失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '预览 PDF 失败',
       error: error.message
     })
   }

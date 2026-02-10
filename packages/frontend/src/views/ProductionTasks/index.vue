@@ -874,7 +874,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isPdfFile(row)"
+                                v-if="isPdfFile(row) || isDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -932,7 +932,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isPdfFile(row)"
+                                v-if="isPdfFile(row) || isDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -1028,7 +1028,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isPdfFile(row)"
+                                v-if="isPdfFile(row) || isDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -1225,6 +1225,7 @@ import {
   getInspectionTemplateItemsApi,
   deleteProductionTaskAttachmentApi,
   downloadProductionTaskAttachmentApi,
+  previewProductionTaskAttachmentPdfApi,
   type ProductionTaskAttachment,
   type ProductionTaskAttachmentType,
   type ProductionTaskInfo,
@@ -1854,6 +1855,18 @@ const isPdfFile = (attachment: ProductionTaskAttachment): boolean => {
   return ext === 'pdf'
 }
 
+const isDocxFile = (attachment: ProductionTaskAttachment): boolean => {
+  if (
+    attachment.contentType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'docx'
+}
+
 // 模具图档（ProjectAttachment）判断与操作
 const isMoldDrawingImageFile = (attachment: ProjectAttachment): boolean => {
   if (attachment.contentType?.startsWith('image/')) return true
@@ -2027,14 +2040,16 @@ const handleAttachmentPreview = async (attachment: ProductionTaskAttachment) => 
 
 // 预览 PDF 附件
 const handleAttachmentPdfPreview = async (attachment: ProductionTaskAttachment) => {
-  if (!isPdfFile(attachment)) {
-    ElMessage.warning('该文件不是 PDF 格式')
+  if (!isPdfFile(attachment) && !isDocxFile(attachment)) {
+    ElMessage.warning('该文件暂不支持 PDF 预览')
     return
   }
 
   try {
-    // 获取 PDF 文件的 blob
-    const resp = await downloadProductionTaskAttachmentApi(attachment.id)
+    // 获取 PDF 文件的 blob（pdf 直接下载，docx 走后端转换）
+    const resp = isPdfFile(attachment)
+      ? await downloadProductionTaskAttachmentApi(attachment.id)
+      : await previewProductionTaskAttachmentPdfApi(attachment.id)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
 

@@ -120,6 +120,14 @@ export const downloadProductionTaskAttachmentApi = (attachmentId: number) => {
   })
 }
 
+// 预览 PDF：docx 按需转 pdf
+export const previewProductionTaskAttachmentPdfApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/production-task/attachments/${attachmentId}/preview-pdf`,
+    responseType: 'blob'
+  })
+}
+
 // 删除生产任务附件
 export const deleteProductionTaskAttachmentApi = (attachmentId: number) => {
   return request.delete<{
