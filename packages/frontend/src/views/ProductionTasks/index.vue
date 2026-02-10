@@ -1131,10 +1131,11 @@
       :close-on-click-modal="false"
       class="pt-inspection-generate-dialog"
     >
+      <el-divider content-position="left">必选项</el-divider>
       <el-table
         v-loading="inspectionTemplateLoading"
-        :data="inspectionTemplateItems"
-        :height="isMobile ? 360 : 600"
+        :data="inspectionManualItems"
+        :height="isMobile ? 150 : 170"
         border
         size="small"
         style="width: 100%"
@@ -1142,13 +1143,10 @@
         <el-table-column label="序号" width="60" align="center">
           <template #default="{ $index }">{{ $index + 1 }}</template>
         </el-table-column>
-        <el-table-column label="编号" width="90" align="center">
-          <template #default="{ row }">{{ row.seq }}</template>
-        </el-table-column>
         <el-table-column label="检验内容" min-width="320">
           <template #default="{ row }">{{ row.content }}</template>
         </el-table-column>
-        <el-table-column label="检验结果" width="200" align="center">
+        <el-table-column label="检验结果" width="160" align="center">
           <template #default="{ row }">
             <el-radio-group v-model="inspectionResultMap[row.seq]" size="small">
               <el-radio-button label="yes">是</el-radio-button>
@@ -1157,6 +1155,45 @@
                 >无</el-radio-button
               >
             </el-radio-group>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-divider content-position="left">只读</el-divider>
+      <div class="pt-inspection-readonly-meta">
+        <el-tag type="info" effect="plain">
+          滑块材质：{{ inspectionReadonlyMeta.sliderMaterial || '空' }}
+        </el-tag>
+        <el-tag type="info" effect="plain">
+          流道类型：{{ inspectionReadonlyMeta.runnerType || '空' }}
+        </el-tag>
+        <el-tag type="info" effect="plain">
+          抽芯方式：{{ inspectionReadonlyMeta.corePullMethod || '空' }}
+        </el-tag>
+      </div>
+      <el-table
+        v-loading="inspectionTemplateLoading"
+        :data="inspectionReadonlyItems"
+        :height="isMobile ? 250 : 490"
+        border
+        size="small"
+        style="width: 100%"
+      >
+        <el-table-column label="序号" width="60" align="center">
+          <template #default="{ $index }">{{ $index + 1 }}</template>
+        </el-table-column>
+        <el-table-column label="检验内容" min-width="320">
+          <template #default="{ row }">{{ row.content }}</template>
+        </el-table-column>
+        <el-table-column label="检验结果" width="160" align="center">
+          <template #default="{ row }">
+            <div class="pt-inspection-readonly-result">
+              <el-radio-group :model-value="getReadonlyChoice(row)" disabled size="small">
+                <el-radio-button label="yes">是</el-radio-button>
+                <el-radio-button label="no">否</el-radio-button>
+                <el-radio-button label="none">无</el-radio-button>
+              </el-radio-group>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -1285,6 +1322,37 @@ const inspectionGenerateSubmitting = ref(false)
 const inspectionTemplateLoading = ref(false)
 const inspectionTemplateItems = ref<InspectionTemplateItem[]>([])
 const inspectionResultMap = reactive<Record<string, InspectionTemplateResult>>({})
+const inspectionReadonlyMeta = reactive<{
+  sliderMaterial: string
+  runnerType: string
+  corePullMethod: string
+}>({
+  sliderMaterial: '',
+  runnerType: '',
+  corePullMethod: ''
+})
+
+const inspectionManualSeqOrder = ['17', '34', '47', '79']
+const inspectionManualSeqSet = new Set(inspectionManualSeqOrder)
+const inspectionManualItems = computed(() => {
+  const map = new Map(inspectionTemplateItems.value.map((x) => [String(x.seq), x]))
+  return inspectionManualSeqOrder
+    .map((seq) => map.get(seq))
+    .filter(Boolean) as InspectionTemplateItem[]
+})
+const inspectionReadonlyItems = computed(() => {
+  return inspectionTemplateItems.value.filter((x) => !inspectionManualSeqSet.has(String(x.seq)))
+})
+
+const getReadonlyChoice = (row: InspectionTemplateItem): InspectionTemplateResult => {
+  const seq = String(row?.seq || '').trim()
+  if (seq === '36' || seq === '37' || seq === '38') {
+    const seq17 = inspectionResultMap['17']
+    if (!seq17) return ''
+    return seq17 === 'yes' ? 'yes' : 'none'
+  }
+  return (row?.defaultChoice || '') as InspectionTemplateResult
+}
 
 // 判断字段是否已填写
 const isFieldFilled = (value: unknown) => {
@@ -1688,29 +1756,31 @@ const buildInspectionTemplateData = () => {
 const loadInspectionTemplateItems = async () => {
   inspectionTemplateLoading.value = true
   try {
-    const resp: any = await getInspectionTemplateItemsApi()
-    const items = resp?.data?.data || resp?.data || []
-    const filteredItems = items.filter((x: any) => String(x?.seq || '').trim() !== '3')
-    // Only adjust display order in the dialog: pin a few seq rows to the top.
-    // Do not renumber seq; keep the rest in template order.
-    const pinSeqOrder = ['17', '34', '47', '79']
-    const pinSeqSet = new Set(pinSeqOrder)
-    const pinned: InspectionTemplateItem[] = []
-    pinSeqOrder.forEach((seq) => {
-      const found = filteredItems.find((x: any) => String(x?.seq || '').trim() === seq)
-      if (found) pinned.push(found)
-    })
-    const rest = filteredItems.filter((x: any) => !pinSeqSet.has(String(x?.seq || '').trim()))
-    const nextItems = pinned.concat(rest)
-    inspectionTemplateItems.value = nextItems
+    const projectCode = String(currentProjectCode.value || dialogForm.项目编号 || '').trim()
+    const resp: any = await getInspectionTemplateItemsApi(projectCode || undefined)
+    const payload =
+      resp && typeof resp === 'object' && 'code' in resp && 'success' in resp
+        ? resp
+        : resp?.data && typeof resp.data === 'object'
+          ? resp.data
+          : resp
+    const items = payload?.data || payload || []
+    const meta = payload?.meta || {}
+    inspectionReadonlyMeta.sliderMaterial = String(meta.sliderMaterial || '').trim()
+    inspectionReadonlyMeta.runnerType = String(meta.runnerType || '').trim()
+    inspectionReadonlyMeta.corePullMethod = String(meta.corePullMethod || '').trim()
+    inspectionTemplateItems.value = items
     Object.keys(inspectionResultMap).forEach((k) => delete inspectionResultMap[k])
-    nextItems.forEach((item: InspectionTemplateItem) => {
+    items.forEach((item: InspectionTemplateItem) => {
       inspectionResultMap[item.seq] = '' as InspectionTemplateResult
     })
   } catch (error) {
     console.error('加载检验模板条目失败:', error)
     ElMessage.error('加载检验模板条目失败')
     inspectionTemplateItems.value = []
+    inspectionReadonlyMeta.sliderMaterial = ''
+    inspectionReadonlyMeta.runnerType = ''
+    inspectionReadonlyMeta.corePullMethod = ''
   } finally {
     inspectionTemplateLoading.value = false
   }
@@ -1744,7 +1814,7 @@ const submitGenerateInspection = async () => {
     if (value) inspectionResults[item.seq] = value
   })
   inspectionResults['3'] = 'yes'
-  const manualSeqs = inspectionTemplateItems.value.map((item) => String(item.seq))
+  const manualSeqs = requiredSeqs
   inspectionGenerateSubmitting.value = true
   try {
     await generateProductionTaskInspectionApi(projectCode, data, inspectionResults, manualSeqs)
@@ -3472,5 +3542,25 @@ onMounted(() => {
   margin-top: 12px;
   transform: none;
   justify-content: center;
+}
+
+.pt-inspection-readonly-result :deep(.el-radio-button__inner) {
+  cursor: default;
+}
+
+/* Keep the selected option visually clear even in disabled mode. */
+.pt-inspection-readonly-result
+  :deep(.el-radio-button__original-radio:disabled:checked + .el-radio-button__inner) {
+  color: #fff;
+  background-color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  opacity: 1;
+}
+
+.pt-inspection-readonly-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 10px;
 }
 </style>

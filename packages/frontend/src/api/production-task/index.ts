@@ -54,6 +54,8 @@ export interface InspectionTemplateItem {
   seq: string
   content: string
   options?: Array<'yes' | 'no' | 'none'>
+  manual?: boolean
+  defaultChoice?: InspectionTemplateResult
 }
 
 // 生产任务查询参数
@@ -130,7 +132,21 @@ export const deleteProductionTaskAttachmentApi = (attachmentId: number) => {
 }
 
 // 获取检验模板中需要填写结果的条目
-export const getInspectionTemplateItemsApi = () => {
+export const getInspectionTemplateItemsApi = (projectCode?: string) => {
+  if (projectCode) {
+    return request.get<{
+      code: number
+      success: boolean
+      data: InspectionTemplateItem[]
+      meta?: {
+        sliderMaterial?: string
+        runnerType?: string
+        corePullMethod?: string
+      }
+    }>({
+      url: `/api/production-task/${encodeURIComponent(projectCode)}/inspection-template/items`
+    })
+  }
   return request.get<{
     code: number
     success: boolean
