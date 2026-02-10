@@ -1690,9 +1690,21 @@ const loadInspectionTemplateItems = async () => {
   try {
     const resp: any = await getInspectionTemplateItemsApi()
     const items = resp?.data?.data || resp?.data || []
-    inspectionTemplateItems.value = items
+    const filteredItems = items.filter((x: any) => String(x?.seq || '').trim() !== '3')
+    // Only adjust display order in the dialog: pin a few seq rows to the top.
+    // Do not renumber seq; keep the rest in template order.
+    const pinSeqOrder = ['17', '34', '47', '79']
+    const pinSeqSet = new Set(pinSeqOrder)
+    const pinned: InspectionTemplateItem[] = []
+    pinSeqOrder.forEach((seq) => {
+      const found = filteredItems.find((x: any) => String(x?.seq || '').trim() === seq)
+      if (found) pinned.push(found)
+    })
+    const rest = filteredItems.filter((x: any) => !pinSeqSet.has(String(x?.seq || '').trim()))
+    const nextItems = pinned.concat(rest)
+    inspectionTemplateItems.value = nextItems
     Object.keys(inspectionResultMap).forEach((k) => delete inspectionResultMap[k])
-    items.forEach((item: InspectionTemplateItem) => {
+    nextItems.forEach((item: InspectionTemplateItem) => {
       inspectionResultMap[item.seq] = '' as InspectionTemplateResult
     })
   } catch (error) {
@@ -1712,11 +1724,26 @@ const submitGenerateInspection = async () => {
   }
   const baseData = buildInspectionTemplateData()
   const data = { ...baseData }
+  const requiredSeqs = ['17', '34', '47', '79']
+  const requiredSeqSet = new Set(requiredSeqs)
+  const presentRequiredSeqs = Array.from(
+    new Set(
+      inspectionTemplateItems.value
+        .map((x) => String(x?.seq || '').trim())
+        .filter((s) => requiredSeqSet.has(s))
+    )
+  )
+  const missingRequired = presentRequiredSeqs.filter((seq) => !inspectionResultMap[seq])
+  if (missingRequired.length) {
+    ElMessage.error(`编号 ${missingRequired.join(' / ')} 必选`)
+    return
+  }
   const inspectionResults: Record<string, InspectionTemplateResult> = {}
   inspectionTemplateItems.value.forEach((item) => {
     const value = inspectionResultMap[item.seq]
     if (value) inspectionResults[item.seq] = value
   })
+  inspectionResults['3'] = 'yes'
   const manualSeqs = inspectionTemplateItems.value.map((item) => String(item.seq))
   inspectionGenerateSubmitting.value = true
   try {

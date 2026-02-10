@@ -177,14 +177,17 @@ const assertProjectExists = async (projectCode) => {
   return !!rows.length
 }
 
-// 根据项目编号查询项目管理信息（客户模号 / 前模材质 / 后模材质）
+// 根据项目编号查询项目管理信息（客户模号 / 前模材质 / 后模材质 / 抽芯明细 / 滑块材质）
 const getProjectMaterialInfo = async (projectCode) => {
   const rows = await query(
     `
       SELECT TOP 1
         客户模号 as customerModelNo,
         前模材质 as frontMaterial,
-        后模材质 as backMaterial
+        后模材质 as backMaterial,
+        抽芯明细 as corePullDetail,
+        滑块材质 as sliderMaterial,
+        流道类型 as runnerType
       FROM 项目管理
       WHERE 项目编号 = @projectCode
         AND (状态 IS NULL OR 状态 <> N'已删除')
@@ -1116,6 +1119,74 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
 
     const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
     const defaultMap = DEFAULT_INSPECTION_RESULT_MAP
+    // seq=3 is fixed to "yes" even when it's not shown in the dialog.
+    // If 项目管理.抽芯明细 contains "油缸", seq=5 is forced to "yes", otherwise forced to "none".
+    let hasOilCylinderCorePull = false
+    try {
+      const raw = String(materialInfo?.corePullDetail || '').trim()
+      const list = raw ? JSON.parse(raw) : []
+      if (Array.isArray(list)) {
+        hasOilCylinderCorePull = list.some((x) => String(x?.方式 || '').trim() === '油缸')
+      }
+    } catch (e) {
+      // ignore parse errors, treat as no oil-cylinder core pull
+    }
+    const sliderMaterial = String(materialInfo?.sliderMaterial || '').trim()
+    const inspectionResultsFinal = {
+      ...(inspectionResults || {}),
+      '3': 'yes',
+      '5': hasOilCylinderCorePull ? 'yes' : 'none',
+      '33': sliderMaterial ? 'yes' : 'none',
+      '35': sliderMaterial ? 'yes' : 'none'
+    }
+    const runnerType = String(materialInfo?.runnerType || '').trim()
+    if (runnerType === '冷流道') {
+      ;['48', '49', '50', '51', '52', '53', '55'].forEach((k) => {
+        inspectionResultsFinal[k] = 'yes'
+      })
+      ;['54'].forEach((k) => {
+        inspectionResultsFinal[k] = 'no'
+      })
+      ;[
+        '10',
+        '56',
+        '57',
+        '58',
+        '59',
+        '60',
+        '61',
+        '62',
+        '63',
+        '64',
+        '65',
+        '66',
+        '67',
+        '68'
+      ].forEach((k) => {
+        inspectionResultsFinal[k] = 'none'
+      })
+    } else if (
+      runnerType === '开放式热流道' ||
+      runnerType === '点浇口热流道' ||
+      runnerType === '针阀式热流道'
+    ) {
+      ;['10', '56', '57', '58', '60', '62', '63', '64', '65', '66', '67', '68'].forEach((k) => {
+        inspectionResultsFinal[k] = 'yes'
+      })
+      ;['59', '61'].forEach((k) => {
+        inspectionResultsFinal[k] = 'no'
+      })
+      ;['48', '49', '50', '51', '52', '53', '54', '55'].forEach((k) => {
+        inspectionResultsFinal[k] = 'none'
+      })
+    }
+    // Linkage: if seq=17 is "yes", then seq=36/37/38 are forced to "yes";
+    // otherwise (including empty), forced to "none".
+    const seq17 = String(inspectionResultsFinal['17'] || '').trim()
+    const linkedChoice = seq17 === 'yes' ? 'yes' : 'none'
+    inspectionResultsFinal['36'] = linkedChoice
+    inspectionResultsFinal['37'] = linkedChoice
+    inspectionResultsFinal['38'] = linkedChoice
 
     // Dialog "序号 1" is not shown to user and should always be "yes".
     // We derive its seq from the template (first yellow-highlight inspection row).
