@@ -1117,10 +1117,29 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
     const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
     const defaultMap = DEFAULT_INSPECTION_RESULT_MAP
 
+    // Dialog "序号 1" is not shown to user and should always be "yes".
+    // We derive its seq from the template (first yellow-highlight inspection row).
+    let forceYesSeq = null
+    try {
+      const templateZip = await JSZip.loadAsync(templateBuffer)
+      const templateDoc = templateZip.file('word/document.xml')
+      if (templateDoc) {
+        const templateXml = await templateDoc.async('string')
+        const allItems = extractInspectionItemsFromTemplateXml(templateXml)
+        forceYesSeq = allItems && allItems.length ? String(allItems[0].seq || '').trim() : null
+      }
+    } catch (e) {
+      console.warn('解析模板默认强制勾选行失败:', e)
+    }
+    const inspectionResultsFinal = {
+      ...(inspectionResults || {}),
+      ...(forceYesSeq ? { [forceYesSeq]: 'yes' } : {})
+    }
+
     const generatedBuffer = await renderDocxTemplate(
       templateBuffer,
       mergedData,
-      inspectionResults,
+      inspectionResultsFinal,
       defaultMap,
       manualSeqs
     )
@@ -1261,7 +1280,9 @@ router.get('/inspection-template/items', async (req, res) => {
         .json({ code: 500, success: false, message: '模板内容不完整' })
     }
     const xml = await docFile.async('string')
-    const items = extractInspectionItemsFromTemplateXml(xml)
+    const allItems = extractInspectionItemsFromTemplateXml(xml)
+    // "序号 1" is fixed to "yes" and not shown in the dialog.
+    const items = allItems.length ? allItems.slice(1) : []
     res.json({ code: 0, success: true, data: items })
   } catch (error) {
     console.error('读取检验模板失败:', error)
