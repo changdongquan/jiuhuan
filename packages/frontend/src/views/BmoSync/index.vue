@@ -497,6 +497,11 @@ onBeforeUnmount(() => {
     justify-content: center;
   }
 
+  /* 采集表：项目编号 tag 背景宽度 +15px */
+  :deep(.el-tag.pm-status-tag--fixed.bmo-project-code-tag) {
+    width: 95px;
+  }
+
   .bmo-project-code-tag {
     max-width: 100%;
   }
