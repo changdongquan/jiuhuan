@@ -1227,11 +1227,11 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
       ].forEach((k) => {
         inspectionResultsFinal[k] = 'none'
       })
-    } else if (
-      runnerType === '开放式热流道' ||
-      runnerType === '点浇口热流道' ||
-      runnerType === '针阀式热流道'
-    ) {
+	    } else if (
+	      runnerType === '开放式热流道' ||
+	      runnerType === '点浇口热流道' ||
+	      runnerType === '针阀式热流道'
+	    ) {
       ;['10', '56', '57', '58', '60', '62', '63', '64', '65', '66', '67', '68'].forEach((k) => {
         inspectionResultsFinal[k] = 'yes'
       })
@@ -1250,28 +1250,27 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
     inspectionResultsFinal['37'] = linkedChoice
     inspectionResultsFinal['38'] = linkedChoice
 
-    // Dialog "序号 1" is not shown to user and should always be "yes".
-    // We derive its seq from the template (first yellow-highlight inspection row).
-    let forceYesSeq = null
-    try {
-      const templateZip = await JSZip.loadAsync(templateBuffer)
-      const templateDoc = templateZip.file('word/document.xml')
-      if (templateDoc) {
-        const templateXml = await templateDoc.async('string')
-        const allItems = extractInspectionItemsFromTemplateXml(templateXml)
-        forceYesSeq = allItems && allItems.length ? String(allItems[0].seq || '').trim() : null
-      }
-    } catch (e) {
-      console.warn('解析模板默认强制勾选行失败:', e)
-    }
-    const inspectionResultsFinal = {
-      ...(inspectionResults || {}),
-      ...(forceYesSeq ? { [forceYesSeq]: 'yes' } : {})
-    }
+	    // Dialog "序号 1" is not shown to user and should always be "yes".
+	    // We derive its seq from the template (first yellow-highlight inspection row).
+	    let forceYesSeq = null
+	    try {
+	      const templateZip = await JSZip.loadAsync(templateBuffer)
+	      const templateDoc = templateZip.file('word/document.xml')
+	      if (templateDoc) {
+	        const templateXml = await templateDoc.async('string')
+	        const allItems = extractInspectionItemsFromTemplateXml(templateXml)
+	        forceYesSeq = allItems && allItems.length ? String(allItems[0].seq || '').trim() : null
+	      }
+	    } catch (e) {
+	      console.warn('解析模板默认强制勾选行失败:', e)
+	    }
+	    if (forceYesSeq) {
+	      inspectionResultsFinal[forceYesSeq] = 'yes'
+	    }
 
-    const generatedBuffer = await renderDocxTemplate(
-      templateBuffer,
-      mergedData,
+	    const generatedBuffer = await renderDocxTemplate(
+	      templateBuffer,
+	      mergedData,
       inspectionResultsFinal,
       defaultMap,
       manualSeqs
