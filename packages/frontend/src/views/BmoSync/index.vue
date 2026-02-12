@@ -66,9 +66,14 @@
         <el-table-column prop="mold_number" label="模具编号" width="130" show-overflow-tooltip />
         <el-table-column prop="project_code" label="项目编号" width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="project-code" :class="{ empty: !row.project_code }">
-              {{ row.project_code || '-' }}
-            </span>
+            <el-tag
+              v-if="row.project_code"
+              type="success"
+              class="pm-status--moved bmo-project-code-tag"
+            >
+              {{ row.project_code }}
+            </el-tag>
+            <el-tag v-else type="info" class="bmo-project-code-tag">-</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="bid_price_tax_incl" label="中标价格(含税)" width="140" align="right">
@@ -387,14 +392,22 @@ onBeforeUnmount(() => {
     line-height: 1.1;
   }
 
-  .project-code {
-    font-weight: 600;
-    color: var(--el-color-success);
+  /* 对齐“项目管理-项目状态”的 tag 风格 */
+  :deep(.el-tag) {
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   }
 
-  .project-code.empty {
-    font-weight: 400;
-    color: var(--el-text-color-secondary);
+  :deep(.el-tag.pm-status--moved) {
+    color: #52c41a !important;
+    background-color: rgb(82 196 26 / 12%) !important;
+    border-color: rgb(82 196 26 / 45%) !important;
+  }
+
+  .bmo-project-code-tag {
+    max-width: 100%;
   }
 }
 </style>
