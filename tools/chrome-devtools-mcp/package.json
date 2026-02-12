@@ -1,0 +1,13 @@
+{
+  "name": "chrome-devtools-mcp-local",
+  "private": true,
+  "description": "Repo-local wrapper for chrome-devtools-mcp (MCP server for Chrome DevTools).",
+  "license": "UNLICENSED",
+  "scripts": {
+    "mcp": "chrome-devtools-mcp"
+  },
+  "devDependencies": {
+    "chrome-devtools-mcp": "^0.17.0"
+  }
+}
+

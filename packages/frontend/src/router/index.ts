@@ -194,6 +194,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
           canTo: true,
           activeMenu: '/project-management/quotation'
         }
+      },
+      {
+        path: 'bmo-sync',
+        name: 'BmoSync',
+        component: () => import('@/views/BmoSync/index.vue'),
+        meta: {
+          title: 'BMO采集',
+          icon: 'vi-ep:refresh',
+          roles: ['*'],
+          noCache: true
+        }
       }
     ]
   },

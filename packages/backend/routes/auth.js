@@ -5,7 +5,13 @@ const { query } = require('../database')
 // 检测是否是开发环境
 // 只在 NODE_ENV 显式为 development/dev 时才视为开发环境
 // 防止生产环境未设置 NODE_ENV 时误判为开发模式
-const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev'
+// 但本仓库开发环境常在 macOS，本机启动时经常未设置 NODE_ENV。
+// 为了让开发端始终保持“开发测试用户默认登录”，在 darwin 且 NODE_ENV 为空时也视为开发环境。
+const isDev =
+  process.env.NODE_ENV === 'development' ||
+  process.env.NODE_ENV === 'dev' ||
+  (process.platform === 'darwin' && !process.env.NODE_ENV) ||
+  process.env.FORCE_DEV_AUTO_LOGIN === '1'
 
 // 尝试动态加载 ldapjs（用于域用户验证）
 let ldap = null
