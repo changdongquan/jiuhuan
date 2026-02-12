@@ -64,7 +64,13 @@
         <el-table-column prop="part_name" label="零部件名称" width="160" show-overflow-tooltip />
         <el-table-column prop="model" label="产品型号" width="170" show-overflow-tooltip />
         <el-table-column prop="mold_number" label="模具编号" width="130" show-overflow-tooltip />
-        <el-table-column prop="project_code" label="项目编号" width="140" show-overflow-tooltip />
+        <el-table-column prop="project_code" label="项目编号" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="project-code" :class="{ empty: !row.project_code }">
+              {{ row.project_code || '-' }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="bid_price_tax_incl" label="中标价格(含税)" width="140" align="right">
           <template #default="{ row }">
             {{ formatAmount(row.bid_price_tax_incl) }}
@@ -379,6 +385,16 @@ onBeforeUnmount(() => {
     font-size: 20px;
     font-weight: 600;
     line-height: 1.1;
+  }
+
+  .project-code {
+    font-weight: 600;
+    color: var(--el-color-success);
+  }
+
+  .project-code.empty {
+    font-weight: 400;
+    color: var(--el-text-color-secondary);
   }
 }
 </style>
