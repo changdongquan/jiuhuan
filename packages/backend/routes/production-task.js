@@ -1280,10 +1280,133 @@ router.get('/inspection-template/items', async (req, res) => {
         .json({ code: 500, success: false, message: '模板内容不完整' })
     }
     const xml = await docFile.async('string')
-    const allItems = extractInspectionItemsFromTemplateXml(xml)
-    // "序号 1" is fixed to "yes" and not shown in the dialog.
-    const items = allItems.length ? allItems.slice(1) : []
+    // seq=3 is fixed to "yes" and not shown in the dialog.
+    const items = extractInspectionItemsFromTemplateXml(xml).filter((x) => String(x.seq) !== '3')
     res.json({ code: 0, success: true, data: items })
+  } catch (error) {
+    console.error('读取检验模板失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取检验模板失败',
+      error: error.message
+    })
+  }
+})
+
+// 获取检验模板条目（按项目计算默认结果，用于只读展示）
+router.get('/:projectCode(*)/inspection-template/items', async (req, res) => {
+  try {
+    const projectCode = getProjectCodeParam(req)
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const existed = await assertProjectExists(projectCode)
+    if (!existed) {
+      return res.status(404).json({ code: 404, success: false, message: '生产任务不存在' })
+    }
+
+    const templateExists = await ensureTemplateExists(INSPECTION_TEMPLATE_PATH)
+    if (!templateExists) {
+      return res.status(500).json({ code: 500, success: false, message: '模板文件不存在' })
+    }
+
+    const templateBuffer = await fsp.readFile(INSPECTION_TEMPLATE_PATH)
+    const zip = await JSZip.loadAsync(templateBuffer)
+    const docFile = zip.file('word/document.xml')
+    if (!docFile) {
+      return res.status(500).json({ code: 500, success: false, message: '模板内容不完整' })
+    }
+    const xml = await docFile.async('string')
+    const baseItems = extractInspectionItemsFromTemplateXml(xml).filter((x) => String(x.seq) !== '3')
+
+    const materialInfo = await getProjectMaterialInfo(projectCode)
+    const sliderMaterial = String(materialInfo?.sliderMaterial || '').trim()
+    const runnerType = String(materialInfo?.runnerType || '').trim()
+
+    let hasOilCylinderCorePull = false
+    let corePullMethod = ''
+    try {
+      const raw = String(materialInfo?.corePullDetail || '').trim()
+      const list = raw ? JSON.parse(raw) : []
+      if (Array.isArray(list)) {
+        hasOilCylinderCorePull = list.some((x) => String(x?.方式 || '').trim() === '油缸')
+        const methods = Array.from(
+          new Set(list.map((x) => String(x?.方式 || '').trim()).filter(Boolean))
+        )
+        corePullMethod = methods.join('/')
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const forcedMap = {
+      '5': hasOilCylinderCorePull ? 'yes' : 'none',
+      '33': sliderMaterial ? 'yes' : 'none',
+      '35': sliderMaterial ? 'yes' : 'none'
+    }
+
+    if (runnerType === '冷流道') {
+      ;['48', '49', '50', '51', '52', '53', '55'].forEach((k) => {
+        forcedMap[k] = 'yes'
+      })
+      ;['54'].forEach((k) => {
+        forcedMap[k] = 'no'
+      })
+      ;[
+        '10',
+        '56',
+        '57',
+        '58',
+        '59',
+        '60',
+        '61',
+        '62',
+        '63',
+        '64',
+        '65',
+        '66',
+        '67',
+        '68'
+      ].forEach((k) => {
+        forcedMap[k] = 'none'
+      })
+    } else if (
+      runnerType === '开放式热流道' ||
+      runnerType === '点浇口热流道' ||
+      runnerType === '针阀式热流道'
+    ) {
+      ;['10', '56', '57', '58', '60', '62', '63', '64', '65', '66', '67', '68'].forEach((k) => {
+        forcedMap[k] = 'yes'
+      })
+      ;['59', '61'].forEach((k) => {
+        forcedMap[k] = 'no'
+      })
+      ;['48', '49', '50', '51', '52', '53', '54', '55'].forEach((k) => {
+        forcedMap[k] = 'none'
+      })
+    }
+
+    const manualSeqSet = new Set(['17', '34', '47', '79'])
+    const items = baseItems.map((item) => {
+      const seq = String(item.seq)
+      const manual = manualSeqSet.has(seq)
+      // Readonly table: default is empty. Only show computed values after reading DB rules.
+      const defaultChoice = manual ? '' : forcedMap[seq] || ''
+      return { ...item, manual, defaultChoice }
+    })
+
+    res.json({
+      code: 0,
+      success: true,
+      data: items,
+      meta: {
+        sliderMaterial,
+        runnerType,
+        corePullMethod
+      }
+    })
   } catch (error) {
     console.error('读取检验模板失败:', error)
     res.status(500).json({
