@@ -64,6 +64,14 @@
         <el-table-column prop="part_name" label="零部件名称" width="160" show-overflow-tooltip />
         <el-table-column prop="model" label="产品型号" width="170" show-overflow-tooltip />
         <el-table-column prop="mold_number" label="模具编号" width="130" show-overflow-tooltip />
+        <el-table-column prop="bid_price_tax_incl" label="中标价格(含税)" width="140" align="right">
+          <template #default="{ row }">
+            {{ formatAmount(row.bid_price_tax_incl) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="bid_time" label="中标时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.bid_time) }}</template>
+        </el-table-column>
         <el-table-column prop="project_code" label="项目编号" width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag
@@ -76,14 +84,6 @@
             </el-tag>
             <el-tag v-else type="info" class="bmo-project-code-tag">-</el-tag>
           </template>
-        </el-table-column>
-        <el-table-column prop="bid_price_tax_incl" label="中标价格(含税)" width="140" align="right">
-          <template #default="{ row }">
-            {{ formatAmount(row.bid_price_tax_incl) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="bid_time" label="中标时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.bid_time) }}</template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -297,9 +297,9 @@ const exportCsv = () => {
     '零部件名称',
     '产品型号',
     '模具编号',
-    '项目编号',
     '中标价格（含税）',
-    '中标时间'
+    '中标时间',
+    '项目编号'
   ]
   const escapeCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
   const lines = [
@@ -312,9 +312,9 @@ const exportCsv = () => {
         row.part_name,
         row.model,
         row.mold_number,
-        row.project_code ?? '',
         row.bid_price_tax_incl ?? '',
-        formatTime(row.bid_time)
+        formatTime(row.bid_time),
+        row.project_code ?? ''
       ]
         .map(escapeCell)
         .join(',')
