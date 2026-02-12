@@ -64,6 +64,7 @@
         <el-table-column prop="part_name" label="零部件名称" width="160" show-overflow-tooltip />
         <el-table-column prop="model" label="产品型号" width="170" show-overflow-tooltip />
         <el-table-column prop="mold_number" label="模具编号" width="130" show-overflow-tooltip />
+        <el-table-column prop="project_code" label="项目编号" width="140" show-overflow-tooltip />
         <el-table-column prop="bid_price_tax_incl" label="中标价格(含税)" width="140" align="right">
           <template #default="{ row }">
             {{ formatAmount(row.bid_price_tax_incl) }}
@@ -251,6 +252,7 @@ const exportCsv = () => {
     '零部件名称',
     '产品型号',
     '模具编号',
+    '项目编号',
     '中标价格（含税）',
     '中标时间'
   ]
@@ -265,6 +267,7 @@ const exportCsv = () => {
         row.part_name,
         row.model,
         row.mold_number,
+        row.project_code ?? '',
         row.bid_price_tax_incl ?? '',
         formatTime(row.bid_time)
       ]

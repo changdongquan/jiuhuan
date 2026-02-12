@@ -75,6 +75,39 @@ const markStaleRunningTasksFailed = async () => {
   }
 }
 
+const getProjectCodeByCustomerModelNo = async (customerModelNos) => {
+  const list = Array.from(new Set((customerModelNos || []).map((x) => String(x || '').trim()).filter(Boolean)))
+  if (!list.length) return new Map()
+
+  const params = {}
+  const placeholders = list.map((value, idx) => {
+    const key = `m${idx}`
+    params[key] = value
+    return `@${key}`
+  })
+
+  const rows = await query(
+    `
+      SELECT
+        客户模号 as customerModelNo,
+        MAX(项目编号) as projectCode
+      FROM 项目管理
+      WHERE 客户模号 IN (${placeholders.join(', ')})
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+      GROUP BY 客户模号;
+    `,
+    params
+  )
+
+  const map = new Map()
+  for (const row of rows || []) {
+    const k = String(row?.customerModelNo || '').trim()
+    if (!k) continue
+    map.set(k, row?.projectCode ? String(row.projectCode).trim() : null)
+  }
+  return map
+}
+
 const createTaskLog = async (requestJson, triggeredBy) => {
   const rows = await query(
     `
@@ -322,9 +355,17 @@ router.get('/mould-procurement', async (req, res) => {
           part_name,
           model,
           mold_number,
+          pm.project_code,
           bid_price_tax_incl,
           bid_time
         FROM bmo_mould_procurement
+        OUTER APPLY (
+          SELECT TOP 1 项目编号 as project_code
+          FROM 项目管理 p
+          WHERE p.客户模号 = bmo_mould_procurement.mold_number
+            AND (p.状态 IS NULL OR p.状态 <> N'已删除')
+          ORDER BY 项目编号 DESC
+        ) pm
         ORDER BY
           CASE WHEN source_create_time IS NULL THEN 1 ELSE 0 END,
           source_create_time DESC,
@@ -365,6 +406,7 @@ router.get('/mould-procurement/live', async (req, res) => {
     })
 
     const list = Array.isArray(result?.list) ? result.list : []
+    const projectCodeMap = await getProjectCodeByCustomerModelNo(list.map((x) => x.moldNumber).filter(Boolean))
     const viewList = list.map((row, idx) => ({
       seq: offset + idx + 1,
       bmo_record_id: row.bmoRecordId || null,
@@ -373,6 +415,7 @@ router.get('/mould-procurement/live', async (req, res) => {
       part_name: row.partName || null,
       model: row.model || null,
       mold_number: row.moldNumber || null,
+      project_code: projectCodeMap.get(String(row.moldNumber || '').trim()) || null,
       bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
       bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
     }))
