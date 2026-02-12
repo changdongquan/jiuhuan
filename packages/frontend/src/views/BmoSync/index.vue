@@ -68,8 +68,9 @@
           <template #default="{ row }">
             <el-tag
               v-if="row.project_code"
-              type="success"
-              class="pm-status--moved bmo-project-code-tag"
+              :type="getStatusTagType(row.project_status)"
+              :class="getStatusTagClass(row.project_status)"
+              class="pm-status-tag--fixed bmo-project-code-tag"
             >
               {{ row.project_code }}
             </el-tag>
@@ -160,6 +161,39 @@ import {
   type BmoMouldProcurementRow,
   type BmoTaskLog
 } from '@/api/bmo'
+
+const getStatusTagType = (status?: string | null) => {
+  if (!status) return 'info'
+  const statusTypeMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
+    T0: 'danger',
+    T1: 'warning',
+    T2: 'warning',
+    设计中: 'warning',
+    加工中: 'primary',
+    表面处理: 'info',
+    封样: 'primary',
+    待移模: 'primary',
+    已经移模: 'success'
+  }
+  return statusTypeMap[status] || 'info'
+}
+
+const statusClassMap: Record<string, string> = {
+  T0: 'pm-status--t0',
+  T1: 'pm-status--t1',
+  T2: 'pm-status--t2',
+  设计中: 'pm-status--designing',
+  加工中: 'pm-status--processing',
+  表面处理: 'pm-status--surface',
+  封样: 'pm-status--sample',
+  待移模: 'pm-status--pending-move',
+  已经移模: 'pm-status--moved'
+}
+
+const getStatusTagClass = (status?: string | null) => {
+  if (!status) return ''
+  return statusClassMap[status] || ''
+}
 
 const loadingLatest = ref(false)
 const loadingTasks = ref(false)
@@ -400,10 +434,67 @@ onBeforeUnmount(() => {
     box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
   }
 
+  :deep(.el-tag.pm-status--t0) {
+    color: #f5222d !important;
+    background-color: rgb(245 34 45 / 12%) !important;
+    border-color: rgb(245 34 45 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--t1) {
+    color: #fa541c !important;
+    background-color: rgb(250 84 28 / 12%) !important;
+    border-color: rgb(250 84 28 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--t2) {
+    color: #faad14 !important;
+    background-color: rgb(250 173 20 / 12%) !important;
+    border-color: rgb(250 173 20 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--designing) {
+    color: #67c23a !important;
+    background-color: rgb(103 194 58 / 12%) !important;
+    border-color: rgb(103 194 58 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--processing) {
+    color: #e6a23c !important;
+    background-color: rgb(230 162 60 / 12%) !important;
+    border-color: rgb(230 162 60 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--surface) {
+    color: #13c2c2 !important;
+    background-color: rgb(19 194 194 / 12%) !important;
+    border-color: rgb(19 194 194 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--sample) {
+    color: #2f54eb !important;
+    background-color: rgb(47 84 235 / 12%) !important;
+    border-color: rgb(47 84 235 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status--pending-move) {
+    color: #eb2f96 !important;
+    background-color: rgb(235 47 150 / 12%) !important;
+    border-color: rgb(235 47 150 / 45%) !important;
+  }
+
   :deep(.el-tag.pm-status--moved) {
     color: #52c41a !important;
     background-color: rgb(82 196 26 / 12%) !important;
     border-color: rgb(82 196 26 / 45%) !important;
+  }
+
+  :deep(.el-tag.pm-status-tag--fixed) {
+    display: inline-flex;
+    width: 80px;
+    text-align: center;
+    white-space: nowrap;
+    box-sizing: border-box;
+    justify-content: center;
   }
 
   .bmo-project-code-tag {

@@ -30,6 +30,7 @@ export interface BmoMouldProcurementRow {
   model: string | null
   mold_number: string | null
   project_code?: string | null
+  project_status?: string | null
   bid_price_tax_incl: number | null
   bid_time: string | null
 }

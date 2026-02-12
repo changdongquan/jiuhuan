@@ -75,7 +75,7 @@ const markStaleRunningTasksFailed = async () => {
   }
 }
 
-const getProjectCodeByCustomerModelNo = async (customerModelNos) => {
+const getProjectInfoByCustomerModelNo = async (customerModelNos) => {
   const list = Array.from(new Set((customerModelNos || []).map((x) => String(x || '').trim()).filter(Boolean)))
   if (!list.length) return new Map()
 
@@ -90,7 +90,8 @@ const getProjectCodeByCustomerModelNo = async (customerModelNos) => {
     `
       SELECT
         客户模号 as customerModelNo,
-        MAX(项目编号) as projectCode
+        MAX(项目编号) as projectCode,
+        MAX(项目状态) as projectStatus
       FROM 项目管理
       WHERE 客户模号 IN (${placeholders.join(', ')})
         AND (状态 IS NULL OR 状态 <> N'已删除')
@@ -103,7 +104,10 @@ const getProjectCodeByCustomerModelNo = async (customerModelNos) => {
   for (const row of rows || []) {
     const k = String(row?.customerModelNo || '').trim()
     if (!k) continue
-    map.set(k, row?.projectCode ? String(row.projectCode).trim() : null)
+    map.set(k, {
+      projectCode: row?.projectCode ? String(row.projectCode).trim() : null,
+      projectStatus: row?.projectStatus ? String(row.projectStatus).trim() : null
+    })
   }
   return map
 }
@@ -356,11 +360,12 @@ router.get('/mould-procurement', async (req, res) => {
           model,
           mold_number,
           pm.project_code,
+          pm.project_status,
           bid_price_tax_incl,
           bid_time
         FROM bmo_mould_procurement
         OUTER APPLY (
-          SELECT TOP 1 项目编号 as project_code
+          SELECT TOP 1 项目编号 as project_code, 项目状态 as project_status
           FROM 项目管理 p
           WHERE p.客户模号 = bmo_mould_procurement.mold_number
             AND (p.状态 IS NULL OR p.状态 <> N'已删除')
@@ -406,7 +411,9 @@ router.get('/mould-procurement/live', async (req, res) => {
     })
 
     const list = Array.isArray(result?.list) ? result.list : []
-    const projectCodeMap = await getProjectCodeByCustomerModelNo(list.map((x) => x.moldNumber).filter(Boolean))
+    const projectInfoMap = await getProjectInfoByCustomerModelNo(
+      list.map((x) => x.moldNumber).filter(Boolean)
+    )
     const viewList = list.map((row, idx) => ({
       seq: offset + idx + 1,
       bmo_record_id: row.bmoRecordId || null,
@@ -415,7 +422,8 @@ router.get('/mould-procurement/live', async (req, res) => {
       part_name: row.partName || null,
       model: row.model || null,
       mold_number: row.moldNumber || null,
-      project_code: projectCodeMap.get(String(row.moldNumber || '').trim()) || null,
+      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
+      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
       bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
       bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
     }))
