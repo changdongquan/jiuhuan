@@ -289,7 +289,7 @@ const retryingTaskId = ref<number | null>(null)
 const syncDialogVisible = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
-const useLiveOrder = ref(true)
+const useLiveOrder = ref(false)
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const taskList = ref<BmoTaskLog[]>([])
@@ -344,18 +344,33 @@ const loadLatest = async () => {
   loadingLatest.value = true
   try {
     if (useLiveOrder.value) {
-      const res = await getBmoMouldProcurementLiveApi({ pageSize: 200, offset: 0 })
-      latestList.value = res.data?.list || []
+      try {
+        const res = await getBmoMouldProcurementLiveApi({
+          pageSize: 200,
+          offset: 0,
+          timeout: 12000
+        })
+        latestList.value = res.data?.list || []
+        return
+      } catch (e: any) {
+        ElMessage.warning(e?.message || '实时顺序读取失败，已回退库内顺序')
+        useLiveOrder.value = false
+      }
     } else {
-      const res = await getBmoMouldProcurementApi({ limit: 200 })
+      const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
       latestList.value = res.data?.list || []
+      return
     }
+
+    const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
+    latestList.value = res.data?.list || []
   } finally {
     loadingLatest.value = false
   }
 }
 
 watch(useLiveOrder, () => {
+  if (loadingLatest.value) return
   void loadLatest()
 })
 

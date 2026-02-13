@@ -123,10 +123,11 @@ export const retryBmoSyncApi = (taskId: number) => {
   })
 }
 
-export const getBmoMouldProcurementApi = (params: { limit?: number } = {}) => {
+export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: number } = {}) => {
   return request.get<{ list: BmoMouldProcurementRow[]; count: number }>({
     url: '/api/bmo/mould-procurement',
-    params
+    params: { limit: params.limit },
+    timeout: params.timeout
   })
 }
 
@@ -136,6 +137,7 @@ export const getBmoMouldProcurementLiveApi = (
     offset?: number
     conditions?: Record<string, unknown>
     sorts?: Record<string, string>
+    timeout?: number
   } = {}
 ) => {
   return request.get<{
@@ -152,13 +154,15 @@ export const getBmoMouldProcurementLiveApi = (
       ...params,
       conditions: params.conditions ? JSON.stringify(params.conditions) : undefined,
       sorts: params.sorts ? JSON.stringify(params.sorts) : undefined
-    }
+    },
+    timeout: params.timeout
   })
 }
 
 export const getBmoMouldProcurementDetailApi = (params: { fdId: string }) => {
   return request.get<BmoMouldProcurementDetail>({
     url: '/api/bmo/mould-procurement/detail',
-    params
+    params,
+    timeout: 15000
   })
 }
