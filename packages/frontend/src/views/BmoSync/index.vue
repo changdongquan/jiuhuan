@@ -85,6 +85,11 @@
             <el-tag v-else type="info" class="bmo-project-code-tag">-</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openInitiateDialog(row)">立项</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
@@ -146,6 +151,86 @@
         <el-button type="primary" :loading="syncing" @click="handleSync">开始采集</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="initiateDialogVisible" title="立项" width="980px" destroy-on-close>
+      <div v-loading="initiateLoading" class="space-y-3">
+        <el-descriptions :column="3" border size="small" title="表头信息">
+          <el-descriptions-item label="零部件图号">
+            {{ initiateRow?.part_no || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="零部件名称">
+            {{ initiateRow?.part_name || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="产品型号">
+            {{ initiateRow?.model || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="模具编号">
+            {{ initiateRow?.mold_number || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="中标价格(含税)">
+            {{ formatAmount(initiateRow?.bid_price_tax_incl ?? null) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="中标时间">
+            {{ formatTime(initiateRow?.bid_time || null) }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="3" border size="small" title="1.4-模具清单详情">
+          <el-descriptions-item label="提需类型">
+            {{ initiateDetail?.demandType ?? '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="设计师">
+            {{ initiateDetail?.designer ?? '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="BMO 记录ID">
+            {{ initiateDetail?.fdId ?? initiateRow?.bmo_record_id ?? '-' }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-card shadow="never" class="bmo-initiate-card">
+          <template #header>模具技术要求</template>
+          <el-table :data="initiateDetail?.tech?.fields || []" border size="small" max-height="320">
+            <el-table-column prop="label" label="字段" width="220" show-overflow-tooltip />
+            <el-table-column prop="value" label="值" min-width="260" show-overflow-tooltip />
+          </el-table>
+        </el-card>
+
+        <el-card shadow="never" class="bmo-initiate-card">
+          <template #header>技术要求附件</template>
+          <el-table
+            :data="initiateDetail?.tech?.attachments || []"
+            border
+            size="small"
+            max-height="220"
+          >
+            <el-table-column prop="fileName" label="文件名" min-width="320" show-overflow-tooltip />
+            <el-table-column prop="fileSize" label="大小" width="120" align="right">
+              <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="上传时间" width="180">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="90" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="row.id"
+                  link
+                  type="primary"
+                  @click="downloadTechAttachment(row.id)"
+                >
+                  下载
+                </el-button>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </div>
+
+      <template #footer>
+        <el-button @click="initiateDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -155,10 +240,12 @@ import { ElMessage } from 'element-plus'
 import {
   getBmoMouldProcurementApi,
   getBmoMouldProcurementLiveApi,
+  getBmoMouldProcurementDetailApi,
   getBmoTasksApi,
   retryBmoSyncApi,
   syncBmoApi,
   type BmoMouldProcurementRow,
+  type BmoMouldProcurementDetail,
   type BmoTaskLog
 } from '@/api/bmo'
 
@@ -207,6 +294,11 @@ const useLiveOrder = ref(true)
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const taskList = ref<BmoTaskLog[]>([])
 
+const initiateDialogVisible = ref(false)
+const initiateLoading = ref(false)
+const initiateRow = ref<BmoMouldProcurementRow | null>(null)
+const initiateDetail = ref<BmoMouldProcurementDetail | null>(null)
+
 const syncForm = reactive({
   pageSize: 25,
   maxPages: 20,
@@ -226,6 +318,19 @@ const formatAmount = (value: number | null | undefined) => {
   if (value === null || value === undefined) return '-'
   const amount = Number(value)
   return Number.isFinite(amount) ? amount.toLocaleString('zh-CN') : '-'
+}
+
+const formatFileSize = (bytes: number | null | undefined) => {
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = n
+  let idx = 0
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024
+    idx += 1
+  }
+  return `${size.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
 const taskTagType = (status?: string) => {
@@ -270,6 +375,32 @@ const refreshAll = async () => {
 
 const openSyncDialog = () => {
   syncDialogVisible.value = true
+}
+
+const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
+  const fdId = row.bmo_record_id
+  if (!fdId) {
+    ElMessage.warning('缺少 BMO 记录ID（bmo_record_id），无法读取 1.4 详情')
+    return
+  }
+
+  initiateDialogVisible.value = true
+  initiateRow.value = row
+  initiateDetail.value = null
+  initiateLoading.value = true
+  try {
+    const res = await getBmoMouldProcurementDetailApi({ fdId })
+    initiateDetail.value = res.data || null
+  } catch (e: any) {
+    ElMessage.error(e?.message || '读取 1.4 详情失败')
+  } finally {
+    initiateLoading.value = false
+  }
+}
+
+const downloadTechAttachment = (attachmentId: string) => {
+  const url = `/api/bmo/attachment/download/${encodeURIComponent(attachmentId)}`
+  window.open(url, '_blank')
 }
 
 const handleRetry = async (taskId: number) => {
@@ -504,6 +635,12 @@ onBeforeUnmount(() => {
 
   .bmo-project-code-tag {
     max-width: 100%;
+  }
+
+  .bmo-initiate-card {
+    :deep(.el-card__header) {
+      padding: 10px 14px;
+    }
   }
 }
 </style>

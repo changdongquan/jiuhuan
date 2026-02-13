@@ -35,6 +35,31 @@ export interface BmoMouldProcurementRow {
   bid_time: string | null
 }
 
+export interface BmoMouldProcurementDetailField {
+  name: string
+  label: string
+  value: string | number | null
+}
+
+export interface BmoMouldProcurementDetailAttachment {
+  id: string | null
+  fileName: string | null
+  fileExt: string | null
+  fileSize: number | null
+  createdAt: string | null
+}
+
+export interface BmoMouldProcurementDetail {
+  fdId: string
+  demandType: string | number | null
+  designer: string | number | null
+  tech: {
+    tableName: string
+    fields: BmoMouldProcurementDetailField[]
+    attachments: BmoMouldProcurementDetailAttachment[]
+  }
+}
+
 export interface BmoLatestRecord {
   id: number
   bmo_record_id: string
@@ -128,5 +153,12 @@ export const getBmoMouldProcurementLiveApi = (
       conditions: params.conditions ? JSON.stringify(params.conditions) : undefined,
       sorts: params.sorts ? JSON.stringify(params.sorts) : undefined
     }
+  })
+}
+
+export const getBmoMouldProcurementDetailApi = (params: { fdId: string }) => {
+  return request.get<BmoMouldProcurementDetail>({
+    url: '/api/bmo/mould-procurement/detail',
+    params
   })
 }

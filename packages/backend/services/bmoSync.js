@@ -3,10 +3,23 @@ const crypto = require('crypto')
 
 const DEFAULT_BASE_URL = 'https://bmo.meiling.com:8023'
 const DEFAULT_DATA_ENDPOINT = '/data/sys-modeling/sysModelingMain/data'
+const DEFAULT_VIEW_ENDPOINT = '/data/sys-modeling/sysModelingMain/view'
 const DEFAULT_LOGIN_ENDPOINT = '/data/sys-auth/login'
 const DEFAULT_LOGIN_PAGE_ENDPOINT = '/data/sys-portal/sysPortalLoginPage/loginPage'
 const DEFAULT_VERIFICATION_CHECK_ENDPOINT = '/data/sys-auth/verificationCode/check'
 const DEFAULT_HTTP_TIMEOUT_MS = 15000
+
+// 1.4-模具清单详情：表单配置（用于字段中文名、选项映射、表字段集合）
+const DEFAULT_MOULD_DETAIL_FORM_CONFIG_PATH =
+  '/web/tenant/0/manufact/release/form/config/1j9135nq6wfgw18shworp7ev3tdaie51liw0/448595122a8968c876b61c6f14c002b3.json'
+const DEFAULT_MOULD_DETAIL_VIEW_ID = '1irp0kk3gwbrwis9nw2ojg5as35h08qs3vw0'
+const DEFAULT_MOULD_DETAIL_FORM_ID = '1irp0kjmvwbrwis74wkebru36jtraf1cs5w0'
+const DEFAULT_MOULD_DETAIL_XFORM_ID = '1irp0kjmvwbrwis74wkebru36jtraf1cs5w0'
+const DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE = 'mk_model_20250521q2w2c_s_5js8e'
+
+const FORM_CONFIG_CACHE_TTL_MS = 60 * 60 * 1000
+let cachedFormConfigMeta = null
+let cachedFormConfigAt = 0
 
 const DEFAULT_LIST_QUERY = {
   fdListViewId: '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0',
@@ -133,6 +146,7 @@ class BmoClient {
   constructor() {
     this.baseUrl = process.env.BMO_BASE_URL || DEFAULT_BASE_URL
     this.dataEndpoint = process.env.BMO_DATA_ENDPOINT || DEFAULT_DATA_ENDPOINT
+    this.viewEndpoint = process.env.BMO_VIEW_ENDPOINT || DEFAULT_VIEW_ENDPOINT
     this.loginEndpoint = process.env.BMO_LOGIN_ENDPOINT || DEFAULT_LOGIN_ENDPOINT
     this.loginPageEndpoint = process.env.BMO_LOGIN_PAGE_ENDPOINT || DEFAULT_LOGIN_PAGE_ENDPOINT
     this.verificationCheckEndpoint =
@@ -327,6 +341,291 @@ class BmoClient {
     }
     return data
   }
+
+  async requestJsonFile(pathname, retried = false) {
+    const headers = this.buildHeaders({
+      Accept: 'application/json, text/plain, */*'
+    })
+    // GET 请求不需要 Content-Type，部分服务端会做严格校验
+    delete headers['Content-Type']
+
+    const res = await fetchWithTimeout(
+      new URL(pathname, this.baseUrl),
+      {
+        method: 'GET',
+        headers
+      },
+      this.httpTimeoutMs
+    )
+
+    if (res.status === 401 && !retried && this.hasLoginAuth) {
+      await this.login()
+      return this.requestJsonFile(pathname, true)
+    }
+
+    if (!res.ok) {
+      throw new Error(`BMO 请求失败: HTTP ${res.status}`)
+    }
+    return await res.json()
+  }
+
+  async requestStream(pathname, retried = false) {
+    const headers = this.buildHeaders({
+      Accept: '*/*'
+    })
+    delete headers['Content-Type']
+
+    const res = await fetchWithTimeout(
+      new URL(pathname, this.baseUrl),
+      {
+        method: 'GET',
+        headers
+      },
+      this.httpTimeoutMs
+    )
+
+    if (res.status === 401 && !retried && this.hasLoginAuth) {
+      await this.login()
+      return this.requestStream(pathname, true)
+    }
+
+    return res
+  }
+}
+
+const buildFormConfigMeta = (formConfigJson) => {
+  const meta = {
+    fieldLabelByName: {},
+    fieldOptionsByName: {},
+    labelToFieldName: {},
+    tableFields: {}
+  }
+
+  const auth = Array.isArray(formConfigJson?.auth) ? formConfigJson.auth[0] : null
+  const add = auth?.add && typeof auth.add === 'object' ? auth.add : {}
+  for (const [tableName, tableDef] of Object.entries(add || {})) {
+    const fields = tableDef?.fields && typeof tableDef.fields === 'object' ? Object.keys(tableDef.fields) : []
+    meta.tableFields[tableName] = fields
+  }
+
+  const dataModels = Array.isArray(formConfigJson?.dataModel) ? formConfigJson.dataModel : []
+  for (const model of dataModels) {
+    const fields = Array.isArray(model?.fdFields) ? model.fdFields : []
+    for (const field of fields) {
+      const name = field?.fdName
+      if (!name || typeof name !== 'string') continue
+
+      const label = field?.fdLabel && typeof field.fdLabel === 'string' ? field.fdLabel : null
+      if (label) {
+        meta.fieldLabelByName[name] = label
+        if (!meta.labelToFieldName[label]) meta.labelToFieldName[label] = name
+      }
+
+      const attrRaw = field?.fdAttribute
+      if (typeof attrRaw !== 'string' || !attrRaw.trim().startsWith('{')) continue
+      try {
+        const attr = JSON.parse(attrRaw)
+        const options = attr?.config?.controlProps?.options
+        if (Array.isArray(options) && options.length) {
+          const map = {}
+          for (const opt of options) {
+            const v = opt?.value
+            const l = opt?.label
+            if (typeof v === 'string' && typeof l === 'string') {
+              map[v] = l
+            }
+          }
+          if (Object.keys(map).length) {
+            meta.fieldOptionsByName[name] = map
+          }
+        }
+      } catch (e) {
+        // ignore invalid fdAttribute JSON
+      }
+    }
+  }
+
+  const langRaw = formConfigJson?.lang
+  if (typeof langRaw === 'string' && langRaw.trim().startsWith('{')) {
+    try {
+      const langMap = JSON.parse(langRaw)
+      const rank = { label: 3, displayLabel: 2, title: 1 }
+      for (const entry of Object.values(langMap || {})) {
+        if (!entry || typeof entry !== 'object') continue
+        const prop = entry.prop
+        const name = entry.name
+        const content = entry.content
+        if (!rank[prop] || typeof name !== 'string' || !content || typeof content !== 'object') continue
+        const cn = content.Cn || content.default
+        if (typeof cn !== 'string' || !cn) continue
+        if (!meta.fieldLabelByName[name]) {
+          meta.fieldLabelByName[name] = cn
+          if (!meta.labelToFieldName[cn]) meta.labelToFieldName[cn] = name
+        }
+      }
+    } catch (e) {
+      // ignore invalid lang JSON
+    }
+  }
+
+  return meta
+}
+
+const getMouldDetailFormConfigMeta = async (client) => {
+  const now = Date.now()
+  if (cachedFormConfigMeta && now - cachedFormConfigAt < FORM_CONFIG_CACHE_TTL_MS) {
+    return cachedFormConfigMeta
+  }
+
+  const path =
+    process.env.BMO_MOULD_DETAIL_FORM_CONFIG_PATH || DEFAULT_MOULD_DETAIL_FORM_CONFIG_PATH
+  const json = await client.requestJsonFile(path)
+  cachedFormConfigMeta = buildFormConfigMeta(json)
+  cachedFormConfigAt = now
+  return cachedFormConfigMeta
+}
+
+const normalizeDetailValue = (raw, optionsMap) => {
+  if (raw === null || raw === undefined) return null
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed) return null
+    if (optionsMap && typeof optionsMap === 'object' && optionsMap[trimmed]) {
+      return optionsMap[trimmed]
+    }
+    return trimmed
+  }
+
+  if (typeof raw === 'number') {
+    // Heuristic: treat large ints as ms timestamps
+    if (Number.isFinite(raw) && raw > 1e11) {
+      const d = new Date(raw)
+      return Number.isNaN(d.getTime()) ? String(raw) : d.toISOString()
+    }
+    return raw
+  }
+
+  if (typeof raw === 'boolean') return raw ? '是' : '否'
+
+  if (Array.isArray(raw)) {
+    const parts = raw.map((x) => normalizeDetailValue(x, optionsMap)).filter((x) => x !== null)
+    return parts.length ? parts.join('、') : null
+  }
+
+  if (typeof raw === 'object') {
+    if (typeof raw.fdName === 'string' && raw.fdName.trim()) return raw.fdName.trim()
+    if (typeof raw.name === 'string' && raw.name.trim()) return raw.name.trim()
+    if (typeof raw.label === 'string' && raw.label.trim()) return raw.label.trim()
+    if (typeof raw.value === 'string' && raw.value.trim()) {
+      const v = raw.value.trim()
+      if (optionsMap && optionsMap[v]) return optionsMap[v]
+      return v
+    }
+    try {
+      return JSON.stringify(raw)
+    } catch (e) {
+      return String(raw)
+    }
+  }
+
+  return String(raw)
+}
+
+const fetchBmoMouldDetail = async (input = {}) => {
+  const fdId = String(input.fdId || input.bmoRecordId || '').trim()
+  if (!fdId) {
+    throw new Error('缺少 fdId')
+  }
+
+  const client = new BmoClient()
+  if (!client.hasStaticAuth && client.hasLoginAuth) {
+    await client.login()
+  }
+  if (!client.hasStaticAuth && !client.hasLoginAuth) {
+    throw new Error(
+      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
+    )
+  }
+
+  const formMeta = await getMouldDetailFormConfigMeta(client)
+
+  const payload = {
+    fdId,
+    fdMode: 1,
+    fdViewId: process.env.BMO_MOULD_DETAIL_FD_VIEW_ID || DEFAULT_MOULD_DETAIL_VIEW_ID,
+    fdFormId: process.env.BMO_MOULD_DETAIL_FD_FORM_ID || DEFAULT_MOULD_DETAIL_FORM_ID,
+    fdXFormId: process.env.BMO_MOULD_DETAIL_FD_XFORM_ID || DEFAULT_MOULD_DETAIL_XFORM_ID,
+    mechanisms: { load: '*' }
+  }
+
+  const data = await client.requestJson(client.viewEndpoint, payload)
+  const sysXform = data?.data?.mechanisms?.['sys-xform'] || {}
+  const dynamicProps = sysXform?.dynamicProps && typeof sysXform.dynamicProps === 'object' ? sysXform.dynamicProps : {}
+  const attachments = Array.isArray(data?.data?.mechanisms?.attachment)
+    ? data.data.mechanisms.attachment
+    : []
+
+  const demandTypeField = formMeta.labelToFieldName['提需类型'] || 'fd_col_106gyr'
+  const designerField = formMeta.labelToFieldName['设计师'] || 'fd_col_2awc2z'
+  const techAttachmentField = formMeta.labelToFieldName['技术要求附件'] || 'fd_col_5yzo48'
+  const techTableName = process.env.BMO_MOULD_TECH_REQUIREMENTS_TABLE || DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE
+
+  const demandTypeRaw = dynamicProps[demandTypeField]
+  const demandType = normalizeDetailValue(demandTypeRaw, formMeta.fieldOptionsByName[demandTypeField] || null)
+
+  const designerRaw = dynamicProps[designerField]
+  const designer = normalizeDetailValue(designerRaw, formMeta.fieldOptionsByName[designerField] || null)
+
+  const techTable = dynamicProps[techTableName] && typeof dynamicProps[techTableName] === 'object' ? dynamicProps[techTableName] : {}
+  const techFieldNames = Array.isArray(formMeta.tableFields[techTableName]) ? formMeta.tableFields[techTableName] : []
+
+  const techFields = techFieldNames
+    .filter((name) => name && name !== 'fd_id')
+    .map((name) => ({
+      name,
+      label: formMeta.fieldLabelByName[name] || name,
+      value: normalizeDetailValue(techTable[name], formMeta.fieldOptionsByName[name] || null)
+    }))
+
+  const techAttachments = attachments
+    .filter((x) => String(x?.fdEntityKey || '') === techAttachmentField)
+    .map((x) => ({
+      id: x?.fdId || null,
+      fileName: x?.fdFileName || null,
+      fileExt: x?.fdFileExtName || null,
+      fileSize: x?.fdFileSize ?? null,
+      createdAt: x?.fdCreateTime ? new Date(x.fdCreateTime).toISOString() : null
+    }))
+
+  return {
+    fdId,
+    demandType,
+    designer,
+    tech: {
+      tableName: techTableName,
+      fields: techFields,
+      attachments: techAttachments
+    }
+  }
+}
+
+const downloadBmoAttachment = async (attachmentId) => {
+  const id = String(attachmentId || '').trim()
+  if (!id) throw new Error('缺少 attachmentId')
+
+  const client = new BmoClient()
+  if (!client.hasStaticAuth && client.hasLoginAuth) {
+    await client.login()
+  }
+  if (!client.hasStaticAuth && !client.hasLoginAuth) {
+    throw new Error(
+      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
+    )
+  }
+
+  const res = await client.requestStream(`/data/sys-attach/download/${encodeURIComponent(id)}`)
+  return res
 }
 
 const upsertBmoRecord = async (record, traceId) => {
@@ -525,5 +824,7 @@ const fetchBmoMouldListLive = async (input = {}) => {
 
 module.exports = {
   syncBmoMouldData,
-  fetchBmoMouldListLive
+  fetchBmoMouldListLive,
+  fetchBmoMouldDetail,
+  downloadBmoAttachment
 }

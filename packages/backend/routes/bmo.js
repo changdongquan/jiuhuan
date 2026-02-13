@@ -1,6 +1,11 @@
 const express = require('express')
 const { query } = require('../database')
-const { syncBmoMouldData, fetchBmoMouldListLive } = require('../services/bmoSync')
+const {
+  syncBmoMouldData,
+  fetchBmoMouldListLive,
+  fetchBmoMouldDetail,
+  downloadBmoAttachment
+} = require('../services/bmoSync')
 
 const router = express.Router()
 
@@ -354,6 +359,7 @@ router.get('/mould-procurement', async (req, res) => {
       `
         SELECT TOP (${limit})
           id,
+          bmo_record_id,
           project_manager,
           part_no,
           part_name,
@@ -391,6 +397,58 @@ router.get('/mould-procurement', async (req, res) => {
       code: 500,
       success: false,
       message: formatBmoSqlErrorMessage(error, '读取 BMO 模具采购数据失败')
+    })
+  }
+})
+
+router.get('/mould-procurement/detail', async (req, res) => {
+  try {
+    const fdId = String(req.query.fdId || req.query.bmoRecordId || req.query.bmo_record_id || '').trim()
+    if (!fdId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 fdId' })
+    }
+
+    const detail = await fetchBmoMouldDetail({ fdId })
+    return res.json({ code: 0, success: true, data: detail })
+  } catch (error) {
+    console.error('读取 BMO 模具清单详情失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 BMO 模具清单详情失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/attachment/download/:attachmentId', async (req, res) => {
+  try {
+    const attachmentId = String(req.params.attachmentId || '').trim()
+    if (!attachmentId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 attachmentId' })
+    }
+
+    const upstream = await downloadBmoAttachment(attachmentId)
+    if (!upstream.ok) {
+      return res.status(upstream.status || 502).json({
+        code: upstream.status || 502,
+        success: false,
+        message: `BMO 下载失败: HTTP ${upstream.status}`
+      })
+    }
+
+    const contentType = upstream.headers.get('content-type')
+    const disposition = upstream.headers.get('content-disposition')
+    if (contentType) res.setHeader('Content-Type', contentType)
+    if (disposition) res.setHeader('Content-Disposition', disposition)
+
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    return res.send(buf)
+  } catch (error) {
+    console.error('下载 BMO 附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载 BMO 附件失败: ' + (error?.message || '未知错误')
     })
   }
 })
