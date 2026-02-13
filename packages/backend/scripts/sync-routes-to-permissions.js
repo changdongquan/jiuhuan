@@ -62,6 +62,14 @@ const routesToSync = [
     parent_route: 'ProjectManagement'
   },
 
+  // BMO 采集（项目管理下）
+  {
+    route_name: 'BmoSync',
+    route_path: '/project-management/bmo-sync',
+    page_title: 'BMO采集',
+    parent_route: 'ProjectManagement'
+  },
+
   // 生产任务
   {
     route_name: 'ProductionTasksIndex',
