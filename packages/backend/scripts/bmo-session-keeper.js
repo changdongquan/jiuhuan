@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
+const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
@@ -72,6 +73,51 @@ const atomicWriteEnvFile = (filePath, kv, { mode, uid, gid } = {}) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+const fetchWithTimeout = async (url, init, timeoutMs) => {
+  const ms = Number(timeoutMs)
+  const effectiveTimeoutMs = Number.isFinite(ms) && ms > 0 ? ms : 15000
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs)
+  try {
+    return await fetch(url, { ...(init || {}), signal: controller.signal })
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || String(e.message || '').includes('aborted'))) {
+      throw new Error(`BMO 请求超时（${effectiveTimeoutMs}ms）`)
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const readCookieHeader = (headers) => {
+  if (!headers || typeof headers.getSetCookie !== 'function') return null
+  const setCookies = headers.getSetCookie()
+  if (!Array.isArray(setCookies) || !setCookies.length) return null
+  return setCookies
+    .map((cookie) => String(cookie || '').split(';')[0].trim())
+    .filter(Boolean)
+    .join('; ')
+}
+
+const pemFromBase64Spki = (base64) => {
+  const clean = String(base64 || '').trim()
+  if (!clean) return null
+  const wrapped = clean.match(/.{1,64}/g)?.join('\n') || clean
+  return `-----BEGIN PUBLIC KEY-----\n${wrapped}\n-----END PUBLIC KEY-----\n`
+}
+
+const encryptPasswordRsa = (publicKeyPem, password, paddingMode) => {
+  const plaintext = Buffer.from(String(password || ''), 'utf8')
+  const mode = String(paddingMode || 'pkcs1').toLowerCase()
+  const options =
+    mode === 'oaep'
+      ? { key: publicKeyPem, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING }
+      : { key: publicKeyPem, padding: crypto.constants.RSA_PKCS1_PADDING }
+  const encrypted = crypto.publicEncrypt(options, plaintext)
+  return encrypted.toString('base64')
+}
+
 const getCookieHeaderFromCookies = (cookies) => {
   const byName = new Map()
   for (const c of cookies || []) {
@@ -99,6 +145,11 @@ const getCookieHeaderFromCookies = (cookies) => {
   return parts.filter(Boolean).join('; ')
 }
 
+const hasSessionCookies = (cookies) => {
+  const list = Array.isArray(cookies) ? cookies : []
+  return list.some((c) => (c?.name === 'LtpaToken' || c?.name === 'X-AUTH-TOKEN') && c?.value)
+}
+
 const resolveBool = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback
   const v = String(value).trim().toLowerCase()
@@ -108,13 +159,6 @@ const resolveBool = (value, fallback) => {
 }
 
 const main = async () => {
-  let chromium = null
-  try {
-    ;({ chromium } = require('playwright-core'))
-  } catch (e) {
-    throw new Error('缺少依赖：请在 packages/backend 执行 npm i playwright-core')
-  }
-
   // Optional: load env from a file (so we don't pass secrets via CLI args/env inline).
   try {
     const dotenv = require('dotenv')
@@ -131,19 +175,19 @@ const main = async () => {
   const argv = process.argv.slice(2)
   const once = argv.includes('--once') || resolveBool(process.env.BMO_KEEPER_ONCE, false)
   const manual = argv.includes('--manual') || resolveBool(process.env.BMO_KEEPER_MANUAL, false)
+  const loginMode = String(process.env.BMO_KEEPER_LOGIN_MODE || 'chromium').toLowerCase()
 
   const baseUrl = (process.env.BMO_BASE_URL || 'https://bmo.meiling.com:8023').replace(/\/+$/, '')
   const username = process.env.BMO_USERNAME || ''
   const password = process.env.BMO_PASSWORD || ''
+  const rsaPadding = process.env.BMO_RSA_PADDING || 'pkcs1'
+  const dataEndpoint = process.env.BMO_DATA_ENDPOINT || '/data/sys-modeling/sysModelingMain/data'
+  const loginEndpoint = process.env.BMO_LOGIN_ENDPOINT || '/data/sys-auth/login'
+  const loginPageEndpoint =
+    process.env.BMO_LOGIN_PAGE_ENDPOINT || '/data/sys-portal/sysPortalLoginPage/loginPage'
   const authFilePath = process.env.BMO_KEEPER_OUTPUT_ENV_PATH || process.env.BMO_AUTH_FILE || ''
-  const chromePath = process.env.BMO_KEEPER_CHROME_PATH || ''
-  const headless = resolveBool(process.env.BMO_KEEPER_HEADLESS, true)
   const intervalMs = Number(process.env.BMO_KEEPER_INTERVAL_MS || 10 * 60 * 1000)
-  const navTimeoutMs = Number(process.env.BMO_KEEPER_NAV_TIMEOUT_MS || 20000)
   const manualWaitMs = Number(process.env.BMO_KEEPER_MANUAL_WAIT_MS || 120000)
-  const userDataDir =
-    process.env.BMO_KEEPER_USER_DATA_DIR ||
-    path.join(os.homedir(), '.cache', 'jh-craftsys', 'bmo-session-keeper')
 
   if (!authFilePath) {
     throw new Error('未配置输出路径：请设置 BMO_AUTH_FILE 或 BMO_KEEPER_OUTPUT_ENV_PATH')
@@ -153,11 +197,139 @@ const main = async () => {
   }
 
   console.log(`[bmo-keeper] baseUrl=${baseUrl}`)
-  console.log(`[bmo-keeper] userDataDir=${userDataDir}`)
   console.log(`[bmo-keeper] output=${authFilePath}`)
   console.log(
-    `[bmo-keeper] headless=${headless ? 'true' : 'false'} once=${once ? 'true' : 'false'} manual=${manual ? 'true' : 'false'}`
+    `[bmo-keeper] mode=${loginMode} once=${once ? 'true' : 'false'} manual=${manual ? 'true' : 'false'} intervalMs=${intervalMs}`
   )
+
+  const refreshOnceApi = async () => {
+    const existing = readEnvFile(authFilePath)
+    const cookie = existing.BMO_COOKIE || process.env.BMO_COOKIE || ''
+    const token = existing.BMO_X_AUTH_TOKEN || process.env.BMO_X_AUTH_TOKEN || ''
+
+    const headersBase = {
+      Accept: 'application/json, text/plain, */*',
+      'Content-Type': 'application/json;charset=UTF-8',
+      'X-Accept-Language': 'zh-CN',
+      'Accept-Language': 'zh-CN,zh;q=0.9',
+      Origin: baseUrl,
+      Referer: `${baseUrl}/web/`,
+      'User-Agent':
+        process.env.BMO_USER_AGENT ||
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+    }
+
+    const probe = async () => {
+      if (!cookie && !token) return { ok: false, status: 0 }
+      const payload = {
+        fdListViewId: '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0',
+        fdMode: 1,
+        type: 'list',
+        navId: '1j7l907fiwmnw15nidw1m9cagh1kfm6tb3w0',
+        sorts: { fd_create_time: 'desc' },
+        conditions: {},
+        pageSize: 1,
+        offset: 0,
+        params: {}
+      }
+      const headers = { ...headersBase, ...(cookie ? { Cookie: cookie } : {}), ...(token ? { 'X-AUTH-TOKEN': token } : {}) }
+      const res = await fetchWithTimeout(new URL(dataEndpoint, baseUrl), { method: 'POST', headers, body: JSON.stringify(payload) }, 8000)
+      if (res.ok) {
+        const json = await res.json().catch(() => null)
+        if (json && json.success !== false) return { ok: true, status: res.status }
+      }
+      return { ok: false, status: res.status }
+    }
+
+    const probeResult = await probe().catch(() => ({ ok: false, status: 0 }))
+    if (probeResult.ok) {
+      console.log(`[bmo-keeper] probe ok (already connected)`)
+      return
+    }
+
+    if (!username || !password) {
+      throw new Error('缺少 BMO_USERNAME/BMO_PASSWORD，无法进行 API 登录续期')
+    }
+
+    const pubRes = await fetchWithTimeout(
+      new URL(loginPageEndpoint, baseUrl),
+      {
+        method: 'POST',
+        headers: { ...headersBase, 'x-need-pkey': 'RSA' },
+        body: JSON.stringify({ fdClient: 1 })
+      },
+      15000
+    )
+    if (!pubRes.ok) throw new Error(`BMO 获取登录公钥失败: HTTP ${pubRes.status}`)
+    const pubKey = pubRes.headers.get('x-pubkey')
+    if (!pubKey) throw new Error('BMO 未返回 x-pubkey，无法进行 RSA 登录')
+    const pubKeyPem = pemFromBase64Spki(pubKey)
+    if (!pubKeyPem) throw new Error('BMO 登录公钥为空')
+
+    const encryptedPassword = encryptPasswordRsa(pubKeyPem, password, rsaPadding)
+    const form = new URLSearchParams()
+    form.set('j_username', username)
+    form.set('j_password', encryptedPassword)
+
+    const loginRes = await fetchWithTimeout(
+      new URL(loginEndpoint, baseUrl),
+      {
+        method: 'POST',
+        headers: { ...headersBase, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString()
+      },
+      15000
+    )
+    const data = await loginRes.json().catch(() => ({}))
+    if (!loginRes.ok || data?.success === false) {
+      throw new Error(`BMO 登录失败: ${data?.msg || data?.message || `HTTP ${loginRes.status}`}`)
+    }
+
+    const newCookie = readCookieHeader(loginRes.headers)
+    const tokenFromHeader = loginRes.headers.get('x-auth-token')
+    const tokenFromData = data?.data?.token || data?.token
+    const newToken = tokenFromHeader || (tokenFromData ? String(tokenFromData) : '')
+    if (!newCookie && !newToken) throw new Error('BMO 登录未返回 Cookie/Token')
+
+    const merged = {
+      ...existing,
+      BMO_BASE_URL: existing.BMO_BASE_URL || baseUrl,
+      ...(newCookie ? { BMO_COOKIE: newCookie } : {}),
+      ...(newToken ? { BMO_X_AUTH_TOKEN: newToken } : {})
+    }
+    atomicWriteEnvFile(authFilePath, merged, { mode: 0o640 })
+    console.log(`[bmo-keeper] refreshed_at=${new Date().toISOString()}`)
+  }
+
+  if (loginMode === 'api') {
+    await refreshOnceApi()
+    if (once) return
+    while (true) {
+      await sleep(intervalMs)
+      try {
+        await refreshOnceApi()
+      } catch (e) {
+        console.error('[bmo-keeper] refresh failed:', e?.message || e)
+      }
+    }
+  }
+
+  let chromium = null
+  try {
+    ;({ chromium } = require('playwright-core'))
+  } catch (e) {
+    throw new Error('缺少依赖：请在 packages/backend 执行 npm i playwright-core，或设置 BMO_KEEPER_LOGIN_MODE=api')
+  }
+
+  const chromePath = process.env.BMO_KEEPER_CHROME_PATH || ''
+  const headless = resolveBool(process.env.BMO_KEEPER_HEADLESS, true)
+  const navTimeoutMs = Number(process.env.BMO_KEEPER_NAV_TIMEOUT_MS || 20000)
+  const userDataDir =
+    process.env.BMO_KEEPER_USER_DATA_DIR ||
+    path.join(os.homedir(), '.cache', 'jh-craftsys', 'bmo-session-keeper')
+
+  console.log(`[bmo-keeper] userDataDir=${userDataDir}`)
+  console.log(`[bmo-keeper] headless=${headless ? 'true' : 'false'}`)
 
   const launchOptions = {
     headless,
@@ -173,8 +345,19 @@ const main = async () => {
   page.setDefaultTimeout(navTimeoutMs)
   page.setDefaultNavigationTimeout(navTimeoutMs)
 
-  const refreshOnce = async () => {
+  const waitForCookies = async (maxMs) => {
+    const start = Date.now()
+    while (Date.now() - start < maxMs) {
+      const cookies = await context.cookies()
+      if (hasSessionCookies(cookies)) return cookies
+      await sleep(500)
+    }
+    return await context.cookies()
+  }
+
+  const refreshOnceChromium = async () => {
     await page.goto(`${baseUrl}/web/`, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle').catch(() => null)
 
     const userLocator = page.locator('input[name="j_username"]')
     const passLocator = page.locator('input[name="j_password"]')
@@ -183,38 +366,24 @@ const main = async () => {
     if (needLogin && !manual) {
       await userLocator.first().fill(username)
       await passLocator.first().fill(password)
-
-      // Prefer pressing Enter to trigger the page's login handler (which usually encrypts password).
       await passLocator.first().press('Enter')
-
-      // Wait until login form disappears or a post-login shell appears.
-      const loginGone = page
-        .locator('input[name="j_username"]')
-        .first()
-        .waitFor({ state: 'detached', timeout: navTimeoutMs })
-        .catch(() => null)
-      const urlChanged = page
-        .waitForURL((url) => !String(url).includes('login'), { timeout: navTimeoutMs })
-        .catch(() => null)
-      await Promise.race([loginGone, urlChanged])
+      await waitForCookies(navTimeoutMs)
     }
 
     if (manual) {
       console.log('[bmo-keeper] waiting for manual login in opened browser...')
-      const start = Date.now()
-      while (Date.now() - start < manualWaitMs) {
-        const cookies = await context.cookies()
-        const hasLtpa = (cookies || []).some((c) => c?.name === 'LtpaToken' && c?.value)
-        const hasAuth = (cookies || []).some((c) => c?.name === 'X-AUTH-TOKEN' && c?.value)
-        if (hasLtpa || hasAuth) break
-        await sleep(800)
-      }
+      await waitForCookies(manualWaitMs)
     }
 
-    const cookies = await context.cookies()
+    const cookies = await waitForCookies(5000)
     const cookieHeader = getCookieHeaderFromCookies(cookies)
     if (!cookieHeader) {
-      throw new Error('未能从浏览器上下文读取到 Cookie（可能仍未登录成功）')
+      const url = page.url()
+      const hasUser = await page.locator('input[name="j_username"]').count().catch(() => 0)
+      const hasPass = await page.locator('input[name="j_password"]').count().catch(() => 0)
+      throw new Error(
+        `未能从浏览器上下文读取到 Cookie（可能仍未登录成功）。url=${url} hasUser=${hasUser} hasPass=${hasPass}`
+      )
     }
 
     const tokenCookie = (cookies || []).find((c) => c?.name === 'X-AUTH-TOKEN')
@@ -228,20 +397,18 @@ const main = async () => {
       ...(authToken ? { BMO_X_AUTH_TOKEN: authToken } : {})
     }
 
-    // Best-effort keep secrets file permissions: root:www-data 640 (common in jiuhuan).
     atomicWriteEnvFile(authFilePath, merged, { mode: 0o640 })
-
     console.log(`[bmo-keeper] refreshed_at=${new Date().toISOString()}`)
   }
 
   try {
-    await refreshOnce()
+    await refreshOnceChromium()
     if (once) return
 
     while (true) {
       await sleep(intervalMs)
       try {
-        await refreshOnce()
+        await refreshOnceChromium()
       } catch (e) {
         console.error('[bmo-keeper] refresh failed:', e?.message || e)
       }
