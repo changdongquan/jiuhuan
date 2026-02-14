@@ -1,0 +1,24 @@
+[Unit]
+Description=Craftsys BMO 会话续期（Headless Chromium）
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=www-data
+WorkingDirectory=/opt/jh-craftsys/source/packages/backend
+EnvironmentFile=/etc/jh-craftsys/secrets/bmo.env
+Environment=BMO_AUTH_FILE=/etc/jh-craftsys/secrets/bmo.env
+Environment=BMO_KEEPER_OUTPUT_ENV_PATH=/etc/jh-craftsys/secrets/bmo.env
+Environment=BMO_KEEPER_USER_DATA_DIR=/var/lib/jh-craftsys/bmo-session-keeper
+Environment=BMO_KEEPER_HEADLESS=true
+# 默认 60 分钟续期一次（可在 bmo.env 中覆盖 BMO_KEEPER_INTERVAL_MS）
+Environment=BMO_KEEPER_INTERVAL_MS=3600000
+ExecStart=/usr/bin/node /opt/jh-craftsys/source/packages/backend/scripts/bmo-session-keeper.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

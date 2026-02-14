@@ -1,9 +1,17 @@
 <template>
   <div class="bmo-sync-page px-4 pt-0 pb-2 space-y-3">
-    <el-card shadow="never">
+    <div class="bmo-header-wrap">
       <div class="bmo-header">
         <div>
-          <h3 class="bmo-title">BMO 数据采集</h3>
+          <div class="bmo-title-line">
+            <h3 class="bmo-title">BMO 数据采集</h3>
+            <div class="bmo-title-status">
+              <el-tag :type="connTagType" effect="plain">{{ connShortLabel }}</el-tag>
+              <span v-if="lastRefreshSource" class="bmo-conn-meta"
+                >来源：{{ lastRefreshSource }}</span
+              >
+            </div>
+          </div>
           <p class="bmo-subtitle">手动触发同步，并查看最新入库数据与任务状态</p>
         </div>
         <div class="bmo-actions">
@@ -19,40 +27,18 @@
           <el-button :loading="loadingLatest || loadingTasks" @click="refreshAll">刷新</el-button>
         </div>
       </div>
-    </el-card>
+    </div>
 
-    <el-row :gutter="12">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover">
-          <div class="stat-label">最新数据条数</div>
-          <div class="stat-value">{{ latestCount }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover">
-          <div class="stat-label">最近任务状态</div>
-          <div class="stat-value">
-            <el-tag :type="taskTagType(lastTask?.status)">{{ lastTask?.status || '-' }}</el-tag>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover">
-          <div class="stat-label">最近抓取条数</div>
-          <div class="stat-value">{{ lastTask?.rows_fetched ?? '-' }}</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card shadow="hover">
-          <div class="stat-label">最近写入条数</div>
-          <div class="stat-value">{{ lastTask?.rows_upserted ?? '-' }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-card shadow="never">
-      <template #header>最新采集数据</template>
-      <el-table v-loading="loadingLatest" :data="latestList" border size="small" max-height="380">
+    <div class="bmo-section">
+      <div class="bmo-section__title">最新采集数据</div>
+      <el-table
+        class="bmo-latest-table"
+        v-loading="loadingLatest"
+        :data="latestList"
+        border
+        size="small"
+        max-height="500"
+      >
         <el-table-column type="index" label="#" width="52" />
         <el-table-column
           prop="project_manager"
@@ -87,15 +73,16 @@
         </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openInitiateDialog(row)">立项</el-button>
+            <span v-if="row.project_code" class="bmo-action-running">项目执行中</span>
+            <el-button v-else link type="primary" @click="openInitiateDialog(row)">立项</el-button>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </div>
 
-    <el-card shadow="never">
-      <template #header>同步任务日志</template>
-      <el-table v-loading="loadingTasks" :data="taskList" border size="small" max-height="320">
+    <div class="bmo-section">
+      <div class="bmo-section__title">同步任务日志</div>
+      <el-table v-loading="loadingTasks" :data="taskList" border size="small" max-height="160">
         <el-table-column prop="id" label="任务ID" width="90" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
@@ -132,7 +119,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </div>
 
     <el-dialog v-model="syncDialogVisible" title="触发 BMO 采集" width="420px">
       <el-form :model="syncForm" label-width="100px">
@@ -187,16 +174,16 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-card shadow="never" class="bmo-initiate-card">
-          <template #header>模具技术要求</template>
+        <div class="bmo-initiate-section">
+          <div class="bmo-initiate-section__title">模具技术要求</div>
           <el-table :data="initiateDetail?.tech?.fields || []" border size="small" max-height="320">
             <el-table-column prop="label" label="字段" width="220" show-overflow-tooltip />
             <el-table-column prop="value" label="值" min-width="260" show-overflow-tooltip />
           </el-table>
-        </el-card>
+        </div>
 
-        <el-card shadow="never" class="bmo-initiate-card">
-          <template #header>技术要求附件</template>
+        <div class="bmo-initiate-section">
+          <div class="bmo-initiate-section__title">技术要求附件</div>
           <el-table
             :data="initiateDetail?.tech?.attachments || []"
             border
@@ -224,7 +211,7 @@
               </template>
             </el-table-column>
           </el-table>
-        </el-card>
+        </div>
       </div>
 
       <template #footer>
@@ -238,12 +225,15 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  getBmoStatusApi,
+  ensureBmoSessionApi,
   getBmoMouldProcurementApi,
-  getBmoMouldProcurementLiveApi,
+  getBmoMouldProcurementRefreshApi,
   getBmoMouldProcurementDetailApi,
   getBmoTasksApi,
   retryBmoSyncApi,
   syncBmoApi,
+  type BmoConnectionStatus,
   type BmoMouldProcurementRow,
   type BmoMouldProcurementDetail,
   type BmoTaskLog
@@ -289,10 +279,15 @@ const retryingTaskId = ref<number | null>(null)
 const syncDialogVisible = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
-const useLiveOrder = ref(false)
+const useLiveOrder = ref(true)
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const taskList = ref<BmoTaskLog[]>([])
+
+const bmoStatus = ref<BmoConnectionStatus | null>(null)
+const lastRefreshSource = ref<'live' | 'db' | null>(null)
+const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
+const lastConnectionMessage = ref<string | null>(null)
 
 const initiateDialogVisible = ref(false)
 const initiateLoading = ref(false)
@@ -305,8 +300,21 @@ const syncForm = reactive({
   dryRun: false
 })
 
-const latestCount = computed(() => latestList.value.length)
-const lastTask = computed(() => taskList.value[0] || null)
+const connTagType = computed(() => {
+  if (!useLiveOrder.value) return 'info'
+  if (lastConnectionState.value === 'connected') return 'success'
+  if (lastConnectionState.value === 'expired') return 'warning'
+  if (lastConnectionState.value === 'error') return 'danger'
+  return 'info'
+})
+
+const connShortLabel = computed(() => {
+  if (!useLiveOrder.value) return '库内顺序'
+  if (lastConnectionState.value === 'connected') return '已连接'
+  if (lastConnectionState.value === 'expired') return '会话过期'
+  if (lastConnectionState.value === 'error') return '连接异常'
+  return '未知状态'
+})
 
 const formatTime = (value: string | null | undefined) => {
   if (!value) return '-'
@@ -340,25 +348,53 @@ const taskTagType = (status?: string) => {
   return 'info'
 }
 
+const loadStatus = async () => {
+  try {
+    const res = await getBmoStatusApi()
+    bmoStatus.value = res.data || null
+  } catch (e) {
+    // ignore status fetch errors
+  }
+}
+
+const ensureSessionOnOpen = async () => {
+  try {
+    const res = await ensureBmoSessionApi({ maxWaitMs: 2000, keeperTimeoutMs: 60000 })
+    const data = res.data
+    lastConnectionState.value = data?.state || null
+    lastRefreshSource.value = (data?.source as any) || null
+    lastConnectionMessage.value = data?.message || null
+  } catch (e: any) {
+    lastConnectionState.value = 'error'
+    lastRefreshSource.value = 'db'
+    lastConnectionMessage.value = e?.message || 'ensure session failed'
+  }
+}
+
 const loadLatest = async () => {
   loadingLatest.value = true
   try {
     if (useLiveOrder.value) {
-      try {
-        const res = await getBmoMouldProcurementLiveApi({
-          pageSize: 200,
-          offset: 0,
-          timeout: 12000
-        })
-        latestList.value = res.data?.list || []
-        return
-      } catch (e: any) {
-        ElMessage.warning(e?.message || '实时顺序读取失败，已回退库内顺序')
-        useLiveOrder.value = false
+      const res = await getBmoMouldProcurementRefreshApi({
+        pageSize: 200,
+        offset: 0,
+        maxWaitMs: 3000,
+        timeout: 6000
+      })
+      latestList.value = res.data?.list || []
+      lastRefreshSource.value = (res.data?.source as any) || null
+      lastConnectionState.value = (res.data?.connection?.state as any) || null
+      lastConnectionMessage.value = res.data?.connection?.message || null
+      if (res.data?.source === 'db') {
+        ElMessage.warning(res.data?.connection?.message || '实时读取失败，已回退库内数据')
       }
+      return
     } else {
       const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
       latestList.value = res.data?.list || []
+      lastRefreshSource.value = null
+      lastConnectionState.value = null
+      lastConnectionMessage.value = null
       return
     }
 
@@ -386,6 +422,7 @@ const loadTasks = async () => {
 
 const refreshAll = async () => {
   await Promise.all([loadLatest(), loadTasks()])
+  await loadStatus()
 }
 
 const openSyncDialog = () => {
@@ -481,11 +518,13 @@ const startPolling = () => {
   if (pollingTimer.value !== null) return
   pollingTimer.value = window.setInterval(async () => {
     if (loadingLatest.value || loadingTasks.value || syncing.value) return
-    await loadTasks()
-    if (taskList.value.some((task) => task.status === 'running')) {
+    await Promise.all([loadTasks(), loadStatus()])
+    if (useLiveOrder.value) {
       await loadLatest()
+      return
     }
-  }, 15000)
+    if (taskList.value.some((task) => task.status === 'running')) await loadLatest()
+  }, 60000)
 }
 
 const stopPolling = () => {
@@ -522,8 +561,11 @@ const handleSync = async () => {
 }
 
 onMounted(() => {
-  void refreshAll()
-  startPolling()
+  // 默认库内顺序，但会先确保会话可用（过期则自动续期一次）
+  void ensureSessionOnOpen().finally(() => {
+    void refreshAll()
+  })
+  if (autoRefresh.value) startPolling()
 })
 
 onBeforeUnmount(() => {
@@ -533,6 +575,13 @@ onBeforeUnmount(() => {
 
 <style scoped lang="less">
 .bmo-sync-page {
+  .bmo-header-wrap {
+    padding: 12px 15px;
+    background: var(--el-bg-color);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+  }
+
   .bmo-header {
     display: flex;
     justify-content: space-between;
@@ -548,9 +597,36 @@ onBeforeUnmount(() => {
     line-height: 1.2;
   }
 
+  .bmo-title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .bmo-title-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
   .bmo-subtitle {
     margin: 4px 0 0;
     font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .bmo-conn {
+    display: flex;
+    margin-top: 8px;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .bmo-conn-meta {
+    font-size: 12px;
     color: var(--el-text-color-secondary);
   }
 
@@ -559,17 +635,32 @@ onBeforeUnmount(() => {
     gap: 8px;
   }
 
-  .stat-label {
-    margin-bottom: 8px;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
+  .bmo-section {
+    padding: 12px 15px;
+    background: var(--el-bg-color);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
   }
 
-  .stat-value {
-    min-height: 22px;
-    font-size: 20px;
+  .bmo-section__title {
+    margin-bottom: 10px;
+    font-size: 14px;
     font-weight: 600;
-    line-height: 1.1;
+    color: var(--el-text-color-primary);
+  }
+
+  .bmo-initiate-section {
+    padding: 12px 15px;
+    background: var(--el-bg-color);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+  }
+
+  .bmo-initiate-section__title {
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
   }
 
   /* 对齐“项目管理-项目状态”的 tag 风格 */
@@ -652,10 +743,14 @@ onBeforeUnmount(() => {
     max-width: 100%;
   }
 
-  .bmo-initiate-card {
-    :deep(.el-card__header) {
-      padding: 10px 14px;
-    }
+  /* 最新采集数据表：字体加大一号（12px -> 13px） */
+  :deep(.bmo-latest-table .el-table__cell .cell) {
+    font-size: 14px;
+  }
+
+  .bmo-action-running {
+    font-size: 13px;
+    color: var(--el-text-color-regular);
   }
 }
 </style>

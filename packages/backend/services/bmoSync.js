@@ -1,5 +1,6 @@
 const { query } = require('../database')
 const crypto = require('crypto')
+const fs = require('fs')
 
 const DEFAULT_BASE_URL = 'https://bmo.meiling.com:8023'
 const DEFAULT_DATA_ENDPOINT = '/data/sys-modeling/sysModelingMain/data'
@@ -20,6 +21,116 @@ const DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE = 'mk_model_20250521q2w2c_s_5js8e'
 const FORM_CONFIG_CACHE_TTL_MS = 60 * 60 * 1000
 let cachedFormConfigMeta = null
 let cachedFormConfigAt = 0
+
+// Reuse one client instance to avoid logging in on every request (BMO may rate-limit / slow down).
+let sharedClient = null
+let sharedLoginPromise = null
+
+const DEFAULT_AUTH_FILE_CACHE_TTL_MS = 2000
+let cachedAuthFile = null
+let cachedAuthFileMtimeMs = 0
+let cachedAuthFileAt = 0
+
+const parseEnvFileValue = (raw) => {
+  if (raw === null || raw === undefined) return ''
+  let v = String(raw).trim()
+  if (!v) return ''
+  if (
+    (v.startsWith('"') && v.endsWith('"') && v.length >= 2) ||
+    (v.startsWith("'") && v.endsWith("'") && v.length >= 2)
+  ) {
+    v = v.slice(1, -1)
+  }
+  return v
+}
+
+const readAuthFromEnvFile = (filePath) => {
+  const p = String(filePath || '').trim()
+  if (!p) return null
+  try {
+    const stat = fs.statSync(p)
+    const now = Date.now()
+    if (
+      cachedAuthFile &&
+      now - cachedAuthFileAt < DEFAULT_AUTH_FILE_CACHE_TTL_MS &&
+      cachedAuthFileMtimeMs === stat.mtimeMs
+    ) {
+      return cachedAuthFile
+    }
+
+    const text = fs.readFileSync(p, 'utf8')
+    const out = {}
+    for (const lineRaw of text.split(/\r?\n/)) {
+      const line = String(lineRaw || '').trim()
+      if (!line || line.startsWith('#')) continue
+      const cleaned = line.startsWith('export ') ? line.slice(7).trim() : line
+      const idx = cleaned.indexOf('=')
+      if (idx <= 0) continue
+      const key = cleaned.slice(0, idx).trim()
+      const value = cleaned.slice(idx + 1).trim()
+      if (!key) continue
+      out[key] = parseEnvFileValue(value)
+    }
+
+    cachedAuthFile = out
+    cachedAuthFileMtimeMs = stat.mtimeMs
+    cachedAuthFileAt = now
+    return out
+  } catch (e) {
+    return null
+  }
+}
+
+const getSharedClient = () => {
+  if (!sharedClient) {
+    sharedClient = new BmoClient()
+  }
+  return sharedClient
+}
+
+const refreshClientStaticAuth = (client) => {
+  if (!client) return
+
+  // Prefer explicit env vars (process env / packages/backend/.env), but allow hot-reload from an env file
+  // written by a session keeper (e.g. /etc/jh-craftsys/secrets/bmo.env).
+  const authFilePath = process.env.BMO_AUTH_FILE || ''
+  const fromFile = authFilePath ? readAuthFromEnvFile(authFilePath) : null
+
+  const cookie = process.env.BMO_COOKIE || fromFile?.BMO_COOKIE || ''
+  const token = process.env.BMO_X_AUTH_TOKEN || fromFile?.BMO_X_AUTH_TOKEN || ''
+
+  if (cookie) client.cookie = cookie
+  if (token) client.authToken = token
+}
+
+const ensureClientAuthed = async (client) => {
+  refreshClientStaticAuth(client)
+  if (client.hasStaticAuth) return
+  if (!client.hasLoginAuth) {
+    throw new Error(
+      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
+    )
+  }
+
+  if (!sharedLoginPromise) {
+    sharedLoginPromise = client
+      .login()
+      .catch((e) => {
+        // Keep the client, but clear any partial auth state to force a clean login next time.
+        try {
+          client.cookie = ''
+          client.authToken = ''
+        } catch (err) {
+          // ignore
+        }
+        throw e
+      })
+      .finally(() => {
+        sharedLoginPromise = null
+      })
+  }
+  await sharedLoginPromise
+}
 
 const DEFAULT_LIST_QUERY = {
   fdListViewId: '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0',
@@ -181,13 +292,6 @@ class BmoClient {
       Origin: origin,
       Referer: `${origin}/web/`,
       'User-Agent': this.userAgent,
-      'sec-ch-ua':
-        '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"macOS"',
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'same-origin',
       ...extraHeaders
     }
     if (this.cookie) {
@@ -317,6 +421,8 @@ class BmoClient {
   }
 
   async requestJson(pathname, payload, retried = false) {
+    const timeoutMsOverride =
+      arguments.length >= 4 && arguments[3] !== undefined ? arguments[3] : undefined
     const res = await fetchWithTimeout(
       new URL(pathname, this.baseUrl),
       {
@@ -324,12 +430,12 @@ class BmoClient {
       headers: this.buildHeaders(),
       body: JSON.stringify(payload)
       },
-      this.httpTimeoutMs
+      timeoutMsOverride ?? this.httpTimeoutMs
     )
 
     if (res.status === 401 && !retried && this.hasLoginAuth) {
       await this.login()
-      return this.requestJson(pathname, payload, true)
+      return this.requestJson(pathname, payload, true, timeoutMsOverride)
     }
 
     const data = await res.json().catch(() => null)
@@ -343,6 +449,8 @@ class BmoClient {
   }
 
   async requestJsonFile(pathname, retried = false) {
+    const timeoutMsOverride =
+      arguments.length >= 3 && arguments[2] !== undefined ? arguments[2] : undefined
     const headers = this.buildHeaders({
       Accept: 'application/json, text/plain, */*'
     })
@@ -355,12 +463,12 @@ class BmoClient {
         method: 'GET',
         headers
       },
-      this.httpTimeoutMs
+      timeoutMsOverride ?? this.httpTimeoutMs
     )
 
     if (res.status === 401 && !retried && this.hasLoginAuth) {
       await this.login()
-      return this.requestJsonFile(pathname, true)
+      return this.requestJsonFile(pathname, true, timeoutMsOverride)
     }
 
     if (!res.ok) {
@@ -370,6 +478,8 @@ class BmoClient {
   }
 
   async requestStream(pathname, retried = false) {
+    const timeoutMsOverride =
+      arguments.length >= 3 && arguments[2] !== undefined ? arguments[2] : undefined
     const headers = this.buildHeaders({
       Accept: '*/*'
     })
@@ -381,12 +491,12 @@ class BmoClient {
         method: 'GET',
         headers
       },
-      this.httpTimeoutMs
+      timeoutMsOverride ?? this.httpTimeoutMs
     )
 
     if (res.status === 401 && !retried && this.hasLoginAuth) {
       await this.login()
-      return this.requestStream(pathname, true)
+      return this.requestStream(pathname, true, timeoutMsOverride)
     }
 
     return res
@@ -538,15 +648,8 @@ const fetchBmoMouldDetail = async (input = {}) => {
     throw new Error('缺少 fdId')
   }
 
-  const client = new BmoClient()
-  if (!client.hasStaticAuth && client.hasLoginAuth) {
-    await client.login()
-  }
-  if (!client.hasStaticAuth && !client.hasLoginAuth) {
-    throw new Error(
-      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
-    )
-  }
+  const client = getSharedClient()
+  await ensureClientAuthed(client)
 
   const formMeta = await getMouldDetailFormConfigMeta(client)
 
@@ -614,15 +717,8 @@ const downloadBmoAttachment = async (attachmentId) => {
   const id = String(attachmentId || '').trim()
   if (!id) throw new Error('缺少 attachmentId')
 
-  const client = new BmoClient()
-  if (!client.hasStaticAuth && client.hasLoginAuth) {
-    await client.login()
-  }
-  if (!client.hasStaticAuth && !client.hasLoginAuth) {
-    throw new Error(
-      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
-    )
-  }
+  const client = getSharedClient()
+  await ensureClientAuthed(client)
 
   const res = await client.requestStream(`/data/sys-attach/download/${encodeURIComponent(id)}`)
   return res
@@ -703,6 +799,17 @@ const upsertBmoRecord = async (record, traceId) => {
   )
 }
 
+const upsertBmoRecords = async (records, traceId) => {
+  const list = Array.isArray(records) ? records : []
+  let upserted = 0
+  for (const record of list) {
+    if (!record?.bmoRecordId) continue
+    await upsertBmoRecord(record, traceId)
+    upserted += 1
+  }
+  return upserted
+}
+
 const syncBmoMouldData = async (input = {}) => {
   const options = {
     fdListViewId: input.fdListViewId || DEFAULT_LIST_QUERY.fdListViewId,
@@ -717,15 +824,8 @@ const syncBmoMouldData = async (input = {}) => {
     dryRun: Boolean(input.dryRun)
   }
 
-  const client = new BmoClient()
-  if (!client.hasStaticAuth && client.hasLoginAuth) {
-    await client.login()
-  }
-  if (!client.hasStaticAuth && !client.hasLoginAuth) {
-    throw new Error(
-      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
-    )
-  }
+  const client = getSharedClient()
+  await ensureClientAuthed(client)
 
   const seen = new Set()
   const collected = []
@@ -795,18 +895,17 @@ const fetchBmoMouldListLive = async (input = {}) => {
     params: input.params || DEFAULT_LIST_QUERY.params
   }
 
-  const client = new BmoClient()
-  if (!client.hasStaticAuth && client.hasLoginAuth) {
-    await client.login()
-  }
-  if (!client.hasStaticAuth && !client.hasLoginAuth) {
-    throw new Error(
-      '未配置 BMO 认证信息。请配置 BMO_COOKIE/BMO_X_AUTH_TOKEN，或配置 BMO_USERNAME/BMO_PASSWORD'
-    )
-  }
+  const client = getSharedClient()
+  await ensureClientAuthed(client)
 
   const payload = buildListPayload(options, options.offset)
-  const data = await client.requestJson(client.dataEndpoint, payload)
+  const timeoutMs = Number(input.timeoutMs)
+  const data = await client.requestJson(
+    client.dataEndpoint,
+    payload,
+    false,
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined
+  )
   const list = Array.isArray(data?.data?.content) ? data.data.content : []
   const totalSize = Number.isFinite(Number(data?.data?.totalSize)) ? Number(data.data.totalSize) : null
 
@@ -826,5 +925,6 @@ module.exports = {
   syncBmoMouldData,
   fetchBmoMouldListLive,
   fetchBmoMouldDetail,
-  downloadBmoAttachment
+  downloadBmoAttachment,
+  upsertBmoRecords
 }

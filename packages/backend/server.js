@@ -1,12 +1,29 @@
+const path = require('path')
+
 // 加载环境变量（如果使用 .env 文件）
+// 兼容从仓库根目录启动时仍能读取 packages/backend/.env
 try {
-  require('dotenv').config()
+  const dotenv = require('dotenv')
+  dotenv.config({ path: path.join(__dirname, '.env') })
+  dotenv.config()
 } catch (e) {
   // dotenv 未安装或 .env 文件不存在，使用系统环境变量
 }
 
-const path = require('path')
 const fs = require('fs')
+
+// 开发端：如果未显式配置 BMO_AUTH_FILE，则默认指向 packages/backend/.env（用于热加载会话）
+try {
+  if (!process.env.BMO_AUTH_FILE) {
+    const localEnvPath = path.join(__dirname, '.env')
+    if (fs.existsSync(localEnvPath)) {
+      process.env.BMO_AUTH_FILE = localEnvPath
+    }
+  }
+} catch (e) {
+  // ignore
+}
+
 const express = require('express')
 const cors = require('cors')
 const { initDatabase } = require('./database')

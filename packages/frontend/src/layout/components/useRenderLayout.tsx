@@ -211,9 +211,8 @@ export const useRenderLayout = () => {
             class={[
               `${prefixCls}-content-scrollbar`,
               {
-                'mt-[var(--tags-view-height)] !pb-[calc(var(--tags-view-height)+var(--app-footer-height))]':
-                  fixedHeader.value,
-                'pb-[var(--app-footer-height)]': !fixedHeader.value
+                // TagsView 固定时，内容需要下移避免被遮挡；Footer 在内容流里，无需额外 padding-bottom
+                'mt-[var(--tags-view-height)]': fixedHeader.value
               }
             ]}
           >

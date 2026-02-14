@@ -4,10 +4,21 @@ const {
   syncBmoMouldData,
   fetchBmoMouldListLive,
   fetchBmoMouldDetail,
-  downloadBmoAttachment
+  downloadBmoAttachment,
+  upsertBmoRecords
 } = require('../services/bmoSync')
+const { runOnce: runBmoSessionKeeperOnce } = require('../services/bmoSessionKeeper')
+const {
+  getBmoStatus,
+  markLiveOk,
+  markLiveError,
+  markPersistStart,
+  markPersistSuccess,
+  markPersistError
+} = require('../services/bmoStatus')
 
 const router = express.Router()
+let persistInFlight = null
 
 router.get('/health', (req, res) => {
   return res.json({
@@ -27,6 +38,90 @@ router.get('/health', (req, res) => {
       dataEndpoint: process.env.BMO_DATA_ENDPOINT || '/data/sys-modeling/sysModelingMain/data'
     }
   })
+})
+
+router.get('/status', (req, res) => {
+  return res.json({
+    code: 0,
+    success: true,
+    data: {
+      ...getBmoStatus()
+    }
+  })
+})
+
+router.post('/session/ensure', async (req, res) => {
+  const maxWaitMs = toSafeInt(req.query.maxWaitMs ?? req.body?.maxWaitMs, 3000)
+  const keeperTimeoutMs = toSafeInt(req.query.keeperTimeoutMs ?? req.body?.keeperTimeoutMs, 60000)
+
+  const tryLive = async () => {
+    const r = await fetchBmoMouldListLive({ pageSize: 1, offset: 0, timeoutMs: maxWaitMs })
+    markLiveOk()
+    return r
+  }
+
+  try {
+    await tryLive()
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        state: 'connected',
+        source: 'live'
+      }
+    })
+  } catch (error) {
+    markLiveError(error)
+    const msg = String(error?.message || error || '')
+    const isExpired = msg.includes('HTTP 401') || msg.includes('401') || msg.includes('未配置 BMO 认证信息')
+    if (!isExpired) {
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          state: 'error',
+          source: 'db',
+          message: msg || 'live failed'
+        }
+      })
+    }
+
+    const keeperResult = await runBmoSessionKeeperOnce({ timeoutMs: keeperTimeoutMs })
+    if (!keeperResult?.ok) {
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          state: 'expired',
+          source: 'db',
+          message: keeperResult?.message || msg || 'session expired'
+        }
+      })
+    }
+
+    try {
+      await tryLive()
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          state: 'connected',
+          source: 'live'
+        }
+      })
+    } catch (e2) {
+      markLiveError(e2)
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          state: 'expired',
+          source: 'db',
+          message: String(e2?.message || e2 || 'recheck failed')
+        }
+      })
+    }
+  }
 })
 
 const formatBmoSqlErrorMessage = (error, fallbackMessage) => {
@@ -115,6 +210,39 @@ const getProjectInfoByCustomerModelNo = async (customerModelNos) => {
     })
   }
   return map
+}
+
+const fetchMouldProcurementFromDb = async (limit) => {
+  const safeLimit = toSafeLimit(limit, 50, 2000)
+  const rows = await query(
+    `
+      SELECT TOP (${safeLimit})
+        id,
+        bmo_record_id,
+        project_manager,
+        part_no,
+        part_name,
+        model,
+        mold_number,
+        pm.project_code,
+        pm.project_status,
+        bid_price_tax_incl,
+        bid_time
+      FROM bmo_mould_procurement
+      OUTER APPLY (
+        SELECT TOP 1 项目编号 as project_code, 项目状态 as project_status
+        FROM 项目管理 p
+        WHERE p.客户模号 = bmo_mould_procurement.mold_number
+          AND (p.状态 IS NULL OR p.状态 <> N'已删除')
+        ORDER BY 项目编号 DESC
+      ) pm
+      ORDER BY
+        CASE WHEN source_create_time IS NULL THEN 1 ELSE 0 END,
+        source_create_time DESC,
+        id DESC;
+    `
+  )
+  return rows
 }
 
 const createTaskLog = async (requestJson, triggeredBy) => {
@@ -354,35 +482,7 @@ router.get('/tasks', async (req, res) => {
 
 router.get('/mould-procurement', async (req, res) => {
   try {
-    const limit = toSafeLimit(req.query.limit, 50, 2000)
-    const rows = await query(
-      `
-        SELECT TOP (${limit})
-          id,
-          bmo_record_id,
-          project_manager,
-          part_no,
-          part_name,
-          model,
-          mold_number,
-          pm.project_code,
-          pm.project_status,
-          bid_price_tax_incl,
-          bid_time
-        FROM bmo_mould_procurement
-        OUTER APPLY (
-          SELECT TOP 1 项目编号 as project_code, 项目状态 as project_status
-          FROM 项目管理 p
-          WHERE p.客户模号 = bmo_mould_procurement.mold_number
-            AND (p.状态 IS NULL OR p.状态 <> N'已删除')
-          ORDER BY 项目编号 DESC
-        ) pm
-        ORDER BY
-          CASE WHEN source_create_time IS NULL THEN 1 ELSE 0 END,
-          source_create_time DESC,
-          id DESC;
-      `
-    )
+    const rows = await fetchMouldProcurementFromDb(req.query.limit)
     return res.json({
       code: 0,
       success: true,
@@ -398,6 +498,103 @@ router.get('/mould-procurement', async (req, res) => {
       success: false,
       message: formatBmoSqlErrorMessage(error, '读取 BMO 模具采购数据失败')
     })
+  }
+})
+
+// Open page → try live within 3s → return latest data, and auto-persist in background.
+router.get('/mould-procurement/refresh', async (req, res) => {
+  const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
+  const pageSize = toSafeLimit(req.query.pageSize ?? req.query.limit, 200, 200)
+  const offset = toSafeInt(req.query.offset, 0)
+  const conditions = parseQueryJsonObject(req.query.conditions)
+  const sorts = parseQueryJsonObject(req.query.sorts)
+
+  try {
+    const liveResult = await fetchBmoMouldListLive({
+      pageSize,
+      offset,
+      timeoutMs: maxWaitMs,
+      ...(conditions ? { conditions } : {}),
+      ...(sorts ? { sorts } : {})
+    })
+    markLiveOk()
+
+    const list = Array.isArray(liveResult?.list) ? liveResult.list : []
+    const projectInfoMap = await getProjectInfoByCustomerModelNo(
+      list.map((x) => x.moldNumber).filter(Boolean)
+    )
+    const viewList = list.map((row, idx) => ({
+      seq: offset + idx + 1,
+      bmo_record_id: row.bmoRecordId || null,
+      project_manager: row.projectManager || null,
+      part_no: row.partNo || null,
+      part_name: row.partName || null,
+      model: row.model || null,
+      mold_number: row.moldNumber || null,
+      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
+      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
+      bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
+      bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
+    }))
+
+    // Persist in background (do not block UI).
+    if (!persistInFlight) {
+      markPersistStart()
+      persistInFlight = Promise.resolve()
+        .then(async () => {
+          const upserted = await upsertBmoRecords(list, liveResult?.traceId || null)
+          markPersistSuccess(upserted)
+        })
+        .catch((e) => {
+          console.error('BMO 自动入库失败:', e)
+          markPersistError(e)
+        })
+        .finally(() => {
+          persistInFlight = null
+        })
+    }
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        source: 'live',
+        connection: { state: 'connected' },
+        list: viewList,
+        count: viewList.length,
+        offset: liveResult.offset,
+        pageSize: liveResult.pageSize,
+        totalSize: liveResult.totalSize,
+        traceId: liveResult.traceId,
+        fetchedAt: liveResult.fetchedAt
+      }
+    })
+  } catch (error) {
+    markLiveError(error)
+    const message = String(error?.message || error || '')
+    const state =
+      message.includes('未配置 BMO 认证信息') || message.includes('401') ? 'expired' : 'error'
+
+    try {
+      const rows = await fetchMouldProcurementFromDb(pageSize)
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          source: 'db',
+          connection: { state, message: message || 'live failed' },
+          list: rows,
+          count: rows.length
+        }
+      })
+    } catch (dbError) {
+      console.error('读取 BMO 模具采购数据失败:', dbError)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: formatBmoSqlErrorMessage(dbError, '读取 BMO 模具采购数据失败')
+      })
+    }
   }
 })
 
@@ -460,10 +657,12 @@ router.get('/mould-procurement/live', async (req, res) => {
     const offset = toSafeInt(req.query.offset, 0)
     const conditions = parseQueryJsonObject(req.query.conditions)
     const sorts = parseQueryJsonObject(req.query.sorts)
+    const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
 
     const result = await fetchBmoMouldListLive({
       pageSize,
       offset,
+      timeoutMs: maxWaitMs,
       ...(conditions ? { conditions } : {}),
       ...(sorts ? { sorts } : {})
     })

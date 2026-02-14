@@ -96,10 +96,52 @@ export interface BmoTaskLog {
   error_message: string | null
 }
 
+export interface BmoConnectionStatus {
+  lastLiveOkAt: string | null
+  lastLiveErrorAt: string | null
+  lastLiveErrorMessage: string | null
+  lastPersistStartedAt: string | null
+  lastPersistFinishedAt: string | null
+  lastPersistUpserted: number | null
+  lastPersistErrorAt: string | null
+  lastPersistErrorMessage: string | null
+}
+
+export interface BmoMouldProcurementRefreshResult {
+  source: 'live' | 'db'
+  connection: { state: 'connected' | 'expired' | 'error'; message?: string }
+  list: BmoMouldProcurementRow[]
+  count: number
+  offset?: number
+  pageSize?: number
+  totalSize?: number | null
+  traceId?: string | null
+  fetchedAt?: string
+}
+
 export const syncBmoApi = (data: BmoSyncPayload) => {
   return request.post<BmoSyncResult>({
     url: '/api/bmo/sync',
     data
+  })
+}
+
+export const getBmoStatusApi = () => {
+  return request.get<BmoConnectionStatus>({
+    url: '/api/bmo/status'
+  })
+}
+
+export const ensureBmoSessionApi = (
+  params: { maxWaitMs?: number; keeperTimeoutMs?: number } = {}
+) => {
+  return request.post<{
+    state: 'connected' | 'expired' | 'error'
+    source: 'live' | 'db'
+    message?: string
+  }>({
+    url: '/api/bmo/session/ensure',
+    params
   })
 }
 
@@ -150,6 +192,27 @@ export const getBmoMouldProcurementLiveApi = (
     fetchedAt: string
   }>({
     url: '/api/bmo/mould-procurement/live',
+    params: {
+      ...params,
+      conditions: params.conditions ? JSON.stringify(params.conditions) : undefined,
+      sorts: params.sorts ? JSON.stringify(params.sorts) : undefined
+    },
+    timeout: params.timeout
+  })
+}
+
+export const getBmoMouldProcurementRefreshApi = (
+  params: {
+    pageSize?: number
+    offset?: number
+    maxWaitMs?: number
+    conditions?: Record<string, unknown>
+    sorts?: Record<string, string>
+    timeout?: number
+  } = {}
+) => {
+  return request.get<BmoMouldProcurementRefreshResult>({
+    url: '/api/bmo/mould-procurement/refresh',
     params: {
       ...params,
       conditions: params.conditions ? JSON.stringify(params.conditions) : undefined,
