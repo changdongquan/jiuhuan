@@ -77,7 +77,6 @@
               v-if="row.project_code"
               link
               type="primary"
-              class="bmo-action-running"
               @click="openProjectManagementEdit(row.project_code)"
             >
               项目执行中
@@ -1539,11 +1538,6 @@ onBeforeUnmount(() => {
   /* 最新采集数据表：字体加大一号（12px -> 13px） */
   :deep(.bmo-latest-table .el-table__cell .cell) {
     font-size: 14px;
-  }
-
-  .bmo-action-running {
-    font-size: 13px;
-    color: var(--el-text-color-regular);
   }
 }
 </style>
