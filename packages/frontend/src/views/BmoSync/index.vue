@@ -543,6 +543,16 @@ const router = useRouter()
 const openProjectManagementEdit = (projectCode: unknown) => {
   const code = String(projectCode || '').trim()
   if (!code) return
+  // Prefer using ProjectManagement's return-context as a robust cross-page open signal,
+  // since some navigation flows may lose query params (tabs/keep-alive).
+  try {
+    sessionStorage.setItem(
+      'pm:return-context',
+      JSON.stringify({ projectCode: code, tab: 'basic', at: Date.now() })
+    )
+  } catch (e) {
+    // ignore
+  }
   router.push({
     name: 'ProjectManagementIndex',
     query: { openProjectCode: code, openProjectTab: 'basic' }
