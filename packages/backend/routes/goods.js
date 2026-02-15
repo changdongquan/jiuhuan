@@ -676,6 +676,11 @@ router.get('/max-serial/:category', async (req, res) => {
   try {
     const { category } = req.params
 
+    // Year (YY). Default to current year if not provided.
+    const rawYear = String(req.query.year || '').trim()
+    const nowYY = String(new Date().getFullYear()).slice(-2)
+    const year = /^\d{2}$/.test(rawYear) ? rawYear : nowYY
+
     const queryString = `
       SELECT ISNULL(MAX(
         CASE 
@@ -690,7 +695,8 @@ router.get('/max-serial/:category', async (req, res) => {
         AND ISNUMERIC(SUBSTRING(项目编号, 9, 3)) = 1
     `
 
-    const pattern = `JH${category}-%-%`
+    // Pattern: JH{category}-{YY}-XXX (and optionally /NN)
+    const pattern = `JH${category}-${year}-%`
     const result = await query(queryString, { pattern })
 
     res.json({

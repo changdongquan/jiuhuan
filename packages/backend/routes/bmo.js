@@ -1,5 +1,6 @@
 const express = require('express')
-const { query } = require('../database')
+const { query, getPool } = require('../database')
+const sql = require('mssql')
 const {
   syncBmoMouldData,
   fetchBmoMouldListLive,
@@ -16,6 +17,7 @@ const {
   markPersistSuccess,
   markPersistError
 } = require('../services/bmoStatus')
+const { resolveActorFromReq } = require('../utils/actor')
 
 const router = express.Router()
 let persistInFlight = null
@@ -131,6 +133,9 @@ const formatBmoSqlErrorMessage = (error, fallbackMessage) => {
     message.includes("Invalid object name 'bmo_sync_task_logs'")
   ) {
     return 'BMO 采集数据表不存在，请先执行迁移：packages/backend/migrations/20260212_create_bmo_sync_tables.sql'
+  }
+  if (message.includes("Invalid object name 'bmo_initiation_requests'")) {
+    return 'BMO 立项申请单表不存在，请先执行迁移：packages/backend/migrations/20260215_create_bmo_initiation_requests.sql'
   }
   return `${fallbackMessage}: ${error.message || '未知错误'}`
 }
@@ -704,6 +709,472 @@ router.get('/mould-procurement/live', async (req, res) => {
       code: 500,
       success: false,
       message: '读取 BMO 模具采购实时数据失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+// === BMO 立项申请单（申请/确认/审核/自动入库） ===
+const safeJsonParse = (s) => {
+  if (!s) return null
+  try {
+    return JSON.parse(String(s))
+  } catch (e) {
+    return null
+  }
+}
+
+const formatToday = () => {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const generateSalesOrderNo = async (tx) => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const orderDate = `${year}${month}${day}`
+  const orderPrefix = 'XS'
+
+  const req = new sql.Request(tx)
+  req.input('pattern', sql.NVarChar, `${orderPrefix}-${orderDate}-%`)
+  const rows = await req.query(`
+    SELECT TOP 1 订单编号 as orderNo
+    FROM 销售订单
+    WHERE 订单编号 LIKE @pattern
+      AND (状态 IS NULL OR 状态 <> N'已删除')
+    ORDER BY 订单编号 DESC
+  `)
+
+  let serial = 1
+  const last = rows.recordset?.[0]?.orderNo ? String(rows.recordset[0].orderNo) : ''
+  if (last) {
+    const m = last.match(/^XS-(\d{8})-(\d{3})$/)
+    if (m && m[1] === orderDate) {
+      const lastSerial = parseInt(m[2], 10)
+      if (Number.isFinite(lastSerial) && lastSerial > 0) serial = lastSerial + 1
+    }
+  }
+  const formattedSerial = String(serial).padStart(3, '0')
+  return `${orderPrefix}-${orderDate}-${formattedSerial}`
+}
+
+const upsertInitiationDraft = async (input) => {
+  const bmoRecordId = String(input?.bmo_record_id || input?.fdId || input?.bmoRecordId || '').trim()
+  if (!bmoRecordId) throw new Error('缺少 bmo_record_id')
+
+  const actor = input?.actor || null
+  const projectCodeCandidate = input?.project_code_candidate ? String(input.project_code_candidate).trim() : null
+  const goodsDraftJson = input?.goods_draft ? JSON.stringify(input.goods_draft) : null
+  const salesDraftJson = input?.sales_order_draft ? JSON.stringify(input.sales_order_draft) : null
+  const techSnapshotJson = input?.tech_snapshot ? JSON.stringify(input.tech_snapshot) : null
+
+  const pool = await getPool()
+  const req = pool.request()
+  req.input('bmoRecordId', sql.NVarChar, bmoRecordId)
+  req.input('projectCodeCandidate', sql.NVarChar, projectCodeCandidate)
+  req.input('goodsDraftJson', sql.NVarChar(sql.MAX), goodsDraftJson)
+  req.input('salesDraftJson', sql.NVarChar(sql.MAX), salesDraftJson)
+  req.input('techSnapshotJson', sql.NVarChar(sql.MAX), techSnapshotJson)
+  req.input('actor', sql.NVarChar, actor)
+
+  await req.query(`
+    MERGE dbo.bmo_initiation_requests AS target
+    USING (SELECT @bmoRecordId AS bmo_record_id) AS source
+    ON target.bmo_record_id = source.bmo_record_id
+    WHEN MATCHED THEN
+      UPDATE SET
+        project_code_candidate = COALESCE(@projectCodeCandidate, target.project_code_candidate),
+        goods_draft_json = COALESCE(@goodsDraftJson, target.goods_draft_json),
+        sales_order_draft_json = COALESCE(@salesDraftJson, target.sales_order_draft_json),
+        tech_snapshot_json = COALESCE(@techSnapshotJson, target.tech_snapshot_json),
+        updated_at = SYSDATETIME()
+    WHEN NOT MATCHED THEN
+      INSERT (
+        bmo_record_id, status, project_code_candidate,
+        goods_draft_json, sales_order_draft_json, tech_snapshot_json,
+        created_by, created_at, updated_at
+      )
+      VALUES (
+        @bmoRecordId, N'DRAFT', @projectCodeCandidate,
+        @goodsDraftJson, @salesDraftJson, @techSnapshotJson,
+        @actor, SYSDATETIME(), SYSDATETIME()
+      );
+  `)
+
+  const rows = await query(
+    `
+      SELECT TOP 1 *
+      FROM dbo.bmo_initiation_requests
+      WHERE bmo_record_id = @bmoRecordId
+    `,
+    { bmoRecordId }
+  )
+  return rows?.[0] || null
+}
+
+router.get('/initiation-request', async (req, res) => {
+  try {
+    const bmoRecordId = String(req.query.bmo_record_id || req.query.fdId || req.query.bmoRecordId || '').trim()
+    if (!bmoRecordId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
+    }
+
+    const rows = await query(
+      `
+        SELECT TOP 1 *
+        FROM dbo.bmo_initiation_requests
+        WHERE bmo_record_id = @bmoRecordId
+      `,
+      { bmoRecordId }
+    )
+    const row = rows?.[0] || null
+    if (!row) {
+      return res.json({ code: 0, success: true, data: null })
+    }
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        ...row,
+        goods_draft: safeJsonParse(row.goods_draft_json),
+        sales_order_draft: safeJsonParse(row.sales_order_draft_json),
+        tech_snapshot: safeJsonParse(row.tech_snapshot_json)
+      }
+    })
+  } catch (error) {
+    console.error('读取 BMO 立项申请单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取 BMO 立项申请单失败')
+    })
+  }
+})
+
+router.post('/initiation-request/draft', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const row = await upsertInitiationDraft({ ...req.body, actor })
+    return res.json({
+      code: 0,
+      success: true,
+      data: row
+        ? {
+            ...row,
+            goods_draft: safeJsonParse(row.goods_draft_json),
+            sales_order_draft: safeJsonParse(row.sales_order_draft_json),
+            tech_snapshot: safeJsonParse(row.tech_snapshot_json)
+          }
+        : null
+    })
+  } catch (error) {
+    console.error('保存 BMO 立项草稿失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '保存 BMO 立项草稿失败')
+    })
+  }
+})
+
+router.post('/initiation-request/confirm', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
+    if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
+
+    // Ensure draft exists and is up-to-date.
+    await upsertInitiationDraft({ ...req.body, actor })
+
+    await query(
+      `
+        UPDATE dbo.bmo_initiation_requests
+        SET status = N'PM_CONFIRMED',
+            confirmed_by = @actor,
+            confirmed_at = SYSDATETIME(),
+            updated_at = SYSDATETIME(),
+            rejected_reason = NULL
+        WHERE bmo_record_id = @bmoRecordId
+      `,
+      { bmoRecordId, actor }
+    )
+
+    const rows = await query(
+      `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+      { bmoRecordId }
+    )
+    const row = rows?.[0] || null
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('确认 BMO 立项申请单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '确认 BMO 立项申请单失败')
+    })
+  }
+})
+
+router.post('/initiation-request/reject', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
+    const reason = String(req.body?.reason || '').trim()
+    if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
+    if (!reason) return res.status(400).json({ code: 400, success: false, message: '缺少驳回原因' })
+
+    await query(
+      `
+        UPDATE dbo.bmo_initiation_requests
+        SET status = N'REJECTED',
+            rejected_reason = @reason,
+            updated_at = SYSDATETIME()
+        WHERE bmo_record_id = @bmoRecordId
+      `,
+      { bmoRecordId, reason }
+    )
+    return res.json({ code: 0, success: true, message: '已驳回' })
+  } catch (error) {
+    console.error('驳回 BMO 立项申请单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '驳回 BMO 立项申请单失败')
+    })
+  }
+})
+
+router.post('/initiation-request/approve-and-apply', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
+    if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
+
+    const rows = await query(
+      `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+      { bmoRecordId }
+    )
+    const requestRow = rows?.[0] || null
+    if (!requestRow) {
+      return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+    }
+    if (String(requestRow.status || '') === 'APPLIED') {
+      return res.json({
+        code: 0,
+        success: true,
+        message: '已入库（跳过）',
+        data: { projectCode: requestRow.project_code_final, orderNo: requestRow.sales_order_no }
+      })
+    }
+    if (String(requestRow.status || '') !== 'PM_CONFIRMED') {
+      return res.status(400).json({ code: 400, success: false, message: '未确认，不能入库' })
+    }
+
+    const goodsDraft = safeJsonParse(requestRow.goods_draft_json) || {}
+    const salesDraft = safeJsonParse(requestRow.sales_order_draft_json) || {}
+    const projectCode = String(goodsDraft.projectCode || requestRow.project_code_candidate || '').trim()
+    if (!projectCode) return res.status(400).json({ code: 400, success: false, message: '缺少项目编号' })
+
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      // 0) projectCode unique
+      {
+        const checkReq = new sql.Request(tx)
+        checkReq.input('projectCode', sql.NVarChar, projectCode)
+        const r = await checkReq.query(`SELECT COUNT(*) as cnt FROM 货物信息 WHERE 项目编号 = @projectCode`)
+        const cnt = r.recordset?.[0]?.cnt ?? 0
+        if (cnt > 0) throw new Error(`项目编号 "${projectCode}" 已存在`)
+      }
+
+      // 1) 项目管理占位（满足外键/关联）
+      const customerName = String(goodsDraft.customerName || '').trim()
+      const customerModelNo = goodsDraft.customerModelNo ?? null
+      let customerId = null
+      if (salesDraft.customerId) customerId = Number(salesDraft.customerId) || null
+      if (!customerId && customerName) {
+        const cReq = new sql.Request(tx)
+        cReq.input('customerName', sql.NVarChar, customerName)
+        const c = await cReq.query(`
+          SELECT TOP 1 客户ID as customerId
+          FROM 客户信息
+          WHERE 客户名称 = @customerName
+        `)
+        customerId = c.recordset?.[0]?.customerId ?? null
+      }
+
+      {
+        const pReq = new sql.Request(tx)
+        pReq.input('projectCode', sql.NVarChar, projectCode)
+        const p = await pReq.query(`SELECT COUNT(*) as cnt FROM 项目管理 WHERE 项目编号 = @projectCode`)
+        const exists = (p.recordset?.[0]?.cnt ?? 0) > 0
+        if (!exists) {
+          const ins = new sql.Request(tx)
+          ins.input('projectCode', sql.NVarChar, projectCode)
+          if (customerId) ins.input('customerId', sql.Int, customerId)
+          ins.input('customerModelNo', sql.NVarChar, customerModelNo)
+          if (customerId) {
+            await ins.query(`
+              INSERT INTO 项目管理 (项目编号, 客户ID, 客户模号)
+              VALUES (@projectCode, @customerId, @customerModelNo)
+            `)
+          } else {
+            await ins.query(`INSERT INTO 项目管理 (项目编号) VALUES (@projectCode)`)
+          }
+        } else if (customerId !== null) {
+          const upd = new sql.Request(tx)
+          upd.input('projectCode', sql.NVarChar, projectCode)
+          upd.input('customerId', sql.Int, customerId)
+          upd.input('customerModelNo', sql.NVarChar, customerModelNo)
+          await upd.query(`
+            UPDATE 项目管理
+            SET 客户ID = @customerId, 客户模号 = @customerModelNo
+            WHERE 项目编号 = @projectCode
+          `)
+        }
+      }
+
+      // 2) 货物信息
+      {
+        const gReq = new sql.Request(tx)
+        gReq.input('projectCode', sql.NVarChar, projectCode)
+        gReq.input('productDrawing', sql.NVarChar, goodsDraft.productDrawing || null)
+        gReq.input('productName', sql.NVarChar, goodsDraft.productName || null)
+        gReq.input('category', sql.NVarChar, goodsDraft.category || '塑胶模具')
+        gReq.input('remarks', sql.NVarChar, goodsDraft.remarks || null)
+        await gReq.query(`
+          INSERT INTO 货物信息 (项目编号, 产品图号, 产品名称, 分类, 备注, IsNew)
+          VALUES (@projectCode, @productDrawing, @productName, @category, @remarks, 1)
+        `)
+      }
+
+      // 3) 生产任务占位
+      {
+        const tReq = new sql.Request(tx)
+        tReq.input('projectCode', sql.NVarChar, projectCode)
+        const r = await tReq.query(`SELECT COUNT(*) as cnt FROM 生产任务 WHERE 项目编号 = @projectCode`)
+        const exists = (r.recordset?.[0]?.cnt ?? 0) > 0
+        if (!exists) {
+          const ins = new sql.Request(tx)
+          ins.input('projectCode', sql.NVarChar, projectCode)
+          await ins.query(`INSERT INTO 生产任务 (项目编号) VALUES (@projectCode)`)
+        }
+      }
+
+      // 4) 销售订单
+      const orderNo = await generateSalesOrderNo(tx)
+      const orderDate = salesDraft.orderDate || formatToday()
+      const signDate = salesDraft.signDate || null
+      const contractNo = salesDraft.contractNo || null
+      const details = Array.isArray(salesDraft.details) ? salesDraft.details : []
+      if (!customerId) throw new Error('缺少客户（customerId）')
+      if (!details.length) throw new Error('缺少订单明细')
+
+      const itemCodes = []
+      const itemCodeToCustomerPartNo = new Map()
+      for (const d of details) {
+        const itemCode = String(d.itemCode || projectCode || '').trim() || null
+        const insertReq = new sql.Request(tx)
+        insertReq.input('orderNo', sql.NVarChar, orderNo)
+        insertReq.input('customerId', sql.Int, customerId)
+        insertReq.input('itemCode', sql.NVarChar, itemCode)
+        insertReq.input('orderDate', sql.NVarChar, orderDate)
+        insertReq.input('deliveryDate', sql.NVarChar, d.deliveryDate || null)
+        insertReq.input('signDate', sql.NVarChar, signDate)
+        insertReq.input('contractNo', sql.NVarChar, contractNo)
+        insertReq.input('totalAmount', sql.Float, Number(d.totalAmount || 0))
+        insertReq.input('unitPrice', sql.Float, Number(d.unitPrice || 0))
+        insertReq.input('quantity', sql.Int, Number(d.quantity || 0))
+        insertReq.input('remark', sql.NVarChar, d.remark || null)
+        insertReq.input('costSource', sql.NVarChar, d.costSource || null)
+        insertReq.input('handler', sql.NVarChar, d.handler || null)
+        insertReq.input('isInStock', sql.Bit, d.isInStock ? 1 : 0)
+        insertReq.input('isShipped', sql.Bit, d.isShipped ? 1 : 0)
+        insertReq.input('shippingDate', sql.NVarChar, d.shippingDate || null)
+        await insertReq.query(`
+          INSERT INTO 销售订单 (
+            订单编号, 客户ID, 项目编号, 订单日期, 交货日期, 签订日期, 合同号,
+            总金额, 单价, 数量, 备注, 费用出处, 经办人, 是否入库, 是否出运, 出运日期
+          ) VALUES (
+            @orderNo, @customerId, @itemCode, @orderDate, @deliveryDate, @signDate, @contractNo,
+            @totalAmount, @unitPrice, @quantity, @remark, @costSource, @handler, @isInStock, @isShipped, @shippingDate
+          )
+        `)
+
+        if (itemCode) {
+          itemCodes.push(itemCode)
+          if (d.customerPartNo !== undefined && d.customerPartNo !== null) {
+            itemCodeToCustomerPartNo.set(itemCode, d.customerPartNo)
+          }
+        }
+      }
+
+      // 4.1) 同步客户模号到项目管理
+      for (const [itemCode, customerPartNo] of itemCodeToCustomerPartNo.entries()) {
+        const upd = new sql.Request(tx)
+        upd.input('itemCode', sql.NVarChar, itemCode)
+        upd.input('customerPartNo', sql.NVarChar, customerPartNo === '' ? null : customerPartNo)
+        await upd.query(`
+          UPDATE 项目管理
+          SET 客户模号 = @customerPartNo
+          WHERE 项目编号 = @itemCode
+        `)
+      }
+
+      // 4.2) 更新 IsNew=0
+      if (itemCodes.length) {
+        const placeholders = itemCodes.map((_, i) => `@c${i}`).join(', ')
+        const u = new sql.Request(tx)
+        itemCodes.forEach((code, i) => u.input(`c${i}`, sql.NVarChar, code))
+        await u.query(`UPDATE 货物信息 SET IsNew = 0 WHERE 项目编号 IN (${placeholders})`)
+      }
+
+      // 5) 更新申请单
+      {
+        const upd = new sql.Request(tx)
+        upd.input('bmoRecordId', sql.NVarChar, bmoRecordId)
+        upd.input('projectCode', sql.NVarChar, projectCode)
+        upd.input('orderNo', sql.NVarChar, orderNo)
+        upd.input('actor', sql.NVarChar, actor)
+        await upd.query(`
+          UPDATE dbo.bmo_initiation_requests
+          SET status = N'APPLIED',
+              project_code_final = @projectCode,
+              sales_order_no = @orderNo,
+              approved_by = @actor,
+              approved_at = SYSDATETIME(),
+              updated_at = SYSDATETIME()
+          WHERE bmo_record_id = @bmoRecordId
+        `)
+      }
+
+      await tx.commit()
+      return res.json({
+        code: 0,
+        success: true,
+        message: '已审核并自动入库',
+        data: { projectCode, orderNo }
+      })
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch (rollbackErr) {
+        // ignore
+      }
+      throw e
+    }
+  } catch (error) {
+    console.error('审核并入库失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '审核并入库失败')
     })
   }
 })

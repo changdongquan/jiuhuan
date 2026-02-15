@@ -508,7 +508,9 @@ const buildFormConfigMeta = (formConfigJson) => {
     fieldLabelByName: {},
     fieldOptionsByName: {},
     labelToFieldName: {},
-    tableFields: {}
+    tableFields: {},
+    // Internal: keep best label source by rank so we can prefer lang.label over fdLabel when needed.
+    _fieldLabelRankByName: {}
   }
 
   const auth = Array.isArray(formConfigJson?.auth) ? formConfigJson.auth[0] : null
@@ -528,6 +530,7 @@ const buildFormConfigMeta = (formConfigJson) => {
       const label = field?.fdLabel && typeof field.fdLabel === 'string' ? field.fdLabel : null
       if (label) {
         meta.fieldLabelByName[name] = label
+        meta._fieldLabelRankByName[name] = Math.max(meta._fieldLabelRankByName[name] || 0, 2)
         if (!meta.labelToFieldName[label]) meta.labelToFieldName[label] = name
       }
 
@@ -568,8 +571,12 @@ const buildFormConfigMeta = (formConfigJson) => {
         if (!rank[prop] || typeof name !== 'string' || !content || typeof content !== 'object') continue
         const cn = content.Cn || content.default
         if (typeof cn !== 'string' || !cn) continue
-        if (!meta.fieldLabelByName[name]) {
+        const r = rank[prop] || 0
+        const cur = meta._fieldLabelRankByName[name] || 0
+        // Prefer lang.label over fdLabel when they disagree (e.g. 模具腔数(技术) vs 模具腔数).
+        if (r > cur) {
           meta.fieldLabelByName[name] = cn
+          meta._fieldLabelRankByName[name] = r
           if (!meta.labelToFieldName[cn]) meta.labelToFieldName[cn] = name
         }
       }
@@ -578,6 +585,8 @@ const buildFormConfigMeta = (formConfigJson) => {
     }
   }
 
+  // Do not leak internal helper.
+  delete meta._fieldLabelRankByName
   return meta
 }
 

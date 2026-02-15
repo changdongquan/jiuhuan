@@ -60,6 +60,59 @@ export interface BmoMouldProcurementDetail {
   }
 }
 
+export type BmoInitiationStatus = 'DRAFT' | 'PM_CONFIRMED' | 'REJECTED' | 'APPLIED' | string
+
+export interface BmoInitiationGoodsDraft {
+  projectCode: string
+  productDrawing?: string | null
+  productName?: string | null
+  category?: string | null
+  remarks?: string | null
+  customerName?: string | null
+  customerModelNo?: string | null
+}
+
+export interface BmoInitiationSalesOrderDraft {
+  orderDate?: string | null
+  signDate?: string | null
+  contractNo?: string | null
+  customerId?: number | null
+  details?: Array<{
+    itemCode?: string | null
+    customerPartNo?: string | null
+    deliveryDate?: string | null
+    totalAmount?: number | null
+    unitPrice?: number | null
+    quantity?: number | null
+    remark?: string | null
+    costSource?: string | null
+    handler?: string | null
+    isInStock?: boolean | null
+    isShipped?: boolean | null
+    shippingDate?: string | null
+  }>
+}
+
+export interface BmoInitiationRequestRow {
+  id: number
+  bmo_record_id: string
+  status: BmoInitiationStatus
+  project_code_candidate?: string | null
+  project_code_final?: string | null
+  sales_order_no?: string | null
+  goods_draft?: BmoInitiationGoodsDraft | null
+  sales_order_draft?: BmoInitiationSalesOrderDraft | null
+  tech_snapshot?: any
+  created_by?: string | null
+  confirmed_by?: string | null
+  approved_by?: string | null
+  rejected_reason?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  confirmed_at?: string | null
+  approved_at?: string | null
+}
+
 export interface BmoLatestRecord {
   id: number
   bmo_record_id: string
@@ -227,5 +280,53 @@ export const getBmoMouldProcurementDetailApi = (params: { fdId: string }) => {
     url: '/api/bmo/mould-procurement/detail',
     params,
     timeout: 15000
+  })
+}
+
+export const getBmoInitiationRequestApi = (params: { bmo_record_id: string }) => {
+  return request.get<BmoInitiationRequestRow | null>({
+    url: '/api/bmo/initiation-request',
+    params
+  })
+}
+
+export const saveBmoInitiationDraftApi = (data: {
+  bmo_record_id: string
+  project_code_candidate?: string | null
+  goods_draft?: BmoInitiationGoodsDraft | null
+  sales_order_draft?: BmoInitiationSalesOrderDraft | null
+  tech_snapshot?: any
+}) => {
+  return request.post<BmoInitiationRequestRow | null>({
+    url: '/api/bmo/initiation-request/draft',
+    data
+  })
+}
+
+export const confirmBmoInitiationRequestApi = (data: {
+  bmo_record_id: string
+  project_code_candidate?: string | null
+  goods_draft?: BmoInitiationGoodsDraft | null
+  sales_order_draft?: BmoInitiationSalesOrderDraft | null
+  tech_snapshot?: any
+}) => {
+  return request.post<BmoInitiationRequestRow | null>({
+    url: '/api/bmo/initiation-request/confirm',
+    data
+  })
+}
+
+export const rejectBmoInitiationRequestApi = (data: { bmo_record_id: string; reason: string }) => {
+  return request.post<{ code: number; success: boolean; message?: string }>({
+    url: '/api/bmo/initiation-request/reject',
+    data
+  })
+}
+
+export const approveAndApplyBmoInitiationRequestApi = (data: { bmo_record_id: string }) => {
+  return request.post<{ projectCode: string; orderNo: string }>({
+    url: '/api/bmo/initiation-request/approve-and-apply',
+    data,
+    timeout: 60000
   })
 }
