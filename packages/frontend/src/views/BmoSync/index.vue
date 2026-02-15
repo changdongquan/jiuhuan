@@ -71,17 +71,29 @@
             <el-tag v-else type="info" class="bmo-project-code-tag">-</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <span>{{ getBmoRowStatusText(row) || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
             <el-button
-              v-if="row.project_code"
+              v-if="!row.project_code"
+              link
+              type="primary"
+              @click="openInitiateDialog(row)"
+            >
+              立项
+            </el-button>
+            <el-button
+              v-else
               link
               type="primary"
               @click="openProjectManagementEdit(row.project_code)"
             >
-              项目执行中
+              编辑
             </el-button>
-            <el-button v-else link type="primary" @click="openInitiateDialog(row)">立项</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -535,6 +547,15 @@ const openProjectManagementEdit = (projectCode: unknown) => {
     name: 'ProjectManagementIndex',
     query: { openProjectCode: code, openProjectTab: 'basic' }
   })
+}
+
+const getBmoRowStatusText = (row: Partial<BmoMouldProcurementRow> | null | undefined) => {
+  if (!row) return ''
+  if (String(row.project_code || '').trim()) return '项目执行中'
+
+  const s = String((row as any).initiation_status || '').trim()
+  if (s === 'PM_CONFIRMED' || s === 'SUBMITTED') return '审核中'
+  return ''
 }
 
 const TECH_FIELDS_FULL_ROW_LABELS = new Set<string>(['模具特殊需求及风险'])
