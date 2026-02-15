@@ -73,7 +73,15 @@
         </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
-            <span v-if="row.project_code" class="bmo-action-running">项目执行中</span>
+            <el-button
+              v-if="row.project_code"
+              link
+              type="primary"
+              class="bmo-action-running"
+              @click="openProjectManagementEdit(row.project_code)"
+            >
+              项目执行中
+            </el-button>
             <el-button v-else link type="primary" @click="openInitiateDialog(row)">立项</el-button>
           </template>
         </el-table-column>
@@ -493,6 +501,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import {
@@ -517,6 +526,17 @@ import {
 } from '@/api/bmo'
 import { getMaxSerialApi } from '@/api/goods'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+
+const router = useRouter()
+
+const openProjectManagementEdit = (projectCode: unknown) => {
+  const code = String(projectCode || '').trim()
+  if (!code) return
+  router.push({
+    name: 'ProjectManagementIndex',
+    query: { openProjectCode: code, openProjectTab: 'basic' }
+  })
+}
 
 const TECH_FIELDS_FULL_ROW_LABELS = new Set<string>(['模具特殊需求及风险'])
 
