@@ -36,6 +36,20 @@ export interface BmoMouldProcurementRow {
   bid_time: string | null
 }
 
+export interface BmoMouldProcurementByProjectRow {
+  id?: number
+  bmo_record_id?: string | null
+  project_manager?: string | null
+  part_no?: string | null
+  part_name?: string | null
+  model?: string | null
+  mold_number?: string | null
+  project_code?: string | null
+  project_status?: string | null
+  bid_price_tax_incl?: number | null
+  bid_time?: string | null
+}
+
 export interface BmoMouldProcurementDetailField {
   name: string
   label: string
@@ -112,6 +126,17 @@ export interface BmoInitiationRequestRow {
   updated_at?: string | null
   confirmed_at?: string | null
   approved_at?: string | null
+}
+
+export interface BmoInitiationTechSnapshot {
+  demandType?: string | number | null
+  designer?: string | number | null
+  fdId?: string | null
+  tech?: {
+    tableName?: string
+    fields?: BmoMouldProcurementDetailField[]
+    attachments?: BmoMouldProcurementDetailAttachment[]
+  } | null
 }
 
 export interface BmoLatestRecord {
@@ -227,6 +252,13 @@ export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: nu
   })
 }
 
+export const getBmoMouldProcurementByProjectApi = (params: { projectCode: string }) => {
+  return request.get<BmoMouldProcurementByProjectRow | null>({
+    url: '/api/bmo/mould-procurement/by-project',
+    params
+  })
+}
+
 export const getBmoMouldProcurementLiveApi = (
   params: {
     pageSize?: number
@@ -287,6 +319,15 @@ export const getBmoMouldProcurementDetailApi = (params: { fdId: string }) => {
 export const getBmoInitiationRequestApi = (params: { bmo_record_id: string }) => {
   return request.get<BmoInitiationRequestRow | null>({
     url: '/api/bmo/initiation-request',
+    params
+  })
+}
+
+export const getBmoInitiationRequestByProjectApi = (params: { projectCode: string }) => {
+  return request.get<
+    (BmoInitiationRequestRow & { tech_snapshot?: BmoInitiationTechSnapshot }) | null
+  >({
+    url: '/api/bmo/initiation-request/by-project',
     params
   })
 }

@@ -57,7 +57,12 @@ router.post('/session/ensure', async (req, res) => {
   const keeperTimeoutMs = toSafeInt(req.query.keeperTimeoutMs ?? req.body?.keeperTimeoutMs, 60000)
 
   const tryLive = async () => {
-    const r = await fetchBmoMouldListLive({ pageSize: 1, offset: 0, timeoutMs: maxWaitMs })
+    const r = await fetchBmoMouldListLive({
+      pageSize: 1,
+      offset: 0,
+      timeoutMs: maxWaitMs,
+      disableAuthRetry: true
+    })
     markLiveOk()
     return r
   }
@@ -584,6 +589,55 @@ router.get('/mould-procurement', async (req, res) => {
   }
 })
 
+router.get('/mould-procurement/by-project', async (req, res) => {
+  try {
+    const projectCode = String(req.query.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 projectCode' })
+    }
+
+    const rows = await query(
+      `
+        SELECT TOP 1
+          mp.id,
+          mp.bmo_record_id,
+          mp.project_manager,
+          mp.part_no,
+          mp.part_name,
+          mp.model,
+          mp.mold_number,
+          p.项目编号 as project_code,
+          p.项目状态 as project_status,
+          mp.bid_price_tax_incl,
+          mp.bid_time
+        FROM bmo_mould_procurement mp
+        INNER JOIN 项目管理 p
+          ON p.客户模号 = mp.mold_number
+        WHERE p.项目编号 = @projectCode
+          AND (p.状态 IS NULL OR p.状态 <> N'已删除')
+        ORDER BY
+          CASE WHEN mp.source_create_time IS NULL THEN 1 ELSE 0 END,
+          mp.source_create_time DESC,
+          mp.id DESC;
+      `,
+      { projectCode }
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: rows?.[0] || null
+    })
+  } catch (error) {
+    console.error('按项目读取 BMO 模具采购记录失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '按项目读取 BMO 模具采购记录失败')
+    })
+  }
+})
+
 // Open page → try live within 3s → return latest data, and auto-persist in background.
 router.get('/mould-procurement/refresh', async (req, res) => {
   const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
@@ -593,36 +647,37 @@ router.get('/mould-procurement/refresh', async (req, res) => {
   const sorts = parseQueryJsonObject(req.query.sorts)
 
   try {
-	    const liveResult = await fetchBmoMouldListLive({
-	      pageSize,
-	      offset,
-	      timeoutMs: maxWaitMs,
-	      ...(conditions ? { conditions } : {}),
-	      ...(sorts ? { sorts } : {})
-	    })
-	    markLiveOk()
+    const liveResult = await fetchBmoMouldListLive({
+      pageSize,
+      offset,
+      timeoutMs: maxWaitMs,
+      disableAuthRetry: true,
+      ...(conditions ? { conditions } : {}),
+      ...(sorts ? { sorts } : {})
+    })
+    markLiveOk()
 
-	    const list = Array.isArray(liveResult?.list) ? liveResult.list : []
-	    const projectInfoMap = await getProjectInfoByCustomerModelNo(
-	      list.map((x) => x.moldNumber).filter(Boolean)
-	    )
-	    const initiationStatusMap = await getInitiationStatusByBmoRecordId(
-	      list.map((x) => x.bmoRecordId).filter(Boolean)
-	    )
-	    const viewList = list.map((row, idx) => ({
-	      seq: offset + idx + 1,
-	      bmo_record_id: row.bmoRecordId || null,
-	      project_manager: row.projectManager || null,
-	      part_no: row.partNo || null,
-	      part_name: row.partName || null,
-	      model: row.model || null,
-	      mold_number: row.moldNumber || null,
-	      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
-	      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
-	      initiation_status: initiationStatusMap.get(String(row.bmoRecordId || '').trim()) || null,
-	      bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
-	      bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
-	    }))
+    const list = Array.isArray(liveResult?.list) ? liveResult.list : []
+    const projectInfoMap = await getProjectInfoByCustomerModelNo(
+      list.map((x) => x.moldNumber).filter(Boolean)
+    )
+    const initiationStatusMap = await getInitiationStatusByBmoRecordId(
+      list.map((x) => x.bmoRecordId).filter(Boolean)
+    )
+    const viewList = list.map((row, idx) => ({
+      seq: offset + idx + 1,
+      bmo_record_id: row.bmoRecordId || null,
+      project_manager: row.projectManager || null,
+      part_no: row.partNo || null,
+      part_name: row.partName || null,
+      model: row.model || null,
+      mold_number: row.moldNumber || null,
+      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
+      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
+      initiation_status: initiationStatusMap.get(String(row.bmoRecordId || '').trim()) || null,
+      bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
+      bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
+    }))
 
     // Persist in background (do not block UI).
     if (!persistInFlight) {
@@ -754,27 +809,27 @@ router.get('/mould-procurement/live', async (req, res) => {
       ...(sorts ? { sorts } : {})
     })
 
-	    const list = Array.isArray(result?.list) ? result.list : []
-	    const projectInfoMap = await getProjectInfoByCustomerModelNo(
-	      list.map((x) => x.moldNumber).filter(Boolean)
-	    )
-	    const initiationStatusMap = await getInitiationStatusByBmoRecordId(
-	      list.map((x) => x.bmoRecordId).filter(Boolean)
-	    )
-	    const viewList = list.map((row, idx) => ({
-	      seq: offset + idx + 1,
-	      bmo_record_id: row.bmoRecordId || null,
-	      project_manager: row.projectManager || null,
-	      part_no: row.partNo || null,
-	      part_name: row.partName || null,
-	      model: row.model || null,
-	      mold_number: row.moldNumber || null,
-	      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
-	      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
-	      initiation_status: initiationStatusMap.get(String(row.bmoRecordId || '').trim()) || null,
-	      bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
-	      bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
-	    }))
+    const list = Array.isArray(result?.list) ? result.list : []
+    const projectInfoMap = await getProjectInfoByCustomerModelNo(
+      list.map((x) => x.moldNumber).filter(Boolean)
+    )
+    const initiationStatusMap = await getInitiationStatusByBmoRecordId(
+      list.map((x) => x.bmoRecordId).filter(Boolean)
+    )
+    const viewList = list.map((row, idx) => ({
+      seq: offset + idx + 1,
+      bmo_record_id: row.bmoRecordId || null,
+      project_manager: row.projectManager || null,
+      part_no: row.partNo || null,
+      part_name: row.partName || null,
+      model: row.model || null,
+      mold_number: row.moldNumber || null,
+      project_code: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectCode || null,
+      project_status: projectInfoMap.get(String(row.moldNumber || '').trim())?.projectStatus || null,
+      initiation_status: initiationStatusMap.get(String(row.bmoRecordId || '').trim()) || null,
+      bid_price_tax_incl: row.bidPriceTaxIncl ?? null,
+      bid_time: row.bidTime ? new Date(row.bidTime).toISOString() : null
+    }))
 
     return res.json({
       code: 0,
@@ -902,6 +957,16 @@ const upsertInitiationDraft = async (input) => {
   return rows?.[0] || null
 }
 
+const toInitiationResponseData = (row) => {
+  if (!row) return null
+  return {
+    ...row,
+    goods_draft: safeJsonParse(row.goods_draft_json),
+    sales_order_draft: safeJsonParse(row.sales_order_draft_json),
+    tech_snapshot: safeJsonParse(row.tech_snapshot_json)
+  }
+}
+
 router.get('/initiation-request', async (req, res) => {
   try {
     const bmoRecordId = String(req.query.bmo_record_id || req.query.fdId || req.query.bmoRecordId || '').trim()
@@ -925,12 +990,7 @@ router.get('/initiation-request', async (req, res) => {
     return res.json({
       code: 0,
       success: true,
-      data: {
-        ...row,
-        goods_draft: safeJsonParse(row.goods_draft_json),
-        sales_order_draft: safeJsonParse(row.sales_order_draft_json),
-        tech_snapshot: safeJsonParse(row.tech_snapshot_json)
-      }
+      data: toInitiationResponseData(row)
     })
   } catch (error) {
     console.error('读取 BMO 立项申请单失败:', error)
@@ -942,6 +1002,49 @@ router.get('/initiation-request', async (req, res) => {
   }
 })
 
+router.get('/initiation-request/by-project', async (req, res) => {
+  try {
+    const projectCode = String(req.query.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 projectCode' })
+    }
+
+    const rows = await query(
+      `
+        SELECT TOP 1 *
+        FROM dbo.bmo_initiation_requests
+        WHERE project_code_final = @projectCode
+          OR project_code_candidate = @projectCode
+          OR JSON_VALUE(goods_draft_json, '$.projectCode') = @projectCode
+        ORDER BY
+          CASE status
+            WHEN N'APPLIED' THEN 0
+            WHEN N'PM_CONFIRMED' THEN 1
+            WHEN N'DRAFT' THEN 2
+            WHEN N'REJECTED' THEN 3
+            ELSE 9
+          END ASC,
+          updated_at DESC,
+          id DESC
+      `,
+      { projectCode }
+    )
+    const row = rows?.[0] || null
+    return res.json({
+      code: 0,
+      success: true,
+      data: toInitiationResponseData(row)
+    })
+  } catch (error) {
+    console.error('按项目读取 BMO 立项申请单失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '按项目读取 BMO 立项申请单失败')
+    })
+  }
+})
+
 router.post('/initiation-request/draft', async (req, res) => {
   try {
     const actor = resolveActorFromReq(req)
@@ -949,14 +1052,7 @@ router.post('/initiation-request/draft', async (req, res) => {
     return res.json({
       code: 0,
       success: true,
-      data: row
-        ? {
-            ...row,
-            goods_draft: safeJsonParse(row.goods_draft_json),
-            sales_order_draft: safeJsonParse(row.sales_order_draft_json),
-            tech_snapshot: safeJsonParse(row.tech_snapshot_json)
-          }
-        : null
+      data: toInitiationResponseData(row)
     })
   } catch (error) {
     console.error('保存 BMO 立项草稿失败:', error)

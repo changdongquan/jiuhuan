@@ -31,6 +31,125 @@
         </el-descriptions-item>
       </el-descriptions>
 
+      <div class="pm-init-spec-section">
+        <div class="pm-init-spec-header">
+          <span class="pm-init-spec-title">1.4-模具清单详情</span>
+          <el-tag v-if="bmoLoading" type="info" effect="plain">加载中</el-tag>
+        </div>
+        <el-alert
+          v-if="bmoLoadError"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="bmoLoadError"
+          style="margin-bottom: 12px"
+        />
+        <template v-if="bmoSnapshot">
+          <el-descriptions :column="isMobile ? 1 : 3" border size="small">
+            <el-descriptions-item label="提需类型">
+              {{ bmoSnapshot.demandType || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="设计师">
+              {{ bmoSnapshot.designer || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="BMO记录ID">
+              {{ bmoSnapshot.fdId || '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <div style="margin-top: 12px">
+            <div style="margin-bottom: 8px; font-weight: 600">模具技术要求（全字段）</div>
+            <el-table
+              :data="bmoTechFieldRows"
+              border
+              size="small"
+              max-height="260"
+              :show-header="false"
+              class="pm-init-tech-fields-table"
+            >
+              <el-table-column min-width="160">
+                <template #default="{ row }">
+                  <span class="pm-init-tech-field-label">{{
+                    row.left?.label || row.left?.name || '-'
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column min-width="220">
+                <template #default="{ row }">
+                  <span class="pm-init-tech-field-value">{{
+                    formatTechFieldValue(row.left?.value)
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column min-width="160">
+                <template #default="{ row }">
+                  <span v-if="row.right" class="pm-init-tech-field-label">{{
+                    row.right.label || row.right.name || '-'
+                  }}</span>
+                  <span v-else class="pm-init-tech-field-empty">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column min-width="220">
+                <template #default="{ row }">
+                  <span v-if="row.right" class="pm-init-tech-field-value">{{
+                    formatTechFieldValue(row.right.value)
+                  }}</span>
+                  <span v-else class="pm-init-tech-field-empty">-</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div style="margin-top: 12px">
+            <div class="pm-init-spec-header" style="margin-bottom: 8px">
+              <span style="font-weight: 600">技术规格表附件（手选）</span>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-checkbox v-model="bmoSaveAttachment">保存到项目附件</el-checkbox>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="bmoReadingAttachment"
+                  :disabled="!bmoAttachmentSelection"
+                  @click="handleReadSelectedBmoAttachment"
+                >
+                  读取并校验
+                </el-button>
+              </div>
+            </div>
+            <el-table :data="bmoTechAttachments" border size="small" max-height="220">
+              <el-table-column label="选择" width="70" align="center">
+                <template #default="{ row }">
+                  <el-radio v-model="bmoAttachmentSelection" :label="String(row.id || '')" />
+                </template>
+              </el-table-column>
+              <el-table-column
+                prop="fileName"
+                label="文件名"
+                min-width="320"
+                show-overflow-tooltip
+              />
+              <el-table-column label="类型" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag
+                    size="small"
+                    :type="isExcelFileName(String(row.fileName || '')) ? 'success' : 'info'"
+                    effect="plain"
+                  >
+                    {{ isExcelFileName(String(row.fileName || '')) ? 'Excel' : '其他' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="createdAt" label="上传时间" width="180" />
+            </el-table>
+          </div>
+        </template>
+        <el-empty
+          v-else-if="!bmoLoading && !bmoLoadError"
+          description="未找到对应的1.4数据"
+          :image-size="64"
+        />
+      </div>
+
       <!-- 技术规格表读取区域 -->
       <div class="pm-init-spec-section">
         <div class="pm-init-spec-header">
@@ -53,35 +172,122 @@
         <!-- 读取的数据显示 -->
         <div v-if="specData" class="pm-init-spec-content">
           <el-descriptions :column="isMobile ? 1 : 2" border size="small">
-            <el-descriptions-item label="材料">
+            <el-descriptions-item label="零件材料及料厚">
               <span :class="{ 'pm-spec--missing': !specData.材料 }">{{
                 specData.材料 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('材料')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('材料') }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="型腔">
               <span :class="{ 'pm-spec--missing': !specData.型腔 }">{{
                 specData.型腔 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('型腔')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('型腔') }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="型芯">
               <span :class="{ 'pm-spec--missing': !specData.型芯 }">{{
                 specData.型芯 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('型芯')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('型芯') }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="模具穴数">
               <span :class="{ 'pm-spec--missing': !specData.模具穴数 }">{{
                 specData.模具穴数 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('模具穴数')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('模具穴数') }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="产品外观尺寸">
               <span :class="{ 'pm-spec--missing': !specData.产品外观尺寸 }">{{
                 specData.产品外观尺寸 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('产品外观尺寸')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('产品外观尺寸') }}
+              </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="产品结构工程师">
+            <el-descriptions-item label="设计师">
               <span :class="{ 'pm-spec--missing': !specData.产品结构工程师 }">{{
                 specData.产品结构工程师 || '待填写'
               }}</span>
+              <el-tag
+                v-if="getSourceText('产品结构工程师')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('产品结构工程师') }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="顶出类型">
+              <span :class="{ 'pm-spec--missing': !specData.顶出类型 }">{{
+                specData.顶出类型 || '待填写'
+              }}</span>
+              <el-tag
+                v-if="getSourceText('顶出类型')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('顶出类型') }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="顶出方式">
+              <span :class="{ 'pm-spec--missing': !specData.顶出方式 }">{{
+                specData.顶出方式 || '待填写'
+              }}</span>
+              <el-tag
+                v-if="getSourceText('顶出方式')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('顶出方式') }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="复位方式">
+              <span :class="{ 'pm-spec--missing': !specData.复位方式 }">{{
+                specData.复位方式 || '待填写'
+              }}</span>
+              <el-tag
+                v-if="getSourceText('复位方式')"
+                class="pm-source-tag"
+                size="small"
+                effect="plain"
+              >
+                {{ getSourceText('复位方式') }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="零件图片" v-if="specData.零件图片">
               <img
@@ -92,6 +298,25 @@
               />
             </el-descriptions-item>
           </el-descriptions>
+
+          <div v-if="diffRows.length" class="pm-init-diff">
+            <div class="pm-init-diff__header">
+              <span class="pm-init-diff__title">技术规格表差异（逐行勾选后一次应用）</span>
+              <el-button type="primary" size="small" @click="applySelectedDiffRows">
+                应用勾选项
+              </el-button>
+            </div>
+            <el-table :data="diffRows" border size="small" max-height="260">
+              <el-table-column label="应用" width="60" align="center">
+                <template #default="{ row }">
+                  <el-checkbox v-model="row.selected" :disabled="!row.selectable" />
+                </template>
+              </el-table-column>
+              <el-table-column prop="label" label="字段" width="160" />
+              <el-table-column prop="currentValue" label="当前值（1.4优先）" min-width="220" />
+              <el-table-column prop="nextValue" label="技术规格表值" min-width="220" />
+            </el-table>
+          </div>
         </div>
       </div>
 
@@ -220,10 +445,19 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { VueDraggable } from 'vue-draggable-plus'
-import * as XLSX from 'xlsx'
+import request from '@/axios'
 import type { ProjectInfo } from '@/api/project'
+import { uploadProjectAttachmentApi } from '@/api/project'
+import {
+  getBmoInitiationRequestByProjectApi,
+  getBmoMouldProcurementByProjectApi,
+  getBmoMouldProcurementDetailApi,
+  type BmoInitiationTechSnapshot,
+  type BmoMouldProcurementDetailAttachment
+} from '@/api/bmo'
+import { parseTechSpecExcel, type TechSpecData } from '@/utils/excel/techSpecParser'
 import type { UploadFile } from 'element-plus'
 
 type InitProductGroup = {
@@ -257,6 +491,47 @@ const groups = ref<InitProductGroup[]>([])
 const specData = ref<any>(null) // 技术规格表数据
 const imagePreviewVisible = ref(false)
 const imagePreviewUrl = ref('')
+const specDataSources = ref<Record<string, 'bmo14' | 'techSpec' | 'manual'>>({})
+const bmoLoading = ref(false)
+const bmoLoadError = ref('')
+const bmoSnapshot = ref<BmoInitiationTechSnapshot | null>(null)
+const bmoAttachmentSelection = ref<string>('')
+const bmoReadingAttachment = ref(false)
+const bmoSaveAttachment = ref(true)
+
+type FieldDiffRow = {
+  key: string
+  label: string
+  currentValue: string
+  nextValue: string
+  currentRaw: any
+  nextRaw: any
+  selectable: boolean
+  selected: boolean
+}
+
+const diffRows = ref<FieldDiffRow[]>([])
+
+const SOURCE_TEXT: Record<'bmo14' | 'techSpec' | 'manual', string> = {
+  bmo14: '1.4',
+  techSpec: '技术规格表',
+  manual: '手工'
+}
+
+const FIELD_KEYS: Array<{
+  key: keyof TechSpecData | '顶出类型' | '顶出方式' | '复位方式'
+  label: string
+}> = [
+  { key: '材料', label: '零件材料及料厚' },
+  { key: '型腔', label: '前模材质' },
+  { key: '型芯', label: '后模材质' },
+  { key: '模具穴数', label: '模具穴数' },
+  { key: '产品外观尺寸', label: '产品外观尺寸' },
+  { key: '产品结构工程师', label: '设计师' },
+  { key: '顶出类型', label: '顶出类型' },
+  { key: '顶出方式', label: '顶出方式' },
+  { key: '复位方式', label: '复位方式' }
+]
 
 const toSafeCavity = (value: unknown) => {
   if (value === undefined || value === '') return 1
@@ -361,6 +636,173 @@ const parseMouldCavityText = (raw: unknown): { expression: string; counts: numbe
   return { expression: '', counts: [] }
 }
 
+const normalizeText = (value: unknown) => String(value ?? '').trim()
+
+const normalizeFieldName = (value: unknown) =>
+  normalizeText(value).replaceAll(/\s+/g, '').replaceAll('：', ':').toLowerCase()
+
+const getSourceText = (key: string) => {
+  const source = specDataSources.value[key]
+  return source ? SOURCE_TEXT[source] : ''
+}
+
+const isExcelFileName = (name: string) => /\.(xlsx|xls)$/i.test(String(name || '').trim())
+
+const bmoTechAttachments = computed<BmoMouldProcurementDetailAttachment[]>(
+  () => bmoSnapshot.value?.tech?.attachments || []
+)
+
+const selectedBmoAttachment = computed(() =>
+  bmoTechAttachments.value.find((item) => String(item.id || '') === bmoAttachmentSelection.value)
+)
+
+const bmoTechFields = computed(() => bmoSnapshot.value?.tech?.fields || [])
+const bmoTechFieldRows = computed(() => {
+  const fields = bmoTechFields.value || []
+  const rows: Array<{ left: any; right?: any }> = []
+  for (let i = 0; i < fields.length; i += 2) {
+    rows.push({
+      left: fields[i],
+      right: fields[i + 1]
+    })
+  }
+  return rows
+})
+
+const buildPrimaryDataFromBmo = () => {
+  const next: any = {
+    材料: '',
+    型腔: '',
+    型芯: '',
+    模具穴数: '',
+    产品外观尺寸: '',
+    产品列表: [] as string[],
+    产品名称列表: [] as string[],
+    产品数量列表: [] as number[],
+    产品重量列表: [] as number[],
+    产品尺寸列表: [] as string[],
+    产品结构工程师: '',
+    零件图片: '',
+    顶出类型: '',
+    顶出方式: '',
+    复位方式: ''
+  }
+  const sources: Record<string, 'bmo14' | 'techSpec' | 'manual'> = {}
+
+  const setIfEmpty = (key: string, value: unknown) => {
+    const v = normalizeText(value)
+    if (!v) return
+    if (!normalizeText(next[key])) {
+      next[key] = v
+      sources[key] = 'bmo14'
+    }
+  }
+
+  if (bmoSnapshot.value?.designer) setIfEmpty('产品结构工程师', bmoSnapshot.value.designer)
+
+  for (const field of bmoTechFields.value) {
+    const name = normalizeFieldName(field.name || field.label)
+    const label = normalizeFieldName(field.label || field.name)
+    const raw = normalizeText(field.value)
+    if (!raw) continue
+
+    if (name === 'fd_col_o527xg' || /模具(穴|腔)数|型腔数/.test(label)) {
+      setIfEmpty('模具穴数', raw)
+      continue
+    }
+    if (/零件材料及料厚/.test(label)) {
+      setIfEmpty('材料', raw)
+      continue
+    }
+    if (/型腔|前模材质/.test(label) && !/数/.test(label)) {
+      setIfEmpty('型腔', raw)
+      continue
+    }
+    if (/型芯|后模材质/.test(label) && !/数/.test(label)) {
+      setIfEmpty('型芯', raw)
+      continue
+    }
+    if (/产品外观尺寸/.test(label)) {
+      setIfEmpty('产品外观尺寸', raw)
+      continue
+    }
+    if (/顶出类型/.test(label)) {
+      setIfEmpty('顶出类型', raw)
+      continue
+    }
+    if (/顶出方式/.test(label)) {
+      setIfEmpty('顶出方式', raw)
+      continue
+    }
+    if (/复位方式/.test(label)) {
+      setIfEmpty('复位方式', raw)
+      continue
+    }
+  }
+
+  const projectDrawing = normalizeText(getProductDrawing())
+  const projectName = normalizeText(getProductName())
+  if (projectDrawing) {
+    next.产品列表 = [projectDrawing]
+    next.产品名称列表 = [projectName]
+    next.产品数量列表 = [0]
+    next.产品重量列表 = [0]
+    next.产品尺寸列表 = [normalizeText(next.产品外观尺寸)]
+    sources.产品列表 = 'bmo14'
+    sources.产品名称列表 = 'bmo14'
+    sources.产品数量列表 = 'bmo14'
+    sources.产品重量列表 = 'bmo14'
+    sources.产品尺寸列表 = 'bmo14'
+  }
+
+  return { data: next, sources }
+}
+
+const applyPrimaryBmoData = () => {
+  const { data, sources } = buildPrimaryDataFromBmo()
+  specData.value = data
+  specDataSources.value = sources
+
+  const cavityParsed = parseMouldCavityText(data.模具穴数)
+  if (cavityParsed.expression) {
+    specData.value.模具穴数 = cavityParsed.expression
+    specDataSources.value.模具穴数 = 'bmo14'
+  }
+
+  if (Array.isArray(data.产品列表) && data.产品列表.length > 0) {
+    applyProductDrawingsToGroups(data.产品列表, data.产品尺寸列表, cavityParsed.counts)
+  }
+}
+
+const parseCsvLikeList = (raw: string) =>
+  raw
+    .split(/[，,、;；\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(',')
+
+const patchMultiSelectFields = (data: any) => {
+  ;['顶出类型', '顶出方式', '复位方式'].forEach((k) => {
+    const v = normalizeText(data?.[k])
+    if (!v) return
+    data[k] = parseCsvLikeList(v)
+  })
+}
+
+const toDisplayText = (value: unknown) => {
+  if (Array.isArray(value))
+    return value
+      .map((v) => normalizeText(v))
+      .filter(Boolean)
+      .join(' / ')
+  return normalizeText(value)
+}
+
+const formatTechFieldValue = (value: unknown) => {
+  const text = normalizeText(value)
+  return text || '-'
+}
+
 const getProductDrawing = () => {
   return props.project?.productDrawing || props.project?.产品图号 || ''
 }
@@ -421,11 +863,55 @@ const resetFromProps = () => {
   ]
 }
 
+const loadBmoSnapshotByProject = async () => {
+  const projectCode = normalizeText(props.project?.项目编号)
+  if (!projectCode) return
+
+  bmoLoading.value = true
+  bmoLoadError.value = ''
+  bmoSnapshot.value = null
+  bmoAttachmentSelection.value = ''
+  diffRows.value = []
+
+  try {
+    const resp = await getBmoInitiationRequestByProjectApi({ projectCode })
+    const row: any = resp?.data || null
+    const snapshot = (row?.tech_snapshot || null) as BmoInitiationTechSnapshot | null
+    if (snapshot) {
+      bmoSnapshot.value = snapshot
+      applyPrimaryBmoData()
+      return
+    }
+
+    // 兜底：立项快照不存在时，按项目编号回查 BMO 记录并读取实时 1.4 详情
+    const bmoRowResp = await getBmoMouldProcurementByProjectApi({ projectCode })
+    const bmoRecordId = normalizeText((bmoRowResp?.data as any)?.bmo_record_id)
+    if (!bmoRecordId) return
+
+    const detailResp = await getBmoMouldProcurementDetailApi({ fdId: bmoRecordId })
+    const detail = detailResp?.data
+    if (!detail) return
+
+    bmoSnapshot.value = {
+      fdId: detail.fdId || bmoRecordId,
+      demandType: detail.demandType ?? null,
+      designer: detail.designer ?? null,
+      tech: detail.tech || { tableName: '', fields: [], attachments: [] }
+    }
+    applyPrimaryBmoData()
+  } catch (e: any) {
+    bmoLoadError.value = e?.message || '读取 1.4 数据失败'
+  } finally {
+    bmoLoading.value = false
+  }
+}
+
 watch(
   () => props.modelValue,
-  (v) => {
+  async (v) => {
     if (!v) return
     resetFromProps()
+    await loadBmoSnapshotByProject()
   }
 )
 
@@ -620,490 +1106,224 @@ const handleComplete = () => {
 const handleClosed = () => {
   // 弹窗关闭时的清理逻辑
   specData.value = null
+  specDataSources.value = {}
+  bmoSnapshot.value = null
+  bmoLoadError.value = ''
+  bmoAttachmentSelection.value = ''
+  diffRows.value = []
   imagePreviewVisible.value = false
   imagePreviewUrl.value = ''
 }
 
-// 处理技术规格表文件上传
+const cloneSpecData = (data: any) =>
+  JSON.parse(
+    JSON.stringify(
+      data || {
+        材料: '',
+        型腔: '',
+        型芯: '',
+        模具穴数: '',
+        产品外观尺寸: '',
+        产品列表: [],
+        产品名称列表: [],
+        产品数量列表: [],
+        产品重量列表: [],
+        产品尺寸列表: [],
+        产品结构工程师: '',
+        零件图片: '',
+        顶出类型: '',
+        顶出方式: '',
+        复位方式: ''
+      }
+    )
+  )
+
+const pickMatchedTechSpecData = async (arrayBuffer: ArrayBuffer) => {
+  const parsed = await parseTechSpecExcel(arrayBuffer)
+  const records = parsed.records || []
+  if (!records.length) throw new Error('技术规格表中未解析到有效数据')
+
+  const drawing = normalizeText(getProductDrawing()).toLowerCase()
+  const name = normalizeText(getProductName()).toLowerCase()
+
+  let record =
+    records.find((r) =>
+      (r.drawings || []).some((d) => normalizeText(d).toLowerCase() === drawing)
+    ) ||
+    records.find((r) => normalizeText(r.partName).toLowerCase() === name) ||
+    records[0]
+
+  const data = cloneSpecData(record.specData)
+  patchMultiSelectFields(data)
+  return data
+}
+
+const compareArrayField = (a: any, b: any) =>
+  JSON.stringify(Array.isArray(a) ? a : []) === JSON.stringify(Array.isArray(b) ? b : [])
+
+const buildFieldDiffs = (baseData: any, candidateData: any) => {
+  const nextDiffs: FieldDiffRow[] = []
+  const keys = [
+    ...FIELD_KEYS.map((x) => ({ key: x.key as string, label: x.label })),
+    { key: '产品列表', label: '产品列表' },
+    { key: '产品名称列表', label: '产品名称列表' },
+    { key: '产品数量列表', label: '产品数量列表' },
+    { key: '产品重量列表', label: '产品重量列表' },
+    { key: '产品尺寸列表', label: '产品尺寸列表' }
+  ]
+  for (const item of keys) {
+    const currentVal = baseData[item.key]
+    const nextVal = candidateData[item.key]
+    const equal =
+      Array.isArray(currentVal) || Array.isArray(nextVal)
+        ? compareArrayField(currentVal, nextVal)
+        : normalizeText(currentVal) === normalizeText(nextVal)
+    if (equal) continue
+    nextDiffs.push({
+      key: item.key,
+      label: item.label,
+      currentValue: toDisplayText(currentVal) || '（空）',
+      nextValue: toDisplayText(nextVal) || '（空）',
+      currentRaw: currentVal,
+      nextRaw: nextVal,
+      selectable: ![
+        '产品列表',
+        '产品名称列表',
+        '产品数量列表',
+        '产品重量列表',
+        '产品尺寸列表'
+      ].includes(item.key),
+      selected: false
+    })
+  }
+  return nextDiffs
+}
+
+const applyTechSpecFallback = (candidateData: any) => {
+  const current = cloneSpecData(specData.value)
+  patchMultiSelectFields(current)
+  patchMultiSelectFields(candidateData)
+
+  // 产品列表：1.4 优先，仅在空时补齐
+  const hasCurrentDrawings = Array.isArray(current.产品列表) && current.产品列表.length > 0
+  if (
+    !hasCurrentDrawings &&
+    Array.isArray(candidateData.产品列表) &&
+    candidateData.产品列表.length > 0
+  ) {
+    current.产品列表 = candidateData.产品列表
+    current.产品名称列表 = candidateData.产品名称列表 || []
+    current.产品数量列表 = candidateData.产品数量列表 || []
+    current.产品重量列表 = candidateData.产品重量列表 || []
+    current.产品尺寸列表 = candidateData.产品尺寸列表 || []
+    specDataSources.value.产品列表 = 'techSpec'
+    specDataSources.value.产品名称列表 = 'techSpec'
+    specDataSources.value.产品数量列表 = 'techSpec'
+    specDataSources.value.产品重量列表 = 'techSpec'
+    specDataSources.value.产品尺寸列表 = 'techSpec'
+  }
+
+  for (const item of FIELD_KEYS) {
+    const key = item.key as string
+    const currentVal = normalizeText(current[key])
+    const nextVal = normalizeText(candidateData[key])
+    if (!nextVal) continue
+    if (!currentVal) {
+      current[key] = nextVal
+      specDataSources.value[key] = 'techSpec'
+    }
+  }
+
+  const rawDiffs = buildFieldDiffs(current, candidateData)
+  diffRows.value = rawDiffs
+
+  specData.value = current
+
+  const cavityParsed = parseMouldCavityText(current.模具穴数)
+  if (Array.isArray(current.产品列表) && current.产品列表.length > 0) {
+    applyProductDrawingsToGroups(current.产品列表, current.产品尺寸列表, cavityParsed.counts)
+  }
+}
+
+const applySelectedDiffRows = () => {
+  if (!diffRows.value.some((row) => row.selected)) {
+    ElMessage.warning('请先勾选差异项')
+    return
+  }
+  const next = cloneSpecData(specData.value)
+  for (const row of diffRows.value) {
+    if (!row.selected || !row.selectable) continue
+    const key = row.key
+    next[key] = Array.isArray(row.nextRaw) ? [...row.nextRaw] : row.nextRaw
+    specDataSources.value[key] = 'techSpec'
+  }
+  specData.value = next
+  const cavityParsed = parseMouldCavityText(next.模具穴数)
+  if (Array.isArray(next.产品列表) && next.产品列表.length > 0) {
+    applyProductDrawingsToGroups(next.产品列表, next.产品尺寸列表, cavityParsed.counts)
+  }
+  diffRows.value = []
+  ElMessage.success('已应用勾选差异')
+}
+
+const saveSelectedAttachmentToProject = async (file: File) => {
+  const projectCode = normalizeText(props.project?.项目编号)
+  if (!projectCode) throw new Error('缺少项目编号，无法保存附件')
+  await uploadProjectAttachmentApi(projectCode, 'technical-spec', file)
+}
+
+const handleSpecArrayBuffer = async (arrayBuffer: ArrayBuffer) => {
+  const parsedData = await pickMatchedTechSpecData(arrayBuffer)
+  applyTechSpecFallback(parsedData)
+}
+
+const handleReadSelectedBmoAttachment = async () => {
+  const picked = selectedBmoAttachment.value
+  if (!picked?.id) {
+    ElMessage.warning('请先选择技术规格表附件')
+    return
+  }
+  if (!isExcelFileName(String(picked.fileName || ''))) {
+    ElMessage.warning('仅支持读取 Excel 技术规格表附件（.xlsx/.xls）')
+    return
+  }
+
+  bmoReadingAttachment.value = true
+  try {
+    const resp: any = await request.get<Blob>({
+      url: `/api/bmo/attachment/download/${encodeURIComponent(String(picked.id))}`,
+      responseType: 'blob'
+    })
+    const blob = ((resp as any)?.data ?? resp) as Blob
+    const fileName = String(picked.fileName || 'BMO技术规格表.xlsx')
+    const file = new File([blob], fileName, {
+      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    })
+
+    if (bmoSaveAttachment.value) {
+      await saveSelectedAttachmentToProject(file)
+    }
+
+    const buffer = await file.arrayBuffer()
+    await handleSpecArrayBuffer(buffer)
+    ElMessage.success(`技术规格表已读取${bmoSaveAttachment.value ? '并保存' : ''}`)
+  } catch (error: any) {
+    console.error('读取 BMO 技术规格表失败:', error)
+    ElMessage.error(error?.message || '读取 BMO 技术规格表失败')
+  } finally {
+    bmoReadingAttachment.value = false
+  }
+}
+
+// 处理本地技术规格表文件上传（手工兜底）
 const handleSpecFileChange = async (file: UploadFile) => {
   if (!file.raw) {
     ElMessage.error('文件读取失败')
     return
   }
-
-  const projectCode = props.project?.项目编号
-  const productDrawing = props.project?.productDrawing || props.project?.产品图号
-  const productName = props.project?.productName || props.project?.产品名称
-
-  if (!projectCode) {
-    ElMessage.error('请先设置项目编号')
-    return
-  }
-
-  if (!productDrawing || !productName) {
-    ElMessage.warning('项目缺少产品图号或产品名称，将尝试匹配技术规格表')
-  }
-
   try {
-    // 读取Excel文件
     const arrayBuffer = await file.raw.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-
-    // 获取第一个工作表
-    const firstSheetName = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets[firstSheetName]
-
-    // 转换为JSON格式（保留所有行，包括空单元格）
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][]
-
-    if (!jsonData || jsonData.length < 2) {
-      ElMessage.error('Excel文件格式错误：至少需要表头和数据行')
-      return
-    }
-
-    // 查找表头行（支持多行表头，通常在第2行或第3行）
-    // 第2行通常是主表头（可能有合并单元格），第3行是子表头
-    let mainHeaderRowIndex = -1 // 主表头行（包含"零件图号"、"零件名称"等）
-    let subHeaderRowIndex = -1 // 子表头行（包含"材料"等子列）
-    let mainHeaderRow: string[] = []
-    let subHeaderRow: string[] = []
-
-    // 先找主表头行（包含"零件图号"的行，通常是第2行，索引1）
-    for (let i = 0; i < Math.min(5, jsonData.length); i++) {
-      const row = jsonData[i]
-      const rowStr = row
-        .map((cell) =>
-          String(cell || '')
-            .trim()
-            .toLowerCase()
-        )
-        .join('|')
-
-      // 检查是否包含关键列名
-      if (
-        (rowStr.includes('零件图号') || rowStr.includes('图号')) &&
-        (rowStr.includes('零件名称') || rowStr.includes('名称'))
-      ) {
-        mainHeaderRowIndex = i
-        mainHeaderRow = row.map((cell) => String(cell || '').trim())
-
-        // 检查下一行是否是子表头（包含"材料"）
-        if (i + 1 < jsonData.length) {
-          const nextRow = jsonData[i + 1]
-          const nextRowStr = nextRow
-            .map((cell) =>
-              String(cell || '')
-                .trim()
-                .toLowerCase()
-            )
-            .join('|')
-          if (nextRowStr.includes('材料') || nextRowStr.includes('材质')) {
-            subHeaderRowIndex = i + 1
-            subHeaderRow = nextRow.map((cell) => String(cell || '').trim())
-          }
-        }
-        break
-      }
-    }
-
-    if (mainHeaderRowIndex === -1) {
-      ElMessage.error('未找到表头行，请确保Excel包含"零件图号"和"零件名称"列')
-      return
-    }
-
-    // 查找列索引（优先在子表头行查找，如果找不到再在主表头行查找）
-    const findColumnIndex = (keywords: string[], preferSubHeader = false): number => {
-      // 如果指定优先查找子表头，且子表头存在，先查子表头
-      if (preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
-        for (let i = 0; i < subHeaderRow.length; i++) {
-          const cell = subHeaderRow[i].toLowerCase()
-          if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
-            return i
-          }
-        }
-      }
-
-      // 在主表头行查找
-      for (let i = 0; i < mainHeaderRow.length; i++) {
-        const cell = mainHeaderRow[i].toLowerCase()
-        if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
-          return i
-        }
-      }
-
-      // 如果主表头没找到，且子表头存在，再查子表头
-      if (!preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
-        for (let i = 0; i < subHeaderRow.length; i++) {
-          const cell = subHeaderRow[i].toLowerCase()
-          if (keywords.some((kw) => cell.includes(kw.toLowerCase()))) {
-            return i
-          }
-        }
-      }
-
-      return -1
-    }
-
-    const findColumnIndexFiltered = (
-      keywords: string[],
-      filter: (cell: string) => boolean,
-      preferSubHeader = false
-    ): number => {
-      const match = (cellRaw: string) => {
-        const cell = cellRaw.toLowerCase()
-        return filter(cell) && keywords.some((kw) => cell.includes(kw.toLowerCase()))
-      }
-
-      if (preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
-        for (let i = 0; i < subHeaderRow.length; i++) {
-          if (match(subHeaderRow[i])) return i
-        }
-      }
-
-      for (let i = 0; i < mainHeaderRow.length; i++) {
-        if (match(mainHeaderRow[i])) return i
-      }
-
-      if (!preferSubHeader && subHeaderRowIndex >= 0 && subHeaderRow.length > 0) {
-        for (let i = 0; i < subHeaderRow.length; i++) {
-          if (match(subHeaderRow[i])) return i
-        }
-      }
-
-      return -1
-    }
-
-    // 查找列索引
-    // "材料"是子列，优先在子表头行查找
-    const partDrawingCol = findColumnIndex(['零件图号', '图号'])
-    const partNameCol = findColumnIndex(['零件名称', '名称'])
-    const materialCol = findColumnIndex(['材料', '材质'], true) // 优先在子表头查找
-    // "型腔"和"型芯"只从主表头查找（模具组件列），不要把“型腔数/穴数”等误认为材质列
-    const cavityCol = findColumnIndexFiltered(
-      ['型腔', '前模'],
-      (cell) => !cell.includes('数'),
-      false
-    )
-    const coreCol = findColumnIndexFiltered(['型芯', '后模'], (cell) => !cell.includes('数'), false)
-    const sizeCol = findColumnIndex(['产品外观尺寸', '外观尺寸', '尺寸'])
-    const engineerCol = findColumnIndex(['产品结构工程师', '结构工程师', '工程师'])
-    const imageCol = findColumnIndex(['零件图片', '图片', '图示'])
-    const cavityCountCol = findColumnIndexFiltered(
-      ['模具穴数', '模具腔数', '穴数', '腔数', '型腔数'],
-      (cell) =>
-        cell.includes('穴') ||
-        cell.includes('腔') ||
-        cell.includes('型腔数') ||
-        cell.includes('模具'),
-      false
-    )
-
-    if (partDrawingCol === -1 || partNameCol === -1) {
-      ElMessage.error('未找到"零件图号"或"零件名称"列')
-      return
-    }
-
-    // 查找匹配的数据行（从表头行之后开始）
-    // 数据行从主表头行的下一行开始，如果有子表头，则从子表头的下一行开始
-    const dataStartRowIndex =
-      subHeaderRowIndex >= 0 ? subHeaderRowIndex + 1 : mainHeaderRowIndex + 1
-    let matchedRow: any[] | null = null
-
-    const parseDrawings = (val: any) => {
-      const raw = String(val || '').trim()
-      if (!raw) return []
-
-      const tokens = raw
-        .replace(/；/g, ';')
-        .split(/[\s;]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-
-      const expandSlashToken = (token: string) => {
-        if (!token.includes('/')) return [token]
-
-        const segments = token
-          .split('/')
-          .map((s) => s.trim())
-          .filter(Boolean)
-        if (segments.length <= 1) return [token]
-
-        const base = segments[0]
-        const baseParts = base
-          .split('.')
-          .map((s) => s.trim())
-          .filter(Boolean)
-
-        const results: string[] = [base]
-        for (const seg of segments.slice(1)) {
-          if (!seg) continue
-
-          const suffixParts = seg
-            .split('.')
-            .map((s) => s.trim())
-            .filter(Boolean)
-
-          if (suffixParts.length === 0 || baseParts.length === 0) {
-            results.push(seg)
-            continue
-          }
-
-          // 规则 A：baseParts.length - suffixParts.length === 1 时，
-          // 代表 suffix 省略了 base 的首段之外所有前缀，按 “首段 + suffix” 补全
-          if (baseParts.length - suffixParts.length === 1) {
-            results.push([baseParts[0], ...suffixParts].join('.'))
-            continue
-          }
-
-          // 规则 B：否则按右侧段数覆盖 base 的末尾同段数
-          if (suffixParts.length <= baseParts.length) {
-            const next = [...baseParts]
-            const start = baseParts.length - suffixParts.length
-            for (let i = 0; i < suffixParts.length; i++) {
-              next[start + i] = suffixParts[i]
-            }
-            results.push(next.join('.'))
-            continue
-          }
-
-          // suffix 段数比 base 多：按完整图号处理
-          results.push(seg)
-        }
-
-        return results
-      }
-
-      return tokens
-        .flatMap((t) => expandSlashToken(t))
-        .map((s) => s.trim())
-        .filter(Boolean)
-    }
-
-    const mainDrawings = parseDrawings(productDrawing)
-    const mainDrawingSet = new Set(mainDrawings.map((d) => d.toLowerCase()))
-
-    for (let i = dataStartRowIndex; i < jsonData.length; i++) {
-      const row = jsonData[i]
-      const rowPartDrawing = String(row[partDrawingCol] || '').trim()
-      const rowPartName = String(row[partNameCol] || '').trim()
-
-      // 匹配逻辑：优先匹配图号，图号匹配则直接使用
-      // 支持多个图号用"/"或空格分隔的情况
-      const rowDrawings = parseDrawings(rowPartDrawing)
-      const drawingMatch =
-        mainDrawingSet.size > 0 && rowDrawings.some((d) => mainDrawingSet.has(d.toLowerCase()))
-      const nameMatch = productName && rowPartName.toLowerCase() === productName.toLowerCase()
-
-      // 优先匹配图号：如果图号匹配，直接使用
-      if (drawingMatch) {
-        matchedRow = row
-        break
-      }
-
-      // 如果图号不匹配但名称匹配，记录为候选（但继续查找图号匹配的行）
-      if (nameMatch && !matchedRow) {
-        matchedRow = row
-        // 不break，继续查找是否有图号匹配的行
-      }
-    }
-
-    if (!matchedRow) {
-      ElMessage.warning(
-        `未找到匹配的数据行（项目编号: ${projectCode}, 产品图号: ${productDrawing || '-'}, 产品名称: ${productName || '-'}）`
-      )
-      return
-    }
-
-    // 检查最终匹配的行：如果只匹配了名称但图号不匹配，提示用户确认
-    const finalRowDrawing = String(matchedRow[partDrawingCol] || '').trim()
-    const finalRowDrawings = parseDrawings(finalRowDrawing)
-    const finalDrawingMatch =
-      mainDrawingSet.size > 0 && finalRowDrawings.some((d) => mainDrawingSet.has(d.toLowerCase()))
-    const finalRowName = String(matchedRow[partNameCol] || '').trim()
-    const finalNameMatch = productName && finalRowName.toLowerCase() === productName.toLowerCase()
-
-    if (!finalDrawingMatch && finalNameMatch) {
-      // 只匹配了名称，图号不匹配，需要用户确认
-      const confirmed = await ElMessageBox.confirm(
-        `找到产品名称匹配的行，但图号不一致：\n` +
-          `项目图号: ${productDrawing || '-'}\n` +
-          `Excel图号: ${finalRowDrawing || '-'}\n` +
-          `产品名称: ${productName || '-'}\n\n` +
-          `是否继续使用该行数据？`,
-        '图号不一致',
-        {
-          confirmButtonText: '继续使用',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }
-      ).catch(() => false)
-
-      if (!confirmed) {
-        return
-      }
-    }
-
-    // 提取数据
-    const rowPartDrawing = String(matchedRow[partDrawingCol] || '').trim()
-    const rowPartSize = sizeCol >= 0 ? String(matchedRow[sizeCol] || '').trim() : ''
-
-    // 解析多个图号（支持空格或"/"分隔）
-    const 图号列表 = parseDrawings(rowPartDrawing)
-    // 解析多个尺寸（支持空格或"/"分隔）
-    const 尺寸列表 = rowPartSize
-      .split(/[\s\/]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-
-    // 检查图号和尺寸数量是否一致
-    if (图号列表.length > 1 && 尺寸列表.length === 1 && 尺寸列表[0]) {
-      // 有多个图号但只有一个尺寸，提示用户选择处理方式
-      const 相同尺寸 = 尺寸列表[0]
-
-      // 使用自定义对话框处理三种选择
-      const result = await new Promise<'confirm' | 'empty' | 'cancel'>((resolve) => {
-        ElMessageBox({
-          title: '图号与尺寸数量不一致',
-          message:
-            `检测到 ${图号列表.length} 个产品图号，但只有 1 个产品尺寸：\n` +
-            `图号: ${图号列表.join(' / ')}\n` +
-            `尺寸: ${尺寸列表[0]}\n\n` +
-            `请选择处理方式：`,
-          showCancelButton: true,
-          showConfirmButton: true,
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          distinguishCancelAndClose: true,
-          type: 'warning',
-          beforeClose: (action, _instance, done) => {
-            if (action === 'confirm') {
-              done()
-              resolve('confirm')
-            } else if (action === 'cancel') {
-              done()
-              resolve('cancel')
-            } else {
-              // close 按钮
-              done()
-              resolve('cancel')
-            }
-          }
-        }).catch(() => {
-          resolve('cancel')
-        })
-
-        // 添加"留空"按钮（等待对话框渲染后）
-        setTimeout(() => {
-          const messageBox = document.querySelector('.el-message-box')
-          if (messageBox) {
-            const footer = messageBox.querySelector('.el-message-box__btns') as HTMLElement
-            if (footer && !footer.querySelector('.empty-size-btn')) {
-              const emptyBtn = document.createElement('button')
-              emptyBtn.className = 'el-button el-button--default empty-size-btn'
-              emptyBtn.textContent = '留空'
-              emptyBtn.style.marginRight = '10px'
-              emptyBtn.onclick = (e) => {
-                e.stopPropagation()
-                ElMessageBox.close()
-                setTimeout(() => resolve('empty'), 0)
-              }
-              // 插入到取消按钮之后，确定按钮之前
-              const cancelBtn = footer.querySelector('.el-button--default:not(.empty-size-btn)')
-              if (cancelBtn && cancelBtn.nextSibling) {
-                footer.insertBefore(emptyBtn, cancelBtn.nextSibling)
-              } else {
-                footer.insertBefore(emptyBtn, footer.querySelector('.el-button--primary'))
-              }
-            }
-          }
-        }, 100)
-      })
-
-      if (result === 'cancel') {
-        return
-      } else if (result === 'confirm') {
-        // 用户确认，将相同的尺寸应用到所有图号
-        尺寸列表.length = 0
-        for (let i = 0; i < 图号列表.length; i++) {
-          尺寸列表.push(相同尺寸)
-        }
-      } else if (result === 'empty') {
-        // 用户选择留空，不填入尺寸（保持空数组）
-        尺寸列表.length = 0
-        for (let i = 0; i < 图号列表.length; i++) {
-          尺寸列表.push('')
-        }
-      }
-    } else {
-      // 确保长度一致（其他情况：图号数量 <= 尺寸数量，或尺寸为空）
-      const maxLength = Math.max(图号列表.length, 尺寸列表.length)
-      while (尺寸列表.length < maxLength) {
-        尺寸列表.push('')
-      }
-      while (尺寸列表.length > maxLength) {
-        尺寸列表.pop()
-      }
-    }
-
-    // 检查图号与主图号是否一致
-    if (mainDrawingSet.size > 0 && 图号列表.length > 0) {
-      const notInMain = 图号列表.filter((d) => !mainDrawingSet.has(d.toLowerCase()))
-      if (notInMain.length > 0) {
-        try {
-          await ElMessageBox.confirm(
-            `技术规格表中的图号（${notInMain.join(' / ')}）不在主图号集合（${productDrawing}）中，是否继续读取？`,
-            '图号不一致',
-            {
-              type: 'warning',
-              confirmButtonText: '继续',
-              cancelButtonText: '取消'
-            }
-          )
-        } catch {
-          return // 用户取消
-        }
-      }
-    }
-
-    const extractedData: any = {
-      材料: materialCol >= 0 ? String(matchedRow[materialCol] || '').trim() : '',
-      型腔: cavityCol >= 0 ? String(matchedRow[cavityCol] || '').trim() : '',
-      型芯: coreCol >= 0 ? String(matchedRow[coreCol] || '').trim() : '',
-      模具穴数: cavityCountCol >= 0 ? String(matchedRow[cavityCountCol] || '').trim() : '',
-      产品外观尺寸: rowPartSize, // 保留原始字符串，用于显示
-      产品列表: 图号列表, // 新增：图号列表
-      产品名称列表: Array(图号列表.length).fill(String(finalRowName || '').trim()), // 新增：产品名称列表
-      产品数量列表: Array(图号列表.length).fill(0), // 新增：产品数量列表
-      产品重量列表: Array(图号列表.length).fill(0), // 新增：产品重量列表
-      产品尺寸列表: 尺寸列表, // 新增：尺寸列表
-      产品结构工程师: engineerCol >= 0 ? String(matchedRow[engineerCol] || '').trim() : '',
-      零件图片: ''
-    }
-
-    const cavityParsed = parseMouldCavityText(extractedData.模具穴数)
-
-    // 处理图片（可能是嵌入的图片或路径）
-    if (imageCol >= 0) {
-      const imageValue = matchedRow[imageCol]
-      if (imageValue) {
-        // 如果是base64或URL，直接使用
-        if (
-          typeof imageValue === 'string' &&
-          (imageValue.startsWith('http') || imageValue.startsWith('data:'))
-        ) {
-          extractedData.零件图片 = imageValue
-        } else {
-          // 尝试从工作表中提取图片
-          // 注意：xlsx库不直接支持图片提取，这里需要特殊处理
-          // 暂时使用空字符串，后续可以通过其他方式处理
-          extractedData.零件图片 = ''
-        }
-      }
-    }
-
-    specData.value = extractedData
-    // 将技术规格表中的图号列表同步为产品组（一个图号一个产品组）
-    applyProductDrawingsToGroups(图号列表, 尺寸列表, cavityParsed.counts)
+    await handleSpecArrayBuffer(arrayBuffer)
     ElMessage.success('技术规格表读取成功')
   } catch (error: any) {
     console.error('读取技术规格表失败:', error)
@@ -1291,6 +1511,26 @@ const showImagePreview = (url: string) => {
   margin-top: 12px;
 }
 
+.pm-source-tag {
+  margin-left: 8px;
+}
+
+.pm-init-diff {
+  margin-top: 12px;
+}
+
+.pm-init-diff__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pm-init-diff__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .pm-init-spec-image {
   max-width: 120px;
   max-height: 120px;
@@ -1303,6 +1543,18 @@ const showImagePreview = (url: string) => {
 
 .pm-init-spec-image:hover {
   border-color: var(--el-color-primary);
+}
+
+.pm-init-tech-field-label {
+  font-weight: 600;
+}
+
+.pm-init-tech-field-value {
+  word-break: break-all;
+}
+
+.pm-init-tech-field-empty {
+  color: var(--el-text-color-placeholder);
 }
 
 /* B) 产品组单元格颜色（产品图号/穴数） */

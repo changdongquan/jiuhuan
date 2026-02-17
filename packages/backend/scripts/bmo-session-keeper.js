@@ -188,6 +188,8 @@ const main = async () => {
   const authFilePath = process.env.BMO_KEEPER_OUTPUT_ENV_PATH || process.env.BMO_AUTH_FILE || ''
   const intervalMs = Number(process.env.BMO_KEEPER_INTERVAL_MS || 10 * 60 * 1000)
   const manualWaitMs = Number(process.env.BMO_KEEPER_MANUAL_WAIT_MS || 120000)
+  const loginUrl = process.env.BMO_KEEPER_LOGIN_URL || `${baseUrl}/web/#/login`
+  const portal = String(process.env.BMO_KEEPER_PORTAL || 'BMO').trim().toUpperCase()
 
   if (!authFilePath) {
     throw new Error('未配置输出路径：请设置 BMO_AUTH_FILE 或 BMO_KEEPER_OUTPUT_ENV_PATH')
@@ -198,50 +200,60 @@ const main = async () => {
 
   console.log(`[bmo-keeper] baseUrl=${baseUrl}`)
   console.log(`[bmo-keeper] output=${authFilePath}`)
+  console.log(`[bmo-keeper] loginUrl=${loginUrl}`)
   console.log(
     `[bmo-keeper] mode=${loginMode} once=${once ? 'true' : 'false'} manual=${manual ? 'true' : 'false'} intervalMs=${intervalMs}`
   )
+
+  const headersBase = {
+    Accept: 'application/json, text/plain, */*',
+    'Content-Type': 'application/json;charset=UTF-8',
+    'X-Accept-Language': 'zh-CN',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
+    Origin: baseUrl,
+    Referer: `${baseUrl}/web/`,
+    'User-Agent':
+      process.env.BMO_USER_AGENT ||
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+  }
+
+  const probePayload = {
+    fdListViewId: '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0',
+    fdMode: 1,
+    type: 'list',
+    navId: '1j7l907fiwmnw15nidw1m9cagh1kfm6tb3w0',
+    sorts: { fd_create_time: 'desc' },
+    conditions: {},
+    pageSize: 1,
+    offset: 0,
+    params: {}
+  }
+
+  const probeWithAuth = async (cookie, token, timeoutMs = 8000) => {
+    if (!cookie && !token) return { ok: false, status: 0 }
+    const headers = {
+      ...headersBase,
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(token ? { 'X-AUTH-TOKEN': token } : {})
+    }
+    const res = await fetchWithTimeout(
+      new URL(dataEndpoint, baseUrl),
+      { method: 'POST', headers, body: JSON.stringify(probePayload) },
+      timeoutMs
+    )
+    if (res.ok) {
+      const json = await res.json().catch(() => null)
+      if (json && json.success !== false) return { ok: true, status: res.status }
+    }
+    return { ok: false, status: res.status }
+  }
 
   const refreshOnceApi = async () => {
     const existing = readEnvFile(authFilePath)
     const cookie = existing.BMO_COOKIE || process.env.BMO_COOKIE || ''
     const token = existing.BMO_X_AUTH_TOKEN || process.env.BMO_X_AUTH_TOKEN || ''
 
-    const headersBase = {
-      Accept: 'application/json, text/plain, */*',
-      'Content-Type': 'application/json;charset=UTF-8',
-      'X-Accept-Language': 'zh-CN',
-      'Accept-Language': 'zh-CN,zh;q=0.9',
-      Origin: baseUrl,
-      Referer: `${baseUrl}/web/`,
-      'User-Agent':
-        process.env.BMO_USER_AGENT ||
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
-    }
-
-    const probe = async () => {
-      if (!cookie && !token) return { ok: false, status: 0 }
-      const payload = {
-        fdListViewId: '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0',
-        fdMode: 1,
-        type: 'list',
-        navId: '1j7l907fiwmnw15nidw1m9cagh1kfm6tb3w0',
-        sorts: { fd_create_time: 'desc' },
-        conditions: {},
-        pageSize: 1,
-        offset: 0,
-        params: {}
-      }
-      const headers = { ...headersBase, ...(cookie ? { Cookie: cookie } : {}), ...(token ? { 'X-AUTH-TOKEN': token } : {}) }
-      const res = await fetchWithTimeout(new URL(dataEndpoint, baseUrl), { method: 'POST', headers, body: JSON.stringify(payload) }, 8000)
-      if (res.ok) {
-        const json = await res.json().catch(() => null)
-        if (json && json.success !== false) return { ok: true, status: res.status }
-      }
-      return { ok: false, status: res.status }
-    }
-
-    const probeResult = await probe().catch(() => ({ ok: false, status: 0 }))
+    const probeResult = await probeWithAuth(cookie, token, 8000).catch(() => ({ ok: false, status: 0 }))
     if (probeResult.ok) {
       console.log(`[bmo-keeper] probe ok (already connected)`)
       return
@@ -356,17 +368,78 @@ const main = async () => {
   }
 
   const refreshOnceChromium = async () => {
-    await page.goto(`${baseUrl}/web/`, { waitUntil: 'domcontentloaded' })
-    await page.waitForLoadState('networkidle').catch(() => null)
+    const gotoAndWait = async (url) => {
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
+      await page.waitForLoadState('networkidle').catch(() => null)
+      await sleep(500)
+    }
 
-    const userLocator = page.locator('input[name="j_username"]')
-    const passLocator = page.locator('input[name="j_password"]')
+    await gotoAndWait(loginUrl)
+
+    const userLocator = page.locator(
+      'input[name="j_username"], input#userName, input#username'
+    )
+    const passLocator = page.locator(
+      'input[name="j_password"], input#passWord, input#password'
+    )
+    const loginButton = page.locator(
+      'button:has-text("登录"), button.user-elem-chml-sso-login-odf82-submit, button[type="submit"]'
+    )
+
+    const typeIntoInput = async (locator, value) => {
+      const target = locator.first()
+      await target.evaluate((el) => {
+        if (el && typeof el.removeAttribute === 'function') {
+          el.removeAttribute('readonly')
+        }
+      }).catch(() => null)
+      await target.click({ timeout: 2000 })
+      // `fill()` is unreliable on this login page (custom input runtime); use keyboard typing.
+      await target.press('Control+A').catch(() => null)
+      await target.press('Meta+A').catch(() => null)
+      await target.press('Backspace').catch(() => null)
+      await page.keyboard.type(String(value || ''), { delay: 30 })
+    }
 
     const needLogin = (await userLocator.count()) > 0 && (await passLocator.count()) > 0
     if (needLogin && !manual) {
-      await userLocator.first().fill(username)
-      await passLocator.first().fill(password)
-      await passLocator.first().press('Enter')
+      if (portal === 'BMO' || portal === 'OA') {
+        const portalRadio = page.locator(`input[type="radio"][value="${portal}"]`)
+        if ((await portalRadio.count()) > 0) {
+          await portalRadio.first().check().catch(() => null)
+        }
+      }
+      await typeIntoInput(userLocator, username)
+      await typeIntoInput(passLocator, password)
+      const currentUserVal = await userLocator.first().inputValue().catch(() => '')
+      const currentPassVal = await passLocator.first().inputValue().catch(() => '')
+      if (currentUserVal !== String(username || '') || currentPassVal !== String(password || '')) {
+        await page.evaluate(
+          ({ u, p }) => {
+            const setInput = (selector, val) => {
+              const el = document.querySelector(selector)
+              if (!el) return false
+              const proto = Object.getPrototypeOf(el)
+              const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null
+              if (desc && typeof desc.set === 'function') {
+                desc.set.call(el, val)
+              } else {
+                el.value = val
+              }
+              el.dispatchEvent(new Event('input', { bubbles: true }))
+              el.dispatchEvent(new Event('change', { bubbles: true }))
+              return true
+            }
+            setInput('input#username,input#userName,input[name="j_username"]', String(u || ''))
+            setInput('input#password,input#passWord,input[name="j_password"]', String(p || ''))
+          },
+          { u: username, p: password }
+        )
+      }
+      if ((await loginButton.count()) > 0) {
+        await loginButton.first().click().catch(() => null)
+      }
+      await passLocator.first().press('Enter').catch(() => null)
       await waitForCookies(navTimeoutMs)
     }
 
@@ -379,15 +452,28 @@ const main = async () => {
     const cookieHeader = getCookieHeaderFromCookies(cookies)
     if (!cookieHeader) {
       const url = page.url()
-      const hasUser = await page.locator('input[name="j_username"]').count().catch(() => 0)
-      const hasPass = await page.locator('input[name="j_password"]').count().catch(() => 0)
+      const hasUser = await page
+        .locator('input[name="j_username"], input#userName, input#username')
+        .count()
+        .catch(() => 0)
+      const hasPass = await page
+        .locator('input[name="j_password"], input#passWord, input#password')
+        .count()
+        .catch(() => 0)
       throw new Error(
-        `未能从浏览器上下文读取到 Cookie（可能仍未登录成功）。url=${url} hasUser=${hasUser} hasPass=${hasPass}`
+        `未能从浏览器上下文读取到 Cookie（登录入口仅 #/login）。url=${url} hasUser=${hasUser} hasPass=${hasPass}`
       )
     }
 
     const tokenCookie = (cookies || []).find((c) => c?.name === 'X-AUTH-TOKEN')
     const authToken = tokenCookie?.value ? String(tokenCookie.value) : ''
+    const probeResult = await probeWithAuth(cookieHeader, authToken, 10000).catch(() => ({
+      ok: false,
+      status: 0
+    }))
+    if (!probeResult.ok) {
+      throw new Error(`浏览器登录后会话校验失败: status=${probeResult.status || 0}`)
+    }
 
     const existing = readEnvFile(authFilePath)
     const merged = {

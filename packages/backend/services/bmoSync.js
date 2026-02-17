@@ -96,8 +96,9 @@ const refreshClientStaticAuth = (client) => {
   const authFilePath = process.env.BMO_AUTH_FILE || ''
   const fromFile = authFilePath ? readAuthFromEnvFile(authFilePath) : null
 
-  const cookie = process.env.BMO_COOKIE || fromFile?.BMO_COOKIE || ''
-  const token = process.env.BMO_X_AUTH_TOKEN || fromFile?.BMO_X_AUTH_TOKEN || ''
+  // If auth file is configured, prefer its values so keeper refresh can take effect without restarting backend.
+  const cookie = fromFile?.BMO_COOKIE || process.env.BMO_COOKIE || ''
+  const token = fromFile?.BMO_X_AUTH_TOKEN || process.env.BMO_X_AUTH_TOKEN || ''
 
   if (cookie) client.cookie = cookie
   if (token) client.authToken = token
@@ -909,10 +910,11 @@ const fetchBmoMouldListLive = async (input = {}) => {
 
   const payload = buildListPayload(options, options.offset)
   const timeoutMs = Number(input.timeoutMs)
+  const disableAuthRetry = Boolean(input.disableAuthRetry)
   const data = await client.requestJson(
     client.dataEndpoint,
     payload,
-    false,
+    disableAuthRetry,
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined
   )
   const list = Array.isArray(data?.data?.content) ? data.data.content : []
