@@ -45,6 +45,7 @@ const attendanceRoutes = require('./routes/attendance')
 const salaryRoutes = require('./routes/salary')
 const gameRoutes = require('./routes/game')
 const bmoRoutes = require('./routes/bmo')
+const { startBmoAutoSyncLoop } = require('./services/bmoAutoSync')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -229,6 +230,7 @@ const startServer = async () => {
   try {
     // 初始化数据库连接
     await initDatabase()
+    startBmoAutoSyncLoop()
 
     // 启动HTTP服务器
     app.listen(PORT, () => {

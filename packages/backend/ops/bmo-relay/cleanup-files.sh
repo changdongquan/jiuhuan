@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="${1:-$(cd "$(dirname "$0")" && pwd)}"
-FILES_DIR="${FILES_DIR:-${ROOT_DIR}/data/files}"
+FILES_DIR="${FILES_DIR:-${BMO_RELAY_FILES_HOST_DIR:-${ROOT_DIR}/data/files}}"
 TTL_HOURS="${TTL_HOURS:-24}"
 
 if [[ ! -d "$FILES_DIR" ]]; then

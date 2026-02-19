@@ -31,6 +31,11 @@ const {
   getDownloadJobFile,
   restartDownloadWorker
 } = require('../services/bmoDownloadWorkerClient')
+const {
+  runBmoAutoSyncOnce,
+  upsertDetailCache,
+  getDetailCacheByRecordId
+} = require('../services/bmoAutoSync')
 
 const router = express.Router()
 let persistInFlight = null
@@ -95,16 +100,45 @@ router.post('/session/ensure', async (req, res) => {
   if (isRelayEnabled()) {
     try {
       const health = await relayRequestJson('/health', { method: 'GET', timeoutMs: 5000 })
-      const ok = Boolean(health?.ok || health?.ready)
+      const healthData = health?.data && typeof health.data === 'object' ? health.data : health
+      const serviceOk = Boolean(healthData?.ok || healthData?.ready)
+      if (!serviceOk) {
+        return res.json({
+          code: 0,
+          success: true,
+          data: {
+            state: 'error',
+            source: 'db',
+            message: 'BMO 中转服务不可用'
+          }
+        })
+      }
+
+      const authStatusResp = await relayRequestJson('/auth/status?probe=1', {
+        method: 'GET',
+        timeoutMs: 15000
+      })
+      const authStatus =
+        authStatusResp?.data && typeof authStatusResp.data === 'object'
+          ? authStatusResp.data
+          : authStatusResp
+      const probe =
+        authStatus?.probe && typeof authStatus.probe === 'object' ? authStatus.probe : null
+      const probeOk = probe?.ok === true
+      const probeStatus = Number(probe?.status || 0)
+      const probeMessage = String(probe?.message || '').trim()
+
       return res.json({
         code: 0,
         success: true,
-        data: ok
+        data: probeOk
           ? { state: 'connected', source: 'live' }
           : {
-              state: 'error',
+              state: probeStatus === 401 || probeStatus === 403 ? 'expired' : 'error',
               source: 'db',
-              message: 'BMO 中转服务不可用'
+              message:
+                probeMessage ||
+                (probeStatus ? `BMO 会话探活失败（HTTP ${probeStatus}）` : 'BMO 会话不可用')
             }
       })
     } catch (e) {
@@ -213,6 +247,9 @@ const formatBmoSqlErrorMessage = (error, fallbackMessage) => {
   }
   if (message.includes("Invalid object name 'bmo_initiation_requests'")) {
     return 'BMO 立项申请单表不存在，请先执行迁移：packages/backend/migrations/20260215_create_bmo_initiation_requests.sql'
+  }
+  if (message.includes("Invalid object name 'bmo_mould_detail_cache'")) {
+    return 'BMO 模具详情缓存表不存在，请先执行迁移：packages/backend/migrations/20260219_create_bmo_mould_detail_cache.sql'
   }
   return `${fallbackMessage}: ${error.message || '未知错误'}`
 }
@@ -327,6 +364,23 @@ const normalizeRelayDownloadJob = (data) => {
         }
       : null
   }
+}
+
+const persistMouldListInBackground = (list, traceId) => {
+  if (persistInFlight) return
+  markPersistStart()
+  persistInFlight = Promise.resolve()
+    .then(async () => {
+      const upserted = await upsertBmoRecords(list, traceId || null)
+      markPersistSuccess(upserted)
+    })
+    .catch((e) => {
+      console.error('BMO 自动入库失败:', e)
+      markPersistError(e)
+    })
+    .finally(() => {
+      persistInFlight = null
+    })
 }
 
 const normalizeRelayJob = (data) => {
@@ -778,6 +832,38 @@ router.get('/mould-procurement', async (req, res) => {
   }
 })
 
+router.get('/mould-procurement/pending-count', async (req, res) => {
+  try {
+    const rows = await query(
+      `
+        SELECT COUNT(1) AS pendingCount
+        FROM bmo_mould_procurement mp
+        OUTER APPLY (
+          SELECT TOP 1 项目编号 as project_code
+          FROM 项目管理 p
+          WHERE p.客户模号 = mp.mold_number
+            AND (p.状态 IS NULL OR p.状态 <> N'已删除')
+          ORDER BY 项目编号 DESC
+        ) pm
+        WHERE pm.project_code IS NULL;
+      `
+    )
+    const pendingCount = Number(rows?.[0]?.pendingCount || 0) || 0
+    return res.json({
+      code: 0,
+      success: true,
+      data: { pendingCount }
+    })
+  } catch (error) {
+    console.error('读取 BMO 待立项数量失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取 BMO 待立项数量失败')
+    })
+  }
+})
+
 router.get('/mould-procurement/by-project', async (req, res) => {
   try {
     const projectCode = String(req.query.projectCode || '').trim()
@@ -897,6 +983,9 @@ router.get('/mould-procurement/refresh', async (req, res) => {
               bid_time: bidTime ? new Date(bidTime).toISOString() : null
             }
           })
+
+          persistMouldListInBackground(list, result?.traceId || null)
+
           return res.json({
             code: 0,
             success: true,
@@ -985,21 +1074,7 @@ router.get('/mould-procurement/refresh', async (req, res) => {
     }))
 
     // Persist in background (do not block UI).
-    if (!persistInFlight) {
-      markPersistStart()
-      persistInFlight = Promise.resolve()
-        .then(async () => {
-          const upserted = await upsertBmoRecords(list, liveResult?.traceId || null)
-          markPersistSuccess(upserted)
-        })
-        .catch((e) => {
-          console.error('BMO 自动入库失败:', e)
-          markPersistError(e)
-        })
-        .finally(() => {
-          persistInFlight = null
-        })
-    }
+    persistMouldListInBackground(list, liveResult?.traceId || null)
 
     return res.json({
       code: 0,
@@ -1048,18 +1123,64 @@ router.get('/mould-procurement/refresh', async (req, res) => {
 router.get('/mould-procurement/detail', async (req, res) => {
   try {
     const fdId = String(req.query.fdId || req.query.bmoRecordId || req.query.bmo_record_id || '').trim()
+    const forceLive = String(req.query.forceLive || '').trim() === '1'
     if (!fdId) {
       return res.status(400).json({ code: 400, success: false, message: '缺少 fdId' })
     }
 
+    if (!forceLive) {
+      const cached = await getDetailCacheByRecordId(fdId)
+      if (cached) return res.json({ code: 0, success: true, data: cached, source: 'db' })
+    }
+
     const detail = await fetchBmoMouldDetail({ fdId })
+    upsertDetailCache(detail).catch((e) => {
+      console.warn('更新 BMO 模具详情缓存失败:', e?.message || e)
+    })
     return res.json({ code: 0, success: true, data: detail })
   } catch (error) {
+    try {
+      const fdId = String(
+        req.query.fdId || req.query.bmoRecordId || req.query.bmo_record_id || ''
+      ).trim()
+      if (fdId) {
+        const cached = await getDetailCacheByRecordId(fdId)
+        if (cached) {
+          return res.json({
+            code: 0,
+            success: true,
+            data: cached,
+            source: 'db',
+            warning: '实时读取失败，已回退缓存数据'
+          })
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('读取 BMO 模具详情缓存失败:', cacheErr?.message || cacheErr)
+    }
     console.error('读取 BMO 模具清单详情失败:', error)
     return res.status(500).json({
       code: 500,
       success: false,
-      message: '读取 BMO 模具清单详情失败: ' + (error?.message || '未知错误')
+      message: formatBmoSqlErrorMessage(error, '读取 BMO 模具清单详情失败')
+    })
+  }
+})
+
+router.post('/auto-sync/run', async (req, res) => {
+  try {
+    const result = await runBmoAutoSyncOnce({
+      pageSize: req.body?.pageSize,
+      maxPages: req.body?.maxPages,
+      detailLimit: req.body?.detailLimit,
+      downloadPerRecord: req.body?.downloadPerRecord
+    })
+    return res.json({ code: 0, success: true, data: result })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '执行 BMO 自动同步失败: ' + (error?.message || '未知错误')
     })
   }
 })
@@ -1409,6 +1530,75 @@ router.get('/attachment/download/:attachmentId', async (req, res) => {
     const fileName = String(req.query.fileName || '').trim()
     if (!attachmentId) {
       return res.status(400).json({ code: 400, success: false, message: '缺少 attachmentId' })
+    }
+
+    // Relay mode: use a single authoritative download path via relay worker.
+    if (isRelayEnabled()) {
+      if (!fdId) {
+        return res
+          .status(400)
+          .json({ code: 400, success: false, message: '缺少 fdId，无法通过中转下载附件' })
+      }
+
+      try {
+        const created = await relayRequestJson('/jobs', {
+          method: 'POST',
+          timeoutMs: 15000,
+          body: {
+            type: 'download_attachment',
+            payload: {
+              fdId,
+              attachmentId,
+              ...(fileName ? { fileName } : {})
+            }
+          }
+        })
+        const jobId = String(created?.data?.id || created?.id || '').trim()
+        if (!jobId) throw new Error('中转任务创建失败（缺少 jobId）')
+
+        const finished = await relayWaitJob(jobId, {
+          timeoutMs: 120000,
+          intervalMs: 1000
+        })
+        if (String(finished?.status || '') !== 'success') {
+          const reason = String(finished?.error || '中转任务执行失败').trim()
+          return res.status(403).json({
+            code: 403,
+            success: false,
+            message: `BMO 下载失败: ${reason || '当前服务会话无权读取附件'}`
+          })
+        }
+
+        const fileId = String(finished?.result?.fileId || '').trim()
+        if (!fileId) throw new Error('中转任务成功但未返回 fileId')
+
+        const relayBase = getRelayBaseUrl()
+        const upstream = await fetch(`${relayBase}/files/${encodeURIComponent(fileId)}`)
+        if (!upstream.ok) {
+          throw new Error(`中转文件下载失败 HTTP ${upstream.status}`)
+        }
+
+        const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+        res.setHeader('Content-Type', contentType)
+        if (fileName) {
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+          )
+        } else {
+          const disposition = upstream.headers.get('content-disposition')
+          if (disposition) res.setHeader('Content-Disposition', disposition)
+        }
+        const buf = Buffer.from(await upstream.arrayBuffer())
+        return res.send(buf)
+      } catch (relayErr) {
+        const msg = String(relayErr?.message || relayErr || '未知错误').slice(0, 220)
+        return res.status(403).json({
+          code: 403,
+          success: false,
+          message: `BMO 下载失败: ${msg}`
+        })
+      }
     }
 
     let attempts = []

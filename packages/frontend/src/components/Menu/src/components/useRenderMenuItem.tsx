@@ -32,7 +32,11 @@ export const useRenderMenuItem = (menuMode) =>
                 index={onlyOneChild ? pathResolve(fullPath, onlyOneChild.path) : fullPath}
               >
                 {{
-                  default: () => renderMenuTitle(onlyOneChild ? onlyOneChild?.meta : meta)
+                  default: () =>
+                    renderMenuTitle(
+                      onlyOneChild ? onlyOneChild?.meta : meta,
+                      String(onlyOneChild?.name || v.name || '')
+                    )
                 }}
               </ElMenuItem>
             )
@@ -44,7 +48,7 @@ export const useRenderMenuItem = (menuMode) =>
                 popperClass={unref(menuMode) === 'vertical' ? `${prefixCls}-popper--vertical` : ''}
               >
                 {{
-                  title: () => renderMenuTitle(meta),
+                  title: () => renderMenuTitle(meta, String(v.name || '')),
                   default: () => renderMenuItem(v.children!, fullPath)
                 }}
               </ElSubMenu>

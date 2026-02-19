@@ -23,7 +23,7 @@
 - `/opt/bmo-relay-test/docker-compose.yml`
 - `/opt/bmo-relay-test/.env`
 - `/opt/bmo-relay-test/app/*`
-- `/opt/bmo-relay-test/data/files`
+- `/mnt/jiuhuan-files/bmo-relay-files`（推荐，NAS 正式目录）
 - `/opt/bmo-relay-test/data/redis`
 
 ## 4. 启停
@@ -107,7 +107,12 @@ BMO_RELAY_BASE_URL=http://10.0.0.48:18081
 
 ## 9. 文件保留与清理
 
-默认附件落地目录：`/opt/bmo-relay-test/data/files`
+默认附件落地目录（推荐）：`/mnt/jiuhuan-files/bmo-relay-files`
+
+推荐设置：
+
+- `.env` 中 `BMO_RELAY_FILES_HOST_DIR=/mnt/jiuhuan-files/bmo-relay-files`
+- compose 会将该目录挂载到容器内 `/data/files`
 
 建议定时清理：
 

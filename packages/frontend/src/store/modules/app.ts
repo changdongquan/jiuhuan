@@ -46,6 +46,7 @@ interface AppState {
     partsProcessing: number
   }
   projectManagementFilterCategory: string
+  bmoPendingInitiationCount: number
 }
 
 export const useAppStore = defineStore('app', {
@@ -120,7 +121,8 @@ export const useAppStore = defineStore('app', {
         modifyMould: 0,
         partsProcessing: 0
       },
-      projectManagementFilterCategory: '塑胶模具'
+      projectManagementFilterCategory: '塑胶模具',
+      bmoPendingInitiationCount: 0
     }
   },
   getters: {
@@ -207,6 +209,9 @@ export const useAppStore = defineStore('app', {
     },
     getProjectManagementFilterCategory(): AppState['projectManagementFilterCategory'] {
       return this.projectManagementFilterCategory
+    },
+    getBmoPendingInitiationCount(): AppState['bmoPendingInitiationCount'] {
+      return this.bmoPendingInitiationCount
     }
   },
   actions: {
@@ -308,6 +313,9 @@ export const useAppStore = defineStore('app', {
     },
     setProjectManagementFilterCategory(category: string) {
       this.projectManagementFilterCategory = category
+    },
+    setBmoPendingInitiationCount(count: number) {
+      this.bmoPendingInitiationCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
     },
     setPrimaryLight() {
       if (this.theme.elColorPrimary) {

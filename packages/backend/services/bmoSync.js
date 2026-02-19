@@ -1121,6 +1121,30 @@ const downloadBmoAttachment = async (attachmentId) => {
 }
 
 const upsertBmoRecord = async (record, traceId) => {
+  const normalized = {
+    bmoRecordId: record?.bmoRecordId ?? record?.bmo_record_id ?? null,
+    moldNumber: record?.moldNumber ?? record?.mold_number ?? null,
+    partNo: record?.partNo ?? record?.part_no ?? null,
+    partName: record?.partName ?? record?.part_name ?? null,
+    moldType: record?.moldType ?? record?.mold_type ?? null,
+    model: record?.model ?? null,
+    budgetWanTaxIncl: record?.budgetWanTaxIncl ?? record?.budget_wan_tax_incl ?? null,
+    bidPriceTaxIncl: record?.bidPriceTaxIncl ?? record?.bid_price_tax_incl ?? null,
+    supplier: record?.supplier ?? null,
+    projectManager: record?.projectManager ?? record?.project_manager ?? null,
+    moldEngineer: record?.moldEngineer ?? record?.mold_engineer ?? null,
+    designer: record?.designer ?? null,
+    projectNo: record?.projectNo ?? record?.project_no ?? null,
+    processNo: record?.processNo ?? record?.process_no ?? null,
+    assetNo: record?.assetNo ?? record?.asset_no ?? null,
+    progressDays: record?.progressDays ?? record?.progress_days ?? null,
+    bidTime: record?.bidTime ?? record?.bid_time ?? null,
+    projectEndTime: record?.projectEndTime ?? record?.project_end_time ?? null,
+    sourceCreateTime: record?.sourceCreateTime ?? record?.source_create_time ?? null,
+    rawJson: record?.rawJson ?? record?.raw_json ?? JSON.stringify(record || {}),
+    traceId: traceId ?? null
+  }
+
   await query(
     `
     MERGE bmo_mould_procurement AS target
@@ -1191,7 +1215,7 @@ const upsertBmoRecord = async (record, traceId) => {
         GETDATE(), GETDATE(), GETDATE()
       );
   `,
-    { ...record, traceId }
+    normalized
   )
 }
 
@@ -1199,7 +1223,8 @@ const upsertBmoRecords = async (records, traceId) => {
   const list = Array.isArray(records) ? records : []
   let upserted = 0
   for (const record of list) {
-    if (!record?.bmoRecordId) continue
+    const bmoRecordId = record?.bmoRecordId ?? record?.bmo_record_id
+    if (!bmoRecordId) continue
     await upsertBmoRecord(record, traceId)
     upserted += 1
   }

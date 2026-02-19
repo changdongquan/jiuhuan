@@ -12,18 +12,17 @@
               >
             </div>
           </div>
-          <p class="bmo-subtitle">通过 BMO 中转实时采集并查看立项入口</p>
+          <p class="bmo-subtitle">通过 BMO 中转采集并查看立项入口</p>
         </div>
         <div class="bmo-actions">
           <el-button :disabled="!latestList.length" @click="exportCsv">导出CSV</el-button>
-          <el-switch v-model="useLiveOrder" active-text="实时顺序" inactive-text="库内顺序" />
           <el-switch
             v-model="autoRefresh"
             active-text="自动刷新"
             inactive-text="手动"
             @change="handleAutoRefreshToggle"
           />
-          <el-button :loading="loadingLatest" @click="refreshAll">刷新</el-button>
+          <el-button :loading="manualRefreshing" @click="refreshAll">刷新</el-button>
         </div>
       </div>
     </div>
@@ -458,7 +457,8 @@ import dayjs from 'dayjs'
 import {
   ensureBmoSessionApi,
   getBmoMouldProcurementApi,
-  getBmoMouldProcurementRefreshApi,
+  createBmoRelayJobApi,
+  getBmoRelayJobApi,
   getBmoMouldProcurementDetailApi,
   getBmoInitiationRequestApi,
   saveBmoInitiationDraftApi,
@@ -556,9 +556,9 @@ const getStatusTagClass = (status?: string | null) => {
 }
 
 const loadingLatest = ref(false)
+const manualRefreshing = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
-const useLiveOrder = ref(true)
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const lastRefreshSource = ref<'live' | 'db' | null>(null)
@@ -616,7 +616,6 @@ const initiateSalesForm = reactive({
 })
 
 const connTagType = computed(() => {
-  if (!useLiveOrder.value) return 'info'
   if (lastConnectionState.value === 'connected') return 'success'
   if (lastConnectionState.value === 'expired') return 'warning'
   if (lastConnectionState.value === 'error') return 'danger'
@@ -624,7 +623,6 @@ const connTagType = computed(() => {
 })
 
 const connShortLabel = computed(() => {
-  if (!useLiveOrder.value) return '库内顺序'
   if (lastConnectionState.value === 'connected') return '已连接'
   if (lastConnectionState.value === 'expired') return '会话过期'
   if (lastConnectionState.value === 'error') return '连接异常'
@@ -946,44 +944,48 @@ const ensureSessionOnOpen = async () => {
 const loadLatest = async () => {
   loadingLatest.value = true
   try {
-    if (useLiveOrder.value) {
-      const res = await getBmoMouldProcurementRefreshApi({
-        pageSize: 200,
-        offset: 0,
-        maxWaitMs: 3000,
-        timeout: 6000
-      })
-      latestList.value = res.data?.list || []
-      lastRefreshSource.value = (res.data?.source as any) || null
-      lastConnectionState.value = (res.data?.connection?.state as any) || null
-      lastConnectionMessage.value = res.data?.connection?.message || null
-      if (res.data?.source === 'db') {
-        ElMessage.warning(res.data?.connection?.message || '实时读取失败，已回退库内数据')
-      }
-      return
-    } else {
-      const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
-      latestList.value = res.data?.list || []
-      lastRefreshSource.value = null
-      lastConnectionState.value = null
-      lastConnectionMessage.value = null
-      return
-    }
-
     const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
     latestList.value = res.data?.list || []
+    lastRefreshSource.value = 'db'
   } finally {
     loadingLatest.value = false
   }
 }
 
-watch(useLiveOrder, () => {
-  if (loadingLatest.value) return
-  void loadLatest()
-})
+const waitRelayCollectJob = async (jobId: string, timeoutMs = 60000) => {
+  const deadline = Date.now() + Math.max(10000, timeoutMs)
+  while (Date.now() < deadline) {
+    const statusRes = await getBmoRelayJobApi(jobId)
+    const job = statusRes.data as any
+    const status = String(job?.status || '').toLowerCase()
+    if (status === 'success') return
+    if (status === 'failed') {
+      throw new Error(String(job?.error || '采集任务失败'))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error('采集任务超时，请到 BMO中转管理 查看任务状态')
+}
 
 const refreshAll = async () => {
-  await loadLatest()
+  manualRefreshing.value = true
+  try {
+    const createRes = await createBmoRelayJobApi({
+      type: 'collect',
+      payload: { pageSize: 200, offset: 0 }
+    })
+    const jobId = String(createRes.data?.id || '').trim()
+    if (!jobId) throw new Error('中转任务创建失败（缺少 jobId）')
+
+    await waitRelayCollectJob(jobId, 60000)
+    await ensureSessionOnOpen()
+    await loadLatest()
+    ElMessage.success('已刷新 BMO 数据')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '刷新 BMO 数据失败')
+  } finally {
+    manualRefreshing.value = false
+  }
 }
 
 const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
@@ -1167,10 +1169,8 @@ const handleAutoRefreshToggle = (enabled: boolean) => {
 }
 
 onMounted(() => {
-  // 默认库内顺序，但会先确保会话可用（过期则自动续期一次）
-  void ensureSessionOnOpen().finally(() => {
-    void refreshAll()
-  })
+  void ensureSessionOnOpen()
+  void loadLatest()
   if (autoRefresh.value) startPolling()
 })
 

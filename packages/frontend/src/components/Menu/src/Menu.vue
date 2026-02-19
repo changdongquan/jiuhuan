@@ -1,5 +1,5 @@
 <script lang="tsx">
-import { computed, defineComponent, unref, PropType } from 'vue'
+import { computed, defineComponent, onBeforeUnmount, onMounted, unref, PropType } from 'vue'
 import { ElMenu, ElScrollbar } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { usePermissionStore } from '@/store/modules/permission'
@@ -7,6 +7,7 @@ import { useRenderMenuItem } from './components/useRenderMenuItem'
 import { useRouter } from 'vue-router'
 import { isUrl } from '@/utils/is'
 import { useDesign } from '@/hooks/web/useDesign'
+import { getBmoPendingInitiationCountApi } from '@/api/bmo'
 
 const { getPrefixCls } = useDesign()
 
@@ -22,6 +23,7 @@ export default defineComponent({
   },
   setup(props) {
     const appStore = useAppStore()
+    let bmoPendingCountTimer: ReturnType<typeof setInterval> | null = null
 
     const layout = computed(() => appStore.getLayout)
 
@@ -68,6 +70,30 @@ export default defineComponent({
         push(index)
       }
     }
+
+    const refreshBmoPendingCount = async () => {
+      try {
+        const res = await getBmoPendingInitiationCountApi({ timeout: 8000 })
+        const pendingCount = Number(res?.data?.pendingCount || 0) || 0
+        appStore.setBmoPendingInitiationCount(pendingCount)
+      } catch {
+        appStore.setBmoPendingInitiationCount(0)
+      }
+    }
+
+    onMounted(() => {
+      void refreshBmoPendingCount()
+      bmoPendingCountTimer = setInterval(() => {
+        void refreshBmoPendingCount()
+      }, 60000)
+    })
+
+    onBeforeUnmount(() => {
+      if (bmoPendingCountTimer) {
+        clearInterval(bmoPendingCountTimer)
+        bmoPendingCountTimer = null
+      }
+    })
 
     const renderMenuWrap = () => {
       if (unref(layout) === 'top') {

@@ -281,6 +281,13 @@ export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: nu
   })
 }
 
+export const getBmoPendingInitiationCountApi = (params: { timeout?: number } = {}) => {
+  return request.get<{ pendingCount: number }>({
+    url: '/api/bmo/mould-procurement/pending-count',
+    timeout: params.timeout
+  })
+}
+
 export const getBmoMouldProcurementByProjectApi = (params: { projectCode: string }) => {
   return request.get<BmoMouldProcurementByProjectRow | null>({
     url: '/api/bmo/mould-procurement/by-project',
