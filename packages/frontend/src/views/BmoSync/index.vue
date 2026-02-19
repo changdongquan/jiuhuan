@@ -127,7 +127,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div class="bmo-initiate-section">
+        <div v-if="showInitiate14Section" class="bmo-initiate-section">
           <div class="bmo-initiate-section__title">1.4-模具清单详情</div>
 
           <el-descriptions :column="3" border size="small">
@@ -566,6 +566,7 @@ const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
 
 const initiateDialogVisible = ref(false)
+const showInitiate14Section = false
 const initiateLoading = ref(false)
 const initiateRow = ref<BmoMouldProcurementRow | null>(null)
 const initiateDetail = ref<BmoMouldProcurementDetail | null>(null)
