@@ -62,6 +62,9 @@ export interface BmoMouldProcurementDetailAttachment {
   fileExt: string | null
   fileSize: number | null
   createdAt: string | null
+  rawDownloadPath?: string | null
+  downloadUrl?: string | null
+  _rawKeys?: string[]
 }
 
 export interface BmoMouldProcurementDetail {
@@ -184,6 +187,32 @@ export interface BmoConnectionStatus {
   lastPersistUpserted: number | null
   lastPersistErrorAt: string | null
   lastPersistErrorMessage: string | null
+}
+
+export interface BmoRelayJob {
+  id: string
+  type: string | null
+  status: string
+  payload: Record<string, any>
+  createdAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  result: Record<string, any> | null
+}
+
+export interface BmoRelayAuthStatus {
+  source: string
+  updatedAt: number | null
+  hasCookie: boolean
+  hasToken: boolean
+  cookiePreview: string
+  tokenPreview: string
+  probe?: {
+    ok: boolean
+    status: number
+    message?: string
+  }
 }
 
 export interface BmoMouldProcurementRefreshResult {
@@ -370,5 +399,66 @@ export const approveAndApplyBmoInitiationRequestApi = (data: { bmo_record_id: st
     url: '/api/bmo/initiation-request/approve-and-apply',
     data,
     timeout: 60000
+  })
+}
+
+export const createBmoRelayJobApi = (data: {
+  type: 'collect' | 'download_attachment' | 'writeback' | 'upload_attachment' | string
+  payload?: Record<string, any>
+}) => {
+  return request.post<BmoRelayJob>({
+    url: '/api/bmo/relay/jobs',
+    data
+  })
+}
+
+export const getBmoRelayJobApi = (jobId: string) => {
+  return request.get<BmoRelayJob>({
+    url: `/api/bmo/relay/jobs/${encodeURIComponent(jobId)}`
+  })
+}
+
+export const retryBmoRelayJobApi = (jobId: string) => {
+  return request.post<{ id: string; status: string }>({
+    url: `/api/bmo/relay/jobs/${encodeURIComponent(jobId)}/retry`
+  })
+}
+
+export const downloadBmoRelayFileApi = (fileId: string) => {
+  return request.get<Blob>({
+    url: `/api/bmo/relay/files/${encodeURIComponent(fileId)}`,
+    responseType: 'blob'
+  })
+}
+
+export const getBmoRelayAuthStatusApi = (params: { probe?: 0 | 1 } = {}) => {
+  return request.get<BmoRelayAuthStatus>({
+    url: '/api/bmo/relay/auth/status',
+    params
+  })
+}
+
+export const loginBmoRelayAuthApi = (data: { username?: string; password?: string } = {}) => {
+  return request.post<{
+    hasCookie: boolean
+    hasToken: boolean
+    probe?: { ok: boolean; status: number; message?: string }
+  }>({
+    url: '/api/bmo/relay/auth/login',
+    data
+  })
+}
+
+export const logoutBmoRelayAuthApi = () => {
+  return request.post<{ loggedOut: true }>({
+    url: '/api/bmo/relay/auth/logout',
+    data: {}
+  })
+}
+
+export const setBmoRelayAuthApi = (data: { cookie?: string; token?: string }) => {
+  return request.post<{ hasCookie: boolean; hasToken: boolean }>({
+    url: '/api/bmo/relay/auth/set',
+    data
   })
 }

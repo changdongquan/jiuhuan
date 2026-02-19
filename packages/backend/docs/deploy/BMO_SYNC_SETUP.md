@@ -16,6 +16,7 @@
 
 - `BMO_BASE_URL`（可选，默认 `https://bmo.meiling.com:8023`）
 - `BMO_DATA_ENDPOINT`（可选，默认 `/data/sys-modeling/sysModelingMain/data`）
+- `BMO_RELAY_BASE_URL`（可选，示例 `http://10.0.0.48:18081`；配置后 `refresh/download-jobs` 优先走中转）
 
 认证二选一：
 

@@ -1,10 +1,15 @@
 const express = require('express')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
 const {
   syncBmoMouldData,
   fetchBmoMouldListLive,
   fetchBmoMouldDetail,
+  checkBmoAttachmentDownload,
+  downloadBmoAttachmentByBrowser,
   downloadBmoAttachment,
   upsertBmoRecords
 } = require('../services/bmoSync')
@@ -18,6 +23,14 @@ const {
   markPersistError
 } = require('../services/bmoStatus')
 const { resolveActorFromReq } = require('../utils/actor')
+const {
+  createDownloadJob,
+  getDownloadJob,
+  waitForDownloadJob,
+  getDownloadWorkerHealth,
+  getDownloadJobFile,
+  restartDownloadWorker
+} = require('../services/bmoDownloadWorkerClient')
 
 const router = express.Router()
 let persistInFlight = null
@@ -42,6 +55,32 @@ router.get('/health', (req, res) => {
   })
 })
 
+router.get('/health/worker', async (req, res) => {
+  try {
+    const data = await getDownloadWorkerHealth()
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 BMO 下载 worker 健康状态失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/health/worker/restart', async (req, res) => {
+  try {
+    const data = await restartDownloadWorker()
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '重启 BMO 下载 worker 失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
 router.get('/status', (req, res) => {
   return res.json({
     code: 0,
@@ -53,6 +92,34 @@ router.get('/status', (req, res) => {
 })
 
 router.post('/session/ensure', async (req, res) => {
+  if (isRelayEnabled()) {
+    try {
+      const health = await relayRequestJson('/health', { method: 'GET', timeoutMs: 5000 })
+      const ok = Boolean(health?.ok || health?.ready)
+      return res.json({
+        code: 0,
+        success: true,
+        data: ok
+          ? { state: 'connected', source: 'live' }
+          : {
+              state: 'error',
+              source: 'db',
+              message: 'BMO 中转服务不可用'
+            }
+      })
+    } catch (e) {
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          state: 'error',
+          source: 'db',
+          message: 'BMO 中转服务连接失败: ' + (e?.message || '未知错误')
+        }
+      })
+    }
+  }
+
   const maxWaitMs = toSafeInt(req.query.maxWaitMs ?? req.body?.maxWaitMs, 3000)
   const keeperTimeoutMs = toSafeInt(req.query.keeperTimeoutMs ?? req.body?.keeperTimeoutMs, 60000)
 
@@ -80,7 +147,12 @@ router.post('/session/ensure', async (req, res) => {
   } catch (error) {
     markLiveError(error)
     const msg = String(error?.message || error || '')
-    const isExpired = msg.includes('HTTP 401') || msg.includes('401') || msg.includes('未配置 BMO 认证信息')
+    const isExpired =
+      msg.includes('HTTP 401') ||
+      msg.includes('401') ||
+      msg.includes('HTTP 403') ||
+      msg.includes('403') ||
+      msg.includes('未配置 BMO 认证信息')
     if (!isExpired) {
       return res.json({
         code: 0,
@@ -154,6 +226,123 @@ const toSafeLimit = (value, fallback = 20, max = 200) => {
 const toSafeInt = (value, fallback = 0) => {
   const n = Number(value)
   return Number.isInteger(n) ? n : fallback
+}
+
+const getRelayBaseUrl = () => String(process.env.BMO_RELAY_BASE_URL || '').trim().replace(/\/+$/, '')
+const isRelayEnabled = () => Boolean(getRelayBaseUrl())
+
+const toIsoFromRelayTime = (value) => {
+  const n = Number(value)
+  if (Number.isFinite(n) && n > 0) {
+    // relay currently returns unix seconds
+    return new Date(n * 1000).toISOString()
+  }
+  const s = String(value || '').trim()
+  if (!s) return null
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+const relayRequestJson = async (pathname, input = {}) => {
+  const baseUrl = getRelayBaseUrl()
+  if (!baseUrl) throw new Error('BMO_RELAY_BASE_URL 未配置')
+  const method = String(input.method || 'GET').toUpperCase()
+  const timeoutMs = toSafeInt(input.timeoutMs, 60000)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs))
+  try {
+    const body = input.body
+    const resp = await fetch(`${baseUrl}${pathname}`, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: ctrl.signal
+    })
+    const text = await resp.text()
+    let json = null
+    if (text) {
+      try {
+        json = JSON.parse(text)
+      } catch (e) {
+        json = null
+      }
+    }
+    if (!resp.ok) {
+      const errMsg =
+        (json && (json.message || json.detail || json.error)) ||
+        text ||
+        `relay HTTP ${resp.status}`
+      throw new Error(String(errMsg).slice(0, 500))
+    }
+    if (json && typeof json === 'object') return json
+    throw new Error('relay 返回非 JSON')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const relayWaitJob = async (jobId, options = {}) => {
+  const timeoutMs = toSafeInt(options.timeoutMs, 120000)
+  const intervalMs = toSafeInt(options.intervalMs, 1000)
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const status = await relayRequestJson(`/jobs/${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+      timeoutMs: Math.min(15000, timeoutMs)
+    })
+    const data = status?.data || status
+    const state = String(data?.status || '').trim()
+    if (state === 'success' || state === 'failed') return data
+    await new Promise((resolve) => setTimeout(resolve, Math.max(200, intervalMs)))
+  }
+  throw new Error(`relay job timeout (${timeoutMs}ms)`)
+}
+
+const normalizeRelayDownloadJob = (data) => {
+  const payload = data?.payload && typeof data.payload === 'object' ? data.payload : {}
+  const result = data?.result && typeof data.result === 'object' ? data.result : null
+  return {
+    id: String(data?.id || '').trim(),
+    requestId: null,
+    attachmentId: payload?.attachmentId ? String(payload.attachmentId) : null,
+    fdId: payload?.fdId ? String(payload.fdId) : null,
+    fileName: payload?.fileName ? String(payload.fileName) : null,
+    viewUrl: null,
+    status: String(data?.status || '').trim() || 'queued',
+    createdAt: toIsoFromRelayTime(data?.created_at || data?.createdAt),
+    startedAt: toIsoFromRelayTime(data?.started_at || data?.startedAt),
+    finishedAt: toIsoFromRelayTime(data?.finished_at || data?.finishedAt),
+    error: data?.error ? String(data.error) : null,
+    result: result
+      ? {
+          localPath: null,
+          fileName: result?.fileName ? String(result.fileName) : null,
+          size: Number(result?.size || 0) || 0,
+          sha256: result?.sha256 ? String(result.sha256) : null,
+          contentType: result?.contentType ? String(result.contentType) : 'application/octet-stream',
+          elapsedMs: Number(result?.elapsedMs || 0) || 0,
+          fileId: result?.fileId ? String(result.fileId) : null
+        }
+      : null
+  }
+}
+
+const normalizeRelayJob = (data) => {
+  const payload = data?.payload && typeof data.payload === 'object' ? data.payload : {}
+  const result = data?.result && typeof data.result === 'object' ? data.result : null
+  return {
+    id: String(data?.id || '').trim(),
+    type: String(data?.type || '').trim() || null,
+    status: String(data?.status || '').trim() || 'queued',
+    payload,
+    createdAt: toIsoFromRelayTime(data?.created_at || data?.createdAt),
+    startedAt: toIsoFromRelayTime(data?.started_at || data?.startedAt),
+    finishedAt: toIsoFromRelayTime(data?.finished_at || data?.finishedAt),
+    error: data?.error ? String(data.error) : null,
+    result
+  }
 }
 
 const parseQueryJsonObject = (raw) => {
@@ -640,11 +829,127 @@ router.get('/mould-procurement/by-project', async (req, res) => {
 
 // Open page → try live within 3s → return latest data, and auto-persist in background.
 router.get('/mould-procurement/refresh', async (req, res) => {
+  const relayEnabled = isRelayEnabled()
   const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
   const pageSize = toSafeLimit(req.query.pageSize ?? req.query.limit, 200, 200)
   const offset = toSafeInt(req.query.offset, 0)
   const conditions = parseQueryJsonObject(req.query.conditions)
   const sorts = parseQueryJsonObject(req.query.sorts)
+  let relayErrorMessage = ''
+  let relaySuccess = false
+
+  if (relayEnabled) {
+    try {
+      const created = await relayRequestJson('/jobs', {
+        method: 'POST',
+        timeoutMs: 15000,
+        body: {
+          type: 'collect',
+          payload: {
+            pageSize,
+            offset,
+            ...(conditions ? { conditions } : {}),
+            ...(sorts ? { sorts } : {})
+          }
+        }
+      })
+      const jobId = String(created?.data?.id || created?.id || '').trim()
+      if (jobId) {
+        const finished = await relayWaitJob(jobId, {
+          timeoutMs: Math.max(3000, maxWaitMs),
+          intervalMs: 1000
+        })
+        if (String(finished?.status || '') === 'success') {
+          relaySuccess = true
+          const result = finished?.result && typeof finished.result === 'object' ? finished.result : null
+          const list = Array.isArray(result?.list) ? result.list : []
+          const projectInfoMap = await getProjectInfoByCustomerModelNo(
+            list.map((x) => x.moldNumber || x.mold_number).filter(Boolean)
+          )
+          const initiationStatusMap = await getInitiationStatusByBmoRecordId(
+            list.map((x) => x.bmoRecordId || x.bmo_record_id).filter(Boolean)
+          )
+          const viewList = list.map((row, idx) => {
+            const moldNumber = row.moldNumber || row.mold_number || null
+            const bmoRecordId = row.bmoRecordId || row.bmo_record_id || null
+            const bidTime = row.bidTime || row.bid_time || null
+            return {
+              seq: offset + idx + 1,
+              bmo_record_id: bmoRecordId,
+              project_manager: row.projectManager || row.project_manager || null,
+              part_no: row.partNo || row.part_no || null,
+              part_name: row.partName || row.part_name || null,
+              model: row.model || null,
+              mold_number: moldNumber,
+              project_code:
+                projectInfoMap.get(String(moldNumber || '').trim())?.projectCode ||
+                row.project_code ||
+                null,
+              project_status:
+                projectInfoMap.get(String(moldNumber || '').trim())?.projectStatus ||
+                row.project_status ||
+                null,
+              initiation_status:
+                initiationStatusMap.get(String(bmoRecordId || '').trim()) ||
+                row.initiation_status ||
+                null,
+              bid_price_tax_incl: row.bidPriceTaxIncl ?? row.bid_price_tax_incl ?? null,
+              bid_time: bidTime ? new Date(bidTime).toISOString() : null
+            }
+          })
+          return res.json({
+            code: 0,
+            success: true,
+            data: {
+              source: 'live',
+              connection: { state: 'connected' },
+              list: viewList,
+              count: viewList.length,
+              offset: toSafeInt(result?.offset, offset),
+              pageSize: toSafeInt(result?.pageSize, pageSize),
+              totalSize: Number(result?.total ?? result?.totalSize ?? viewList.length),
+              traceId: null,
+              fetchedAt: new Date().toISOString()
+            }
+          })
+        }
+        if (String(finished?.status || '') === 'failed') {
+          relayErrorMessage = String(finished?.error || '中转任务执行失败').slice(0, 300)
+        }
+      }
+    } catch (relayError) {
+      relayErrorMessage = String(relayError?.message || relayError || '').slice(0, 300)
+      console.warn('[bmo-relay-refresh-fallback]', relayError?.message || relayError)
+    }
+  }
+
+  if (relayEnabled && (relayErrorMessage || !relaySuccess)) {
+    try {
+      const rows = await fetchMouldProcurementFromDb(pageSize)
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          source: 'db',
+          connection: {
+            state: 'error',
+            message: relayErrorMessage
+              ? `BMO 中转服务异常: ${relayErrorMessage}`
+              : 'BMO 中转未返回实时数据，已回退库内数据'
+          },
+          list: rows,
+          count: rows.length
+        }
+      })
+    } catch (dbError) {
+      console.error('读取 BMO 模具采购数据失败:', dbError)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: formatBmoSqlErrorMessage(dbError, '读取 BMO 模具采购数据失败')
+      })
+    }
+  }
 
   try {
     const liveResult = await fetchBmoMouldListLive({
@@ -759,19 +1064,545 @@ router.get('/mould-procurement/detail', async (req, res) => {
   }
 })
 
-router.get('/attachment/download/:attachmentId', async (req, res) => {
+router.post('/download-jobs', async (req, res) => {
   try {
-    const attachmentId = String(req.params.attachmentId || '').trim()
+    const attachmentId = String(
+      req.body?.attachmentId || req.body?.id || req.query.attachmentId || req.query.id || ''
+    ).trim()
+    const fdId = String(req.body?.fdId || req.query.fdId || '').trim()
+    const fileName = String(req.body?.fileName || req.query.fileName || '').trim()
+    const viewUrl = String(req.body?.viewUrl || req.query.viewUrl || '').trim()
+    const requestId = String(req.headers['x-request-id'] || req.body?.requestId || '').trim()
     if (!attachmentId) {
       return res.status(400).json({ code: 400, success: false, message: '缺少 attachmentId' })
     }
 
-    const upstream = await downloadBmoAttachment(attachmentId)
-    if (!upstream.ok) {
-      return res.status(upstream.status || 502).json({
-        code: upstream.status || 502,
+    if (isRelayEnabled()) {
+      const relayCreated = await relayRequestJson('/jobs', {
+        method: 'POST',
+        timeoutMs: 15000,
+        body: {
+          type: 'download_attachment',
+          payload: {
+            attachmentId,
+            fdId,
+            fileName
+          }
+        }
+      })
+      const normalized = normalizeRelayDownloadJob(relayCreated?.data || relayCreated)
+      if (!normalized.id) throw new Error('relay 创建任务失败（缺少 jobId）')
+      return res.json({ code: 0, success: true, data: normalized })
+    }
+
+    const job = await createDownloadJob({
+      requestId,
+      attachmentId,
+      fdId,
+      fileName,
+      viewUrl
+    })
+    return res.json({ code: 0, success: true, data: job })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '创建 BMO 下载任务失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/download-jobs/:jobId', (req, res) => {
+  const jobId = String(req.params.jobId || '').trim()
+  if (!jobId) return res.status(400).json({ code: 400, success: false, message: '缺少 jobId' })
+  if (isRelayEnabled()) {
+    relayRequestJson(`/jobs/${encodeURIComponent(jobId)}`, { method: 'GET', timeoutMs: 15000 })
+      .then((relayStatus) => {
+        const normalized = normalizeRelayDownloadJob(relayStatus?.data || relayStatus)
+        if (!normalized.id) {
+          return res
+            .status(404)
+            .json({ code: 404, success: false, message: '任务不存在或已过期' })
+        }
+        return res.json({ code: 0, success: true, data: normalized })
+      })
+      .catch((e) => {
+        const msg = String(e?.message || e || '')
+        const notFound = msg.includes('not found') || msg.includes('不存在')
+        return res
+          .status(notFound ? 404 : 500)
+          .json({ code: notFound ? 404 : 500, success: false, message: msg || '读取任务失败' })
+      })
+    return
+  }
+  const job = getDownloadJob(jobId)
+  if (!job) return res.status(404).json({ code: 404, success: false, message: '任务不存在或已过期' })
+  return res.json({ code: 0, success: true, data: job })
+})
+
+router.get('/download-jobs/:jobId/file', async (req, res) => {
+  const jobId = String(req.params.jobId || '').trim()
+  if (!jobId) return res.status(400).json({ code: 400, success: false, message: '缺少 jobId' })
+  if (isRelayEnabled()) {
+    try {
+      const relayStatus = await relayRequestJson(`/jobs/${encodeURIComponent(jobId)}`, {
+        method: 'GET',
+        timeoutMs: 15000
+      })
+      const normalized = normalizeRelayDownloadJob(relayStatus?.data || relayStatus)
+      const fileId = String(normalized?.result?.fileId || '').trim()
+      if (!fileId) {
+        return res.status(404).json({ code: 404, success: false, message: '任务文件不存在，请重新下载' })
+      }
+      const relayBase = getRelayBaseUrl()
+      const upstream = await fetch(`${relayBase}/files/${encodeURIComponent(fileId)}`)
+      if (!upstream.ok) {
+        return res
+          .status(upstream.status || 500)
+          .json({ code: upstream.status || 500, success: false, message: 'relay 文件下载失败' })
+      }
+      const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+      const disposition = upstream.headers.get('content-disposition')
+      res.setHeader('Content-Type', contentType)
+      if (disposition) res.setHeader('Content-Disposition', disposition)
+      const buf = Buffer.from(await upstream.arrayBuffer())
+      return res.send(buf)
+    } catch (e) {
+      return res.status(500).json({
+        code: 500,
         success: false,
-        message: `BMO 下载失败: HTTP ${upstream.status}`
+        message: '读取 relay 任务文件失败: ' + (e?.message || '未知错误')
+      })
+    }
+  }
+  const file = getDownloadJobFile(jobId)
+  if (!file) {
+    return res.status(404).json({ code: 404, success: false, message: '任务文件不存在，请重新下载' })
+  }
+
+  const safeName = String(file.fileName || 'attachment.bin').replace(/"/g, '')
+  res.setHeader('Content-Type', file.contentType || 'application/octet-stream')
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`)
+  return fs.createReadStream(file.localPath).pipe(res)
+})
+
+router.post('/relay/jobs', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const type = String(req.body?.type || '').trim()
+    const payload = req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : {}
+    if (!type) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 type' })
+    }
+    const relayCreated = await relayRequestJson('/jobs', {
+      method: 'POST',
+      timeoutMs: 15000,
+      body: { type, payload }
+    })
+    const normalized = normalizeRelayJob(relayCreated?.data || relayCreated)
+    if (!normalized.id) throw new Error('relay 创建任务失败（缺少 jobId）')
+    return res.json({ code: 0, success: true, data: normalized })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '创建 relay 任务失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/relay/jobs/:jobId', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const jobId = String(req.params.jobId || '').trim()
+    if (!jobId) return res.status(400).json({ code: 400, success: false, message: '缺少 jobId' })
+    const relayStatus = await relayRequestJson(`/jobs/${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+      timeoutMs: 15000
+    })
+    const normalized = normalizeRelayJob(relayStatus?.data || relayStatus)
+    if (!normalized.id) {
+      return res.status(404).json({ code: 404, success: false, message: '任务不存在或已过期' })
+    }
+    return res.json({ code: 0, success: true, data: normalized })
+  } catch (e) {
+    const msg = String(e?.message || e || '')
+    const notFound = msg.includes('not found') || msg.includes('不存在')
+    return res
+      .status(notFound ? 404 : 500)
+      .json({ code: notFound ? 404 : 500, success: false, message: msg || '读取任务失败' })
+  }
+})
+
+router.post('/relay/jobs/:jobId/retry', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const jobId = String(req.params.jobId || '').trim()
+    if (!jobId) return res.status(400).json({ code: 400, success: false, message: '缺少 jobId' })
+    const relayRetried = await relayRequestJson(`/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: 'POST',
+      timeoutMs: 15000
+    })
+    return res.json({ code: 0, success: true, data: relayRetried?.data || relayRetried || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '重试 relay 任务失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/relay/auth/status', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const probe = String(req.query.probe || '').trim() === '1' ? '1' : '0'
+    const data = await relayRequestJson(`/auth/status?probe=${probe}`, {
+      method: 'GET',
+      timeoutMs: 20000
+    })
+    return res.json({ code: 0, success: true, data: data?.data || data || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 relay 会话状态失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/relay/auth/login', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    const data = await relayRequestJson('/auth/login', {
+      method: 'POST',
+      timeoutMs: 30000,
+      body
+    })
+    return res.json({ code: 0, success: true, data: data?.data || data || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: 'relay 手动登录失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/relay/auth/logout', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const data = await relayRequestJson('/auth/logout', {
+      method: 'POST',
+      timeoutMs: 15000,
+      body: {}
+    })
+    return res.json({ code: 0, success: true, data: data?.data || data || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: 'relay 断开会话失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/relay/auth/set', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {}
+    const data = await relayRequestJson('/auth/set', {
+      method: 'POST',
+      timeoutMs: 15000,
+      body
+    })
+    return res.json({ code: 0, success: true, data: data?.data || data || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: 'relay 写入会话失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/relay/files/:fileId', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const fileId = String(req.params.fileId || '').trim()
+    if (!fileId) return res.status(400).json({ code: 400, success: false, message: '缺少 fileId' })
+    const relayBase = getRelayBaseUrl()
+    const upstream = await fetch(`${relayBase}/files/${encodeURIComponent(fileId)}`)
+    if (!upstream.ok) {
+      return res
+        .status(upstream.status || 500)
+        .json({ code: upstream.status || 500, success: false, message: 'relay 文件下载失败' })
+    }
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+    const disposition = upstream.headers.get('content-disposition')
+    res.setHeader('Content-Type', contentType)
+    if (disposition) res.setHeader('Content-Disposition', disposition)
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    return res.send(buf)
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 relay 文件失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/attachment/download/:attachmentId', async (req, res) => {
+  try {
+    const attachmentId = String(req.params.attachmentId || '').trim()
+    const fdId = String(req.query.fdId || '').trim()
+    const fileName = String(req.query.fileName || '').trim()
+    if (!attachmentId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 attachmentId' })
+    }
+
+    let attempts = []
+    if (fdId) {
+      try {
+        const requestId = String(req.headers['x-request-id'] || '').trim()
+        const job = await createDownloadJob({
+          requestId,
+          attachmentId,
+          fdId,
+          fileName
+        })
+        const finished = await waitForDownloadJob(job.id, { timeoutMs: 120000 })
+        if (finished.status === 'success') {
+          const file = getDownloadJobFile(job.id)
+          if (file) {
+            const finalName = String(fileName || file.fileName || 'attachment.bin').replace(/"/g, '')
+            res.setHeader('Content-Type', file.contentType || 'application/octet-stream')
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename*=UTF-8''${encodeURIComponent(finalName)}`
+            )
+            res.on('finish', () => {
+              fs.unlink(file.localPath, () => {})
+            })
+            return fs.createReadStream(file.localPath).pipe(res)
+          }
+          attempts.push(`worker/${attachmentId} => success-but-no-file`)
+        } else {
+          attempts.push(`worker/${attachmentId} => ${String(finished.error || 'failed').slice(0, 200)}`)
+        }
+      } catch (e) {
+        attempts.push(`worker/${attachmentId} => ${String(e?.message || e).slice(0, 200)}`)
+      }
+    }
+
+    let download = await downloadBmoAttachment(attachmentId)
+    let upstream = download.response
+    attempts.push(...(Array.isArray(download.attempts) ? download.attempts : []))
+    let primaryStatus = Number(download.primaryStatus || upstream?.status || 0)
+    if (
+      !upstream.ok &&
+      (upstream.status === 401 ||
+        upstream.status === 403 ||
+        upstream.status === 500 ||
+        primaryStatus === 401 ||
+        primaryStatus === 403 ||
+        primaryStatus === 500)
+    ) {
+      try {
+        await runBmoSessionKeeperOnce({
+          timeoutMs: 90000,
+          env: {
+            BMO_KEEPER_LOGIN_MODE: 'chromium',
+            BMO_KEEPER_HEADLESS: 'true',
+            BMO_KEEPER_USER_DATA_DIR: path.join(
+              os.tmpdir(),
+              `bmo-keeper-download-${Date.now()}`
+            )
+          }
+        })
+        download = await downloadBmoAttachment(attachmentId)
+        upstream = download.response
+        attempts = attempts.concat(download.attempts || [])
+        if (!primaryStatus) primaryStatus = Number(download.primaryStatus || upstream?.status || 0)
+      } catch (e) {
+        // ignore keeper refresh errors, keep fallback flow below
+      }
+    }
+    if (
+      !upstream.ok &&
+      fdId &&
+      (upstream.status === 401 ||
+        upstream.status === 403 ||
+        upstream.status === 500 ||
+        primaryStatus === 401 ||
+        primaryStatus === 403 ||
+        primaryStatus === 500)
+    ) {
+      try {
+        const detail = await fetchBmoMouldDetail({ fdId })
+        const mechAuthToken = detail?.tech?.mechAuthToken || ''
+        if (mechAuthToken) {
+          try {
+            await checkBmoAttachmentDownload(attachmentId, mechAuthToken)
+            attempts.push(`checkDownload/${attachmentId} => 200`)
+            const retried = await downloadBmoAttachment(attachmentId)
+            attempts = attempts.concat(retried.attempts || [])
+            if (!primaryStatus) {
+              primaryStatus = Number(retried.primaryStatus || retried.response?.status || 0)
+            }
+            if (retried.response?.ok) {
+              upstream = retried.response
+            }
+          } catch (e) {
+            attempts.push(`checkDownload/${attachmentId} => ${String(e?.message || e).slice(0, 80)}`)
+          }
+        }
+        if (!upstream.ok) {
+          const attachments = Array.isArray(detail?.tech?.attachments) ? detail.tech.attachments : []
+          const normalizedTargetName = fileName.toLowerCase()
+          const candidateIds = attachments
+            .filter((x) => x?.id && x.id !== attachmentId)
+            .sort((a, b) => {
+              const aName = String(a?.fileName || '').toLowerCase()
+              const bName = String(b?.fileName || '').toLowerCase()
+              const aScore = normalizedTargetName && aName === normalizedTargetName ? 2 : aName.includes(normalizedTargetName) ? 1 : 0
+              const bScore = normalizedTargetName && bName === normalizedTargetName ? 2 : bName.includes(normalizedTargetName) ? 1 : 0
+              return bScore - aScore
+            })
+            .map((x) => String(x.id))
+
+          for (const nextId of candidateIds) {
+            const retried = await downloadBmoAttachment(nextId)
+            attempts = attempts.concat(retried.attempts || [])
+            if (!primaryStatus) primaryStatus = Number(retried.primaryStatus || retried.response?.status || 0)
+            if (retried.response?.ok) {
+              upstream = retried.response
+              break
+            }
+          }
+        }
+      } catch (e) {
+        // ignore fallback errors, keep original response below
+      }
+    }
+
+    if (
+      !upstream.ok &&
+      fdId &&
+      (upstream.status === 401 ||
+        upstream.status === 403 ||
+        upstream.status === 500 ||
+        primaryStatus === 401 ||
+        primaryStatus === 403 ||
+        primaryStatus === 500)
+    ) {
+      try {
+        const browserDownloaded = await downloadBmoAttachmentByBrowser({
+          fdId,
+          attachmentId,
+          fileName
+        })
+        if (browserDownloaded?.buffer?.length) {
+          if (browserDownloaded.contentType) {
+            res.setHeader('Content-Type', browserDownloaded.contentType)
+          }
+          if (fileName) {
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+            )
+          }
+          return res.send(browserDownloaded.buffer)
+        }
+      } catch (e) {
+        attempts.unshift(
+          `browserFallback/${attachmentId} => ${String(e?.message || e).slice(0, 120)}`
+        )
+      }
+    }
+
+    if (!upstream.ok) {
+      let upstreamMsg = ''
+      try {
+        upstreamMsg = String(await upstream.text()).trim()
+      } catch (e) {
+        upstreamMsg = ''
+      }
+      const tries = attempts.length ? attempts.join(' | ') : ''
+      const tail = [tries, upstreamMsg].filter(Boolean).join(' | ')
+      const statusCode = primaryStatus || upstream.status || 502
+      const workerAttempt = attempts.find((x) => String(x || '').startsWith('worker/'))
+      const workerReason = workerAttempt
+        ? String(workerAttempt).replace(/^worker\/[^=]+=>\s*/, '').trim()
+        : ''
+      const conciseFailure =
+        statusCode === 403 || statusCode === 404 || statusCode === 500
+          ? workerReason
+            ? `BMO 下载失败: ${workerReason}`
+            : 'BMO 下载失败：当前服务会话无权读取附件，请在 BMO 页面下载后使用本地上传读取。'
+          : `BMO 下载失败: HTTP ${statusCode}`
+      if (tail) {
+        console.error('[bmo-attachment-download-failed]', {
+          attachmentId,
+          fdId,
+          statusCode,
+          detail: tail.slice(0, 2000)
+        })
+      }
+      return res.status(statusCode).json({
+        code: statusCode,
+        success: false,
+        message: conciseFailure
       })
     }
 

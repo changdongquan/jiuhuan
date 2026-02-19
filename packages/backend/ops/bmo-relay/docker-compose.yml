@@ -1,0 +1,57 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: bmo-relay-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+
+  api:
+    build:
+      context: ./app
+    container_name: bmo-relay-api
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_KEY: bmo_relay_jobs
+      FILES_DIR: /data/files
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,10.0.0.0/8,redis,bmo.meiling.com,.meiling.com}
+    depends_on:
+      - redis
+    ports:
+      - "${BMO_RELAY_PORT:-18081}:18081"
+    volumes:
+      - ./data/files:/data/files
+      - ./app:/app
+    command: ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "18081"]
+
+  worker:
+    build:
+      context: ./app
+    container_name: bmo-relay-worker
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_KEY: bmo_relay_jobs
+      WORKER_POLL_TIMEOUT: "5"
+      FILES_DIR: /data/files
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,10.0.0.0/8,redis,bmo.meiling.com,.meiling.com}
+    depends_on:
+      - redis
+    volumes:
+      - ./data/files:/data/files
+      - ./app:/app
+    command: ["python", "worker.py"]

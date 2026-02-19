@@ -205,6 +205,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
           roles: ['*'],
           noCache: true
         }
+      },
+      {
+        path: 'bmo-relay-manage',
+        name: 'BmoRelayManage',
+        component: () => import('@/views/BmoRelayManage/index.vue'),
+        meta: {
+          title: 'BMO中转管理',
+          icon: 'vi-ep:connection',
+          roles: ['*'],
+          noCache: true
+        }
       }
     ]
   },

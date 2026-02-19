@@ -1,6 +1,8 @@
 const { query } = require('../database')
 const crypto = require('crypto')
 const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
 const DEFAULT_BASE_URL = 'https://bmo.meiling.com:8023'
 const DEFAULT_DATA_ENDPOINT = '/data/sys-modeling/sysModelingMain/data'
@@ -169,6 +171,26 @@ const readCookieHeader = (headers) => {
     .join('; ')
 }
 
+const mergeCookieHeader = (currentCookie, nextCookie) => {
+  const parse = (raw) =>
+    String(raw || '')
+      .split(';')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .map((x) => {
+        const idx = x.indexOf('=')
+        if (idx <= 0) return null
+        return [x.slice(0, idx).trim(), x.slice(idx + 1).trim()]
+      })
+      .filter(Boolean)
+
+  const merged = new Map(parse(currentCookie))
+  for (const [k, v] of parse(nextCookie)) merged.set(k, v)
+  return Array.from(merged.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ')
+}
+
 const pemFromBase64Spki = (base64) => {
   const clean = String(base64 || '').trim()
   if (!clean) return null
@@ -331,6 +353,10 @@ class BmoClient {
     if (!res.ok) {
       throw new Error(`BMO 获取登录公钥失败: HTTP ${res.status}`)
     }
+    const cookie = readCookieHeader(res.headers)
+    if (cookie) {
+      this.cookie = mergeCookieHeader(this.cookie, cookie)
+    }
     const pubKey = res.headers.get('x-pubkey')
     if (!pubKey) {
       throw new Error('BMO 未返回 x-pubkey，无法进行 RSA 登录')
@@ -342,7 +368,7 @@ class BmoClient {
     // Some deployments may require a preflight verification check (even if captcha is not needed).
     // This call is cheap and matches the browser's login flow.
     try {
-      await fetchWithTimeout(
+      const preflightRes = await fetchWithTimeout(
         new URL(this.verificationCheckEndpoint, this.baseUrl),
         {
           method: 'POST',
@@ -351,6 +377,10 @@ class BmoClient {
         },
         this.httpTimeoutMs
       )
+      const preflightCookie = readCookieHeader(preflightRes.headers)
+      if (preflightCookie) {
+        this.cookie = mergeCookieHeader(this.cookie, preflightCookie)
+      }
     } catch (e) {
       // ignore preflight failures and continue to attempt login
     }
@@ -381,7 +411,7 @@ class BmoClient {
       throw new Error(`BMO 登录失败: ${data?.msg || data?.message || `HTTP ${res.status}`}`)
     }
     const cookie = readCookieHeader(res.headers)
-    if (cookie) this.cookie = cookie
+    if (cookie) this.cookie = mergeCookieHeader(this.cookie, cookie)
     const tokenFromHeader = res.headers.get('x-auth-token')
     const tokenFromData = data?.data?.token || data?.token
     if (tokenFromHeader) this.authToken = tokenFromHeader
@@ -410,7 +440,7 @@ class BmoClient {
         throw new Error(`BMO 登录失败: ${data?.msg || data?.message || `HTTP ${res.status}`}`)
       }
       const cookie = readCookieHeader(res.headers)
-      if (cookie) this.cookie = cookie
+      if (cookie) this.cookie = mergeCookieHeader(this.cookie, cookie)
       const tokenFromHeader = res.headers.get('x-auth-token')
       const tokenFromData = data?.data?.token || data?.token
       if (tokenFromHeader) this.authToken = tokenFromHeader
@@ -434,7 +464,7 @@ class BmoClient {
       timeoutMsOverride ?? this.httpTimeoutMs
     )
 
-    if (res.status === 401 && !retried && this.hasLoginAuth) {
+    if ((res.status === 401 || res.status === 403) && !retried && this.hasLoginAuth) {
       await this.login()
       return this.requestJson(pathname, payload, true, timeoutMsOverride)
     }
@@ -467,7 +497,7 @@ class BmoClient {
       timeoutMsOverride ?? this.httpTimeoutMs
     )
 
-    if (res.status === 401 && !retried && this.hasLoginAuth) {
+    if ((res.status === 401 || res.status === 403) && !retried && this.hasLoginAuth) {
       await this.login()
       return this.requestJsonFile(pathname, true, timeoutMsOverride)
     }
@@ -486,7 +516,7 @@ class BmoClient {
     })
     delete headers['Content-Type']
 
-    const res = await fetchWithTimeout(
+    let res = await fetchWithTimeout(
       new URL(pathname, this.baseUrl),
       {
         method: 'GET',
@@ -495,7 +525,25 @@ class BmoClient {
       timeoutMsOverride ?? this.httpTimeoutMs
     )
 
-    if (res.status === 401 && !retried && this.hasLoginAuth) {
+    // Some BMO deployments reject file download when stale/mismatched X-AUTH-TOKEN is sent.
+    // Retry once with cookie-only headers before relogin.
+    if (res.status === 403 && !retried && headers['X-AUTH-TOKEN']) {
+      const cookieOnlyHeaders = this.buildHeaders({ Accept: '*/*' })
+      delete cookieOnlyHeaders['Content-Type']
+      delete cookieOnlyHeaders['X-AUTH-TOKEN']
+      const cookieOnlyRes = await fetchWithTimeout(
+        new URL(pathname, this.baseUrl),
+        {
+          method: 'GET',
+          headers: cookieOnlyHeaders
+        },
+        timeoutMsOverride ?? this.httpTimeoutMs
+      )
+      if (cookieOnlyRes.ok) return cookieOnlyRes
+      res = cookieOnlyRes
+    }
+
+    if ((res.status === 401 || res.status === 403) && !retried && this.hasLoginAuth) {
       await this.login()
       return this.requestStream(pathname, true, timeoutMsOverride)
     }
@@ -652,6 +700,16 @@ const normalizeDetailValue = (raw, optionsMap) => {
   return String(raw)
 }
 
+const pickAttachmentId = (value) => {
+  if (!value) return ''
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim()
+  if (typeof value === 'object') {
+    const direct = String(value.fdId || value.id || value.fd_id || '').trim()
+    if (direct) return direct
+  }
+  return ''
+}
+
 const fetchBmoMouldDetail = async (input = {}) => {
   const fdId = String(input.fdId || input.bmoRecordId || '').trim()
   if (!fdId) {
@@ -703,13 +761,34 @@ const fetchBmoMouldDetail = async (input = {}) => {
 
   const techAttachments = attachments
     .filter((x) => String(x?.fdEntityKey || '') === techAttachmentField)
-    .map((x) => ({
-      id: x?.fdId || null,
+    .map((x) => {
+      const sysAttachFileId = pickAttachmentId(x?.fdSysAttachFile)
+      const fileId = pickAttachmentId(x?.fdFileId)
+      const attachmentId = pickAttachmentId(x?.fdAttachmentId || x?.fdAttachId)
+      const fdId = pickAttachmentId(x?.fdId)
+      // BMO 下载接口 `/data/sys-attach/download/{id}` 需要附件记录 fdId，
+      // 不是 fdSysAttachFile（文件实体ID）。
+      const finalId = fdId || attachmentId || fileId || sysAttachFileId || null
+      return {
+      id: finalId,
       fileName: x?.fdFileName || null,
       fileExt: x?.fdFileExtName || null,
       fileSize: x?.fdFileSize ?? null,
-      createdAt: x?.fdCreateTime ? new Date(x.fdCreateTime).toISOString() : null
-    }))
+      createdAt: x?.fdCreateTime ? new Date(x.fdCreateTime).toISOString() : null,
+      fileId: fileId || sysAttachFileId || null,
+      attachmentId: attachmentId || null,
+      rawDownloadPath:
+        x?.fdDownloadPath ||
+        x?.fdDownloadUrl ||
+        x?.downloadUrl ||
+        x?.url ||
+        x?.fdUrl ||
+        null,
+      rawDownloadUrl: x?.downloadUrl || null,
+      sysAttachFileId: sysAttachFileId || null,
+      fdId: fdId || null,
+      _rawKeys: Object.keys(x || {})
+    }})
 
   return {
     fdId,
@@ -717,8 +796,290 @@ const fetchBmoMouldDetail = async (input = {}) => {
     designer,
     tech: {
       tableName: techTableName,
+      mechAuthToken: sysXform?.['sys-auth']?.mechAuthToken || null,
       fields: techFields,
       attachments: techAttachments
+    }
+  }
+}
+
+const checkBmoAttachmentDownload = async (attachmentId, mechAuthToken) => {
+  const id = String(attachmentId || '').trim()
+  const token = String(mechAuthToken || '').trim()
+  if (!id || !token) return { ok: false, skipped: true }
+
+  const client = getSharedClient()
+  await ensureClientAuthed(client)
+  if (client.hasLoginAuth) {
+    try {
+      await client.login()
+    } catch (e) {
+      // ignore and keep current auth context
+    }
+  }
+  const data = await client.requestJson(
+    `/data/sys-attach/checkDownload/${encodeURIComponent(id)}?mechAuthToken=${encodeURIComponent(token)}`,
+    {}
+  )
+  return { ok: true, data }
+}
+
+const downloadBmoAttachmentByBrowser = async (input = {}) => {
+  const fdId = String(input.fdId || '').trim()
+  const attachmentId = String(input.attachmentId || '').trim()
+  if (!fdId || !attachmentId) {
+    throw new Error('缺少 fdId 或 attachmentId')
+  }
+
+  let chromium = null
+  try {
+    ;({ chromium } = require('playwright-core'))
+  } catch (e) {
+    throw new Error('缺少 playwright-core，无法启用浏览器附件下载兜底')
+  }
+
+  const authFilePath = process.env.BMO_AUTH_FILE || ''
+  const fromFile = authFilePath ? readAuthFromEnvFile(authFilePath) : null
+  const baseUrl = (
+    process.env.BMO_BASE_URL ||
+    fromFile?.BMO_BASE_URL ||
+    DEFAULT_BASE_URL
+  ).replace(/\/+$/, '')
+  const cookieHeader = process.env.BMO_COOKIE || fromFile?.BMO_COOKIE || ''
+  const tokenFromEnv = process.env.BMO_X_AUTH_TOKEN || fromFile?.BMO_X_AUTH_TOKEN || ''
+  const username = process.env.BMO_USERNAME || fromFile?.BMO_USERNAME || ''
+  const password = process.env.BMO_PASSWORD || fromFile?.BMO_PASSWORD || ''
+  if (!username || !password) {
+    throw new Error('缺少 BMO_USERNAME/BMO_PASSWORD，无法进行浏览器下载兜底')
+  }
+
+  const userDataDir =
+    process.env.BMO_KEEPER_USER_DATA_DIR ||
+    path.join(
+      os.tmpdir(),
+      `bmo-attachment-download-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    )
+  const headless = String(process.env.BMO_KEEPER_HEADLESS || 'true').toLowerCase() !== 'false'
+  const navTimeoutMs = Number(process.env.BMO_KEEPER_NAV_TIMEOUT_MS || 20000)
+  const listViewId = process.env.BMO_MOULD_LIST_VIEW_ID || '1isqa135kwe9w4adow1ng3ksi3rrcgl912w0'
+  const menuId = process.env.BMO_MOULD_MENU_ID || '1j7l907fmwmnw15nihw3essaq61h6trmg3w0'
+  const portal = String(
+    process.env.BMO_KEEPER_PORTAL || fromFile?.BMO_KEEPER_PORTAL || 'BMO'
+  )
+    .trim()
+    .toUpperCase()
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless,
+    acceptDownloads: true,
+    ignoreHTTPSErrors: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage']
+  })
+  const page = await context.newPage()
+  page.setDefaultTimeout(navTimeoutMs)
+  page.setDefaultNavigationTimeout(navTimeoutMs)
+  const targetUrl = `${baseUrl}/web/#/current/sys-modeling/app/mojuxt/view/${DEFAULT_MOULD_DETAIL_FORM_ID}/${encodeURIComponent(fdId)}?listviewId=${encodeURIComponent(listViewId)}&menuId=${encodeURIComponent(menuId)}&fdOpenMode=new`
+
+  const typeIntoInput = async (locator, value) => {
+    const target = locator.first()
+    await target
+      .evaluate((el) => {
+        if (el && typeof el.removeAttribute === 'function') {
+          el.removeAttribute('readonly')
+        }
+      })
+      .catch(() => null)
+    await target.click({ timeout: 2000 }).catch(() => null)
+    await target.press('Control+A').catch(() => null)
+    await target.press('Meta+A').catch(() => null)
+    await target.press('Backspace').catch(() => null)
+    await page.keyboard.type(String(value || ''), { delay: 20 })
+  }
+
+  try {
+    // 使用可复现的“登录页 -> 详情页 -> 点击下载”流程，避免依赖历史会话状态。
+    await page.goto(`${baseUrl}/web/#/login`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1200)
+
+    const userLocator = page.locator('input[name="j_username"], input#userName, input#username')
+    const passLocator = page.locator('input[name="j_password"], input#passWord, input#password')
+    const loginButton = page.locator(
+      'button:has-text("登录"), button.user-elem-chml-sso-login-odf82-submit, button[type="submit"]'
+    )
+
+    const needLogin = (await userLocator.count()) > 0 && (await passLocator.count()) > 0
+    if (needLogin) {
+      if (portal === 'BMO' || portal === 'OA') {
+        const portalRadio = page.locator(`input[type="radio"][value="${portal}"]`)
+        if ((await portalRadio.count()) > 0) {
+          await portalRadio.first().check().catch(() => null)
+        }
+      }
+      await typeIntoInput(userLocator, username)
+      await typeIntoInput(passLocator, password)
+      if ((await loginButton.count()) > 0) {
+        await loginButton.first().click().catch(() => null)
+      } else {
+        await passLocator.first().press('Enter').catch(() => null)
+      }
+    }
+    await page.waitForTimeout(2500)
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle').catch(() => null)
+    await page.waitForTimeout(5000)
+
+    const runInPageDownload = async () =>
+      page
+      .evaluate(
+        async ({ detailFdId, attachId, viewId, formId, xformId }) => {
+          const fail = (status, message) => ({ ok: false, status, message, bytes: [] })
+          try {
+            const viewResp = await fetch('/data/sys-modeling/sysModelingMain/view', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+              body: JSON.stringify({
+                fdId: detailFdId,
+                fdMode: 1,
+                fdViewId: viewId,
+                fdFormId: formId,
+                fdXFormId: xformId,
+                mechanisms: { load: '*' }
+              })
+            })
+            if (!viewResp.ok) return fail(viewResp.status, 'view failed')
+            const viewJson = await viewResp.json().catch(() => ({}))
+            const mechAuthToken = viewJson?.data?.mechanisms?.['sys-auth']?.mechAuthToken || ''
+            if (!mechAuthToken) return fail(0, 'missing mechAuthToken')
+
+            const checkResp = await fetch(
+              `/data/sys-attach/checkDownload/${encodeURIComponent(attachId)}?mechAuthToken=${encodeURIComponent(mechAuthToken)}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: '{}'
+              }
+            )
+            if (!checkResp.ok) {
+              const text = await checkResp.text().catch(() => '')
+              return fail(checkResp.status, text || 'checkDownload failed')
+            }
+            const checkJson = await checkResp.json().catch(() => ({}))
+            if (checkJson && checkJson.success === false) {
+              return fail(403, checkJson.msg || checkJson.message || 'checkDownload denied')
+            }
+
+            const dlResp = await fetch(`/data/sys-attach/download/${encodeURIComponent(attachId)}`)
+            if (!dlResp.ok) {
+              const text = await dlResp.text().catch(() => '')
+              return fail(dlResp.status, text || 'download failed')
+            }
+            const contentType = dlResp.headers.get('content-type') || 'application/octet-stream'
+            const ab = await dlResp.arrayBuffer()
+            return {
+              ok: true,
+              contentType,
+              bytes: Array.from(new Uint8Array(ab))
+            }
+          } catch (e) {
+            return fail(0, String(e?.message || e))
+          }
+        },
+        {
+          detailFdId: fdId,
+          attachId: attachmentId,
+          viewId: process.env.BMO_MOULD_DETAIL_FD_VIEW_ID || DEFAULT_MOULD_DETAIL_VIEW_ID,
+          formId: process.env.BMO_MOULD_DETAIL_FD_FORM_ID || DEFAULT_MOULD_DETAIL_FORM_ID,
+          xformId: process.env.BMO_MOULD_DETAIL_FD_XFORM_ID || DEFAULT_MOULD_DETAIL_XFORM_ID
+        }
+      )
+      .catch((e) => ({ ok: false, message: String(e?.message || e) }))
+
+    // A) 先尝试页面内 API 链路，不依赖按钮可见性
+    let inPage = await runInPageDownload()
+    // 若失败，强制重新登录一次并重试（常见于会话过期/路由跳转后未生效）
+    if (!inPage?.ok) {
+      await page.goto(`${baseUrl}/web/#/login`, { waitUntil: 'domcontentloaded' }).catch(() => null)
+      await page.waitForTimeout(800)
+      const reloginUser = page.locator('input[name="j_username"], input#userName, input#username')
+      const reloginPass = page.locator('input[name="j_password"], input#passWord, input#password')
+      const reloginBtn = page.locator(
+        'button:has-text("登录"), button.user-elem-chml-sso-login-odf82-submit, button[type="submit"]'
+      )
+      if ((await reloginUser.count()) > 0 && (await reloginPass.count()) > 0) {
+        if (portal === 'BMO' || portal === 'OA') {
+          const portalRadio = page.locator(`input[type="radio"][value="${portal}"]`)
+          if ((await portalRadio.count()) > 0) {
+            await portalRadio.first().check().catch(() => null)
+          }
+        }
+        await typeIntoInput(reloginUser, username)
+        await typeIntoInput(reloginPass, password)
+        if ((await reloginBtn.count()) > 0) {
+          await reloginBtn.first().click().catch(() => null)
+        } else {
+          await reloginPass.first().press('Enter').catch(() => null)
+        }
+      }
+      await page.waitForTimeout(2500)
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded' }).catch(() => null)
+      await page.waitForLoadState('networkidle').catch(() => null)
+      await page.waitForTimeout(2000)
+      inPage = await runInPageDownload()
+    }
+
+    if (inPage?.ok && Array.isArray(inPage.bytes) && inPage.bytes.length > 0) {
+      return {
+        contentType: String(inPage.contentType || 'application/octet-stream'),
+        buffer: Buffer.from(inPage.bytes)
+      }
+    }
+
+    let downloadButtons = page.locator('text=下载')
+    let count = await downloadButtons.count()
+    if (!count) {
+      downloadButtons = page.locator('button:has-text("下载"), [role="button"]:has-text("下载")')
+      count = await downloadButtons.count()
+    }
+    if (!count) {
+      throw new Error(
+        `browser fallback failed: 下载按钮不存在（in-page: ${String(inPage?.message || inPage?.status || 'unknown')}）`
+      )
+    }
+
+    for (let i = 0; i < Math.min(count, 6); i += 1) {
+      const downloadPromise = page.waitForEvent('download', { timeout: 12000 }).catch(() => null)
+      await downloadButtons.nth(i).click({ timeout: 6000 }).catch(() => null)
+      const download = await downloadPromise
+      if (!download) continue
+      const suggestedName = String(download.suggestedFilename() || '')
+      if (suggestedName && !/\.(xlsx|xls)$/i.test(suggestedName) && count > 1) {
+        // 优先接收 Excel 下载，非 Excel 继续尝试下一个按钮
+        continue
+      }
+
+      const tmpPath = path.join(
+        os.tmpdir(),
+        `bmo-attachment-${attachmentId}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      )
+      await download.saveAs(tmpPath)
+      const buffer = fs.readFileSync(tmpPath)
+      try {
+        fs.unlinkSync(tmpPath)
+      } catch (e) {
+        // ignore
+      }
+      return {
+        contentType: 'application/octet-stream',
+        buffer
+      }
+    }
+
+    throw new Error('browser fallback failed: 未捕获有效下载事件')
+  } finally {
+    try {
+      await context.close()
+    } catch (e) {
+      // ignore
     }
   }
 }
@@ -729,9 +1090,34 @@ const downloadBmoAttachment = async (attachmentId) => {
 
   const client = getSharedClient()
   await ensureClientAuthed(client)
+  if (client.hasLoginAuth) {
+    try {
+      await client.login()
+    } catch (e) {
+      // ignore and keep current auth context
+    }
+  }
 
-  const res = await client.requestStream(`/data/sys-attach/download/${encodeURIComponent(id)}`)
-  return res
+  const encodedId = encodeURIComponent(id)
+  const candidatePaths = [
+    `/data/sys-attach/download/${encodedId}`,
+    `/sys-attach/download/${encodedId}`,
+    `/data/sys-attach/download?fdId=${encodedId}`,
+    `/sys-attach/download?fdId=${encodedId}`
+  ]
+
+  const attempts = []
+  let lastRes = null
+  let primaryStatus = 0
+  for (const pathname of candidatePaths) {
+    const res = await client.requestStream(pathname)
+    if (!primaryStatus) primaryStatus = Number(res.status || 0)
+    attempts.push(`${pathname} => ${res.status}`)
+    if (res.ok) return { response: res, attempts }
+    lastRes = res
+  }
+
+  return { response: lastRes, attempts, primaryStatus }
 }
 
 const upsertBmoRecord = async (record, traceId) => {
@@ -936,6 +1322,8 @@ module.exports = {
   syncBmoMouldData,
   fetchBmoMouldListLive,
   fetchBmoMouldDetail,
+  checkBmoAttachmentDownload,
+  downloadBmoAttachmentByBrowser,
   downloadBmoAttachment,
   upsertBmoRecords
 }

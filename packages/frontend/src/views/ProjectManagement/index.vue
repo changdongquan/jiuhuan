@@ -2281,7 +2281,7 @@ const paginationLayout = computed(() =>
 // 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
-const queryForm = reactive({ keyword: '', status: '', category: '' })
+const queryForm = reactive({ keyword: '', status: '', category: '塑胶模具' })
 const categoryOptions = [
   { label: '塑胶模具', value: '塑胶模具' },
   { label: '零件加工', value: '零件加工' },

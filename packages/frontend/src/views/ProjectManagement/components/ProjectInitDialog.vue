@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :width="isMobile ? '100%' : '980px'"
+    :width="isMobile ? '100%' : '1030px'"
     :fullscreen="isMobile"
     :close-on-click-modal="false"
     class="pm-init-dialog"
@@ -119,7 +119,11 @@
             <el-table :data="bmoTechAttachments" border size="small" max-height="220">
               <el-table-column label="选择" width="70" align="center">
                 <template #default="{ row }">
-                  <el-radio v-model="bmoAttachmentSelection" :label="String(row.id || '')" />
+                  <el-radio
+                    v-model="bmoAttachmentSelection"
+                    :label="String(row.selectionId || '')"
+                    :disabled="!row.id"
+                  />
                 </template>
               </el-table-column>
               <el-table-column
@@ -132,10 +136,10 @@
                 <template #default="{ row }">
                   <el-tag
                     size="small"
-                    :type="isExcelFileName(String(row.fileName || '')) ? 'success' : 'info'"
+                    :type="isExcelAttachment(row) ? 'success' : 'info'"
                     effect="plain"
                   >
-                    {{ isExcelFileName(String(row.fileName || '')) ? 'Excel' : '其他' }}
+                    {{ isExcelAttachment(row) ? 'Excel' : '其他' }}
                   </el-tag>
                 </template>
               </el-table-column>
@@ -172,7 +176,7 @@
         <!-- 读取的数据显示 -->
         <div v-if="specData" class="pm-init-spec-content">
           <el-descriptions :column="isMobile ? 1 : 2" border size="small">
-            <el-descriptions-item label="零件材料及料厚">
+            <el-descriptions-item label="材料">
               <span :class="{ 'pm-spec--missing': !specData.材料 }">{{
                 specData.材料 || '待填写'
               }}</span>
@@ -248,45 +252,6 @@
                 effect="plain"
               >
                 {{ getSourceText('产品结构工程师') }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="顶出类型">
-              <span :class="{ 'pm-spec--missing': !specData.顶出类型 }">{{
-                specData.顶出类型 || '待填写'
-              }}</span>
-              <el-tag
-                v-if="getSourceText('顶出类型')"
-                class="pm-source-tag"
-                size="small"
-                effect="plain"
-              >
-                {{ getSourceText('顶出类型') }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="顶出方式">
-              <span :class="{ 'pm-spec--missing': !specData.顶出方式 }">{{
-                specData.顶出方式 || '待填写'
-              }}</span>
-              <el-tag
-                v-if="getSourceText('顶出方式')"
-                class="pm-source-tag"
-                size="small"
-                effect="plain"
-              >
-                {{ getSourceText('顶出方式') }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="复位方式">
-              <span :class="{ 'pm-spec--missing': !specData.复位方式 }">{{
-                specData.复位方式 || '待填写'
-              }}</span>
-              <el-tag
-                v-if="getSourceText('复位方式')"
-                class="pm-source-tag"
-                size="small"
-                effect="plain"
-              >
-                {{ getSourceText('复位方式') }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="零件图片" v-if="specData.零件图片">
@@ -513,24 +478,18 @@ type FieldDiffRow = {
 const diffRows = ref<FieldDiffRow[]>([])
 
 const SOURCE_TEXT: Record<'bmo14' | 'techSpec' | 'manual', string> = {
-  bmo14: '1.4',
+  bmo14: 'BMO',
   techSpec: '技术规格表',
   manual: '手工'
 }
 
-const FIELD_KEYS: Array<{
-  key: keyof TechSpecData | '顶出类型' | '顶出方式' | '复位方式'
-  label: string
-}> = [
-  { key: '材料', label: '零件材料及料厚' },
-  { key: '型腔', label: '前模材质' },
-  { key: '型芯', label: '后模材质' },
+const FIELD_KEYS: Array<{ key: keyof TechSpecData; label: string }> = [
+  { key: '材料', label: '材料' },
+  { key: '型腔', label: '型腔钢材' },
+  { key: '型芯', label: '型芯钢材' },
   { key: '模具穴数', label: '模具穴数' },
-  { key: '产品外观尺寸', label: '产品外观尺寸' },
-  { key: '产品结构工程师', label: '设计师' },
-  { key: '顶出类型', label: '顶出类型' },
-  { key: '顶出方式', label: '顶出方式' },
-  { key: '复位方式', label: '复位方式' }
+  { key: '产品外观尺寸', label: '产品尺寸/mm' },
+  { key: '产品结构工程师', label: '设计师' }
 ]
 
 const toSafeCavity = (value: unknown) => {
@@ -647,13 +606,61 @@ const getSourceText = (key: string) => {
 }
 
 const isExcelFileName = (name: string) => /\.(xlsx|xls)$/i.test(String(name || '').trim())
+const normalizeExcelExt = (extLike: unknown) =>
+  normalizeText(extLike).toLowerCase().replace(/^\./, '')
 
-const bmoTechAttachments = computed<BmoMouldProcurementDetailAttachment[]>(
-  () => bmoSnapshot.value?.tech?.attachments || []
+const isExcelAttachment = (attachment: any) => {
+  if (!attachment) return false
+  if (isExcelFileName(String(attachment.fileName || ''))) return true
+  const ext = normalizeExcelExt(attachment.fileExt || attachment.fdFileExtName)
+  return ext === 'xlsx' || ext === 'xls'
+}
+
+const normalizeBmoAttachment = (
+  raw: any,
+  index: number
+): BmoMouldProcurementDetailAttachment & { selectionId: string } => {
+  const id = normalizeText(raw?.id ?? raw?.fdId ?? raw?.attachmentId ?? raw?.fileId) || null
+  const fileName =
+    normalizeText(raw?.fileName ?? raw?.fdFileName ?? raw?.name ?? raw?.filename) || null
+  const fileExt =
+    normalizeText(raw?.fileExt ?? raw?.fdFileExtName ?? raw?.ext ?? raw?.extension) || null
+
+  const fileSizeRaw = raw?.fileSize ?? raw?.fdFileSize ?? raw?.size
+  const fileSize = Number.isFinite(Number(fileSizeRaw)) ? Number(fileSizeRaw) : null
+
+  const createdRaw = raw?.createdAt ?? raw?.fdCreateTime ?? raw?.createTime ?? raw?.created_at
+  const createdAt = createdRaw
+    ? (() => {
+        const d = new Date(createdRaw)
+        return Number.isNaN(d.getTime()) ? String(createdRaw) : d.toISOString()
+      })()
+    : null
+
+  return {
+    id,
+    fileName: fileName || (id ? `附件_${id}` : null),
+    fileExt,
+    fileSize,
+    createdAt,
+    rawDownloadPath:
+      normalizeText(raw?.rawDownloadPath ?? raw?.downloadUrl ?? raw?.fdDownloadPath) || null,
+    downloadUrl: normalizeText(raw?.downloadUrl) || null,
+    // 选择值必须行级唯一；历史快照里可能存在重复 id，直接用 id 会导致“全选”错觉
+    selectionId: `${id || 'no-id'}__${index}`
+  }
+}
+
+const bmoTechAttachments = computed<BmoMouldProcurementDetailAttachment[]>(() =>
+  (bmoSnapshot.value?.tech?.attachments || [])
+    .map((item: any, index: number) => normalizeBmoAttachment(item, index))
+    .filter((item) => !!(item.id || item.fileName))
 )
 
 const selectedBmoAttachment = computed(() =>
-  bmoTechAttachments.value.find((item) => String(item.id || '') === bmoAttachmentSelection.value)
+  bmoTechAttachments.value.find(
+    (item: any) => String(item.selectionId || '') === bmoAttachmentSelection.value
+  )
 )
 
 const bmoTechFields = computed(() => bmoSnapshot.value?.tech?.fields || [])
@@ -714,28 +721,16 @@ const buildPrimaryDataFromBmo = () => {
       setIfEmpty('材料', raw)
       continue
     }
-    if (/型腔|前模材质/.test(label) && !/数/.test(label)) {
+    if (/型腔钢材/.test(label)) {
       setIfEmpty('型腔', raw)
       continue
     }
-    if (/型芯|后模材质/.test(label) && !/数/.test(label)) {
+    if (/型芯钢材/.test(label)) {
       setIfEmpty('型芯', raw)
       continue
     }
-    if (/产品外观尺寸/.test(label)) {
+    if (/产品尺寸\/mm/.test(label)) {
       setIfEmpty('产品外观尺寸', raw)
-      continue
-    }
-    if (/顶出类型/.test(label)) {
-      setIfEmpty('顶出类型', raw)
-      continue
-    }
-    if (/顶出方式/.test(label)) {
-      setIfEmpty('顶出方式', raw)
-      continue
-    }
-    if (/复位方式/.test(label)) {
-      setIfEmpty('复位方式', raw)
       continue
     }
   }
@@ -1146,7 +1141,7 @@ const pickMatchedTechSpecData = async (arrayBuffer: ArrayBuffer) => {
   const drawing = normalizeText(getProductDrawing()).toLowerCase()
   const name = normalizeText(getProductName()).toLowerCase()
 
-  let record =
+  const record =
     records.find((r) =>
       (r.drawings || []).some((d) => normalizeText(d).toLowerCase() === drawing)
     ) ||
@@ -1277,25 +1272,48 @@ const handleSpecArrayBuffer = async (arrayBuffer: ArrayBuffer) => {
   applyTechSpecFallback(parsedData)
 }
 
+const downloadBmoAttachmentByJob = async (picked: BmoMouldProcurementDetailAttachment) => {
+  const fdId = normalizeText(bmoSnapshot.value?.fdId)
+  const params = new URLSearchParams()
+  if (fdId) params.set('fdId', fdId)
+  const fileName = String(picked.fileName || '').trim()
+  if (fileName) params.set('fileName', fileName)
+  const query = params.toString()
+  const url = `/api/bmo/attachment/download/${encodeURIComponent(String(picked.id || ''))}${
+    query ? `?${query}` : ''
+  }`
+  const fileResp: any = await request.get<Blob>({
+    url,
+    responseType: 'blob',
+    timeout: 180000
+  })
+  return ((fileResp as any)?.data ?? fileResp) as Blob
+}
+
+const applyTechSpecFile = async (file: File, successMessage = '技术规格表读取成功') => {
+  const arrayBuffer = await file.arrayBuffer()
+  await handleSpecArrayBuffer(arrayBuffer)
+  ElMessage.success(successMessage)
+}
+
 const handleReadSelectedBmoAttachment = async () => {
   const picked = selectedBmoAttachment.value
   if (!picked?.id) {
     ElMessage.warning('请先选择技术规格表附件')
     return
   }
-  if (!isExcelFileName(String(picked.fileName || ''))) {
+  if (!isExcelAttachment(picked)) {
     ElMessage.warning('仅支持读取 Excel 技术规格表附件（.xlsx/.xls）')
     return
   }
 
   bmoReadingAttachment.value = true
   try {
-    const resp: any = await request.get<Blob>({
-      url: `/api/bmo/attachment/download/${encodeURIComponent(String(picked.id))}`,
-      responseType: 'blob'
-    })
-    const blob = ((resp as any)?.data ?? resp) as Blob
-    const fileName = String(picked.fileName || 'BMO技术规格表.xlsx')
+    const blob = await downloadBmoAttachmentByJob(picked)
+    const fallbackExt = normalizeExcelExt(picked.fileExt)
+    const ext = fallbackExt === 'xls' || fallbackExt === 'xlsx' ? fallbackExt : 'xlsx'
+    const fallbackName = `BMO技术规格表.${ext}`
+    const fileName = String(picked.fileName || fallbackName)
     const file = new File([blob], fileName, {
       type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
@@ -1304,11 +1322,25 @@ const handleReadSelectedBmoAttachment = async () => {
       await saveSelectedAttachmentToProject(file)
     }
 
-    const buffer = await file.arrayBuffer()
-    await handleSpecArrayBuffer(buffer)
-    ElMessage.success(`技术规格表已读取${bmoSaveAttachment.value ? '并保存' : ''}`)
+    await applyTechSpecFile(file, `技术规格表已读取${bmoSaveAttachment.value ? '并保存' : ''}`)
   } catch (error: any) {
     console.error('读取 BMO 技术规格表失败:', error)
+    const status = Number(error?.response?.status || 0)
+    const isBmoDenied = status === 403 || status === 404
+    if (isBmoDenied && picked) {
+      const path = String(picked.rawDownloadPath || '').trim()
+      const fallbackPath = `/data/sys-attach/download/${encodeURIComponent(String(picked.id || ''))}`
+      const fullUrl = path
+        ? path.startsWith('http')
+          ? path
+          : `https://bmo.meiling.com:8023${path}`
+        : `https://bmo.meiling.com:8023${fallbackPath}`
+      window.open(fullUrl, '_blank')
+      ElMessage.error(
+        '后端无附件下载权限，已为你打开 BMO 原始下载链接。请下载后用“读取技术规格表”本地上传。'
+      )
+      return
+    }
     ElMessage.error(error?.message || '读取 BMO 技术规格表失败')
   } finally {
     bmoReadingAttachment.value = false
@@ -1322,9 +1354,7 @@ const handleSpecFileChange = async (file: UploadFile) => {
     return
   }
   try {
-    const arrayBuffer = await file.raw.arrayBuffer()
-    await handleSpecArrayBuffer(arrayBuffer)
-    ElMessage.success('技术规格表读取成功')
+    await applyTechSpecFile(file.raw, '技术规格表读取成功')
   } catch (error: any) {
     console.error('读取技术规格表失败:', error)
     ElMessage.error(`读取失败: ${error.message || '未知错误'}`)
@@ -1360,6 +1390,10 @@ const showImagePreview = (url: string) => {
 @media (width <= 768px) {
   .pm-init-groups-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pm-init-body {
+    max-height: calc(100vh - 128px);
   }
 }
 
@@ -1406,6 +1440,13 @@ const showImagePreview = (url: string) => {
 
 .pm-init-title-tip {
   font-weight: normal;
+}
+
+.pm-init-body {
+  max-height: calc(100vh - 220px);
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pm-init-desc {

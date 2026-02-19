@@ -18,13 +18,17 @@ const runOnce = async (options = {}) => {
 
   keeperInFlight = new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, '..', 'scripts', 'bmo-session-keeper.js')
+    const envOverrides =
+      options && options.env && typeof options.env === 'object' ? options.env : {}
     const child = spawn(process.execPath, [scriptPath, '--once'], {
       env: {
         ...process.env,
+        ...envOverrides,
         // In non-dev environments, default to headless for keeper runs unless explicitly set.
         BMO_KEEPER_HEADLESS:
+          envOverrides.BMO_KEEPER_HEADLESS ??
           process.env.BMO_KEEPER_HEADLESS ??
-          (process.env.NODE_ENV === 'production' ? 'true' : 'false')
+          'true'
       },
       stdio: ['ignore', 'pipe', 'pipe']
     })
@@ -77,4 +81,3 @@ const runOnce = async (options = {}) => {
 module.exports = {
   runOnce
 }
-

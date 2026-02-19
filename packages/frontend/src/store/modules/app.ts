@@ -120,7 +120,7 @@ export const useAppStore = defineStore('app', {
         modifyMould: 0,
         partsProcessing: 0
       },
-      projectManagementFilterCategory: ''
+      projectManagementFilterCategory: '塑胶模具'
     }
   },
   getters: {

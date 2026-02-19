@@ -12,10 +12,9 @@
               >
             </div>
           </div>
-          <p class="bmo-subtitle">手动触发同步，并查看最新入库数据与任务状态</p>
+          <p class="bmo-subtitle">通过 BMO 中转实时采集并查看立项入口</p>
         </div>
         <div class="bmo-actions">
-          <el-button :loading="syncing" type="primary" @click="openSyncDialog">采集最新</el-button>
           <el-button :disabled="!latestList.length" @click="exportCsv">导出CSV</el-button>
           <el-switch v-model="useLiveOrder" active-text="实时顺序" inactive-text="库内顺序" />
           <el-switch
@@ -24,7 +23,7 @@
             inactive-text="手动"
             @change="handleAutoRefreshToggle"
           />
-          <el-button :loading="loadingLatest || loadingTasks" @click="refreshAll">刷新</el-button>
+          <el-button :loading="loadingLatest" @click="refreshAll">刷新</el-button>
         </div>
       </div>
     </div>
@@ -98,65 +97,6 @@
         </el-table-column>
       </el-table>
     </div>
-
-    <div class="bmo-section">
-      <div class="bmo-section__title">同步任务日志</div>
-      <el-table v-loading="loadingTasks" :data="taskList" border size="small" max-height="160">
-        <el-table-column prop="id" label="任务ID" width="90" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="taskTagType(row.status)">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="triggered_by" label="触发人" width="120" show-overflow-tooltip />
-        <el-table-column prop="rows_fetched" label="抓取" width="80" align="right" />
-        <el-table-column prop="rows_upserted" label="写入" width="80" align="right" />
-        <el-table-column prop="started_at" label="开始时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
-        </el-table-column>
-        <el-table-column prop="finished_at" label="结束时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
-        </el-table-column>
-        <el-table-column
-          prop="error_message"
-          label="错误信息"
-          min-width="220"
-          show-overflow-tooltip
-        />
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'failed'"
-              link
-              type="primary"
-              :loading="retryingTaskId === row.id"
-              @click="handleRetry(row.id)"
-            >
-              重试
-            </el-button>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-
-    <el-dialog v-model="syncDialogVisible" title="触发 BMO 采集" width="420px">
-      <el-form :model="syncForm" label-width="100px">
-        <el-form-item label="每页条数">
-          <el-input-number v-model="syncForm.pageSize" :min="1" :max="200" />
-        </el-form-item>
-        <el-form-item label="最多页数">
-          <el-input-number v-model="syncForm.maxPages" :min="1" :max="500" />
-        </el-form-item>
-        <el-form-item label="仅试跑">
-          <el-switch v-model="syncForm.dryRun" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="syncDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="syncing" @click="handleSync">开始采集</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog
       v-model="initiateDialogVisible"
@@ -516,7 +456,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import {
-  getBmoStatusApi,
   ensureBmoSessionApi,
   getBmoMouldProcurementApi,
   getBmoMouldProcurementRefreshApi,
@@ -525,15 +464,10 @@ import {
   saveBmoInitiationDraftApi,
   confirmBmoInitiationRequestApi,
   approveAndApplyBmoInitiationRequestApi,
-  getBmoTasksApi,
-  retryBmoSyncApi,
-  syncBmoApi,
-  type BmoConnectionStatus,
   type BmoMouldProcurementRow,
   type BmoMouldProcurementDetail,
   type BmoMouldProcurementDetailField,
-  type BmoInitiationRequestRow,
-  type BmoTaskLog
+  type BmoInitiationRequestRow
 } from '@/api/bmo'
 import { getMaxSerialApi } from '@/api/goods'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
@@ -622,18 +556,11 @@ const getStatusTagClass = (status?: string | null) => {
 }
 
 const loadingLatest = ref(false)
-const loadingTasks = ref(false)
-const syncing = ref(false)
-const retryingTaskId = ref<number | null>(null)
-const syncDialogVisible = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
 const useLiveOrder = ref(true)
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
-const taskList = ref<BmoTaskLog[]>([])
-
-const bmoStatus = ref<BmoConnectionStatus | null>(null)
 const lastRefreshSource = ref<'live' | 'db' | null>(null)
 const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
@@ -686,12 +613,6 @@ const initiateSalesForm = reactive({
     isShipped: false,
     shippingDate: ''
   }
-})
-
-const syncForm = reactive({
-  pageSize: 25,
-  maxPages: 20,
-  dryRun: false
 })
 
 const connTagType = computed(() => {
@@ -1008,22 +929,6 @@ const buildInitiationDraftPayload = () => {
   }
 }
 
-const taskTagType = (status?: string) => {
-  if (status === 'success') return 'success'
-  if (status === 'failed') return 'danger'
-  if (status === 'running') return 'warning'
-  return 'info'
-}
-
-const loadStatus = async () => {
-  try {
-    const res = await getBmoStatusApi()
-    bmoStatus.value = res.data || null
-  } catch (e) {
-    // ignore status fetch errors
-  }
-}
-
 const ensureSessionOnOpen = async () => {
   try {
     const res = await ensureBmoSessionApi({ maxWaitMs: 2000, keeperTimeoutMs: 60000 })
@@ -1077,23 +982,8 @@ watch(useLiveOrder, () => {
   void loadLatest()
 })
 
-const loadTasks = async () => {
-  loadingTasks.value = true
-  try {
-    const res = await getBmoTasksApi({ limit: 30 })
-    taskList.value = res.data?.list || []
-  } finally {
-    loadingTasks.value = false
-  }
-}
-
 const refreshAll = async () => {
-  await Promise.all([loadLatest(), loadTasks()])
-  await loadStatus()
-}
-
-const openSyncDialog = () => {
-  syncDialogVisible.value = true
+  await loadLatest()
 }
 
 const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
@@ -1207,19 +1097,6 @@ const downloadTechAttachment = (attachmentId: string) => {
   window.open(url, '_blank')
 }
 
-const handleRetry = async (taskId: number) => {
-  retryingTaskId.value = taskId
-  try {
-    const res = await retryBmoSyncApi(taskId)
-    ElMessage.success(
-      `重试完成：抓取 ${res.data?.fetched ?? 0} 条，写入 ${res.data?.upserted ?? 0} 条`
-    )
-    await refreshAll()
-  } finally {
-    retryingTaskId.value = null
-  }
-}
-
 const exportCsv = () => {
   if (!latestList.value.length) {
     ElMessage.warning('暂无可导出数据')
@@ -1269,13 +1146,8 @@ const exportCsv = () => {
 const startPolling = () => {
   if (pollingTimer.value !== null) return
   pollingTimer.value = window.setInterval(async () => {
-    if (loadingLatest.value || loadingTasks.value || syncing.value) return
-    await Promise.all([loadTasks(), loadStatus()])
-    if (useLiveOrder.value) {
-      await loadLatest()
-      return
-    }
-    if (taskList.value.some((task) => task.status === 'running')) await loadLatest()
+    if (loadingLatest.value) return
+    await loadLatest()
   }, 60000)
 }
 
@@ -1291,24 +1163,6 @@ const handleAutoRefreshToggle = (enabled: boolean) => {
     startPolling()
   } else {
     stopPolling()
-  }
-}
-
-const handleSync = async () => {
-  syncing.value = true
-  try {
-    const res = await syncBmoApi({
-      pageSize: syncForm.pageSize,
-      maxPages: syncForm.maxPages,
-      dryRun: syncForm.dryRun
-    })
-    ElMessage.success(
-      `采集完成：抓取 ${res.data?.fetched ?? 0} 条，写入 ${res.data?.upserted ?? 0} 条`
-    )
-    syncDialogVisible.value = false
-    await refreshAll()
-  } finally {
-    syncing.value = false
   }
 }
 
