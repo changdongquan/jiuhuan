@@ -251,6 +251,9 @@ const formatBmoSqlErrorMessage = (error, fallbackMessage) => {
   if (message.includes("Invalid object name 'bmo_mould_detail_cache'")) {
     return 'BMO 模具详情缓存表不存在，请先执行迁移：packages/backend/migrations/20260219_create_bmo_mould_detail_cache.sql'
   }
+  if (message.includes("Invalid object name 'bmo_tech_spec_parse_cache'")) {
+    return 'BMO 技术规格表解析缓存表不存在，请先执行迁移：packages/backend/migrations/20260220_create_bmo_tech_spec_parse_cache.sql'
+  }
   return `${fallbackMessage}: ${error.message || '未知错误'}`
 }
 
@@ -366,6 +369,294 @@ const normalizeRelayDownloadJob = (data) => {
   }
 }
 
+const hasBmoCavityValue = (detail) => {
+  const fields = Array.isArray(detail?.tech?.fields) ? detail.tech.fields : []
+  for (const f of fields) {
+    const label = String(f?.label || f?.name || '').trim()
+    const value = String(f?.value ?? '').trim()
+    if (!label) continue
+    if (/模具(穴|腔)数|型腔数/.test(label) && value) return true
+    if (String(f?.name || '').trim() === 'fd_col_pt6kmk' && value) return true
+  }
+  return false
+}
+
+let techSpecCacheTableReady = false
+const ensureTechSpecCacheTable = async () => {
+  if (techSpecCacheTableReady) return
+  await query(`
+    IF OBJECT_ID(N'dbo.bmo_tech_spec_parse_cache', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.bmo_tech_spec_parse_cache (
+        id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        bmo_record_id NVARCHAR(100) NOT NULL,
+        attachment_id NVARCHAR(120) NOT NULL,
+        file_name NVARCHAR(255) NULL,
+        parsed_json NVARCHAR(MAX) NOT NULL,
+        parsed_meta_json NVARCHAR(MAX) NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_bmo_tech_spec_parse_cache_created_at DEFAULT (SYSDATETIME()),
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_bmo_tech_spec_parse_cache_updated_at DEFAULT (SYSDATETIME())
+      );
+      CREATE UNIQUE INDEX UX_bmo_tech_spec_parse_cache_key
+        ON dbo.bmo_tech_spec_parse_cache (bmo_record_id, attachment_id);
+      CREATE INDEX IX_bmo_tech_spec_parse_cache_updated
+        ON dbo.bmo_tech_spec_parse_cache (updated_at DESC, id DESC);
+    END
+  `)
+  techSpecCacheTableReady = true
+}
+
+const getTechSpecParseCache = async ({ fdId, attachmentId }) => {
+  const bmoRecordId = String(fdId || '').trim()
+  const attachId = String(attachmentId || '').trim()
+  if (!bmoRecordId || !attachId) return null
+  await ensureTechSpecCacheTable()
+  const rows = await query(
+    `
+      SELECT TOP 1
+        bmo_record_id,
+        attachment_id,
+        file_name,
+        parsed_json,
+        parsed_meta_json,
+        updated_at
+      FROM dbo.bmo_tech_spec_parse_cache
+      WHERE bmo_record_id = @bmoRecordId
+        AND attachment_id = @attachmentId
+      ORDER BY updated_at DESC, id DESC;
+    `,
+    { bmoRecordId, attachmentId: attachId }
+  )
+  const row = rows?.[0]
+  if (!row) return null
+  let parsedData = null
+  let parsedMeta = null
+  try {
+    parsedData = JSON.parse(row.parsed_json || '{}')
+  } catch (e) {
+    parsedData = null
+  }
+  try {
+    parsedMeta = row.parsed_meta_json ? JSON.parse(row.parsed_meta_json) : null
+  } catch (e) {
+    parsedMeta = null
+  }
+  if (!parsedData || typeof parsedData !== 'object') return null
+  return {
+    fdId: row.bmo_record_id,
+    attachmentId: row.attachment_id,
+    fileName: row.file_name || null,
+    parsedData,
+    parsedMeta,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null
+  }
+}
+
+const upsertTechSpecParseCache = async ({ fdId, attachmentId, fileName, parsedData, parsedMeta }) => {
+  const bmoRecordId = String(fdId || '').trim()
+  const attachId = String(attachmentId || '').trim()
+  if (!bmoRecordId || !attachId || !parsedData || typeof parsedData !== 'object') {
+    throw new Error('缺少必要参数（fdId/attachmentId/parsedData）')
+  }
+  await ensureTechSpecCacheTable()
+  await query(
+    `
+      MERGE dbo.bmo_tech_spec_parse_cache AS target
+      USING (
+        SELECT
+          @bmoRecordId AS bmo_record_id,
+          @attachmentId AS attachment_id,
+          @fileName AS file_name,
+          @parsedJson AS parsed_json,
+          @parsedMetaJson AS parsed_meta_json
+      ) AS source
+      ON target.bmo_record_id = source.bmo_record_id
+       AND target.attachment_id = source.attachment_id
+      WHEN MATCHED THEN
+        UPDATE SET
+          file_name = source.file_name,
+          parsed_json = source.parsed_json,
+          parsed_meta_json = source.parsed_meta_json,
+          updated_at = SYSDATETIME()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          bmo_record_id, attachment_id, file_name, parsed_json, parsed_meta_json, created_at, updated_at
+        )
+        VALUES (
+          source.bmo_record_id, source.attachment_id, source.file_name, source.parsed_json, source.parsed_meta_json, SYSDATETIME(), SYSDATETIME()
+        );
+    `,
+    {
+      bmoRecordId,
+      attachmentId: attachId,
+      fileName: String(fileName || '').trim() || null,
+      parsedJson: JSON.stringify(parsedData),
+      parsedMetaJson: parsedMeta ? JSON.stringify(parsedMeta) : null
+    }
+  )
+}
+
+const listLatestTechSpecParseCachesByRecordId = async (fdId, limit = 5) => {
+  const bmoRecordId = String(fdId || '').trim()
+  if (!bmoRecordId) return []
+  await ensureTechSpecCacheTable()
+  const safeLimit = Math.max(1, Math.min(20, Number(limit) || 5))
+  const rows = await query(
+    `
+      SELECT TOP (${safeLimit})
+        bmo_record_id,
+        attachment_id,
+        file_name,
+        parsed_json,
+        parsed_meta_json,
+        updated_at
+      FROM dbo.bmo_tech_spec_parse_cache
+      WHERE bmo_record_id = @bmoRecordId
+      ORDER BY updated_at DESC, id DESC;
+    `,
+    { bmoRecordId }
+  )
+  return (rows || [])
+    .map((row) => {
+      const parsedData = safeJsonParse(row.parsed_json)
+      const parsedMeta = safeJsonParse(row.parsed_meta_json)
+      if (!parsedData || typeof parsedData !== 'object') return null
+      return {
+        fdId: row.bmo_record_id,
+        attachmentId: row.attachment_id,
+        fileName: row.file_name || null,
+        parsedData,
+        parsedMeta,
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null
+      }
+    })
+    .filter(Boolean)
+}
+
+const collectBmo14CavityCandidatesFromSnapshot = (snapshot) => {
+  const fields = Array.isArray(snapshot?.tech?.fields) ? snapshot.tech.fields : []
+  const primary = []
+  const fallback = []
+  for (const f of fields) {
+    const label = normalizeCavityFieldKey(f?.label || f?.name)
+    const name = normalizeCavityFieldKey(f?.name || f?.label)
+    const value = normalizeCavityText(f?.value)
+    if (!value) continue
+
+    if (name === 'fd_col_o527xg' || label === '模具腔数') {
+      primary.push({
+        source: 'bmo14.field.模具腔数',
+        value
+      })
+      continue
+    }
+    if (/模具(穴|腔)数|型腔数/.test(label)) {
+      fallback.push({
+        source: `bmo14.field.${label || 'other'}`,
+        value
+      })
+    }
+  }
+  return primary.length ? primary : fallback
+}
+
+const collectTechSpecCavityCandidatesFromParsedCaches = (items) => {
+  const list = Array.isArray(items) ? items : []
+  const out = []
+  for (const item of list) {
+    const parsedData = item?.parsedData && typeof item.parsedData === 'object' ? item.parsedData : null
+    if (!parsedData) continue
+    const value = normalizeCavityText(parsedData.模具穴数 || parsedData.模具腔数 || '')
+    if (!value) continue
+    out.push({
+      source: `techSpec.attachment.${String(item?.attachmentId || '').trim() || 'unknown'}`,
+      value
+    })
+  }
+  return out
+}
+
+const buildCavitySnapshot = ({ snapshot, parsedCaches }) => {
+  const bmo14Candidates = collectBmo14CavityCandidatesFromSnapshot(snapshot)
+  const techSpecCandidates = collectTechSpecCavityCandidatesFromParsedCaches(parsedCaches)
+  const allCandidates = [...bmo14Candidates, ...techSpecCandidates]
+  const picked = pickBestCavityCandidate(allCandidates)
+  return {
+    candidates: {
+      bmo14: bmo14Candidates,
+      techSpec: techSpecCandidates
+    },
+    final: picked
+      ? {
+          value: picked.parsed.expression || picked.value,
+          counts: picked.parsed.counts,
+          source: picked.source || null
+        }
+      : {
+          value: '',
+          counts: [],
+          source: null
+        },
+    analyzedAt: new Date().toISOString()
+  }
+}
+
+const refreshInitiationCavitySnapshot = async (fdId, options = {}) => {
+  const bmoRecordId = String(fdId || '').trim()
+  if (!bmoRecordId) return null
+
+  const rows = await query(
+    `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+    { bmoRecordId }
+  )
+  const row = rows?.[0] || null
+  const existingSnapshot =
+    row?.tech_snapshot_json && typeof row.tech_snapshot_json === 'string'
+      ? safeJsonParse(row.tech_snapshot_json)
+      : null
+
+  const baseSnapshot =
+    options.baseSnapshot && typeof options.baseSnapshot === 'object'
+      ? options.baseSnapshot
+      : existingSnapshot && typeof existingSnapshot === 'object'
+        ? existingSnapshot
+        : null
+
+  let snapshot =
+    baseSnapshot && typeof baseSnapshot === 'object' ? { ...baseSnapshot } : { fdId: bmoRecordId, tech: null }
+  if (!snapshot.fdId) snapshot.fdId = bmoRecordId
+
+  if (!snapshot.tech || !Array.isArray(snapshot.tech?.fields)) {
+    const detail = await getDetailCacheByRecordId(bmoRecordId)
+    if (detail?.tech) {
+      snapshot = {
+        ...snapshot,
+        demandType: snapshot.demandType ?? detail.demandType ?? null,
+        designer: snapshot.designer ?? detail.designer ?? null,
+        tech: {
+          tableName: detail?.tech?.tableName || snapshot?.tech?.tableName || null,
+          fields: Array.isArray(detail?.tech?.fields) ? detail.tech.fields : [],
+          attachments: Array.isArray(detail?.tech?.attachments) ? detail.tech.attachments : []
+        }
+      }
+    }
+  }
+
+  const parsedCaches = await listLatestTechSpecParseCachesByRecordId(bmoRecordId, 10)
+  const cavitySnapshot = buildCavitySnapshot({ snapshot, parsedCaches })
+  const mergedSnapshot = {
+    ...(snapshot && typeof snapshot === 'object' ? snapshot : {}),
+    cavitySnapshot
+  }
+
+  await upsertInitiationDraft({
+    bmo_record_id: bmoRecordId,
+    tech_snapshot: mergedSnapshot,
+    actor: options.actor || null
+  })
+  return mergedSnapshot
+}
+
 const persistMouldListInBackground = (list, traceId) => {
   if (persistInFlight) return
   markPersistStart()
@@ -382,6 +673,65 @@ const persistMouldListInBackground = (list, traceId) => {
       persistInFlight = null
     })
 }
+
+router.get('/tech-spec/parsed-cache', async (req, res) => {
+  try {
+    const fdId = String(req.query.fdId || req.query.bmoRecordId || req.query.bmo_record_id || '').trim()
+    const attachmentId = String(req.query.attachmentId || req.query.id || '').trim()
+    if (!fdId || !attachmentId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 fdId 或 attachmentId' })
+    }
+    const cached = await getTechSpecParseCache({ fdId, attachmentId })
+    return res.json({ code: 0, success: true, data: cached })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取技术规格表解析缓存失败')
+    })
+  }
+})
+
+router.post('/tech-spec/parsed-cache', async (req, res) => {
+  try {
+    const fdId = String(req.body?.fdId || req.body?.bmoRecordId || req.body?.bmo_record_id || '').trim()
+    const attachmentId = String(req.body?.attachmentId || req.body?.id || '').trim()
+    const fileName = String(req.body?.fileName || '').trim()
+    const parsedData =
+      req.body?.parsedData && typeof req.body.parsedData === 'object' ? req.body.parsedData : null
+    const parsedMeta =
+      req.body?.parsedMeta && typeof req.body.parsedMeta === 'object' ? req.body.parsedMeta : null
+    await upsertTechSpecParseCache({ fdId, attachmentId, fileName, parsedData, parsedMeta })
+    await refreshInitiationCavitySnapshot(fdId, { actor: resolveActorFromReq(req) || null })
+    const cached = await getTechSpecParseCache({ fdId, attachmentId })
+    return res.json({ code: 0, success: true, data: cached })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '保存技术规格表解析缓存失败')
+    })
+  }
+})
+
+router.post('/initiation-request/cavity-snapshot/refresh', async (req, res) => {
+  try {
+    const fdId = String(req.body?.fdId || req.body?.bmoRecordId || req.body?.bmo_record_id || '').trim()
+    if (!fdId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 fdId' })
+    }
+    const snapshot = await refreshInitiationCavitySnapshot(fdId, {
+      actor: resolveActorFromReq(req) || null
+    })
+    return res.json({ code: 0, success: true, data: snapshot })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '刷新模具穴数快照失败')
+    })
+  }
+})
 
 const normalizeRelayJob = (data) => {
   const payload = data?.payload && typeof data.payload === 'object' ? data.payload : {}
@@ -1130,7 +1480,33 @@ router.get('/mould-procurement/detail', async (req, res) => {
 
     if (!forceLive) {
       const cached = await getDetailCacheByRecordId(fdId)
-      if (cached) return res.json({ code: 0, success: true, data: cached, source: 'db' })
+      if (cached) {
+        if (hasBmoCavityValue(cached)) {
+          return res.json({ code: 0, success: true, data: cached, source: 'db' })
+        }
+        // 缓存缺少模具腔数时，尝试实时回填一次；失败再回退旧缓存。
+        try {
+          const liveDetail = await fetchBmoMouldDetail({ fdId })
+          upsertDetailCache(liveDetail).catch((e) => {
+            console.warn('更新 BMO 模具详情缓存失败:', e?.message || e)
+          })
+          return res.json({
+            code: 0,
+            success: true,
+            data: liveDetail,
+            source: 'live',
+            warning: '缓存缺少模具腔数，已自动实时回填'
+          })
+        } catch (liveErr) {
+          return res.json({
+            code: 0,
+            success: true,
+            data: cached,
+            source: 'db',
+            warning: '缓存缺少模具腔数且实时回填失败，已回退缓存数据'
+          })
+        }
+      }
     }
 
     const detail = await fetchBmoMouldDetail({ fdId })
@@ -1885,6 +2261,141 @@ const safeJsonParse = (s) => {
   }
 }
 
+const normalizeCavityText = (v) => String(v ?? '').trim()
+const normalizeCavityFieldKey = (v) =>
+  normalizeCavityText(v).replace(/\s+/g, '').replace(/：/g, ':').toLowerCase()
+
+const parseChineseNumber = (value) => {
+  const s = String(value || '').trim()
+  if (!s) return null
+  const digitMap = {
+    零: 0,
+    〇: 0,
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9
+  }
+  if (s.includes('十')) {
+    const [leftRaw, rightRaw] = s.split('十')
+    const left = leftRaw ? digitMap[leftRaw] : 1
+    const right = rightRaw ? digitMap[rightRaw] : 0
+    if (left === undefined || right === undefined) return null
+    return left * 10 + right
+  }
+  const single = digitMap[s]
+  return single === undefined ? null : single
+}
+
+const parseMouldCavityText = (raw) => {
+  const original = normalizeCavityText(raw)
+  if (!original) return { expression: '', counts: [] }
+
+  const normalized = original
+    .replaceAll('（', '(')
+    .replaceAll('）', ')')
+    .replaceAll('＋', '+')
+    .replaceAll('，', ',')
+    .replace(/\s+/g, '')
+
+  const parseCountsFromExpr = (expr) => {
+    const e = String(expr || '').trim()
+    if (!e) return []
+    const parts = e
+      .split(/[+,，、]/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const counts = []
+    for (const part of parts) {
+      const token = String(part.includes('*') ? part.split('*').pop() || '' : part).trim()
+      if (!token) continue
+
+      const digitMatches = token.match(/\d+/g)
+      if (digitMatches && digitMatches.length) {
+        const n = Number(digitMatches[digitMatches.length - 1])
+        if (Number.isFinite(n) && n > 0) {
+          counts.push(Math.max(1, Math.trunc(n)))
+          continue
+        }
+      }
+
+      const zh = token.match(/[一二两三四五六七八九十〇零]+/)
+      if (zh?.[0]) {
+        const n = parseChineseNumber(zh[0])
+        if (n && n > 0) counts.push(Math.max(1, Math.trunc(n)))
+      }
+    }
+    return counts
+  }
+
+  const parenMatch = normalized.match(/\(([^)]+)\)/)
+  const countsFromParen = parseCountsFromExpr(parenMatch?.[1] || '')
+  if (countsFromParen.length) {
+    return {
+      expression: countsFromParen.map((n) => `1*${n}`).join('+'),
+      counts: countsFromParen
+    }
+  }
+
+  const countsFromWhole = parseCountsFromExpr(normalized)
+  if (countsFromWhole.length) {
+    return {
+      expression: countsFromWhole.map((n) => `1*${n}`).join('+'),
+      counts: countsFromWhole
+    }
+  }
+
+  const arabicMatch = normalized.match(/一模(\d+)(?:腔|穴)/)
+  if (arabicMatch?.[1]) {
+    const n = Number(arabicMatch[1])
+    if (Number.isFinite(n) && n > 0) {
+      const c = Math.max(1, Math.trunc(n))
+      return { expression: `1*${c}`, counts: [c] }
+    }
+  }
+
+  const zhMatch = normalized.match(/一模([一二两三四五六七八九十〇零]+)(?:腔|穴)/)
+  if (zhMatch?.[1]) {
+    const n = parseChineseNumber(zhMatch[1])
+    if (n && n > 0) {
+      const c = Math.max(1, Math.trunc(n))
+      return { expression: `1*${c}`, counts: [c] }
+    }
+  }
+
+  return { expression: '', counts: [] }
+}
+
+const pickBestCavityCandidate = (candidates) => {
+  const list = Array.isArray(candidates) ? candidates : []
+  if (!list.length) return null
+
+  const scored = list
+    .map((x, idx) => {
+      const value = normalizeCavityText(x?.value)
+      const source = normalizeCavityText(x?.source)
+      const parsed = parseMouldCavityText(value)
+      const isBmo14 = source.startsWith('bmo14') ? 1 : 0
+      return {
+        idx,
+        value,
+        source,
+        parsed,
+        score: isBmo14 * 1000 + parsed.counts.length * 100 + (parsed.expression ? 10 : 0)
+      }
+    })
+    .filter((x) => !!x.value)
+    .sort((a, b) => b.score - a.score || a.idx - b.idx)
+  if (!scored.length) return null
+  return scored[0]
+}
+
 const formatToday = () => {
   const d = new Date()
   const y = d.getFullYear()
@@ -1932,7 +2443,19 @@ const upsertInitiationDraft = async (input) => {
   const projectCodeCandidate = input?.project_code_candidate ? String(input.project_code_candidate).trim() : null
   const goodsDraftJson = input?.goods_draft ? JSON.stringify(input.goods_draft) : null
   const salesDraftJson = input?.sales_order_draft ? JSON.stringify(input.sales_order_draft) : null
-  const techSnapshotJson = input?.tech_snapshot ? JSON.stringify(input.tech_snapshot) : null
+  let techSnapshotJson = null
+  if (input?.tech_snapshot && typeof input.tech_snapshot === 'object') {
+    const parsedCaches = await listLatestTechSpecParseCachesByRecordId(bmoRecordId, 10)
+    const cavitySnapshot = buildCavitySnapshot({
+      snapshot: input.tech_snapshot,
+      parsedCaches
+    })
+    techSnapshotJson = JSON.stringify({
+      ...input.tech_snapshot,
+      fdId: input.tech_snapshot?.fdId || bmoRecordId,
+      cavitySnapshot
+    })
+  }
 
   const pool = await getPool()
   const req = pool.request()

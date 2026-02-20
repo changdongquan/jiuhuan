@@ -19,10 +19,30 @@ const DEFAULT_MOULD_DETAIL_VIEW_ID = '1irp0kk3gwbrwis9nw2ojg5as35h08qs3vw0'
 const DEFAULT_MOULD_DETAIL_FORM_ID = '1irp0kjmvwbrwis74wkebru36jtraf1cs5w0'
 const DEFAULT_MOULD_DETAIL_XFORM_ID = '1irp0kjmvwbrwis74wkebru36jtraf1cs5w0'
 const DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE = 'mk_model_20250521q2w2c_s_5js8e'
+const DEFAULT_MOULD_FIELD_LABEL_MAP = {
+  fd_col_o527xg: '模具腔数',
+  fd_col_pt6kmk: '模具腔数',
+  fd_col_i399sd: '模架',
+  fd_col_rkue4b: '型腔要求',
+  fd_col_qqqcjm: '型芯要求',
+  fd_col_ax14sg: '型腔钢材',
+  fd_col_uex1wi: '型芯钢材',
+  fd_col_p503gk: '型腔热处理方式',
+  fd_col_fu56xl: '型芯热处理方式',
+  fd_col_ph3n8d: '浇口类型',
+  fd_col_46l6dp: '浇口数量',
+  fd_col_c8vviq: '流道类型',
+  fd_col_id7g4w: '产品尺寸/mm',
+  fd_col_epspco: '模具特殊需求及风险',
+  fd_col_4e8fal: '通用技术要求'
+}
 
 const FORM_CONFIG_CACHE_TTL_MS = 60 * 60 * 1000
 let cachedFormConfigMeta = null
 let cachedFormConfigAt = 0
+
+const getRelayBaseUrl = () => String(process.env.BMO_RELAY_BASE_URL || '').trim().replace(/\/+$/, '')
+const isRelayEnabled = () => Boolean(getRelayBaseUrl())
 
 // Reuse one client instance to avoid logging in on every request (BMO may rate-limit / slow down).
 let sharedClient = null
@@ -149,6 +169,62 @@ const DEFAULT_LIST_QUERY = {
 const toPositiveInt = (value, fallback) => {
   const n = Number(value)
   return Number.isInteger(n) && n > 0 ? n : fallback
+}
+
+const relayRequestJson = async (pathname, input = {}) => {
+  const baseUrl = getRelayBaseUrl()
+  if (!baseUrl) throw new Error('BMO_RELAY_BASE_URL 未配置')
+  const method = String(input.method || 'GET').toUpperCase()
+  const timeoutMs = toPositiveInt(input.timeoutMs, 60000)
+  const body = input.body
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs))
+  try {
+    const resp = await fetch(`${baseUrl}${pathname}`, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal
+    })
+    const text = await resp.text()
+    let json = null
+    if (text) {
+      try {
+        json = JSON.parse(text)
+      } catch (e) {
+        json = null
+      }
+    }
+    if (!resp.ok) {
+      const errMsg =
+        (json && (json.message || json.detail || json.error)) || text || `relay HTTP ${resp.status}`
+      throw new Error(String(errMsg).slice(0, 500))
+    }
+    if (json && typeof json === 'object') return json
+    throw new Error('relay 返回非 JSON')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const relayWaitJob = async (jobId, options = {}) => {
+  const timeoutMs = toPositiveInt(options.timeoutMs, 120000)
+  const intervalMs = toPositiveInt(options.intervalMs, 1000)
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const status = await relayRequestJson(`/jobs/${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+      timeoutMs: Math.min(15000, timeoutMs)
+    })
+    const data = status?.data || status
+    const state = String(data?.status || '').trim()
+    if (state === 'success' || state === 'failed') return data
+    await new Promise((resolve) => setTimeout(resolve, Math.max(200, intervalMs)))
+  }
+  throw new Error(`relay job timeout (${timeoutMs}ms)`)
 }
 
 const parseJsonObject = (raw, fallback = null) => {
@@ -710,54 +786,74 @@ const pickAttachmentId = (value) => {
   return ''
 }
 
-const fetchBmoMouldDetail = async (input = {}) => {
-  const fdId = String(input.fdId || input.bmoRecordId || '').trim()
-  if (!fdId) {
-    throw new Error('缺少 fdId')
-  }
+const createEmptyFormMeta = () => ({
+  fieldLabelByName: {},
+  fieldOptionsByName: {},
+  labelToFieldName: {},
+  tableFields: {}
+})
 
-  const client = getSharedClient()
-  await ensureClientAuthed(client)
+const resolveFieldLabel = (meta, fieldName) => {
+  const name = String(fieldName || '').trim()
+  if (!name) return ''
+  return (
+    (meta?.fieldLabelByName && String(meta.fieldLabelByName[name] || '').trim()) ||
+    DEFAULT_MOULD_FIELD_LABEL_MAP[name] ||
+    name
+  )
+}
 
-  const formMeta = await getMouldDetailFormConfigMeta(client)
-
-  const payload = {
-    fdId,
-    fdMode: 1,
-    fdViewId: process.env.BMO_MOULD_DETAIL_FD_VIEW_ID || DEFAULT_MOULD_DETAIL_VIEW_ID,
-    fdFormId: process.env.BMO_MOULD_DETAIL_FD_FORM_ID || DEFAULT_MOULD_DETAIL_FORM_ID,
-    fdXFormId: process.env.BMO_MOULD_DETAIL_FD_XFORM_ID || DEFAULT_MOULD_DETAIL_XFORM_ID,
-    mechanisms: { load: '*' }
-  }
-
-  const data = await client.requestJson(client.viewEndpoint, payload)
-  const sysXform = data?.data?.mechanisms?.['sys-xform'] || {}
-  const dynamicProps = sysXform?.dynamicProps && typeof sysXform.dynamicProps === 'object' ? sysXform.dynamicProps : {}
-  const attachments = Array.isArray(data?.data?.mechanisms?.attachment)
-    ? data.data.mechanisms.attachment
+const buildMouldDetailFromViewData = ({ fdId, viewData, formMeta }) => {
+  const meta = formMeta && typeof formMeta === 'object' ? formMeta : createEmptyFormMeta()
+  const sysXform = viewData?.data?.mechanisms?.['sys-xform'] || {}
+  const dynamicProps =
+    sysXform?.dynamicProps && typeof sysXform.dynamicProps === 'object' ? sysXform.dynamicProps : {}
+  const attachments = Array.isArray(viewData?.data?.mechanisms?.attachment)
+    ? viewData.data.mechanisms.attachment
     : []
 
-  const demandTypeField = formMeta.labelToFieldName['提需类型'] || 'fd_col_106gyr'
-  const designerField = formMeta.labelToFieldName['设计师'] || 'fd_col_2awc2z'
-  const techAttachmentField = formMeta.labelToFieldName['技术要求附件'] || 'fd_col_5yzo48'
-  const techTableName = process.env.BMO_MOULD_TECH_REQUIREMENTS_TABLE || DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE
+  const demandTypeField = meta.labelToFieldName['提需类型'] || 'fd_col_106gyr'
+  const designerField = meta.labelToFieldName['设计师'] || 'fd_col_2awc2z'
+  const techAttachmentField = meta.labelToFieldName['技术要求附件'] || 'fd_col_5yzo48'
+  const techTableName =
+    process.env.BMO_MOULD_TECH_REQUIREMENTS_TABLE || DEFAULT_MOULD_TECH_REQUIREMENTS_TABLE
 
   const demandTypeRaw = dynamicProps[demandTypeField]
-  const demandType = normalizeDetailValue(demandTypeRaw, formMeta.fieldOptionsByName[demandTypeField] || null)
+  const demandType = normalizeDetailValue(demandTypeRaw, meta.fieldOptionsByName[demandTypeField] || null)
 
   const designerRaw = dynamicProps[designerField]
-  const designer = normalizeDetailValue(designerRaw, formMeta.fieldOptionsByName[designerField] || null)
+  const designer = normalizeDetailValue(designerRaw, meta.fieldOptionsByName[designerField] || null)
 
-  const techTable = dynamicProps[techTableName] && typeof dynamicProps[techTableName] === 'object' ? dynamicProps[techTableName] : {}
-  const techFieldNames = Array.isArray(formMeta.tableFields[techTableName]) ? formMeta.tableFields[techTableName] : []
+  const techTable =
+    dynamicProps[techTableName] && typeof dynamicProps[techTableName] === 'object'
+      ? dynamicProps[techTableName]
+      : {}
+  const techFieldNames = Array.isArray(meta.tableFields[techTableName])
+    ? meta.tableFields[techTableName]
+    : Object.keys(techTable || {})
 
   const techFields = techFieldNames
     .filter((name) => name && name !== 'fd_id')
     .map((name) => ({
       name,
-      label: formMeta.fieldLabelByName[name] || name,
-      value: normalizeDetailValue(techTable[name], formMeta.fieldOptionsByName[name] || null)
+      label: resolveFieldLabel(meta, name),
+      value: normalizeDetailValue(techTable[name], meta.fieldOptionsByName[name] || null)
     }))
+
+  const mainCavityFieldNames = ['fd_col_pt6kmk']
+  for (const fieldName of mainCavityFieldNames) {
+    const value = normalizeDetailValue(dynamicProps[fieldName], meta.fieldOptionsByName[fieldName] || null)
+    const idx = techFields.findIndex((x) => String(x?.name || '') === fieldName)
+    if (idx >= 0) {
+      if (!techFields[idx].value && value) techFields[idx].value = value
+      continue
+    }
+    techFields.push({
+      name: fieldName,
+      label: resolveFieldLabel(meta, fieldName) || '模具腔数',
+      value: value || null
+    })
+  }
 
   const techAttachments = attachments
     .filter((x) => String(x?.fdEntityKey || '') === techAttachmentField)
@@ -765,30 +861,24 @@ const fetchBmoMouldDetail = async (input = {}) => {
       const sysAttachFileId = pickAttachmentId(x?.fdSysAttachFile)
       const fileId = pickAttachmentId(x?.fdFileId)
       const attachmentId = pickAttachmentId(x?.fdAttachmentId || x?.fdAttachId)
-      const fdId = pickAttachmentId(x?.fdId)
-      // BMO 下载接口 `/data/sys-attach/download/{id}` 需要附件记录 fdId，
-      // 不是 fdSysAttachFile（文件实体ID）。
-      const finalId = fdId || attachmentId || fileId || sysAttachFileId || null
+      const attachFdId = pickAttachmentId(x?.fdId)
+      const finalId = attachFdId || attachmentId || fileId || sysAttachFileId || null
       return {
-      id: finalId,
-      fileName: x?.fdFileName || null,
-      fileExt: x?.fdFileExtName || null,
-      fileSize: x?.fdFileSize ?? null,
-      createdAt: x?.fdCreateTime ? new Date(x.fdCreateTime).toISOString() : null,
-      fileId: fileId || sysAttachFileId || null,
-      attachmentId: attachmentId || null,
-      rawDownloadPath:
-        x?.fdDownloadPath ||
-        x?.fdDownloadUrl ||
-        x?.downloadUrl ||
-        x?.url ||
-        x?.fdUrl ||
-        null,
-      rawDownloadUrl: x?.downloadUrl || null,
-      sysAttachFileId: sysAttachFileId || null,
-      fdId: fdId || null,
-      _rawKeys: Object.keys(x || {})
-    }})
+        id: finalId,
+        fileName: x?.fdFileName || null,
+        fileExt: x?.fdFileExtName || null,
+        fileSize: x?.fdFileSize ?? null,
+        createdAt: x?.fdCreateTime ? new Date(x.fdCreateTime).toISOString() : null,
+        fileId: fileId || sysAttachFileId || null,
+        attachmentId: attachmentId || null,
+        rawDownloadPath:
+          x?.fdDownloadPath || x?.fdDownloadUrl || x?.downloadUrl || x?.url || x?.fdUrl || null,
+        rawDownloadUrl: x?.downloadUrl || null,
+        sysAttachFileId: sysAttachFileId || null,
+        fdId: attachFdId || null,
+        _rawKeys: Object.keys(x || {})
+      }
+    })
 
   return {
     fdId,
@@ -800,6 +890,87 @@ const fetchBmoMouldDetail = async (input = {}) => {
       fields: techFields,
       attachments: techAttachments
     }
+  }
+}
+
+const fetchBmoMouldDetailViaRelay = async (fdId) => {
+  const payload = {
+    fdId,
+    fdMode: 1,
+    fdViewId: process.env.BMO_MOULD_DETAIL_FD_VIEW_ID || DEFAULT_MOULD_DETAIL_VIEW_ID,
+    fdFormId: process.env.BMO_MOULD_DETAIL_FD_FORM_ID || DEFAULT_MOULD_DETAIL_FORM_ID,
+    fdXFormId: process.env.BMO_MOULD_DETAIL_FD_XFORM_ID || DEFAULT_MOULD_DETAIL_XFORM_ID,
+    mechanisms: { load: '*' }
+  }
+
+  const created = await relayRequestJson('/jobs', {
+    method: 'POST',
+    timeoutMs: 15000,
+    body: {
+      type: 'writeback',
+      payload: {
+        path: '/data/sys-modeling/sysModelingMain/view',
+        body: payload
+      }
+    }
+  })
+  const jobId = String(created?.data?.id || created?.id || '').trim()
+  if (!jobId) throw new Error('relay 创建详情任务失败（缺少 jobId）')
+
+  const finished = await relayWaitJob(jobId, { timeoutMs: 120000, intervalMs: 1000 })
+  if (String(finished?.status || '').trim() !== 'success') {
+    throw new Error(String(finished?.error || 'relay 详情任务失败'))
+  }
+
+  const viewData =
+    finished?.result?.response && typeof finished.result.response === 'object'
+      ? finished.result.response
+      : finished?.result
+  if (!viewData || typeof viewData !== 'object') {
+    throw new Error('relay 详情任务返回空数据')
+  }
+
+  let formMeta = createEmptyFormMeta()
+  try {
+    const client = getSharedClient()
+    formMeta = await getMouldDetailFormConfigMeta(client)
+  } catch (e) {
+    formMeta = createEmptyFormMeta()
+  }
+  return buildMouldDetailFromViewData({ fdId, viewData, formMeta })
+}
+
+const fetchBmoMouldDetail = async (input = {}) => {
+  const fdId = String(input.fdId || input.bmoRecordId || '').trim()
+  if (!fdId) {
+    throw new Error('缺少 fdId')
+  }
+
+  try {
+    const client = getSharedClient()
+    await ensureClientAuthed(client)
+    const formMeta = await getMouldDetailFormConfigMeta(client)
+    const payload = {
+      fdId,
+      fdMode: 1,
+      fdViewId: process.env.BMO_MOULD_DETAIL_FD_VIEW_ID || DEFAULT_MOULD_DETAIL_VIEW_ID,
+      fdFormId: process.env.BMO_MOULD_DETAIL_FD_FORM_ID || DEFAULT_MOULD_DETAIL_FORM_ID,
+      fdXFormId: process.env.BMO_MOULD_DETAIL_FD_XFORM_ID || DEFAULT_MOULD_DETAIL_XFORM_ID,
+      mechanisms: { load: '*' }
+    }
+    const viewData = await client.requestJson(client.viewEndpoint, payload)
+    return buildMouldDetailFromViewData({ fdId, viewData, formMeta })
+  } catch (error) {
+    if (isRelayEnabled()) {
+      try {
+        return await fetchBmoMouldDetailViaRelay(fdId)
+      } catch (relayError) {
+        const primaryMsg = String(error?.message || error || '')
+        const relayMsg = String(relayError?.message || relayError || '')
+        throw new Error(`${primaryMsg || '直连失败'}；relay 兜底失败：${relayMsg || '未知错误'}`)
+      }
+    }
+    throw error
   }
 }
 

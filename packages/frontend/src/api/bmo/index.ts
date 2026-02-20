@@ -135,11 +135,32 @@ export interface BmoInitiationTechSnapshot {
   demandType?: string | number | null
   designer?: string | number | null
   fdId?: string | null
+  cavitySnapshot?: {
+    candidates?: {
+      bmo14?: Array<{ source?: string | null; value?: string | null }>
+      techSpec?: Array<{ source?: string | null; value?: string | null }>
+    }
+    final?: {
+      value?: string | null
+      counts?: number[]
+      source?: string | null
+    }
+    analyzedAt?: string | null
+  } | null
   tech?: {
     tableName?: string
     fields?: BmoMouldProcurementDetailField[]
     attachments?: BmoMouldProcurementDetailAttachment[]
   } | null
+}
+
+export interface BmoTechSpecParsedCache {
+  fdId: string
+  attachmentId: string
+  fileName: string | null
+  parsedData: any
+  parsedMeta?: Record<string, any> | null
+  updatedAt?: string | null
 }
 
 export interface BmoLatestRecord {
@@ -348,6 +369,40 @@ export const getBmoMouldProcurementDetailApi = (params: { fdId: string }) => {
   return request.get<BmoMouldProcurementDetail>({
     url: '/api/bmo/mould-procurement/detail',
     params,
+    timeout: 15000
+  })
+}
+
+export const getBmoTechSpecParsedCacheApi = (params: { fdId: string; attachmentId: string }) => {
+  return request.get<BmoTechSpecParsedCache | null>({
+    url: '/api/bmo/tech-spec/parsed-cache',
+    params,
+    timeout: 10000
+  })
+}
+
+export const saveBmoTechSpecParsedCacheApi = (data: {
+  fdId: string
+  attachmentId: string
+  fileName?: string
+  parsedData: any
+  parsedMeta?: Record<string, any>
+}) => {
+  return request.post<BmoTechSpecParsedCache | null>({
+    url: '/api/bmo/tech-spec/parsed-cache',
+    data,
+    timeout: 15000
+  })
+}
+
+export const refreshBmoInitiationCavitySnapshotApi = (data: {
+  fdId?: string
+  bmoRecordId?: string
+  bmo_record_id?: string
+}) => {
+  return request.post<BmoInitiationTechSnapshot | null>({
+    url: '/api/bmo/initiation-request/cavity-snapshot/refresh',
+    data,
     timeout: 15000
   })
 }

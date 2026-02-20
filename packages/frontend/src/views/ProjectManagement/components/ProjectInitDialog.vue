@@ -16,7 +16,19 @@
       </div>
     </template>
     <div class="pm-init-body">
-      <el-descriptions :column="isMobile ? 1 : 4" border class="pm-init-desc">
+      <div class="pm-init-steps">
+        <el-steps :active="currentStep - 1" finish-status="success" simple>
+          <el-step title="步骤1 产品组" />
+          <el-step title="步骤2 技术规格表信息" />
+        </el-steps>
+      </div>
+
+      <el-descriptions
+        :column="isMobile ? 1 : 4"
+        :label-width="isMobile ? undefined : 85"
+        border
+        class="pm-init-desc"
+      >
         <el-descriptions-item label="项目编号">
           {{ project?.项目编号 || '-' }}
         </el-descriptions-item>
@@ -31,7 +43,7 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <div class="pm-init-spec-section">
+      <div v-if="currentStep === 2" class="pm-init-spec-section">
         <div class="pm-init-spec-header">
           <span class="pm-init-spec-title">1.4-模具清单详情</span>
           <el-tag v-if="bmoLoading" type="info" effect="plain">加载中</el-tag>
@@ -70,7 +82,7 @@
               <el-table-column min-width="160">
                 <template #default="{ row }">
                   <span class="pm-init-tech-field-label">{{
-                    row.left?.label || row.left?.name || '-'
+                    resolveTechFieldLabel(row.left)
                   }}</span>
                 </template>
               </el-table-column>
@@ -84,7 +96,7 @@
               <el-table-column min-width="160">
                 <template #default="{ row }">
                   <span v-if="row.right" class="pm-init-tech-field-label">{{
-                    row.right.label || row.right.name || '-'
+                    resolveTechFieldLabel(row.right)
                   }}</span>
                   <span v-else class="pm-init-tech-field-empty">-</span>
                 </template>
@@ -155,7 +167,7 @@
       </div>
 
       <!-- 技术规格表读取区域 -->
-      <div class="pm-init-spec-section">
+      <div v-if="currentStep === 2" class="pm-init-spec-section">
         <div class="pm-init-spec-header">
           <span class="pm-init-spec-title">技术规格表</span>
           <el-upload
@@ -285,7 +297,7 @@
         </div>
       </div>
 
-      <div class="pm-init-groups-section">
+      <div v-if="currentStep === 1" class="pm-init-groups-section">
         <div class="pm-init-groups-header">
           <div class="pm-init-groups-title">
             <div class="pm-init-groups-title__main">产品组</div>
@@ -360,11 +372,15 @@
                           'pm-cell-input--empty': !String(group.productDrawing || '').trim()
                         }"
                         placeholder="请输入产品图号"
-                        @blur="validateProductDrawing(group.id)"
+                        @blur="handleProductDrawingBlur(group.id)"
                       />
                     </el-form-item>
                     <el-form-item label="产品名称">
-                      <el-input v-model="group.productName" placeholder="请输入产品名称（可选）" />
+                      <el-input
+                        v-model="group.productName"
+                        placeholder="请输入产品名称（可选）"
+                        @blur="handleProductNameBlur"
+                      />
                     </el-form-item>
                     <el-form-item label="产品尺寸">
                       <el-input v-model="group.productSize" placeholder="请输入产品尺寸（可选）" />
@@ -394,8 +410,15 @@
 
     <template #footer>
       <div class="pm-init-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="handleComplete">完成并进入编辑</el-button>
+        <template v-if="currentStep === 1">
+          <el-button @click="visible = false">取消</el-button>
+          <el-button type="primary" @click="handleNextStep">下一步：技术规格表</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="handlePrevStep">上一步</el-button>
+          <el-button @click="visible = false">取消</el-button>
+          <el-button type="primary" @click="handleComplete">完成并进入编辑</el-button>
+        </template>
       </div>
     </template>
   </el-dialog>
@@ -419,10 +442,17 @@ import {
   getBmoInitiationRequestByProjectApi,
   getBmoMouldProcurementByProjectApi,
   getBmoMouldProcurementDetailApi,
+  getBmoTechSpecParsedCacheApi,
+  saveBmoTechSpecParsedCacheApi,
   type BmoInitiationTechSnapshot,
   type BmoMouldProcurementDetailAttachment
 } from '@/api/bmo'
-import { parseTechSpecExcel, type TechSpecData } from '@/utils/excel/techSpecParser'
+import {
+  parseDrawings,
+  parseTechSpecExcel,
+  type TechSpecData,
+  type TechSpecRecord
+} from '@/utils/excel/techSpecParser'
 import type { UploadFile } from 'element-plus'
 
 type InitProductGroup = {
@@ -451,6 +481,7 @@ const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v)
 })
+const currentStep = ref<1 | 2>(1)
 
 const groups = ref<InitProductGroup[]>([])
 const specData = ref<any>(null) // 技术规格表数据
@@ -542,7 +573,12 @@ const parseMouldCavityText = (raw: unknown): { expression: string; counts: numbe
   const original = String(raw || '').trim()
   if (!original) return { expression: '', counts: [] }
 
-  const normalized = original.replaceAll('（', '(').replaceAll('）', ')').replace(/\s+/g, '')
+  const normalized = original
+    .replaceAll('（', '(')
+    .replaceAll('）', ')')
+    .replaceAll('＋', '+')
+    .replaceAll('，', ',')
+    .replace(/\s+/g, '')
 
   const parenMatch = normalized.match(/\(([^)]+)\)/)
   const inside = parenMatch?.[1] || ''
@@ -551,15 +587,31 @@ const parseMouldCavityText = (raw: unknown): { expression: string; counts: numbe
     const e = String(expr || '').trim()
     if (!e) return []
     const parts = e
-      .split('+')
+      .split(/[+,，、]/)
       .map((p) => p.trim())
       .filter(Boolean)
     const counts: number[] = []
     for (const part of parts) {
-      const token = part.includes('*') ? part.split('*').pop() || '' : part
-      const n = Number(String(token).trim())
-      if (!Number.isFinite(n) || n <= 0) continue
-      counts.push(Math.max(1, Math.trunc(n)))
+      const token = String(part.includes('*') ? part.split('*').pop() || '' : part).trim()
+      if (!token) continue
+
+      // 兼容 "1*1(前模)" / "1*1穴" / "一+一" 等混合文本
+      const digitMatches = token.match(/\d+/g)
+      if (digitMatches && digitMatches.length) {
+        const n = Number(digitMatches[digitMatches.length - 1])
+        if (Number.isFinite(n) && n > 0) {
+          counts.push(Math.max(1, Math.trunc(n)))
+          continue
+        }
+      }
+
+      const zh = token.match(/[一二两三四五六七八九十〇零]+/)
+      if (zh?.[0]) {
+        const n = parseChineseNumber(zh[0])
+        if (n && n > 0) {
+          counts.push(Math.max(1, Math.trunc(n)))
+        }
+      }
     }
     return counts
   }
@@ -570,6 +622,15 @@ const parseMouldCavityText = (raw: unknown): { expression: string; counts: numbe
     return {
       expression: countsFromParen.map((n) => `1*${n}`).join('+'),
       counts: countsFromParen
+    }
+  }
+
+  // A2) 解析无括号表达式："1*2+1*2" / "2+2"
+  const countsFromWhole = parseCountsFromExpr(normalized)
+  if (countsFromWhole.length) {
+    return {
+      expression: countsFromWhole.map((n) => `1*${n}`).join('+'),
+      counts: countsFromWhole
     }
   }
 
@@ -595,6 +656,36 @@ const parseMouldCavityText = (raw: unknown): { expression: string; counts: numbe
   return { expression: '', counts: [] }
 }
 
+const normalizeMouldCavityExpression = (raw: unknown) => {
+  const text = normalizeText(raw)
+  if (!text) return { value: '', counts: [] as number[] }
+  const parsed = parseMouldCavityText(text)
+  return {
+    value: parsed.expression || text,
+    counts: parsed.counts
+  }
+}
+
+const splitSizeValues = (value: unknown) => {
+  const text = String(value || '').trim()
+  if (!text) return []
+  const normalized = text.replace(/\s*([*xX×])\s*/g, '$1').trim()
+  if (!normalized) return []
+  if (/[\/／]/.test(normalized)) {
+    return normalized
+      .split(/[\/／]/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  if (/\s+/.test(normalized)) {
+    return normalized
+      .split(/\s+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  return [normalized]
+}
+
 const normalizeText = (value: unknown) => String(value ?? '').trim()
 
 const normalizeFieldName = (value: unknown) =>
@@ -608,6 +699,7 @@ const getSourceText = (key: string) => {
 const isExcelFileName = (name: string) => /\.(xlsx|xls)$/i.test(String(name || '').trim())
 const normalizeExcelExt = (extLike: unknown) =>
   normalizeText(extLike).toLowerCase().replace(/^\./, '')
+const TECH_SPEC_PARSED_CACHE_VERSION = 3
 
 const isExcelAttachment = (attachment: any) => {
   if (!attachment) return false
@@ -663,7 +755,41 @@ const selectedBmoAttachment = computed(() =>
   )
 )
 
+const ensureDefaultBmoAttachmentSelection = () => {
+  if (bmoAttachmentSelection.value) return
+  const preferred: any =
+    bmoTechAttachments.value.find((item: any) => item?.id && isExcelAttachment(item)) ||
+    bmoTechAttachments.value.find((item: any) => item?.id)
+  if (preferred && preferred.selectionId) {
+    bmoAttachmentSelection.value = String(preferred.selectionId)
+  }
+}
+
 const bmoTechFields = computed(() => bmoSnapshot.value?.tech?.fields || [])
+const BMO_TECH_FIELD_LABEL_FALLBACK: Record<string, string> = {
+  fd_col_o527xg: '模具腔数',
+  fd_col_pt6kmk: '模具腔数',
+  fd_col_i399sd: '模架',
+  fd_col_rkue4b: '型腔要求',
+  fd_col_qqqcjm: '型芯要求',
+  fd_col_ax14sg: '型腔钢材',
+  fd_col_uex1wi: '型芯钢材',
+  fd_col_p503gk: '型腔热处理方式',
+  fd_col_fu56xl: '型芯热处理方式',
+  fd_col_ph3n8d: '浇口类型',
+  fd_col_46l6dp: '浇口数量',
+  fd_col_c8vviq: '流道类型',
+  fd_col_id7g4w: '产品尺寸/mm',
+  fd_col_epspco: '模具特殊需求及风险',
+  fd_col_4e8fal: '通用技术要求'
+}
+
+const resolveTechFieldLabel = (field: any) => {
+  const label = normalizeText(field?.label)
+  if (label && !/^fd_col_/i.test(label)) return label
+  const name = normalizeText(field?.name)
+  return BMO_TECH_FIELD_LABEL_FALLBACK[name] || label || name || '-'
+}
 const bmoTechFieldRows = computed(() => {
   const fields = bmoTechFields.value || []
   const rows: Array<{ left: any; right?: any }> = []
@@ -707,14 +833,25 @@ const buildPrimaryDataFromBmo = () => {
 
   if (bmoSnapshot.value?.designer) setIfEmpty('产品结构工程师', bmoSnapshot.value.designer)
 
+  const mouldCavityPrimaryCandidates: string[] = []
+  const mouldCavityFallbackCandidates: string[] = []
+  const snapshotFinalCavity = normalizeText(bmoSnapshot.value?.cavitySnapshot?.final?.value)
+  const snapshotFinalCounts = Array.isArray(bmoSnapshot.value?.cavitySnapshot?.final?.counts)
+    ? (bmoSnapshot.value?.cavitySnapshot?.final?.counts as number[])
+    : []
   for (const field of bmoTechFields.value) {
     const name = normalizeFieldName(field.name || field.label)
     const label = normalizeFieldName(field.label || field.name)
     const raw = normalizeText(field.value)
     if (!raw) continue
 
-    if (name === 'fd_col_o527xg' || /模具(穴|腔)数|型腔数/.test(label)) {
-      setIfEmpty('模具穴数', raw)
+    if (name === 'fd_col_o527xg' || name === 'fd_col_pt6kmk' || label === '模具腔数') {
+      // 优先使用 1.4 页面中字段名明确为“模具腔数”的值（通常会出现两个同名字段）
+      mouldCavityPrimaryCandidates.push(raw)
+      continue
+    }
+    if (/模具(穴|腔)数|型腔数/.test(label)) {
+      mouldCavityFallbackCandidates.push(raw)
       continue
     }
     if (/零件材料及料厚/.test(label)) {
@@ -729,9 +866,39 @@ const buildPrimaryDataFromBmo = () => {
       setIfEmpty('型芯', raw)
       continue
     }
+    // relay 兜底场景可能拿不到中文标签，使用字段编码兜底识别关键字段
+    if (name === 'fd_col_id7g4w') {
+      setIfEmpty('产品外观尺寸', raw)
+      continue
+    }
     if (/产品尺寸\/mm/.test(label)) {
       setIfEmpty('产品外观尺寸', raw)
       continue
+    }
+  }
+
+  const mouldCavityCandidates = [
+    ...(snapshotFinalCavity ? [snapshotFinalCavity] : []),
+    ...(mouldCavityPrimaryCandidates.length > 0
+      ? mouldCavityPrimaryCandidates
+      : mouldCavityFallbackCandidates)
+  ]
+
+  if (mouldCavityCandidates.length) {
+    // 1.4 里可能存在多个“模具腔数”，优先使用可标准化的表达式
+    const normalizedCandidates = mouldCavityCandidates.map((x) => normalizeMouldCavityExpression(x))
+    const preferred =
+      normalizedCandidates
+        .filter((x) => normalizeText(x.value))
+        .sort((a, b) => {
+          const aParsed = a.counts.length > 0 ? 1 : 0
+          const bParsed = b.counts.length > 0 ? 1 : 0
+          if (aParsed !== bParsed) return bParsed - aParsed
+          return b.counts.length - a.counts.length
+        })[0] || null
+    if (preferred?.value) {
+      next.模具穴数 = preferred.value
+      sources.模具穴数 = 'bmo14'
     }
   }
 
@@ -742,12 +909,23 @@ const buildPrimaryDataFromBmo = () => {
     next.产品名称列表 = [projectName]
     next.产品数量列表 = [0]
     next.产品重量列表 = [0]
-    next.产品尺寸列表 = [normalizeText(next.产品外观尺寸)]
+    const parsedSizes = splitSizeValues(next.产品外观尺寸)
+    next.产品尺寸列表 = parsedSizes.length ? parsedSizes : [normalizeText(next.产品外观尺寸)]
     sources.产品列表 = 'bmo14'
     sources.产品名称列表 = 'bmo14'
     sources.产品数量列表 = 'bmo14'
     sources.产品重量列表 = 'bmo14'
     sources.产品尺寸列表 = 'bmo14'
+  }
+
+  if (!next.模具穴数 && snapshotFinalCavity) {
+    next.模具穴数 = snapshotFinalCavity
+    sources.模具穴数 = 'bmo14'
+  }
+
+  if (snapshotFinalCounts.length > 0 && !next.模具穴数) {
+    next.模具穴数 = snapshotFinalCounts.map((n) => `1*${Number(n) || 1}`).join('+')
+    sources.模具穴数 = 'bmo14'
   }
 
   return { data: next, sources }
@@ -759,14 +937,22 @@ const applyPrimaryBmoData = () => {
   specDataSources.value = sources
 
   const cavityParsed = parseMouldCavityText(data.模具穴数)
+  const snapshotCounts = Array.isArray(bmoSnapshot.value?.cavitySnapshot?.final?.counts)
+    ? (bmoSnapshot.value?.cavitySnapshot?.final?.counts as number[])
+    : []
+  const effectiveCounts =
+    cavityParsed.counts.length > 0
+      ? cavityParsed.counts
+      : snapshotCounts.filter((x) => Number(x) > 0)
   if (cavityParsed.expression) {
     specData.value.模具穴数 = cavityParsed.expression
     specDataSources.value.模具穴数 = 'bmo14'
   }
 
   if (Array.isArray(data.产品列表) && data.产品列表.length > 0) {
-    applyProductDrawingsToGroups(data.产品列表, data.产品尺寸列表, cavityParsed.counts)
+    applyProductDrawingsToGroups(data.产品列表, data.产品尺寸列表, effectiveCounts)
   }
+  applyCavityCountsFallback(effectiveCounts)
 }
 
 const parseCsvLikeList = (raw: string) =>
@@ -875,25 +1061,27 @@ const loadBmoSnapshotByProject = async () => {
     if (snapshot) {
       bmoSnapshot.value = snapshot
       applyPrimaryBmoData()
+      await autoApplyCachedTechSpecFromSnapshot()
       return
     }
 
     // 兜底：立项快照不存在时，按项目编号回查 BMO 记录并读取实时 1.4 详情
     const bmoRowResp = await getBmoMouldProcurementByProjectApi({ projectCode })
-    const bmoRecordId = normalizeText((bmoRowResp?.data as any)?.bmo_record_id)
-    if (!bmoRecordId) return
+    const fallbackBmoRecordId = normalizeText((bmoRowResp?.data as any)?.bmo_record_id)
+    if (!fallbackBmoRecordId) return
 
-    const detailResp = await getBmoMouldProcurementDetailApi({ fdId: bmoRecordId })
+    const detailResp = await getBmoMouldProcurementDetailApi({ fdId: fallbackBmoRecordId })
     const detail = detailResp?.data
     if (!detail) return
 
     bmoSnapshot.value = {
-      fdId: detail.fdId || bmoRecordId,
+      fdId: detail.fdId || fallbackBmoRecordId,
       demandType: detail.demandType ?? null,
       designer: detail.designer ?? null,
       tech: detail.tech || { tableName: '', fields: [], attachments: [] }
     }
     applyPrimaryBmoData()
+    await autoApplyCachedTechSpecFromSnapshot()
   } catch (e: any) {
     bmoLoadError.value = e?.message || '读取 1.4 数据失败'
   } finally {
@@ -905,9 +1093,20 @@ watch(
   () => props.modelValue,
   async (v) => {
     if (!v) return
+    currentStep.value = 1
     resetFromProps()
+    runAutoAnalyzeGroups()
     await loadBmoSnapshotByProject()
+    ensureDefaultBmoAttachmentSelection()
   }
+)
+
+watch(
+  () => bmoTechAttachments.value,
+  () => {
+    ensureDefaultBmoAttachmentSelection()
+  },
+  { deep: true, immediate: true }
 )
 
 // 监听项目数据变化，如果有产品图号，则更新默认产品组的产品图号
@@ -925,6 +1124,7 @@ watch(
           group.productDrawing = productDrawing
         }
       })
+      runAutoAnalyzeGroups()
     }
   },
   { deep: true, immediate: true }
@@ -974,10 +1174,105 @@ const handleAddGroup = () => {
   groups.value.push(makeDefaultGroup(groups.value.length))
 }
 
+const splitBySlash = (value: unknown) =>
+  String(value || '')
+    .split(/[\/／]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+const analyzeGroups = (options: { notifyMismatch?: boolean } = {}) => {
+  const notifyMismatch = options.notifyMismatch !== false
+  const nextGroups: InitProductGroup[] = []
+  let changed = false
+
+  for (const group of groups.value) {
+    const drawings = splitBySlash(group.productDrawing)
+    const names = splitBySlash(group.productName)
+    const sizes = splitSizeValues(group.productSize)
+    const drawingsCount = drawings.length
+    const namesCount = names.length
+
+    if (drawingsCount <= 1 && namesCount <= 1) {
+      nextGroups.push(group)
+      continue
+    }
+
+    const targetCount = Math.max(drawingsCount || 1, namesCount || 1)
+    const drawingList =
+      drawingsCount > 1
+        ? drawings
+        : Array.from({ length: targetCount }, () => String(group.productDrawing || '').trim())
+    const nameList =
+      namesCount > 1
+        ? names
+        : Array.from({ length: targetCount }, () => String(group.productName || '').trim())
+    const sizeList =
+      sizes.length > 1
+        ? sizes
+        : Array.from({ length: targetCount }, () => String(group.productSize || '').trim())
+
+    if (drawingList.length !== nameList.length) {
+      if (notifyMismatch) {
+        ElMessage.warning('产品图号与产品名称拆分数量不一致，已跳过本次分析')
+      }
+      return { changed: false, skipped: true as const }
+    }
+
+    changed = true
+    for (let i = 0; i < targetCount; i += 1) {
+      const row = makeDefaultGroup(nextGroups.length)
+      row.productDrawing = drawingList[i] || ''
+      row.productName = nameList[i] || ''
+      row.productSize = sizeList[i] || ''
+      row.cavityCount = group.cavityCount
+      row.expanded = true
+      nextGroups.push(row)
+    }
+  }
+
+  if (!changed) {
+    return { changed: false, skipped: false as const }
+  }
+
+  groups.value = nextGroups
+  return { changed: true, skipped: false as const }
+}
+
+const runAutoAnalyzeGroups = () => {
+  analyzeGroups({ notifyMismatch: false })
+}
+
+const handleProductDrawingBlur = (groupId: string) => {
+  validateProductDrawing(groupId)
+  runAutoAnalyzeGroups()
+}
+
+const handleProductNameBlur = () => {
+  runAutoAnalyzeGroups()
+}
+
 const handleDeleteGroup = (id: string) => {
   if (groups.value.length <= 1) return
   groups.value = groups.value.filter((g) => g.id !== id)
   // 删除后不需要重新编号，因为标题显示的是产品图号
+}
+
+const applyCavityCountsFallback = (counts: number[]) => {
+  const normalized = (counts || [])
+    .map((c) => toSafeCavity(c))
+    .filter((c) => Number.isFinite(c) && c > 0)
+  if (!normalized.length || !groups.value.length) return
+
+  const multi = normalized.length > 1
+  groups.value = groups.value.map((g, idx) => {
+    if (hasValidCavity(g.cavityCount)) return g
+    const picked = multi ? normalized[idx] : normalized[0]
+    if (!picked) return g
+    return {
+      ...g,
+      cavityCount: toSafeCavity(picked)
+    }
+  })
 }
 
 const applyProductDrawingsToGroups = (
@@ -985,9 +1280,97 @@ const applyProductDrawingsToGroups = (
   sizes?: string[],
   cavityCounts?: number[]
 ) => {
-  const list = (drawings || []).map((d) => String(d || '').trim()).filter(Boolean)
-  const sizeList = (sizes || []).map((s) => String(s || '').trim())
-  const cavityList = (cavityCounts || []).map((c) => toSafeCavity(c))
+  const splitParts = (value: unknown) =>
+    String(value || '')
+      .split(/[\/／]/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+
+  const rawDrawings = (drawings || []).map((d) => String(d || '').trim())
+  const rawNames =
+    (specData.value?.产品名称列表 || []).map((n: unknown) => String(n || '').trim()) || []
+  const rawSizes = (sizes || []).map((s) => String(s || '').trim())
+  const rawCavities = (cavityCounts || []).map((c) => toSafeCavity(c))
+
+  const normalizedDrawings: string[] = []
+  const normalizedNames: string[] = []
+  const normalizedSizes: string[] = []
+  const normalizedCavities: Array<number | undefined> = []
+
+  const maxRows = Math.max(rawDrawings.length, rawNames.length, rawSizes.length, rawCavities.length)
+  for (let i = 0; i < maxRows; i += 1) {
+    const drawingRaw = rawDrawings[i] || ''
+    const nameRaw = rawNames[i] || ''
+    const sizeRaw = rawSizes[i] || ''
+    const cavityRaw = rawCavities[i]
+
+    const drawingParts = splitParts(drawingRaw)
+    const nameParts = splitParts(nameRaw)
+    const sizeParts = splitSizeValues(sizeRaw)
+    const drawingCount = drawingParts.length
+    const nameCount = nameParts.length
+
+    const targetCount = Math.max(drawingCount || 1, nameCount || 1)
+    const canExpand =
+      drawingCount <= 1 ||
+      nameCount <= 1 ||
+      drawingCount === nameCount ||
+      nameRaw === '' ||
+      drawingRaw === ''
+
+    if (!canExpand) {
+      normalizedDrawings.push(drawingRaw)
+      normalizedNames.push(nameRaw)
+      normalizedSizes.push(sizeRaw)
+      normalizedCavities.push(cavityRaw)
+      continue
+    }
+
+    const dList =
+      drawingCount > 1 ? drawingParts : Array.from({ length: targetCount }, () => drawingRaw)
+    const nList = nameCount > 1 ? nameParts : Array.from({ length: targetCount }, () => nameRaw)
+    const sList =
+      sizeParts.length > 1 ? sizeParts : Array.from({ length: targetCount }, () => sizeRaw)
+
+    for (let j = 0; j < targetCount; j += 1) {
+      normalizedDrawings.push(String(dList[j] || '').trim())
+      normalizedNames.push(String(nList[j] || '').trim())
+      normalizedSizes.push(String(sList[j] || '').trim())
+      normalizedCavities.push(cavityRaw)
+    }
+  }
+
+  const compactRows = normalizedDrawings
+    .map((d, idx) => ({
+      drawing: String(d || '').trim(),
+      name: String(normalizedNames[idx] || '').trim(),
+      size: String(normalizedSizes[idx] || '').trim(),
+      cavity: normalizedCavities[idx]
+    }))
+    .filter((x) => !!x.drawing)
+
+  const flatSizeCandidates = rawSizes.flatMap((s) => splitSizeValues(s)).filter(Boolean)
+  if (compactRows.length > 1 && flatSizeCandidates.length >= compactRows.length) {
+    // 当图号拆分为多条时，优先按拆平后的尺寸列表逐条对齐，避免首个尺寸被重复套用
+    for (let i = 0; i < compactRows.length; i += 1) {
+      compactRows[i].size = String(flatSizeCandidates[i] || compactRows[i].size || '').trim()
+    }
+  }
+
+  const flatCavityCandidates = rawCavities
+    .map((c) => (c === undefined ? undefined : toSafeCavity(c)))
+    .filter((c): c is number => c !== undefined)
+  if (compactRows.length > 1 && flatCavityCandidates.length >= compactRows.length) {
+    // 穴数与产品组按索引一一对应，避免多组时沿用首个穴数
+    for (let i = 0; i < compactRows.length; i += 1) {
+      compactRows[i].cavity = toSafeCavity(flatCavityCandidates[i])
+    }
+  }
+
+  const list = compactRows.map((x) => x.drawing)
+  const nameList = compactRows.map((x) => x.name)
+  const sizeList = compactRows.map((x) => x.size)
+  const cavityList = compactRows.map((x) => x.cavity)
 
   if (list.length === 0) return
 
@@ -1024,8 +1407,9 @@ const applyProductDrawingsToGroups = (
     const kept = cavityByDrawing.get(d.toLowerCase())
     next.cavityCount =
       fromSpecCavity !== undefined ? fromSpecCavity : kept === undefined ? undefined : kept
-    const keptName = nameByDrawing.get(d.toLowerCase())
-    if (keptName) next.productName = keptName
+    const fromSpecName = String(nameList[idx] || '').trim()
+    const keptName = nameByDrawing.get(d.toLowerCase()) || ''
+    next.productName = fromSpecName || keptName || next.productName
     const fromSpecSize = sizeList[idx] || ''
     const keptSize = sizeByDrawing.get(d.toLowerCase()) || ''
     next.productSize = fromSpecSize || keptSize || ''
@@ -1055,10 +1439,10 @@ const getProductDrawingError = (groupId: string) => {
   return validateProductDrawing(groupId)
 }
 
-const handleComplete = () => {
+const validateStep1 = () => {
   if (!groups.value.length) {
     ElMessage.warning('请至少保留 1 个产品组')
-    return
+    return false
   }
 
   // 验证穴数必填
@@ -1070,7 +1454,7 @@ const handleComplete = () => {
   })
   if (cavityErrors.length > 0) {
     ElMessage.error(cavityErrors.join('\n'))
-    return
+    return false
   }
 
   // 验证所有产品组的产品图号是否重复
@@ -1084,8 +1468,24 @@ const handleComplete = () => {
 
   if (errors.length > 0) {
     ElMessage.error('产品图号不能重复：\n' + errors.join('\n'))
-    return
+    return false
   }
+  return true
+}
+
+const handleNextStep = () => {
+  const analyzeResult = analyzeGroups({ notifyMismatch: true })
+  if (analyzeResult.skipped) return
+  if (!validateStep1()) return
+  currentStep.value = 2
+}
+
+const handlePrevStep = () => {
+  currentStep.value = 1
+}
+
+const handleComplete = () => {
+  if (!validateStep1()) return
 
   emit(
     'complete',
@@ -1100,6 +1500,7 @@ const handleComplete = () => {
 
 const handleClosed = () => {
   // 弹窗关闭时的清理逻辑
+  currentStep.value = 1
   specData.value = null
   specDataSources.value = {}
   bmoSnapshot.value = null
@@ -1138,17 +1539,111 @@ const pickMatchedTechSpecData = async (arrayBuffer: ArrayBuffer) => {
   const records = parsed.records || []
   if (!records.length) throw new Error('技术规格表中未解析到有效数据')
 
-  const drawing = normalizeText(getProductDrawing()).toLowerCase()
-  const name = normalizeText(getProductName()).toLowerCase()
+  const toKey = (v: unknown) => normalizeText(v).toLowerCase()
+  const uniqPush = (list: string[], value: string) => {
+    const key = toKey(value)
+    if (!key) return
+    if (!list.some((x) => toKey(x) === key)) list.push(value)
+  }
 
-  const record =
-    records.find((r) =>
-      (r.drawings || []).some((d) => normalizeText(d).toLowerCase() === drawing)
-    ) ||
-    records.find((r) => normalizeText(r.partName).toLowerCase() === name) ||
-    records[0]
+  const targetDrawings = Array.from(
+    new Set(
+      groups.value
+        .flatMap((g) => parseDrawings(g.productDrawing || ''))
+        .map((d) => toKey(d))
+        .filter(Boolean)
+    )
+  )
+  const fallbackDrawings = parseDrawings(getProductDrawing())
+    .map((d) => toKey(d))
+    .filter(Boolean)
+  const drawingKeys = targetDrawings.length ? targetDrawings : fallbackDrawings
 
-  const data = cloneSpecData(record.specData)
+  const targetNames = Array.from(
+    new Set(groups.value.map((g) => toKey(g.productName)).filter(Boolean))
+  )
+  const fallbackName = toKey(getProductName())
+  const nameKeys = targetNames.length ? targetNames : fallbackName ? [fallbackName] : []
+
+  const selected: TechSpecRecord[] = []
+  const selectedSet = new Set<string>()
+  const appendRecord = (record: TechSpecRecord | undefined) => {
+    if (!record) return
+    if (selectedSet.has(record.id)) return
+    selected.push(record)
+    selectedSet.add(record.id)
+  }
+
+  for (const drawingKey of drawingKeys) {
+    appendRecord(records.find((r) => (r.drawings || []).some((d) => toKey(d) === drawingKey)))
+  }
+  for (const nameKey of nameKeys) {
+    appendRecord(records.find((r) => toKey(r.partName) === nameKey))
+  }
+  if (!selected.length) appendRecord(records[0])
+
+  const merged = cloneSpecData(null) as TechSpecData
+  const drawings: string[] = []
+  const names: string[] = []
+  const sizes: string[] = []
+  const cavityExpressions: string[] = []
+
+  const scalarKeys: Array<keyof TechSpecData> = [
+    '材料',
+    '型腔',
+    '型芯',
+    '产品外观尺寸',
+    '产品结构工程师',
+    '零件图片'
+  ]
+
+  for (const record of selected) {
+    const row = cloneSpecData(record.specData) as TechSpecData
+    patchMultiSelectFields(row)
+
+    for (const key of scalarKeys) {
+      if (!normalizeText(merged[key]) && normalizeText(row[key])) {
+        ;(merged as any)[key] = row[key]
+      }
+    }
+
+    const cavityParsed = parseMouldCavityText(row.模具穴数)
+    const cavityExpr = normalizeText(cavityParsed.expression || row.模具穴数)
+    if (cavityExpr) cavityExpressions.push(cavityExpr)
+
+    const rowDrawings =
+      Array.isArray(row.产品列表) && row.产品列表.length ? row.产品列表 : record.drawings
+    const rowNames = Array.isArray(row.产品名称列表) ? row.产品名称列表 : []
+    const rowSizes = Array.isArray(row.产品尺寸列表) ? row.产品尺寸列表 : []
+    const rowPartName = normalizeText(record.partName)
+
+    const maxLen = Math.max(rowDrawings.length, rowNames.length, rowSizes.length, 1)
+    for (let i = 0; i < maxLen; i += 1) {
+      const d = normalizeText(rowDrawings[i] || rowDrawings[0] || '')
+      const n = normalizeText(rowNames[i] || rowNames[0] || rowPartName)
+      const s = normalizeText(rowSizes[i] || rowSizes[0] || '')
+      if (!d) continue
+      uniqPush(drawings, d)
+      names.push(n)
+      sizes.push(s)
+    }
+  }
+
+  if (drawings.length) {
+    merged.产品列表 = drawings
+    merged.产品名称列表 = names.length ? names.slice(0, drawings.length) : drawings.map(() => '')
+    merged.产品数量列表 = drawings.map(() => 0)
+    merged.产品重量列表 = drawings.map(() => 0)
+    merged.产品尺寸列表 = sizes.length ? sizes.slice(0, drawings.length) : drawings.map(() => '')
+  }
+
+  if (cavityExpressions.length) {
+    merged.模具穴数 = cavityExpressions.join('+')
+  } else if (selected[0]) {
+    merged.模具穴数 = normalizeText(selected[0].specData?.模具穴数)
+  }
+
+  const data = merged
   patchMultiSelectFields(data)
   return data
 }
@@ -1169,18 +1664,22 @@ const buildFieldDiffs = (baseData: any, candidateData: any) => {
   for (const item of keys) {
     const currentVal = baseData[item.key]
     const nextVal = candidateData[item.key]
+    const normalizedCurrent =
+      item.key === '模具穴数' ? normalizeMouldCavityExpression(currentVal).value : currentVal
+    const normalizedNext =
+      item.key === '模具穴数' ? normalizeMouldCavityExpression(nextVal).value : nextVal
     const equal =
-      Array.isArray(currentVal) || Array.isArray(nextVal)
-        ? compareArrayField(currentVal, nextVal)
-        : normalizeText(currentVal) === normalizeText(nextVal)
+      Array.isArray(normalizedCurrent) || Array.isArray(normalizedNext)
+        ? compareArrayField(normalizedCurrent, normalizedNext)
+        : normalizeText(normalizedCurrent) === normalizeText(normalizedNext)
     if (equal) continue
     nextDiffs.push({
       key: item.key,
       label: item.label,
-      currentValue: toDisplayText(currentVal) || '（空）',
-      nextValue: toDisplayText(nextVal) || '（空）',
-      currentRaw: currentVal,
-      nextRaw: nextVal,
+      currentValue: toDisplayText(normalizedCurrent) || '（空）',
+      nextValue: toDisplayText(normalizedNext) || '（空）',
+      currentRaw: normalizedCurrent,
+      nextRaw: normalizedNext,
       selectable: ![
         '产品列表',
         '产品名称列表',
@@ -1223,10 +1722,32 @@ const applyTechSpecFallback = (candidateData: any) => {
     const currentVal = normalizeText(current[key])
     const nextVal = normalizeText(candidateData[key])
     if (!nextVal) continue
+    if (key === '模具穴数') {
+      // “模具穴数”已来自 1.4 时，不再被技术规格表覆盖
+      const isBmo14Locked = specDataSources.value[key] === 'bmo14' && !!currentVal
+      if (isBmo14Locked) continue
+
+      const currentParsed = normalizeMouldCavityExpression(currentVal)
+      const nextParsed = normalizeMouldCavityExpression(nextVal)
+      const canUseNext =
+        !currentVal ||
+        (currentParsed.counts.length === 0 && nextParsed.counts.length > 0) ||
+        (!currentParsed.value && !!nextParsed.value)
+      if (canUseNext) {
+        current[key] = nextParsed.value || nextVal
+        specDataSources.value[key] = 'techSpec'
+      }
+      continue
+    }
     if (!currentVal) {
       current[key] = nextVal
       specDataSources.value[key] = 'techSpec'
     }
+  }
+
+  const normalizedCurrentCavity = normalizeMouldCavityExpression(current.模具穴数)
+  if (normalizedCurrentCavity.value) {
+    current.模具穴数 = normalizedCurrentCavity.value
   }
 
   const rawDiffs = buildFieldDiffs(current, candidateData)
@@ -1238,6 +1759,7 @@ const applyTechSpecFallback = (candidateData: any) => {
   if (Array.isArray(current.产品列表) && current.产品列表.length > 0) {
     applyProductDrawingsToGroups(current.产品列表, current.产品尺寸列表, cavityParsed.counts)
   }
+  applyCavityCountsFallback(cavityParsed.counts)
 }
 
 const applySelectedDiffRows = () => {
@@ -1249,7 +1771,8 @@ const applySelectedDiffRows = () => {
   for (const row of diffRows.value) {
     if (!row.selected || !row.selectable) continue
     const key = row.key
-    next[key] = Array.isArray(row.nextRaw) ? [...row.nextRaw] : row.nextRaw
+    const rawValue = Array.isArray(row.nextRaw) ? [...row.nextRaw] : row.nextRaw
+    next[key] = key === '模具穴数' ? normalizeMouldCavityExpression(rawValue).value : rawValue
     specDataSources.value[key] = 'techSpec'
   }
   specData.value = next
@@ -1257,6 +1780,7 @@ const applySelectedDiffRows = () => {
   if (Array.isArray(next.产品列表) && next.产品列表.length > 0) {
     applyProductDrawingsToGroups(next.产品列表, next.产品尺寸列表, cavityParsed.counts)
   }
+  applyCavityCountsFallback(cavityParsed.counts)
   diffRows.value = []
   ElMessage.success('已应用勾选差异')
 }
@@ -1270,6 +1794,7 @@ const saveSelectedAttachmentToProject = async (file: File) => {
 const handleSpecArrayBuffer = async (arrayBuffer: ArrayBuffer) => {
   const parsedData = await pickMatchedTechSpecData(arrayBuffer)
   applyTechSpecFallback(parsedData)
+  return parsedData
 }
 
 const downloadBmoAttachmentByJob = async (picked: BmoMouldProcurementDetailAttachment) => {
@@ -1292,12 +1817,75 @@ const downloadBmoAttachmentByJob = async (picked: BmoMouldProcurementDetailAttac
 
 const applyTechSpecFile = async (file: File, successMessage = '技术规格表读取成功') => {
   const arrayBuffer = await file.arrayBuffer()
-  await handleSpecArrayBuffer(arrayBuffer)
+  const parsedData = await handleSpecArrayBuffer(arrayBuffer)
   ElMessage.success(successMessage)
+  return parsedData
+}
+
+const getCachedTechSpecParsedData = async (fdId: string, attachmentId: string) => {
+  const resp = await getBmoTechSpecParsedCacheApi({ fdId, attachmentId })
+  const cache = (resp as any)?.data ?? resp
+  const parsedData =
+    cache?.parsedData && typeof cache.parsedData === 'object' ? cache.parsedData : null
+  if (!parsedData) return null
+  const cacheVersion = Number((parsedData as any).__cacheVersion || 0)
+  if (cacheVersion !== TECH_SPEC_PARSED_CACHE_VERSION) return null
+  return parsedData
+}
+
+const saveTechSpecParsedDataCache = async (params: {
+  fdId: string
+  attachmentId: string
+  fileName?: string
+  parsedData: any
+}) => {
+  const parsedDataWithVersion =
+    params.parsedData && typeof params.parsedData === 'object'
+      ? {
+          ...params.parsedData,
+          __cacheVersion: TECH_SPEC_PARSED_CACHE_VERSION
+        }
+      : params.parsedData
+  await saveBmoTechSpecParsedCacheApi({
+    fdId: params.fdId,
+    attachmentId: params.attachmentId,
+    fileName: params.fileName,
+    parsedData: parsedDataWithVersion,
+    parsedMeta: {
+      source: 'project-init-dialog',
+      savedAt: new Date().toISOString()
+    }
+  })
+}
+
+const autoApplyCachedTechSpecFromSnapshot = async () => {
+  const fdId = normalizeText(bmoSnapshot.value?.fdId)
+  if (!fdId) return false
+
+  const attachments = (bmoTechAttachments.value || []).filter(
+    (x: any) => x?.id && isExcelAttachment(x)
+  )
+  if (!attachments.length) return false
+
+  for (const item of attachments) {
+    const attachmentId = normalizeText((item as any)?.id)
+    if (!attachmentId) continue
+    try {
+      const cachedParsed = await getCachedTechSpecParsedData(fdId, attachmentId)
+      if (!cachedParsed) continue
+      applyTechSpecFallback(cachedParsed)
+      return true
+    } catch {
+      // ignore and continue trying next attachment
+    }
+  }
+  return false
 }
 
 const handleReadSelectedBmoAttachment = async () => {
   const picked = selectedBmoAttachment.value
+  const fdId = normalizeText(bmoSnapshot.value?.fdId)
+  const attachmentId = normalizeText(picked?.id)
   if (!picked?.id) {
     ElMessage.warning('请先选择技术规格表附件')
     return
@@ -1309,6 +1897,19 @@ const handleReadSelectedBmoAttachment = async () => {
 
   bmoReadingAttachment.value = true
   try {
+    if (fdId && attachmentId) {
+      try {
+        const cachedParsed = await getCachedTechSpecParsedData(fdId, attachmentId)
+        if (cachedParsed) {
+          applyTechSpecFallback(cachedParsed)
+          ElMessage.success('技术规格表已从缓存读取')
+          return
+        }
+      } catch (cacheErr) {
+        // ignore cache read errors, continue with download+parse flow
+      }
+    }
+
     const blob = await downloadBmoAttachmentByJob(picked)
     const fallbackExt = normalizeExcelExt(picked.fileExt)
     const ext = fallbackExt === 'xls' || fallbackExt === 'xlsx' ? fallbackExt : 'xlsx'
@@ -1322,7 +1923,21 @@ const handleReadSelectedBmoAttachment = async () => {
       await saveSelectedAttachmentToProject(file)
     }
 
-    await applyTechSpecFile(file, `技术规格表已读取${bmoSaveAttachment.value ? '并保存' : ''}`)
+    const parsedData = await applyTechSpecFile(
+      file,
+      `技术规格表已读取${bmoSaveAttachment.value ? '并保存' : ''}`
+    )
+
+    if (fdId && attachmentId && parsedData) {
+      saveTechSpecParsedDataCache({
+        fdId,
+        attachmentId,
+        fileName,
+        parsedData
+      }).catch((cacheErr) => {
+        console.warn('保存技术规格表解析缓存失败:', cacheErr?.message || cacheErr)
+      })
+    }
   } catch (error: any) {
     console.error('读取 BMO 技术规格表失败:', error)
     const status = Number(error?.response?.status || 0)
@@ -1451,6 +2066,10 @@ const showImagePreview = (url: string) => {
 
 .pm-init-desc {
   margin-bottom: 20px;
+}
+
+.pm-init-steps {
+  margin-bottom: 16px;
 }
 
 .pm-init-groups-section {

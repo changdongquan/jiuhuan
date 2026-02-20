@@ -1,5 +1,6 @@
 const { query } = require('../database')
 const { upsertBmoRecords, fetchBmoMouldDetail, fetchBmoMouldListLive } = require('./bmoSync')
+const XLSX = require('xlsx')
 
 const toSafeInt = (value, fallback = 0) => {
   const n = Number(value)
@@ -70,6 +71,141 @@ const relayWaitJob = async (jobId, options = {}) => {
     await new Promise((resolve) => setTimeout(resolve, Math.max(200, intervalMs)))
   }
   throw new Error(`relay job timeout (${timeoutMs}ms)`)
+}
+
+const relayDownloadFileBuffer = async (fileId, timeoutMs = 30000) => {
+  const baseUrl = getRelayBaseUrl()
+  if (!baseUrl) throw new Error('BMO_RELAY_BASE_URL 未配置')
+  const id = String(fileId || '').trim()
+  if (!id) throw new Error('缺少 fileId')
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs))
+  try {
+    const resp = await fetch(`${baseUrl}/files/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      signal: ctrl.signal
+    })
+    if (!resp.ok) throw new Error(`relay file HTTP ${resp.status}`)
+    const arr = await resp.arrayBuffer()
+    return Buffer.from(arr)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const normalizeText = (v) => String(v ?? '').trim()
+const normalizeFieldKey = (v) =>
+  normalizeText(v).replace(/\s+/g, '').replace(/：/g, ':').toLowerCase()
+
+const CAVITY_LABELS = ['模具穴数', '模具腔数', '穴数', '腔数', '型腔数']
+
+const extractCavityFromExcelBuffer = (buffer) => {
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const candidates = []
+
+  for (const sheetName of workbook.SheetNames || []) {
+    const ws = workbook.Sheets[sheetName]
+    if (!ws) continue
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+    for (let r = 0; r < rows.length; r += 1) {
+      const row = Array.isArray(rows[r]) ? rows[r] : []
+      for (let c = 0; c < row.length; c += 1) {
+        const cellRaw = normalizeText(row[c])
+        if (!cellRaw) continue
+        const key = normalizeFieldKey(cellRaw)
+        const matched = CAVITY_LABELS.some((label) => key.includes(normalizeFieldKey(label)))
+        if (!matched) continue
+
+        for (let offset = 1; offset <= 4; offset += 1) {
+          const right = normalizeText(row[c + offset])
+          if (right) {
+            candidates.push(right)
+            break
+          }
+        }
+        for (let offset = 1; offset <= 2; offset += 1) {
+          const nextRow = Array.isArray(rows[r + offset]) ? rows[r + offset] : []
+          const down = normalizeText(nextRow[c])
+          if (down) {
+            candidates.push(down)
+            break
+          }
+        }
+      }
+    }
+  }
+
+  const uniq = Array.from(new Set(candidates.map((x) => normalizeText(x)).filter(Boolean)))
+  if (!uniq.length) return { value: '', candidates: [] }
+  return { value: uniq[0], candidates: uniq }
+}
+
+let techSpecCacheReady = false
+const ensureTechSpecParseCacheTable = async () => {
+  if (techSpecCacheReady) return
+  await query(`
+    IF OBJECT_ID(N'dbo.bmo_tech_spec_parse_cache', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.bmo_tech_spec_parse_cache (
+        id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        bmo_record_id NVARCHAR(100) NOT NULL,
+        attachment_id NVARCHAR(120) NOT NULL,
+        file_name NVARCHAR(255) NULL,
+        parsed_json NVARCHAR(MAX) NOT NULL,
+        parsed_meta_json NVARCHAR(MAX) NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_bmo_tech_spec_parse_cache_created_at DEFAULT (SYSDATETIME()),
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_bmo_tech_spec_parse_cache_updated_at DEFAULT (SYSDATETIME())
+      );
+      CREATE UNIQUE INDEX UX_bmo_tech_spec_parse_cache_key
+        ON dbo.bmo_tech_spec_parse_cache (bmo_record_id, attachment_id);
+      CREATE INDEX IX_bmo_tech_spec_parse_cache_updated
+        ON dbo.bmo_tech_spec_parse_cache (updated_at DESC, id DESC);
+    END
+  `)
+  techSpecCacheReady = true
+}
+
+const upsertTechSpecParseCache = async ({ fdId, attachmentId, fileName, parsedData, parsedMeta }) => {
+  const bmoRecordId = String(fdId || '').trim()
+  const attachId = String(attachmentId || '').trim()
+  if (!bmoRecordId || !attachId || !parsedData || typeof parsedData !== 'object') return false
+  await ensureTechSpecParseCacheTable()
+  await query(
+    `
+      MERGE dbo.bmo_tech_spec_parse_cache AS target
+      USING (
+        SELECT
+          @bmoRecordId AS bmo_record_id,
+          @attachmentId AS attachment_id,
+          @fileName AS file_name,
+          @parsedJson AS parsed_json,
+          @parsedMetaJson AS parsed_meta_json
+      ) AS source
+      ON target.bmo_record_id = source.bmo_record_id
+       AND target.attachment_id = source.attachment_id
+      WHEN MATCHED THEN
+        UPDATE SET
+          file_name = source.file_name,
+          parsed_json = source.parsed_json,
+          parsed_meta_json = source.parsed_meta_json,
+          updated_at = SYSDATETIME()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          bmo_record_id, attachment_id, file_name, parsed_json, parsed_meta_json, created_at, updated_at
+        )
+        VALUES (
+          source.bmo_record_id, source.attachment_id, source.file_name, source.parsed_json, source.parsed_meta_json, SYSDATETIME(), SYSDATETIME()
+        );
+    `,
+    {
+      bmoRecordId,
+      attachmentId: attachId,
+      fileName: String(fileName || '').trim() || null,
+      parsedJson: JSON.stringify(parsedData),
+      parsedMetaJson: parsedMeta ? JSON.stringify(parsedMeta) : null
+    }
+  )
+  return true
 }
 
 let cacheTableReady = false
@@ -230,6 +366,8 @@ const autoDownloadTechAttachmentsByRelay = async (detail, options = {}) => {
   let queued = 0
   let success = 0
   let failed = 0
+  let parsedSuccess = 0
+  let parsedFailed = 0
   for (const a of candidates) {
     queued += 1
     try {
@@ -248,13 +386,46 @@ const autoDownloadTechAttachmentsByRelay = async (detail, options = {}) => {
       const jobId = String(created?.data?.id || created?.id || '').trim()
       if (!jobId) throw new Error('relay missing jobId')
       const done = await relayWaitJob(jobId, { timeoutMs: 120000, intervalMs: 1000 })
-      if (String(done?.status || '') === 'success') success += 1
-      else failed += 1
+      if (String(done?.status || '') === 'success') {
+        success += 1
+        try {
+          const fileId = String(done?.result?.fileId || '').trim()
+          if (fileId) {
+            const fileBuffer = await relayDownloadFileBuffer(fileId, 45000)
+            const parsed = extractCavityFromExcelBuffer(fileBuffer)
+            const cavityValue = normalizeText(parsed?.value)
+            if (cavityValue) {
+              await upsertTechSpecParseCache({
+                fdId,
+                attachmentId: String(a.id),
+                fileName: String(a?.fileName || done?.result?.fileName || '').trim() || null,
+                parsedData: {
+                  模具穴数: cavityValue,
+                  __autoParsedBy: 'bmo-auto-sync',
+                  __autoParsedAt: new Date().toISOString()
+                },
+                parsedMeta: {
+                  source: 'relay-auto-download-parse',
+                  fileId,
+                  cavityCandidates: parsed?.candidates || []
+                }
+              })
+              parsedSuccess += 1
+            } else {
+              parsedFailed += 1
+            }
+          } else {
+            parsedFailed += 1
+          }
+        } catch (parseError) {
+          parsedFailed += 1
+        }
+      } else failed += 1
     } catch (e) {
       failed += 1
     }
   }
-  return { queued, success, failed }
+  return { queued, success, failed, parsedSuccess, parsedFailed }
 }
 
 const collectViaRelayPages = async (input = {}) => {
@@ -341,6 +512,8 @@ const runBmoAutoSyncOnce = async (options = {}) => {
     let downloadQueued = 0
     let downloadSuccess = 0
     let downloadFailed = 0
+    let parseSuccess = 0
+    let parseFailed = 0
     for (const fdId of targetIds) {
       try {
         const detail = await fetchBmoMouldDetail({ fdId })
@@ -352,6 +525,8 @@ const runBmoAutoSyncOnce = async (options = {}) => {
         downloadQueued += d.queued
         downloadSuccess += d.success
         downloadFailed += d.failed
+        parseSuccess += Number(d.parsedSuccess || 0)
+        parseFailed += Number(d.parsedFailed || 0)
       } catch (e) {
         detailFailed += 1
       }
@@ -367,6 +542,8 @@ const runBmoAutoSyncOnce = async (options = {}) => {
       downloadQueued,
       downloadSuccess,
       downloadFailed,
+      parseSuccess,
+      parseFailed,
       traceId,
       syncedAt: new Date().toISOString()
     }
