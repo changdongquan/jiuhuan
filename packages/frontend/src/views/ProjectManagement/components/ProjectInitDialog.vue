@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :width="isMobile ? '100%' : '1030px'"
+    :width="isMobile ? '100%' : '1130px'"
     :fullscreen="isMobile"
     :close-on-click-modal="false"
     class="pm-init-dialog"
@@ -9,20 +9,22 @@
   >
     <template #title>
       <div class="pm-init-dialog-title">
-        <span>初始化</span>
-        <el-text type="info" size="small" class="pm-init-title-tip">
-          初始化仅需完成一次，完成后将不再弹出。
-        </el-text>
-      </div>
-    </template>
-    <div class="pm-init-body">
-      <div class="pm-init-steps">
-        <el-steps :active="currentStep - 1" finish-status="success" simple>
+        <div class="pm-init-title-left">
+          <span class="pm-init-title-main">初始化</span>
+          <el-text type="info" size="small" class="pm-init-title-tip">初始化仅需完成一次。</el-text>
+        </div>
+        <el-steps
+          :active="currentStep - 1"
+          finish-status="success"
+          align-center
+          class="pm-init-title-steps"
+        >
           <el-step title="步骤1 产品组" />
           <el-step title="步骤2 技术规格表信息" />
         </el-steps>
       </div>
-
+    </template>
+    <div class="pm-init-body">
       <el-descriptions
         :column="isMobile ? 1 : 4"
         :label-width="isMobile ? undefined : 85"
@@ -71,45 +73,23 @@
 
           <div style="margin-top: 12px">
             <div style="margin-bottom: 8px; font-weight: 600">模具技术要求（全字段）</div>
-            <el-table
-              :data="bmoTechFieldRows"
+            <el-descriptions
+              :column="isMobile ? 1 : 4"
               border
               size="small"
-              max-height="260"
-              :show-header="false"
               class="pm-init-tech-fields-table"
             >
-              <el-table-column min-width="160">
-                <template #default="{ row }">
-                  <span class="pm-init-tech-field-label">{{
-                    resolveTechFieldLabel(row.left)
-                  }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column min-width="220">
-                <template #default="{ row }">
-                  <span class="pm-init-tech-field-value">{{
-                    formatTechFieldValue(row.left?.value)
-                  }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column min-width="160">
-                <template #default="{ row }">
-                  <span v-if="row.right" class="pm-init-tech-field-label">{{
-                    resolveTechFieldLabel(row.right)
-                  }}</span>
-                  <span v-else class="pm-init-tech-field-empty">-</span>
-                </template>
-              </el-table-column>
-              <el-table-column min-width="220">
-                <template #default="{ row }">
-                  <span v-if="row.right" class="pm-init-tech-field-value">{{
-                    formatTechFieldValue(row.right.value)
-                  }}</span>
-                  <span v-else class="pm-init-tech-field-empty">-</span>
-                </template>
-              </el-table-column>
-            </el-table>
+              <el-descriptions-item
+                v-for="field in bmoTechFields"
+                :key="field?.name || field?.label"
+                :label="resolveTechFieldLabel(field)"
+                :span="isTechFieldFullRow(resolveTechFieldLabel(field)) ? 4 : 1"
+              >
+                <span class="pm-init-tech-field-value">{{
+                  formatTechFieldValue(field?.value)
+                }}</span>
+              </el-descriptions-item>
+            </el-descriptions>
           </div>
 
           <div style="margin-top: 12px">
@@ -275,25 +255,6 @@
               />
             </el-descriptions-item>
           </el-descriptions>
-
-          <div v-if="diffRows.length" class="pm-init-diff">
-            <div class="pm-init-diff__header">
-              <span class="pm-init-diff__title">技术规格表差异（逐行勾选后一次应用）</span>
-              <el-button type="primary" size="small" @click="applySelectedDiffRows">
-                应用勾选项
-              </el-button>
-            </div>
-            <el-table :data="diffRows" border size="small" max-height="260">
-              <el-table-column label="应用" width="60" align="center">
-                <template #default="{ row }">
-                  <el-checkbox v-model="row.selected" :disabled="!row.selectable" />
-                </template>
-              </el-table-column>
-              <el-table-column prop="label" label="字段" width="160" />
-              <el-table-column prop="currentValue" label="当前值（1.4优先）" min-width="220" />
-              <el-table-column prop="nextValue" label="技术规格表值" min-width="220" />
-            </el-table>
-          </div>
         </div>
       </div>
 
@@ -494,19 +455,7 @@ const bmoSnapshot = ref<BmoInitiationTechSnapshot | null>(null)
 const bmoAttachmentSelection = ref<string>('')
 const bmoReadingAttachment = ref(false)
 const bmoSaveAttachment = ref(true)
-
-type FieldDiffRow = {
-  key: string
-  label: string
-  currentValue: string
-  nextValue: string
-  currentRaw: any
-  nextRaw: any
-  selectable: boolean
-  selected: boolean
-}
-
-const diffRows = ref<FieldDiffRow[]>([])
+const bmoAutoReadTried = ref(false)
 
 const SOURCE_TEXT: Record<'bmo14' | 'techSpec' | 'manual', string> = {
   bmo14: 'BMO',
@@ -757,9 +706,7 @@ const selectedBmoAttachment = computed(() =>
 
 const ensureDefaultBmoAttachmentSelection = () => {
   if (bmoAttachmentSelection.value) return
-  const preferred: any =
-    bmoTechAttachments.value.find((item: any) => item?.id && isExcelAttachment(item)) ||
-    bmoTechAttachments.value.find((item: any) => item?.id)
+  const preferred: any = bmoTechAttachments.value.find((item: any) => item?.id)
   if (preferred && preferred.selectionId) {
     bmoAttachmentSelection.value = String(preferred.selectionId)
   }
@@ -790,17 +737,9 @@ const resolveTechFieldLabel = (field: any) => {
   const name = normalizeText(field?.name)
   return BMO_TECH_FIELD_LABEL_FALLBACK[name] || label || name || '-'
 }
-const bmoTechFieldRows = computed(() => {
-  const fields = bmoTechFields.value || []
-  const rows: Array<{ left: any; right?: any }> = []
-  for (let i = 0; i < fields.length; i += 2) {
-    rows.push({
-      left: fields[i],
-      right: fields[i + 1]
-    })
-  }
-  return rows
-})
+
+const TECH_FIELDS_FULL_ROW_LABELS = new Set<string>(['模具特殊需求及风险'])
+const isTechFieldFullRow = (label: string) => TECH_FIELDS_FULL_ROW_LABELS.has(normalizeText(label))
 
 const buildPrimaryDataFromBmo = () => {
   const next: any = {
@@ -970,15 +909,6 @@ const patchMultiSelectFields = (data: any) => {
   })
 }
 
-const toDisplayText = (value: unknown) => {
-  if (Array.isArray(value))
-    return value
-      .map((v) => normalizeText(v))
-      .filter(Boolean)
-      .join(' / ')
-  return normalizeText(value)
-}
-
 const formatTechFieldValue = (value: unknown) => {
   const text = normalizeText(value)
   return text || '-'
@@ -1052,7 +982,7 @@ const loadBmoSnapshotByProject = async () => {
   bmoLoadError.value = ''
   bmoSnapshot.value = null
   bmoAttachmentSelection.value = ''
-  diffRows.value = []
+  bmoAutoReadTried.value = false
 
   try {
     const resp = await getBmoInitiationRequestByProjectApi({ projectCode })
@@ -1062,6 +992,8 @@ const loadBmoSnapshotByProject = async () => {
       bmoSnapshot.value = snapshot
       applyPrimaryBmoData()
       await autoApplyCachedTechSpecFromSnapshot()
+      ensureDefaultBmoAttachmentSelection()
+      await tryAutoReadSelectedBmoAttachment()
       return
     }
 
@@ -1082,6 +1014,8 @@ const loadBmoSnapshotByProject = async () => {
     }
     applyPrimaryBmoData()
     await autoApplyCachedTechSpecFromSnapshot()
+    ensureDefaultBmoAttachmentSelection()
+    await tryAutoReadSelectedBmoAttachment()
   } catch (e: any) {
     bmoLoadError.value = e?.message || '读取 1.4 数据失败'
   } finally {
@@ -1097,7 +1031,6 @@ watch(
     resetFromProps()
     runAutoAnalyzeGroups()
     await loadBmoSnapshotByProject()
-    ensureDefaultBmoAttachmentSelection()
   }
 )
 
@@ -1105,6 +1038,9 @@ watch(
   () => bmoTechAttachments.value,
   () => {
     ensureDefaultBmoAttachmentSelection()
+    if (props.modelValue) {
+      void tryAutoReadSelectedBmoAttachment()
+    }
   },
   { deep: true, immediate: true }
 )
@@ -1506,7 +1442,7 @@ const handleClosed = () => {
   bmoSnapshot.value = null
   bmoLoadError.value = ''
   bmoAttachmentSelection.value = ''
-  diffRows.value = []
+  bmoAutoReadTried.value = false
   imagePreviewVisible.value = false
   imagePreviewUrl.value = ''
 }
@@ -1648,51 +1584,6 @@ const pickMatchedTechSpecData = async (arrayBuffer: ArrayBuffer) => {
   return data
 }
 
-const compareArrayField = (a: any, b: any) =>
-  JSON.stringify(Array.isArray(a) ? a : []) === JSON.stringify(Array.isArray(b) ? b : [])
-
-const buildFieldDiffs = (baseData: any, candidateData: any) => {
-  const nextDiffs: FieldDiffRow[] = []
-  const keys = [
-    ...FIELD_KEYS.map((x) => ({ key: x.key as string, label: x.label })),
-    { key: '产品列表', label: '产品列表' },
-    { key: '产品名称列表', label: '产品名称列表' },
-    { key: '产品数量列表', label: '产品数量列表' },
-    { key: '产品重量列表', label: '产品重量列表' },
-    { key: '产品尺寸列表', label: '产品尺寸列表' }
-  ]
-  for (const item of keys) {
-    const currentVal = baseData[item.key]
-    const nextVal = candidateData[item.key]
-    const normalizedCurrent =
-      item.key === '模具穴数' ? normalizeMouldCavityExpression(currentVal).value : currentVal
-    const normalizedNext =
-      item.key === '模具穴数' ? normalizeMouldCavityExpression(nextVal).value : nextVal
-    const equal =
-      Array.isArray(normalizedCurrent) || Array.isArray(normalizedNext)
-        ? compareArrayField(normalizedCurrent, normalizedNext)
-        : normalizeText(normalizedCurrent) === normalizeText(normalizedNext)
-    if (equal) continue
-    nextDiffs.push({
-      key: item.key,
-      label: item.label,
-      currentValue: toDisplayText(normalizedCurrent) || '（空）',
-      nextValue: toDisplayText(normalizedNext) || '（空）',
-      currentRaw: normalizedCurrent,
-      nextRaw: normalizedNext,
-      selectable: ![
-        '产品列表',
-        '产品名称列表',
-        '产品数量列表',
-        '产品重量列表',
-        '产品尺寸列表'
-      ].includes(item.key),
-      selected: false
-    })
-  }
-  return nextDiffs
-}
-
 const applyTechSpecFallback = (candidateData: any) => {
   const current = cloneSpecData(specData.value)
   patchMultiSelectFields(current)
@@ -1750,9 +1641,6 @@ const applyTechSpecFallback = (candidateData: any) => {
     current.模具穴数 = normalizedCurrentCavity.value
   }
 
-  const rawDiffs = buildFieldDiffs(current, candidateData)
-  diffRows.value = rawDiffs
-
   specData.value = current
 
   const cavityParsed = parseMouldCavityText(current.模具穴数)
@@ -1760,29 +1648,6 @@ const applyTechSpecFallback = (candidateData: any) => {
     applyProductDrawingsToGroups(current.产品列表, current.产品尺寸列表, cavityParsed.counts)
   }
   applyCavityCountsFallback(cavityParsed.counts)
-}
-
-const applySelectedDiffRows = () => {
-  if (!diffRows.value.some((row) => row.selected)) {
-    ElMessage.warning('请先勾选差异项')
-    return
-  }
-  const next = cloneSpecData(specData.value)
-  for (const row of diffRows.value) {
-    if (!row.selected || !row.selectable) continue
-    const key = row.key
-    const rawValue = Array.isArray(row.nextRaw) ? [...row.nextRaw] : row.nextRaw
-    next[key] = key === '模具穴数' ? normalizeMouldCavityExpression(rawValue).value : rawValue
-    specDataSources.value[key] = 'techSpec'
-  }
-  specData.value = next
-  const cavityParsed = parseMouldCavityText(next.模具穴数)
-  if (Array.isArray(next.产品列表) && next.产品列表.length > 0) {
-    applyProductDrawingsToGroups(next.产品列表, next.产品尺寸列表, cavityParsed.counts)
-  }
-  applyCavityCountsFallback(cavityParsed.counts)
-  diffRows.value = []
-  ElMessage.success('已应用勾选差异')
 }
 
 const saveSelectedAttachmentToProject = async (file: File) => {
@@ -1962,6 +1827,16 @@ const handleReadSelectedBmoAttachment = async () => {
   }
 }
 
+const tryAutoReadSelectedBmoAttachment = async () => {
+  if (bmoAutoReadTried.value || bmoReadingAttachment.value) return
+  ensureDefaultBmoAttachmentSelection()
+  const picked = selectedBmoAttachment.value
+  if (!picked?.id) return
+  bmoAutoReadTried.value = true
+  if (!isExcelAttachment(picked)) return
+  await handleReadSelectedBmoAttachment()
+}
+
 // 处理本地技术规格表文件上传（手工兜底）
 const handleSpecFileChange = async (file: UploadFile) => {
   if (!file.raw) {
@@ -2050,7 +1925,25 @@ const showImagePreview = (url: string) => {
 .pm-init-dialog-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pm-init-title-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pm-init-title-main {
+  line-height: 1.2;
+}
+
+.pm-init-title-steps {
+  flex: 1;
+  min-width: 320px;
 }
 
 .pm-init-title-tip {
@@ -2066,10 +1959,6 @@ const showImagePreview = (url: string) => {
 
 .pm-init-desc {
   margin-bottom: 20px;
-}
-
-.pm-init-steps {
-  margin-bottom: 16px;
 }
 
 .pm-init-groups-section {
@@ -2173,22 +2062,6 @@ const showImagePreview = (url: string) => {
 
 .pm-source-tag {
   margin-left: 8px;
-}
-
-.pm-init-diff {
-  margin-top: 12px;
-}
-
-.pm-init-diff__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.pm-init-diff__title {
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .pm-init-spec-image {
