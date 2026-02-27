@@ -12,7 +12,7 @@
               >
             </div>
           </div>
-          <p class="bmo-subtitle">通过 BMO 中转采集并查看立项入口</p>
+          <p class="bmo-subtitle">通过 BMO 中转结果进行查看与立项</p>
         </div>
         <div class="bmo-actions">
           <el-button :disabled="!latestList.length" @click="exportCsv">导出CSV</el-button>
@@ -74,8 +74,9 @@
             <span>{{ getBmoRowStatusText(row) || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90">
+        <el-table-column label="操作" width="170">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openViewDialog(row)">查看</el-button>
             <el-button
               v-if="!row.project_code"
               link
@@ -100,7 +101,7 @@
     <el-dialog
       v-model="initiateDialogVisible"
       class="bmo-initiate-dialog"
-      title="立项"
+      :title="dialogMode === 'view' ? '查看（1.4-模具清单详情）' : '立项'"
       width="1400px"
       top="2vh"
       destroy-on-close
@@ -204,7 +205,7 @@
           </div>
         </div>
 
-        <div class="bmo-initiate-section">
+        <div v-if="!isViewMode" class="bmo-initiate-section">
           <div class="bmo-initiate-section__title">
             立项申请
             <el-tag v-if="initiateRequest?.status" class="ml-2" effect="plain">
@@ -432,18 +433,22 @@
 
       <template #footer>
         <el-button @click="initiateDialogVisible = false">关闭</el-button>
-        <el-button :loading="initiateSaving" @click="handleSaveInitiationDraft">保存草稿</el-button>
-        <el-button type="primary" :loading="initiateConfirming" @click="handleConfirmInitiation">
-          提交审核
-        </el-button>
-        <el-button
-          type="success"
-          :disabled="initiateRequest?.status !== 'PM_CONFIRMED'"
-          :loading="initiateApproving"
-          @click="handleApproveAndApply"
-        >
-          审核通过并入库
-        </el-button>
+        <template v-if="!isViewMode">
+          <el-button :loading="initiateSaving" @click="handleSaveInitiationDraft"
+            >保存草稿</el-button
+          >
+          <el-button type="primary" :loading="initiateConfirming" @click="handleConfirmInitiation">
+            提交审核
+          </el-button>
+          <el-button
+            type="success"
+            :disabled="initiateRequest?.status !== 'PM_CONFIRMED'"
+            :loading="initiateApproving"
+            @click="handleApproveAndApply"
+          >
+            审核通过并入库
+          </el-button>
+        </template>
       </template>
     </el-dialog>
   </div>
@@ -461,6 +466,7 @@ import {
   getBmoRelayJobApi,
   getBmoMouldProcurementDetailApi,
   getBmoInitiationRequestApi,
+  getBmoInitiationRequestByProjectApi,
   saveBmoInitiationDraftApi,
   confirmBmoInitiationRequestApi,
   approveAndApplyBmoInitiationRequestApi,
@@ -566,7 +572,9 @@ const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
 
 const initiateDialogVisible = ref(false)
-const showInitiate14Section = false
+const dialogMode = ref<'view' | 'initiate'>('initiate')
+const isViewMode = computed(() => dialogMode.value === 'view')
+const showInitiate14Section = computed(() => true)
 const initiateLoading = ref(false)
 const initiateRow = ref<BmoMouldProcurementRow | null>(null)
 const initiateDetail = ref<BmoMouldProcurementDetail | null>(null)
@@ -581,6 +589,7 @@ const initiate14CollapseActive = ref<string[]>([])
 
 const DEFAULT_INITIATE_CUSTOMER_NAME = '长虹美菱股份有限公司'
 const initiateProjectCodeAuto = ref(true)
+const lastAutoSyncedProjectCode = ref('')
 
 const initiateProjectForm = reactive({
   projectCode: '',
@@ -720,8 +729,42 @@ watch(
   }
 )
 
+watch(
+  () => initiateProjectForm.projectCode,
+  (next, prev) => {
+    const nextCode = String(next || '').trim()
+    const prevCode = String(prev || '').trim()
+    const currentItemCode = String(initiateSalesForm.detail.itemCode || '').trim()
+    if (
+      !currentItemCode ||
+      currentItemCode === prevCode ||
+      currentItemCode === lastAutoSyncedProjectCode.value
+    ) {
+      initiateSalesForm.detail.itemCode = nextCode
+      lastAutoSyncedProjectCode.value = nextCode
+    }
+  }
+)
+
 const handleInitiateProjectCodeInput = () => {
   initiateProjectCodeAuto.value = false
+}
+
+const isProjectCodeReservedByOtherInitiation = async (
+  projectCode: string,
+  currentBmoRecordId: string
+) => {
+  const code = String(projectCode || '').trim()
+  if (!code) return false
+  const resp = await getBmoInitiationRequestByProjectApi({ projectCode: code })
+  const row = resp.data
+  if (!row) return false
+
+  const rowRecordId = String(row.bmo_record_id || '').trim()
+  if (rowRecordId && rowRecordId === currentBmoRecordId) return false
+
+  const status = String(row.status || '').trim()
+  return status !== 'REJECTED'
 }
 
 const recommendInitiateProjectCode = async () => {
@@ -738,17 +781,36 @@ const recommendInitiateProjectCode = async () => {
       ElMessage.error('获取最大序号失败，无法推荐项目编号')
       return
     }
-    initiateProjectForm.projectSerial = String(nextSerial).padStart(3, '0')
+    const currentBmoRecordId = String(initiateRow.value?.bmo_record_id || '').trim()
+    let serialCursor = Number(nextSerial) || 0
+    let pickedCode = ''
+    for (let i = 0; i < 200; i += 1) {
+      const serialStr = String(serialCursor).padStart(3, '0')
+      const candidate = generateProjectCode({
+        projectCategory: initiateProjectForm.projectCategory,
+        projectYear: initiateProjectForm.projectYear,
+        projectSerial: serialStr,
+        partNumber: initiateProjectForm.partNumber
+      })
+      if (!candidate) break
+      const reserved = await isProjectCodeReservedByOtherInitiation(candidate, currentBmoRecordId)
+      if (!reserved) {
+        initiateProjectForm.projectSerial = serialStr
+        pickedCode = candidate
+        break
+      }
+      serialCursor += 1
+    }
+    if (!pickedCode) {
+      ElMessage.error('推荐项目编号失败：未找到可用序号，请手动填写')
+      return
+    }
     initiateProjectCodeAuto.value = true
-    initiateProjectForm.projectCode = generateProjectCode({
-      projectCategory: initiateProjectForm.projectCategory,
-      projectYear: initiateProjectForm.projectYear,
-      projectSerial: initiateProjectForm.projectSerial,
-      partNumber: initiateProjectForm.partNumber
-    })
+    initiateProjectForm.projectCode = pickedCode
 
     // 同步订单明细的项目编号
     initiateSalesForm.detail.itemCode = initiateProjectForm.projectCode
+    lastAutoSyncedProjectCode.value = initiateProjectForm.projectCode
   } catch (e: any) {
     ElMessage.error(e?.message || '推荐项目编号失败')
   } finally {
@@ -989,13 +1051,14 @@ const refreshAll = async () => {
   }
 }
 
-const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
+const openBmoDetailDialog = async (row: BmoMouldProcurementRow, mode: 'view' | 'initiate') => {
   const fdId = row.bmo_record_id
   if (!fdId) {
     ElMessage.warning('缺少 BMO 记录ID（bmo_record_id），无法读取 1.4 详情')
     return
   }
 
+  dialogMode.value = mode
   initiateDialogVisible.value = true
   initiateRow.value = row
   initiateDetail.value = null
@@ -1013,15 +1076,25 @@ const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
       applyRequestToForms(reqRow)
       // 若没有加载过客户列表，顺便加载，保证下拉可用
       if (!initiateCustomerOptions.value.length) void loadInitiateCustomers()
-    } else {
+    } else if (mode !== 'view') {
       await applyDefaultsFromBmoRow(row)
     }
   } catch (e: any) {
     ElMessage.error(e?.message || '读取 1.4 详情失败')
-    await applyDefaultsFromBmoRow(row)
+    if (mode !== 'view') {
+      await applyDefaultsFromBmoRow(row)
+    }
   } finally {
     initiateLoading.value = false
   }
+}
+
+const openViewDialog = async (row: BmoMouldProcurementRow) => {
+  await openBmoDetailDialog(row, 'view')
+}
+
+const openInitiateDialog = async (row: BmoMouldProcurementRow) => {
+  await openBmoDetailDialog(row, 'initiate')
 }
 
 const handleSaveInitiationDraft = async () => {
