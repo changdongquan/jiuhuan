@@ -105,12 +105,12 @@
       v-model="initiateDialogVisible"
       class="bmo-initiate-dialog"
       :title="dialogMode === 'view' ? '查看（1.4-模具清单详情）' : '立项'"
-      width="1400px"
-      top="2vh"
+      :width="isMobile ? '95vw' : '1400px'"
+      :top="isMobile ? '4vh' : '2vh'"
       destroy-on-close
     >
       <div v-loading="initiateLoading" class="space-y-3">
-        <el-descriptions :column="3" border size="small" title="表头信息">
+        <el-descriptions :column="descriptionColumns" border size="small" title="表头信息">
           <el-descriptions-item label="零部件图号">
             {{ initiateRow?.part_no || '-' }}
           </el-descriptions-item>
@@ -134,7 +134,7 @@
         <div v-if="isViewMode" class="bmo-initiate-section">
           <div class="bmo-initiate-section__title">1.4-模具清单详情</div>
 
-          <el-descriptions :column="3" border size="small">
+          <el-descriptions :column="descriptionColumns" border size="small">
             <el-descriptions-item label="提需类型">
               {{ initiateDetail?.demandType ?? '-' }}
             </el-descriptions-item>
@@ -150,7 +150,7 @@
             <div class="bmo-initiate-subsection__title">模具技术要求</div>
             <el-descriptions
               class="bmo-tech-desc"
-              :column="4"
+              :column="techDescriptionColumns"
               :label-width="120"
               border
               size="small"
@@ -159,7 +159,7 @@
                 v-for="field in initiateDetail?.tech?.fields || []"
                 :key="field.name || field.label"
                 :label="formatTechFieldLabel(field)"
-                :span="isTechFieldFullRow(formatTechFieldLabel(field)) ? 4 : 1"
+                :span="isTechFieldFullRow(formatTechFieldLabel(field)) ? techDescriptionColumns : 1"
               >
                 <div class="bmo-tech-value">
                   {{ formatTechFieldValue(field.value) }}
@@ -486,6 +486,7 @@ import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 const router = useRouter()
+const MOBILE_BREAKPOINT = 900
 
 const openProjectManagementEdit = (projectCode: unknown) => {
   const code = String(projectCode || '').trim()
@@ -607,6 +608,7 @@ const loadingLatest = ref(false)
 const manualRefreshing = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
+const isMobile = ref(false)
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const lastRefreshSource = ref<'live' | 'db' | null>(null)
@@ -678,6 +680,13 @@ const connShortLabel = computed(() => {
   if (lastConnectionState.value === 'error') return '连接异常'
   return '未知状态'
 })
+const descriptionColumns = computed(() => (isMobile.value ? 1 : 3))
+const techDescriptionColumns = computed(() => (isMobile.value ? 1 : 4))
+
+const updateViewport = () => {
+  if (typeof window === 'undefined') return
+  isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
+}
 
 const formatTime = (value: string | null | undefined) => {
   if (!value) return '-'
@@ -1276,6 +1285,8 @@ const handleAutoRefreshToggle = (enabled: boolean) => {
 }
 
 onMounted(() => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport, { passive: true })
   void ensureSessionOnOpen()
   void loadLatest()
   if (autoRefresh.value) startPolling()
@@ -1283,6 +1294,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateViewport)
+  }
 })
 </script>
 
@@ -1530,6 +1544,37 @@ onBeforeUnmount(() => {
   /* 最新采集数据表：字体加大一号（12px -> 13px） */
   :deep(.bmo-latest-table .el-table__cell .cell) {
     font-size: 14px;
+  }
+}
+
+@media (width <= 900px) {
+  .bmo-sync-page {
+    :deep(.bmo-initiate-dialog .el-dialog__body) {
+      max-height: calc(100vh - 140px);
+      padding: 10px 12px;
+    }
+
+    :deep(.bmo-initiate-dialog .el-dialog__footer) {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      padding-top: 10px;
+    }
+
+    :deep(.bmo-initiate-dialog .el-dialog__footer .el-button) {
+      margin-left: 0;
+    }
+
+    :deep(.bmo-tech-desc .el-descriptions__label) {
+      width: 96px;
+      min-width: 96px;
+    }
+
+    .bmo-initiate-section,
+    .bmo-initiate-subsection {
+      padding: 10px;
+    }
   }
 }
 </style>

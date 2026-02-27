@@ -10,9 +10,9 @@
       </div>
     </div>
 
-    <el-form :inline="true" class="review-filter">
+    <el-form :inline="!isMobile" class="review-filter">
       <el-form-item label="状态">
-        <el-select v-model="query.status" style="width: 160px">
+        <el-select v-model="query.status" :style="{ width: isMobile ? '100%' : '160px' }">
           <el-option label="全部" value="ALL" />
           <el-option label="草稿" value="DRAFT" />
           <el-option label="审核中" value="PM_CONFIRMED" />
@@ -23,7 +23,7 @@
       <el-form-item label="关键词">
         <el-input
           v-model="query.keyword"
-          style="width: 320px"
+          :style="{ width: isMobile ? '100%' : '320px' }"
           clearable
           placeholder="项目编号/客户模号/图号/名称/记录ID"
           @keydown.enter.prevent="handleSearch"
@@ -36,7 +36,14 @@
     </el-form>
 
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="list" border size="small" max-height="700">
+      <el-table
+        v-if="!isMobile"
+        v-loading="loading"
+        :data="list"
+        border
+        size="small"
+        max-height="700"
+      >
         <el-table-column type="index" label="#" width="56" />
         <el-table-column prop="status_text" label="状态" width="100">
           <template #default="{ row }">
@@ -83,22 +90,68 @@
         </el-table-column>
       </el-table>
 
-      <div class="mt-3 flex justify-end">
+      <div v-else v-loading="loading" class="review-mobile-list">
+        <el-empty v-if="!list.length && !loading" description="暂无数据" :image-size="72" />
+        <el-card v-for="row in list" :key="row.bmo_record_id" class="mobile-item" shadow="hover">
+          <div class="mobile-item__head">
+            <div class="mobile-item__title">{{ row.project_code_candidate || '-' }}</div>
+            <el-tag :type="statusTagType(row.status)" size="small">
+              {{ row.status_text || '-' }}
+            </el-tag>
+          </div>
+          <div class="mobile-item__grid">
+            <span>图号：{{ row.part_no || '-' }}</span>
+            <span>名称：{{ row.part_name || '-' }}</span>
+            <span>客户模号：{{ row.mold_number || '-' }}</span>
+            <span>项目经理：{{ row.project_manager || '-' }}</span>
+            <span>申请人：{{ row.created_by || '-' }}</span>
+            <span>更新时间：{{ formatTime(row.updated_at) }}</span>
+          </div>
+          <div class="mobile-item__actions">
+            <el-button link type="primary" @click="openInitiationViewDialog(row)"
+              >查看立项</el-button
+            >
+            <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
+              驳回
+            </el-button>
+            <el-button
+              v-if="canReview(row)"
+              link
+              type="success"
+              :loading="approvingId === row.bmo_record_id"
+              @click="handleApprove(row)"
+            >
+              审核通过并入库
+            </el-button>
+          </div>
+        </el-card>
+      </div>
+
+      <div class="mt-3 review-pagination">
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.pageSize"
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="
+            isMobile ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
+          "
           :total="total"
           :page-sizes="[20, 50, 100]"
+          :small="isMobile"
           @current-change="loadTasks"
           @size-change="handlePageSizeChange"
         />
       </div>
     </el-card>
 
-    <el-dialog v-model="viewDialogVisible" title="立项" width="1400px" top="2vh" destroy-on-close>
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="立项"
+      :width="isMobile ? '95vw' : '1400px'"
+      :top="isMobile ? '4vh' : '2vh'"
+      destroy-on-close
+    >
       <div v-loading="viewDialogLoading" class="space-y-3">
-        <el-descriptions :column="4" border size="small" title="表头信息">
+        <el-descriptions :column="descColumn" border size="small" title="表头信息">
           <el-descriptions-item label="零部件图号">
             {{ viewRow?.part_no || '-' }}
           </el-descriptions-item>
@@ -119,7 +172,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-descriptions :column="4" border size="small" title="立项状态">
+        <el-descriptions :column="descColumn" border size="small" title="立项状态">
           <el-descriptions-item label="当前状态">
             <el-tag :type="statusTagType(viewRequest?.status)">
               {{ viewRequest?.status_text || '-' }}
@@ -139,7 +192,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-descriptions :column="4" border size="small" title="立项草稿（货物信息）">
+        <el-descriptions :column="descColumn" border size="small" title="立项草稿（货物信息）">
           <el-descriptions-item label="项目编号">
             {{ viewRequest?.goods_draft?.projectCode || '-' }}
           </el-descriptions-item>
@@ -163,7 +216,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-descriptions :column="4" border size="small" title="立项草稿（销售订单）">
+        <el-descriptions :column="descColumn" border size="small" title="立项草稿（销售订单）">
           <el-descriptions-item label="订单日期">
             {{ viewRequest?.sales_order_draft?.orderDate || '-' }}
           </el-descriptions-item>
@@ -214,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import {
@@ -230,6 +283,7 @@ import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 type ReviewStatus = 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'REJECTED' | 'APPLIED'
 
 const route = useRoute()
+const MOBILE_BREAKPOINT = 900
 const loading = ref(false)
 const list = ref<BmoInitiationReviewTask[]>([])
 const total = ref(0)
@@ -238,6 +292,7 @@ const viewDialogVisible = ref(false)
 const viewDialogLoading = ref(false)
 const viewRow = ref<BmoInitiationReviewTask | null>(null)
 const viewRequest = ref<BmoInitiationRequestRow | null>(null)
+const isMobile = ref(false)
 
 const query = reactive({
   status: 'PM_CONFIRMED' as ReviewStatus,
@@ -272,6 +327,12 @@ const formatAmount = (value: number | null | undefined) => {
 }
 
 const normalizedKeyword = computed(() => String(query.keyword || '').trim())
+const descColumn = computed(() => (isMobile.value ? 1 : 4))
+
+const updateViewport = () => {
+  if (typeof window === 'undefined') return
+  isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
+}
 
 const loadTasks = async () => {
   loading.value = true
@@ -377,11 +438,18 @@ const handleApprove = async (row: Partial<BmoInitiationReviewTask>) => {
 }
 
 onMounted(async () => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport, { passive: true })
   const initBmoRecordId = String(route.query.bmoRecordId || '').trim()
   if (initBmoRecordId) {
     query.keyword = initBmoRecordId
   }
   await loadTasks()
+})
+
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return
+  window.removeEventListener('resize', updateViewport)
 })
 </script>
 
@@ -410,6 +478,79 @@ onMounted(async () => {
     padding: 12px 12px 0;
     background: var(--el-bg-color-overlay);
     border-radius: 8px;
+  }
+
+  .review-pagination {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .review-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobile-item {
+    :deep(.el-card__body) {
+      padding: 12px;
+    }
+  }
+
+  .mobile-item__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .mobile-item__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
+
+  .mobile-item__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--el-text-color-regular);
+  }
+
+  .mobile-item__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+  }
+}
+
+@media (width <= 900px) {
+  .review-center-page {
+    padding-right: 8px;
+    padding-left: 8px;
+
+    .review-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .review-actions {
+      display: flex;
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .review-filter {
+      padding-bottom: 12px;
+    }
+
+    .review-pagination {
+      justify-content: center;
+      overflow-x: auto;
+    }
   }
 }
 </style>
