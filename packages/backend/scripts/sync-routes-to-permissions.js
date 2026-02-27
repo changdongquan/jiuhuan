@@ -69,6 +69,12 @@ const routesToSync = [
     page_title: 'BMO采集',
     parent_route: 'ProjectManagement'
   },
+  {
+    route_name: 'ReviewCenter',
+    route_path: '/review-center/index',
+    page_title: '审核中心',
+    parent_route: 'ReviewCenterMenu'
+  },
 
   // 生产任务
   {

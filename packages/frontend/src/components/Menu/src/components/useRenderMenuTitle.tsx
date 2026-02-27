@@ -10,8 +10,11 @@ export const useRenderMenuTitle = () => {
 
   const renderMenuTitle = (meta: RouteMeta, routeName?: string) => {
     const { title = 'Please set title', icon } = meta
-    const pendingCount = appStore.getBmoPendingInitiationCount
-    const showBmoPendingBadge = routeName === 'BmoSync' && pendingCount > 0
+    const pendingInitiationCount = appStore.getBmoPendingInitiationCount
+    const pendingReviewCount = appStore.getBmoPendingReviewCount
+    const showBmoPendingBadge = routeName === 'BmoSync' && pendingInitiationCount > 0
+    const showReviewPendingBadge =
+      (routeName === 'ReviewCenter' || routeName === 'ReviewCenterMenu') && pendingReviewCount > 0
 
     const titleNode = (
       <span class="v-menu__title-wrap inline-flex items-center gap-[6px]">
@@ -22,12 +25,14 @@ export const useRenderMenuTitle = () => {
       </span>
     )
 
-    if (!showBmoPendingBadge) {
+    if (!showBmoPendingBadge && !showReviewPendingBadge) {
       return titleNode
     }
 
+    const badgeCount = showReviewPendingBadge ? pendingReviewCount : pendingInitiationCount
+
     return (
-      <ElBadge value={pendingCount} max={99} class="v-menu__badge">
+      <ElBadge value={badgeCount} max={99} class="v-menu__badge">
         {titleNode}
       </ElBadge>
     )

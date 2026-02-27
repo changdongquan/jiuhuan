@@ -220,6 +220,29 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/review-center',
+    component: Layout,
+    redirect: '/review-center/index',
+    name: 'ReviewCenterMenu',
+    meta: {
+      title: '审核中心',
+      icon: 'vi-ep:checked'
+    },
+    children: [
+      {
+        path: 'index',
+        name: 'ReviewCenter',
+        component: () => import('@/views/ReviewCenter/index.vue'),
+        meta: {
+          title: '审核中心',
+          icon: 'vi-ep:checked',
+          roles: ['*'],
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
     path: '/production-tasks',
     component: Layout,
     redirect: '/production-tasks/index',

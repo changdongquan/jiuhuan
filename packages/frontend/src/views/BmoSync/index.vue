@@ -35,7 +35,7 @@
         :data="latestList"
         border
         size="small"
-        max-height="650"
+        max-height="600"
       >
         <el-table-column type="index" label="#" width="52" />
         <el-table-column
@@ -86,13 +86,16 @@
               立项
             </el-button>
             <el-button
-              v-else
+              v-else-if="hasProjectCode(row)"
               link
               type="primary"
               @click="openProjectManagementEdit(row.project_code)"
             >
               编辑
             </el-button>
+            <el-button v-else link type="primary" @click="openInitiateDialog(row)"
+              >查看立项</el-button
+            >
           </template>
         </el-table-column>
       </el-table>
@@ -128,7 +131,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="showInitiate14Section" class="bmo-initiate-section">
+        <div v-if="isViewMode" class="bmo-initiate-section">
           <div class="bmo-initiate-section__title">1.4-模具清单详情</div>
 
           <el-descriptions :column="3" border size="small">
@@ -192,7 +195,7 @@
                         v-if="row.id"
                         link
                         type="primary"
-                        @click="downloadTechAttachment(row.id)"
+                        @click="downloadTechAttachment(row.id, row.fileName)"
                       >
                         下载
                       </el-button>
@@ -209,7 +212,10 @@
           <div class="bmo-initiate-section__title">
             立项申请
             <el-tag v-if="initiateRequest?.status" class="ml-2" effect="plain">
-              {{ initiateRequest.status }}
+              {{ getInitiationStatusText(initiateRequest) }}
+            </el-tag>
+            <el-tag v-if="initiationApplicantName !== '-'" class="ml-2" type="info" effect="plain">
+              申请人：{{ initiationApplicantName }}
             </el-tag>
             <span v-if="initiateRequest?.rejected_reason" class="bmo-initiate-reject-reason">
               （驳回：{{ initiateRequest.rejected_reason }}）
@@ -434,8 +440,12 @@
       <template #footer>
         <el-button @click="initiateDialogVisible = false">关闭</el-button>
         <template v-if="!isViewMode">
-          <el-button :loading="initiateSaving" @click="handleSaveInitiationDraft"
-            >保存草稿</el-button
+          <el-button
+            :disabled="isInitiationStatusLocked(initiateRequest?.status)"
+            :loading="initiateSaving"
+            @click="handleSaveInitiationDraft"
+          >
+            保存草稿</el-button
           >
           <el-button
             type="primary"
@@ -444,14 +454,6 @@
             @click="handleConfirmInitiation"
           >
             提交审核
-          </el-button>
-          <el-button
-            type="success"
-            :disabled="initiateRequest?.status !== 'PM_CONFIRMED'"
-            :loading="initiateApproving"
-            @click="handleApproveAndApply"
-          >
-            审核通过并入库
           </el-button>
         </template>
       </template>
@@ -474,7 +476,6 @@ import {
   getBmoInitiationRequestByProjectApi,
   saveBmoInitiationDraftApi,
   confirmBmoInitiationRequestApi,
-  approveAndApplyBmoInitiationRequestApi,
   type BmoMouldProcurementRow,
   type BmoMouldProcurementDetail,
   type BmoMouldProcurementDetailField,
@@ -482,6 +483,7 @@ import {
 } from '@/api/bmo'
 import { getMaxSerialApi } from '@/api/goods'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 const router = useRouter()
 
@@ -519,11 +521,33 @@ const isInitiationStatusLocked = (status: unknown) => {
   return s === 'PM_CONFIRMED' || s === 'APPLIED'
 }
 
+const getInitiationStatusText = (row: Partial<BmoInitiationRequestRow> | null | undefined) => {
+  if (!row) return '-'
+  const statusText = String(row.status_text || '').trim()
+  if (statusText) return statusText
+
+  const s = String(row.status || '').trim()
+  if (s === 'DRAFT') return '草稿'
+  if (s === 'PM_CONFIRMED' || s === 'SUBMITTED') return '审核中'
+  if (s === 'APPLIED') return '已入库'
+  if (s === 'REJECTED') return '已驳回'
+  return s || '-'
+}
+
+const initiationApplicantName = computed(() => {
+  const fromRequest = String(initiateRequest.value?.created_by || '').trim()
+  if (fromRequest) return fromRequest
+  return '-'
+})
+
 const canShowInitiateAction = (row: Partial<BmoMouldProcurementRow> | null | undefined) => {
   if (!row) return false
-  const hasProjectCode = Boolean(String(row.project_code || '').trim())
-  if (hasProjectCode) return false
+  if (hasProjectCode(row)) return false
   return !isInitiationStatusLocked((row as any).initiation_status)
+}
+
+const hasProjectCode = (row: Partial<BmoMouldProcurementRow> | null | undefined) => {
+  return Boolean(String(row?.project_code || '').trim())
 }
 
 const TECH_FIELDS_FULL_ROW_LABELS = new Set<string>(['模具特殊需求及风险'])
@@ -592,14 +616,12 @@ const lastConnectionMessage = ref<string | null>(null)
 const initiateDialogVisible = ref(false)
 const dialogMode = ref<'view' | 'initiate'>('initiate')
 const isViewMode = computed(() => dialogMode.value === 'view')
-const showInitiate14Section = computed(() => true)
 const initiateLoading = ref(false)
 const initiateRow = ref<BmoMouldProcurementRow | null>(null)
 const initiateDetail = ref<BmoMouldProcurementDetail | null>(null)
 const initiateRequest = ref<BmoInitiationRequestRow | null>(null)
 const initiateSaving = ref(false)
 const initiateConfirming = ref(false)
-const initiateApproving = ref(false)
 const initiateRecommendingCode = ref(false)
 const initiateCustomerLoading = ref(false)
 const initiateCustomerOptions = ref<CustomerInfo[]>([])
@@ -1161,6 +1183,7 @@ const handleConfirmInitiation = async () => {
     const res = await confirmBmoInitiationRequestApi(payload)
     const row = (res.data as any) || null
     initiateRequest.value = row
+    await refreshBmoMenuBadges()
     ElMessage.success('已提交审核')
   } catch (e: any) {
     ElMessage.error(e?.message || '提交审核失败')
@@ -1169,29 +1192,17 @@ const handleConfirmInitiation = async () => {
   }
 }
 
-const handleApproveAndApply = async () => {
-  const bmo_record_id = String(initiateRow.value?.bmo_record_id || '').trim()
-  if (!bmo_record_id) {
-    ElMessage.error('缺少 bmo_record_id，无法入库')
+const downloadTechAttachment = (attachmentId: string, fileName?: string | null) => {
+  const fdId = String(initiateDetail.value?.fdId || initiateRow.value?.bmo_record_id || '').trim()
+  if (!fdId) {
+    ElMessage.error('缺少 fdId，无法下载附件')
     return
   }
-  initiateApproving.value = true
-  try {
-    const res = await approveAndApplyBmoInitiationRequestApi({ bmo_record_id })
-    const data = res.data
-    ElMessage.success(`已入库：${data?.projectCode || '-'} / ${data?.orderNo || '-'}`)
-    // Refresh request status
-    const r = await getBmoInitiationRequestApi({ bmo_record_id })
-    initiateRequest.value = (r.data as any) || initiateRequest.value
-  } catch (e: any) {
-    ElMessage.error(e?.message || '审核入库失败')
-  } finally {
-    initiateApproving.value = false
-  }
-}
-
-const downloadTechAttachment = (attachmentId: string) => {
-  const url = `/api/bmo/attachment/download/${encodeURIComponent(attachmentId)}`
+  const params = new URLSearchParams()
+  params.set('fdId', fdId)
+  const safeFileName = String(fileName || '').trim()
+  if (safeFileName) params.set('fileName', safeFileName)
+  const url = `/api/bmo/attachment/download/${encodeURIComponent(attachmentId)}?${params.toString()}`
   window.open(url, '_blank')
 }
 

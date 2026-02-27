@@ -7,7 +7,7 @@ import { useRenderMenuItem } from './components/useRenderMenuItem'
 import { useRouter } from 'vue-router'
 import { isUrl } from '@/utils/is'
 import { useDesign } from '@/hooks/web/useDesign'
-import { getBmoPendingInitiationCountApi } from '@/api/bmo'
+import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 const { getPrefixCls } = useDesign()
 
@@ -71,20 +71,10 @@ export default defineComponent({
       }
     }
 
-    const refreshBmoPendingCount = async () => {
-      try {
-        const res = await getBmoPendingInitiationCountApi({ timeout: 8000 })
-        const pendingCount = Number(res?.data?.pendingCount || 0) || 0
-        appStore.setBmoPendingInitiationCount(pendingCount)
-      } catch {
-        appStore.setBmoPendingInitiationCount(0)
-      }
-    }
-
     onMounted(() => {
-      void refreshBmoPendingCount()
+      void refreshBmoMenuBadges()
       bmoPendingCountTimer = setInterval(() => {
-        void refreshBmoPendingCount()
+        void refreshBmoMenuBadges()
       }, 60000)
     })
 

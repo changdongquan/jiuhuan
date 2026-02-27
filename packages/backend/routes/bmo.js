@@ -1266,6 +1266,31 @@ router.get('/mould-procurement/pending-count', async (req, res) => {
   }
 })
 
+router.get('/initiation-review/pending-count', async (req, res) => {
+  try {
+    const rows = await query(
+      `
+        SELECT COUNT(1) AS pendingCount
+        FROM dbo.bmo_initiation_requests
+        WHERE status = N'PM_CONFIRMED';
+      `
+    )
+    const pendingCount = Number(rows?.[0]?.pendingCount || 0) || 0
+    return res.json({
+      code: 0,
+      success: true,
+      data: { pendingCount }
+    })
+  } catch (error) {
+    console.error('读取立项待审核数量失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取立项待审核数量失败')
+    })
+  }
+})
+
 router.get('/mould-procurement/by-project', async (req, res) => {
   try {
     const projectCode = String(req.query.projectCode || '').trim()
@@ -2616,11 +2641,133 @@ const generateSalesOrderNo = async (tx) => {
   return `${orderPrefix}-${orderDate}-${formattedSerial}`
 }
 
+const LOCKED_INITIATION_STATUSES = new Set(['PM_CONFIRMED', 'APPLIED'])
+
+const INITIATION_STATUS_TEXT_MAP = {
+  DRAFT: '草稿',
+  PM_CONFIRMED: '审核中',
+  APPLIED: '已入库',
+  REJECTED: '已驳回'
+}
+
+const normalizeInitiationStatus = (status) => String(status || '').trim().toUpperCase()
+
+const getInitiationStatusText = (status) => {
+  const s = normalizeInitiationStatus(status)
+  return INITIATION_STATUS_TEXT_MAP[s] || '未知状态'
+}
+
+const getReviewerWhitelist = () => {
+  const raw = String(process.env.BMO_INITIATION_REVIEWERS || '').trim()
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map((x) => String(x || '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
+const assertInitiationReviewerPermission = (req) => {
+  const whitelist = getReviewerWhitelist()
+  if (!whitelist.length) return
+
+  const actor = String(resolveActorFromReq(req) || '').trim().toLowerCase()
+  const usernameRaw = req?.headers?.['x-username']
+  const username = String(Array.isArray(usernameRaw) ? usernameRaw[0] : usernameRaw || '')
+    .trim()
+    .toLowerCase()
+  if (!actor && !username) {
+    const e = new Error('当前用户没有审核权限')
+    e.statusCode = 403
+    throw e
+  }
+  if (whitelist.includes(actor) || whitelist.includes(username)) return
+
+  const e = new Error('当前用户没有审核权限')
+  e.statusCode = 403
+  throw e
+}
+
+const toInitiationReviewTaskData = (row) => {
+  if (!row) return null
+  const data = toInitiationResponseData(row)
+  return {
+    ...data,
+    part_no: row.part_no || null,
+    part_name: row.part_name || null,
+    model: row.model || null,
+    mold_number: row.mold_number || null,
+    project_manager: row.project_manager || null,
+    bid_price_tax_incl: row.bid_price_tax_incl ?? null,
+    bid_time: row.bid_time || null
+  }
+}
+
+const ensureInitiationEditable = (status) => {
+  const s = normalizeInitiationStatus(status)
+  if (LOCKED_INITIATION_STATUSES.has(s)) {
+    throw new Error('当前状态不可修改')
+  }
+}
+
+const extractProjectCodeFromDraftInput = (input) => {
+  const fromGoods = String(input?.goods_draft?.projectCode || '').trim()
+  if (fromGoods) return fromGoods
+  return String(input?.project_code_candidate || '').trim()
+}
+
+const ensureProjectCodeNotOccupied = async ({ projectCode, currentBmoRecordId }) => {
+  const code = String(projectCode || '').trim()
+  if (!code) return
+  const currentRecordId = String(currentBmoRecordId || '').trim()
+
+  const rows = await query(
+    `
+      SELECT TOP 1 bmo_record_id, status
+      FROM dbo.bmo_initiation_requests
+      WHERE (
+          project_code_final = @projectCode
+          OR project_code_candidate = @projectCode
+          OR JSON_VALUE(goods_draft_json, '$.projectCode') = @projectCode
+        )
+        AND bmo_record_id <> @currentBmoRecordId
+      ORDER BY
+        CASE status
+          WHEN N'APPLIED' THEN 0
+          WHEN N'PM_CONFIRMED' THEN 1
+          WHEN N'DRAFT' THEN 2
+          WHEN N'REJECTED' THEN 3
+          ELSE 9
+        END ASC,
+        updated_at DESC,
+        id DESC
+    `,
+    { projectCode: code, currentBmoRecordId: currentRecordId }
+  )
+  const row = rows?.[0] || null
+  if (!row) return
+
+  const occupiedStatus = normalizeInitiationStatus(row.status)
+  if (occupiedStatus === 'REJECTED') return
+
+  throw new Error(`项目编号 "${code}" 已被其他立项单占用`)
+}
+
 const upsertInitiationDraft = async (input) => {
   const bmoRecordId = String(input?.bmo_record_id || input?.fdId || input?.bmoRecordId || '').trim()
   if (!bmoRecordId) throw new Error('缺少 bmo_record_id')
 
   const actor = input?.actor || null
+  const projectCode = extractProjectCodeFromDraftInput(input)
+  if (!projectCode) throw new Error('项目编号不能为空')
+
+  const existingRows = await query(
+    `SELECT TOP 1 status FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+    { bmoRecordId }
+  )
+  const existing = existingRows?.[0] || null
+  ensureInitiationEditable(existing?.status)
+  await ensureProjectCodeNotOccupied({ projectCode, currentBmoRecordId: bmoRecordId })
+
   const projectCodeCandidate = input?.project_code_candidate ? String(input.project_code_candidate).trim() : null
   const goodsDraftJson = input?.goods_draft ? JSON.stringify(input.goods_draft) : null
   const salesDraftJson = input?.sales_order_draft ? JSON.stringify(input.sales_order_draft) : null
@@ -2653,6 +2800,7 @@ const upsertInitiationDraft = async (input) => {
     ON target.bmo_record_id = source.bmo_record_id
     WHEN MATCHED THEN
       UPDATE SET
+        created_by = COALESCE(target.created_by, @actor),
         project_code_candidate = COALESCE(@projectCodeCandidate, target.project_code_candidate),
         goods_draft_json = COALESCE(@goodsDraftJson, target.goods_draft_json),
         sales_order_draft_json = COALESCE(@salesDraftJson, target.sales_order_draft_json),
@@ -2686,6 +2834,7 @@ const toInitiationResponseData = (row) => {
   if (!row) return null
   return {
     ...row,
+    status_text: getInitiationStatusText(row.status),
     goods_draft: safeJsonParse(row.goods_draft_json),
     sales_order_draft: safeJsonParse(row.sales_order_draft_json),
     tech_snapshot: safeJsonParse(row.tech_snapshot_json)
@@ -2781,6 +2930,15 @@ router.post('/initiation-request/draft', async (req, res) => {
     })
   } catch (error) {
     console.error('保存 BMO 立项草稿失败:', error)
+    if (String(error?.message || '').includes('不可修改')) {
+      return res.status(409).json({ code: 409, success: false, message: error.message })
+    }
+    if (String(error?.message || '').includes('占用')) {
+      return res.status(409).json({ code: 409, success: false, message: error.message })
+    }
+    if (String(error?.message || '').includes('项目编号不能为空')) {
+      return res.status(400).json({ code: 400, success: false, message: error.message })
+    }
     return res.status(500).json({
       code: 500,
       success: false,
@@ -2795,9 +2953,6 @@ router.post('/initiation-request/confirm', async (req, res) => {
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
     if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
 
-    // Ensure draft exists and is up-to-date.
-    await upsertInitiationDraft({ ...req.body, actor })
-
     const existingRows = await query(
       `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
       { bmoRecordId }
@@ -2810,6 +2965,8 @@ router.post('/initiation-request/confirm', async (req, res) => {
     if (existingStatus === 'PM_CONFIRMED') {
       return res.status(400).json({ code: 400, success: false, message: '已提交审核，请勿重复提交' })
     }
+    // Ensure draft exists and is up-to-date after editable status check.
+    await upsertInitiationDraft({ ...req.body, actor })
 
     await query(
       `
@@ -2829,9 +2986,18 @@ router.post('/initiation-request/confirm', async (req, res) => {
       { bmoRecordId }
     )
     const row = rows?.[0] || null
-    return res.json({ code: 0, success: true, data: row })
+    return res.json({ code: 0, success: true, data: toInitiationResponseData(row) })
   } catch (error) {
     console.error('确认 BMO 立项申请单失败:', error)
+    if (String(error?.message || '').includes('不可修改')) {
+      return res.status(409).json({ code: 409, success: false, message: error.message })
+    }
+    if (String(error?.message || '').includes('占用')) {
+      return res.status(409).json({ code: 409, success: false, message: error.message })
+    }
+    if (String(error?.message || '').includes('项目编号不能为空')) {
+      return res.status(400).json({ code: 400, success: false, message: error.message })
+    }
     return res.status(500).json({
       code: 500,
       success: false,
@@ -2840,13 +3006,139 @@ router.post('/initiation-request/confirm', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/reject', async (req, res) => {
+router.get('/initiation-review/tasks', async (req, res) => {
   try {
-    const actor = resolveActorFromReq(req)
+    assertInitiationReviewerPermission(req)
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1)
+    const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || '20'), 10) || 20))
+    const statusInput = normalizeInitiationStatus(req.query.status)
+    const status = statusInput && statusInput !== 'ALL' ? statusInput : ''
+    const keyword = String(req.query.keyword || '').trim()
+    const offset = (page - 1) * pageSize
+
+    const whereParts = ['1=1']
+    const params = {}
+    if (status) {
+      whereParts.push('ir.status = @status')
+      params.status = status
+    }
+    if (keyword) {
+      whereParts.push(`(
+        ir.bmo_record_id LIKE @keyword
+        OR ir.project_code_candidate LIKE @keyword
+        OR ir.project_code_final LIKE @keyword
+        OR JSON_VALUE(ir.goods_draft_json, '$.projectCode') LIKE @keyword
+        OR mp.part_no LIKE @keyword
+        OR mp.part_name LIKE @keyword
+        OR mp.mold_number LIKE @keyword
+        OR mp.project_manager LIKE @keyword
+      )`)
+      params.keyword = `%${keyword}%`
+    }
+    params.offset = offset
+    params.pageSize = pageSize
+
+    const whereSql = whereParts.join(' AND ')
+    const rows = await query(
+      `
+        WITH base AS (
+          SELECT
+            ir.*,
+            mp.part_no,
+            mp.part_name,
+            mp.model,
+            mp.mold_number,
+            mp.project_manager,
+            mp.bid_price_tax_incl,
+            mp.bid_time
+          FROM dbo.bmo_initiation_requests ir
+          LEFT JOIN dbo.bmo_mould_procurement mp
+            ON mp.bmo_record_id = ir.bmo_record_id
+          WHERE ${whereSql}
+        ),
+        ordered AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (
+              ORDER BY
+                CASE status
+                  WHEN N'PM_CONFIRMED' THEN 0
+                  WHEN N'DRAFT' THEN 1
+                  WHEN N'REJECTED' THEN 2
+                  WHEN N'APPLIED' THEN 3
+                  ELSE 9
+                END ASC,
+                updated_at DESC,
+                id DESC
+            ) AS rn
+          FROM base
+        )
+        SELECT *
+        FROM ordered
+        WHERE rn > @offset
+          AND rn <= (@offset + @pageSize)
+        ORDER BY rn ASC
+      `,
+      params
+    )
+
+    const totalRows = await query(
+      `
+        SELECT COUNT(1) AS total
+        FROM dbo.bmo_initiation_requests ir
+        LEFT JOIN dbo.bmo_mould_procurement mp
+          ON mp.bmo_record_id = ir.bmo_record_id
+        WHERE ${whereSql}
+      `,
+      params
+    )
+    const total = Number(totalRows?.[0]?.total || 0) || 0
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        page,
+        pageSize,
+        total,
+        list: (rows || []).map((row) => toInitiationReviewTaskData(row))
+      }
+    })
+  } catch (error) {
+    console.error('读取立项审核任务失败:', error)
+    if (Number(error?.statusCode || 0) === 403) {
+      return res.status(403).json({ code: 403, success: false, message: error.message || '无权限' })
+    }
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取立项审核任务失败')
+    })
+  }
+})
+
+const rejectInitiationRequest = async (req, res, options = {}) => {
+  try {
+    if (options.requireReviewerPermission) {
+      assertInitiationReviewerPermission(req)
+    }
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
     const reason = String(req.body?.reason || '').trim()
     if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
     if (!reason) return res.status(400).json({ code: 400, success: false, message: '缺少驳回原因' })
+
+    const existingRows = await query(
+      `SELECT TOP 1 status FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+      { bmoRecordId }
+    )
+    const existing = existingRows?.[0] || null
+    if (!existing) return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+    const status = normalizeInitiationStatus(existing.status)
+    if (status === 'APPLIED') {
+      return res.status(400).json({ code: 400, success: false, message: '已入库，不能驳回' })
+    }
+    if (status !== 'PM_CONFIRMED') {
+      return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
+    }
 
     await query(
       `
@@ -2861,16 +3153,30 @@ router.post('/initiation-request/reject', async (req, res) => {
     return res.json({ code: 0, success: true, message: '已驳回' })
   } catch (error) {
     console.error('驳回 BMO 立项申请单失败:', error)
+    if (Number(error?.statusCode || 0) === 403) {
+      return res.status(403).json({ code: 403, success: false, message: error.message || '无权限' })
+    }
     return res.status(500).json({
       code: 500,
       success: false,
       message: formatBmoSqlErrorMessage(error, '驳回 BMO 立项申请单失败')
     })
   }
+}
+
+router.post('/initiation-request/reject', async (req, res) => {
+  return rejectInitiationRequest(req, res)
 })
 
-router.post('/initiation-request/approve-and-apply', async (req, res) => {
+router.post('/initiation-review/reject', async (req, res) => {
+  return rejectInitiationRequest(req, res, { requireReviewerPermission: true })
+})
+
+const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
   try {
+    if (options.requireReviewerPermission) {
+      assertInitiationReviewerPermission(req)
+    }
     const actor = resolveActorFromReq(req)
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
     if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
@@ -3091,12 +3397,23 @@ router.post('/initiation-request/approve-and-apply', async (req, res) => {
     }
   } catch (error) {
     console.error('审核并入库失败:', error)
+    if (Number(error?.statusCode || 0) === 403) {
+      return res.status(403).json({ code: 403, success: false, message: error.message || '无权限' })
+    }
     return res.status(500).json({
       code: 500,
       success: false,
       message: formatBmoSqlErrorMessage(error, '审核并入库失败')
     })
   }
+}
+
+router.post('/initiation-request/approve-and-apply', async (req, res) => {
+  return approveAndApplyInitiationRequest(req, res)
+})
+
+router.post('/initiation-review/approve-and-apply', async (req, res) => {
+  return approveAndApplyInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
 module.exports = router
