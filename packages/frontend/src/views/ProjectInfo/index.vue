@@ -101,16 +101,18 @@
           <span class="value">{{ item.remarks }}</span>
         </div>
         <div class="pi-mobile-card__actions">
-          <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
-          <el-button size="small" @click="handleEdit(item)">编辑</el-button>
-          <el-button
-            v-if="item.status === '已删除'"
-            size="small"
-            type="warning"
-            @click="handleRestore(item)"
-            >恢复</el-button
-          >
-          <el-button v-else size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+          <template v-if="item.status === '已删除'">
+            <el-tag size="small" :type="getHardDeleteReviewTagType(item.hardDeleteReviewStatus)">
+              {{ getHardDeleteReviewText(item.hardDeleteReviewStatus) }}
+            </el-tag>
+            <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
+            <el-button size="small" type="warning" @click="handleRestore(item)">恢复</el-button>
+          </template>
+          <template v-else>
+            <el-button size="small" type="primary" @click="handleView(item)">查看</el-button>
+            <el-button size="small" @click="handleEdit(item)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+          </template>
         </div>
       </el-card>
     </div>
@@ -182,18 +184,23 @@
           <el-table-column label="操作" width="220" align="center" fixed="right">
             <template #default="{ row }">
               <div class="operation-buttons">
-                <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-                <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-                <el-button
-                  v-if="row.status === '已删除'"
-                  type="warning"
-                  size="small"
-                  @click="handleRestore(row)"
-                  >恢复</el-button
-                >
-                <el-button v-else type="danger" size="small" @click="handleDelete(row)"
-                  >删除</el-button
-                >
+                <template v-if="row.status === '已删除'">
+                  <el-tag
+                    size="small"
+                    :type="getHardDeleteReviewTagType(row.hardDeleteReviewStatus)"
+                  >
+                    {{ getHardDeleteReviewText(row.hardDeleteReviewStatus) }}
+                  </el-tag>
+                  <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+                  <el-button type="warning" size="small" @click="handleRestore(row)"
+                    >恢复</el-button
+                  >
+                </template>
+                <template v-else>
+                  <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+                  <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+                  <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+                </template>
               </div>
             </template>
           </el-table-column>
@@ -263,7 +270,9 @@
       </div>
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleEditFromView">编辑</el-button>
+        <el-button v-if="viewData?.status !== '已删除'" type="primary" @click="handleEditFromView"
+          >编辑</el-button
+        >
       </template>
     </el-dialog>
 
@@ -418,6 +427,7 @@ import {
 } from '@/api/goods'
 import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { useAppStore } from '@/store/modules/app'
+import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 import {
   ElButton,
   ElCard,
@@ -542,6 +552,29 @@ const getCategoryTagType = (
     修改模具: 'warning'
   }
   return typeMap[category] || 'info'
+}
+
+const getHardDeleteReviewText = (status: unknown) => {
+  const s = String(status || '')
+    .trim()
+    .toUpperCase()
+  if (s === 'PENDING') return '硬删审核中'
+  if (s === 'APPROVED') return '硬删已通过'
+  if (s === 'REJECTED') return '硬删已驳回'
+  if (s === 'CANCELED') return '硬删已取消'
+  return '待提交硬删'
+}
+
+const getHardDeleteReviewTagType = (
+  status: unknown
+): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
+  const s = String(status || '')
+    .trim()
+    .toUpperCase()
+  if (s === 'PENDING') return 'warning'
+  if (s === 'APPROVED') return 'success'
+  if (s === 'REJECTED') return 'danger'
+  return 'info'
 }
 
 // 生成项目编号
@@ -802,6 +835,7 @@ const handleDelete = async (row: any) => {
       ElMessage.success('删除成功')
       // 刷新数据列表
       await fetchData()
+      await refreshBmoMenuBadges()
     }
   } catch (error) {
     if (error !== 'cancel') {
@@ -838,6 +872,7 @@ const handleRestore = async (row: any) => {
       await restoreGoodsProjectApi(projectCode)
       ElMessage.success('恢复成功')
       await fetchData()
+      await refreshBmoMenuBadges()
     }
   } catch (error) {
     if (error !== 'cancel') {

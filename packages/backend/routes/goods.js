@@ -3,7 +3,230 @@ const { query, getPool } = require('../database')
 const sql = require('mssql')
 const { resolveActorFromReq } = require('../utils/actor')
 const { softDeleteByProjectCode, restoreByProjectCode, SOFT_DELETED } = require('../services/projectSoftDelete')
+const {
+  DELETE_PLAN,
+  createHardDeleteAuditStarted,
+  markHardDeleteAuditFinished,
+  hardDeleteByProjectCode
+} = require('../services/projectHardDelete')
+const {
+  HARD_DELETE_REVIEW_STATUS,
+  ensureHardDeleteReviewTable,
+  assertHardDeleteReviewerPermission,
+  toHardDeleteReviewTaskData
+} = require('../services/projectHardDeleteReview')
 const router = express.Router()
+
+const resolveRequestId = (req) =>
+  String(req.headers['x-request-id'] || req.headers['x-correlation-id'] || '').trim() || null
+
+const ensurePendingHardDeleteReviewRequest = async ({
+  tx,
+  projectCode,
+  goodsId,
+  requesterName,
+  requestSource = 'SOFT_DELETE_AUTO',
+  requestReason = null
+}) => {
+  if (!tx || !projectCode) return null
+  await ensureHardDeleteReviewTable(tx)
+
+  const lockReq = new sql.Request(tx)
+  lockReq.input('projectCode', sql.NVarChar(100), projectCode)
+  const existsResult = await lockReq.query(`
+    SELECT TOP 1 id
+    FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
+    WHERE project_code = @projectCode
+      AND status = N'${HARD_DELETE_REVIEW_STATUS.PENDING}'
+    ORDER BY id DESC
+  `)
+  const pendingId = Number(existsResult.recordset?.[0]?.id || 0)
+  if (pendingId > 0) return pendingId
+
+  const insertReq = new sql.Request(tx)
+  insertReq.input('projectCode', sql.NVarChar(100), projectCode)
+  insertReq.input('goodsId', sql.Int, Number.isInteger(goodsId) && goodsId > 0 ? goodsId : null)
+  insertReq.input('requestSource', sql.NVarChar(40), requestSource)
+  insertReq.input('requestReason', sql.NVarChar(1000), requestReason || null)
+  insertReq.input('status', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
+  insertReq.input('requesterName', sql.NVarChar(200), requesterName || null)
+  const insertResult = await insertReq.query(`
+    INSERT INTO dbo.project_hard_delete_review_requests (
+      project_code,
+      goods_id,
+      request_source,
+      request_reason,
+      status,
+      requester_name
+    )
+    VALUES (
+      @projectCode,
+      @goodsId,
+      @requestSource,
+      @requestReason,
+      @status,
+      @requesterName
+    );
+    SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS requestId;
+  `)
+  return Number(insertResult.recordset?.[0]?.requestId || 0) || null
+}
+
+const cancelPendingHardDeleteReviewRequest = async ({ tx, projectCode, reviewerName, comment }) => {
+  if (!tx || !projectCode) return
+  await ensureHardDeleteReviewTable(tx)
+  const req = new sql.Request(tx)
+  req.input('projectCode', sql.NVarChar(100), projectCode)
+  req.input('statusPending', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
+  req.input('statusCanceled', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.CANCELED)
+  req.input('reviewerName', sql.NVarChar(200), reviewerName || null)
+  req.input('reviewComment', sql.NVarChar(1000), comment || '记录已恢复，系统自动取消硬删除申请')
+  await req.query(`
+    UPDATE dbo.project_hard_delete_review_requests
+    SET
+      status = @statusCanceled,
+      reviewer_name = COALESCE(reviewer_name, @reviewerName),
+      review_comment = @reviewComment,
+      canceled_at = SYSDATETIME(),
+      updated_at = SYSDATETIME()
+    WHERE project_code = @projectCode
+      AND status = @statusPending
+  `)
+}
+
+const executeHardDeleteByGoodsId = async ({
+  pool,
+  goodsId,
+  actor,
+  requestId,
+  requireApprovedReviewRequest = false
+}) => {
+  const parsedId = parseInt(goodsId, 10)
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    const err = new Error('无效的ID')
+    err.httpStatus = 400
+    throw err
+  }
+
+  const beforeReq = pool.request()
+  beforeReq.input('id', sql.Int, parsedId)
+  const beforeResult = await beforeReq.query(`
+    SELECT TOP 1
+      货物ID AS id,
+      项目编号 AS projectCode,
+      状态 AS status,
+      产品名称 AS productName,
+      产品图号 AS productDrawing,
+      分类 AS category
+    FROM 货物信息
+    WHERE 货物ID = @id
+  `)
+  const beforeRow = beforeResult.recordset?.[0]
+  if (!beforeRow) {
+    const err = new Error('货物信息不存在')
+    err.httpStatus = 404
+    throw err
+  }
+
+  const projectCode = String(beforeRow.projectCode || '').trim()
+  if (!projectCode) {
+    const err = new Error('记录缺少项目编号，无法硬删除')
+    err.httpStatus = 400
+    throw err
+  }
+  if (String(beforeRow.status || '').trim() !== SOFT_DELETED) {
+    const err = new Error('仅允许对“已删除”状态记录执行硬删除')
+    err.httpStatus = 409
+    throw err
+  }
+
+  if (requireApprovedReviewRequest) {
+    const reviewReq = pool.request()
+    reviewReq.input('projectCode', sql.NVarChar(100), projectCode)
+    reviewReq.input('statusApproved', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.APPROVED)
+    const reviewResult = await reviewReq.query(`
+      SELECT TOP 1 id, executed_at
+      FROM dbo.project_hard_delete_review_requests
+      WHERE project_code = @projectCode
+        AND status = @statusApproved
+      ORDER BY approved_at DESC, id DESC
+    `)
+    const approvedRow = reviewResult.recordset?.[0]
+    if (!approvedRow) {
+      const err = new Error('未找到已审批通过的硬删除申请')
+      err.httpStatus = 409
+      throw err
+    }
+    if (approvedRow.executed_at) {
+      const err = new Error('该硬删除申请已执行，请勿重复操作')
+      err.httpStatus = 409
+      throw err
+    }
+  }
+
+  let auditId = await createHardDeleteAuditStarted({
+    pool,
+    projectCode,
+    actor,
+    requestId,
+    beforeSnapshot: beforeRow,
+    cascadePlan: DELETE_PLAN
+  })
+
+  let cascadeSummary = null
+  const tx = new sql.Transaction(pool)
+  try {
+    await tx.begin()
+    const guardReq = new sql.Request(tx)
+    guardReq.input('id', sql.Int, parsedId)
+    const guardResult = await guardReq.query(`
+      SELECT TOP 1 项目编号 AS projectCode, 状态 AS status
+      FROM 货物信息 WITH (UPDLOCK, HOLDLOCK)
+      WHERE 货物ID = @id
+    `)
+    const guardRow = guardResult.recordset?.[0]
+    if (!guardRow) {
+      const err = new Error('目标记录不存在，可能已被其他操作删除')
+      err.httpStatus = 404
+      throw err
+    }
+    const guardStatus = String(guardRow.status || '').trim()
+    if (guardStatus !== SOFT_DELETED) {
+      const err = new Error('记录状态已变化，仅允许硬删除“已删除”状态记录')
+      err.httpStatus = 409
+      throw err
+    }
+
+    cascadeSummary = await hardDeleteByProjectCode({ tx, projectCode })
+    await tx.commit()
+  } catch (e) {
+    try {
+      await tx.rollback()
+    } catch {}
+    try {
+      await markHardDeleteAuditFinished({
+        pool,
+        auditId,
+        success: false,
+        errorMessage: e?.message || '未知错误'
+      })
+    } catch {}
+    throw e
+  }
+
+  await markHardDeleteAuditFinished({
+    pool,
+    auditId,
+    success: true,
+    cascadeResult: cascadeSummary
+  })
+
+  return {
+    auditId,
+    projectCode,
+    cascadeSummary
+  }
+}
 
 // 获取新品货物列表（IsNew=1）
 // 只返回在项目管理表中有记录的货物，避免外键约束错误
@@ -61,6 +284,9 @@ router.get('/list', async (req, res) => {
       sortField,
       sortOrder
     } = req.query
+
+    const pool = await getPool()
+    await ensureHardDeleteReviewTable(pool)
 
     let whereConditions = []
     let params = {}
@@ -141,11 +367,20 @@ router.get('/list', async (req, res) => {
         g.分类 as category,
         g.备注 as remarks,
         g.状态 as status,
+        hd.status as hardDeleteReviewStatus,
+        hd.review_comment as hardDeleteReviewComment,
+        hd.updated_at as hardDeleteReviewUpdatedAt,
         c.客户名称 as customerName,
         p.客户模号 as customerModelNo
       FROM 货物信息 g
       LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+      OUTER APPLY (
+        SELECT TOP 1 status, review_comment, updated_at
+        FROM dbo.project_hard_delete_review_requests
+        WHERE project_code = g.项目编号
+        ORDER BY id DESC
+      ) hd
       ${whereClause}
       ${orderByClause}
       OFFSET ${offset} ROWS
@@ -170,6 +405,344 @@ router.get('/list', async (req, res) => {
       success: false,
       message: '获取货物信息列表失败',
       error: error.message
+    })
+  }
+})
+
+// 审核中心：硬删除待审核数量
+router.get('/hard-delete-review/pending-count', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureHardDeleteReviewTable(pool)
+    const request = pool.request()
+    request.input('statusPending', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
+    const result = await request.query(`
+      SELECT COUNT(1) AS pendingCount
+      FROM dbo.project_hard_delete_review_requests
+      WHERE status = @statusPending
+    `)
+    const pendingCount = Number(result.recordset?.[0]?.pendingCount || 0) || 0
+    return res.json({ code: 0, success: true, data: { pendingCount } })
+  } catch (error) {
+    console.error('获取硬删除待审数量失败:', error)
+    return res.status(500).json({ code: 500, success: false, message: '获取待审数量失败' })
+  }
+})
+
+// 审核中心：硬删除任务列表
+router.get('/hard-delete-review/tasks', async (req, res) => {
+  try {
+    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+
+    const { status = 'PENDING', keyword = '', page = 1, pageSize = 20 } = req.query
+    const statusText = String(status || 'PENDING').trim().toUpperCase()
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const size = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
+    const offset = (pageNumber - 1) * size
+
+    const where = []
+    const params = {}
+    if (statusText && statusText !== 'ALL') {
+      where.push('r.status = @status')
+      params.status = statusText
+    }
+    const keywordText = String(keyword || '').trim()
+    if (keywordText) {
+      where.push(
+        '(r.project_code LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword OR r.requester_name LIKE @keyword)'
+      )
+      params.keyword = `%${keywordText}%`
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    const pool = await getPool()
+    await ensureHardDeleteReviewTable(pool)
+
+    const countReq = pool.request()
+    if (params.status) countReq.input('status', sql.NVarChar(20), params.status)
+    if (params.keyword) countReq.input('keyword', sql.NVarChar(120), params.keyword)
+    const countResult = await countReq.query(`
+      SELECT COUNT(DISTINCT r.id) AS total
+      FROM dbo.project_hard_delete_review_requests r
+      OUTER APPLY (
+        SELECT TOP 1 g.产品名称, g.产品图号
+        FROM 货物信息 g
+        WHERE g.项目编号 = r.project_code
+        ORDER BY g.货物ID DESC
+      ) g
+      ${whereSql}
+    `)
+    const total = Number(countResult.recordset?.[0]?.total || 0) || 0
+
+    const dataReq = pool.request()
+    if (params.status) dataReq.input('status', sql.NVarChar(20), params.status)
+    if (params.keyword) dataReq.input('keyword', sql.NVarChar(120), params.keyword)
+    dataReq.input('offset', sql.Int, offset)
+    dataReq.input('pageSize', sql.Int, size)
+    const dataResult = await dataReq.query(`
+      SELECT
+        r.id,
+        r.project_code AS projectCode,
+        r.goods_id AS goodsId,
+        g.产品名称 AS productName,
+        g.产品图号 AS productDrawing,
+        g.分类 AS category,
+        r.status,
+        r.request_source AS requestSource,
+        r.request_reason AS requestReason,
+        r.requester_name AS requesterName,
+        r.reviewer_name AS reviewerName,
+        r.review_comment AS reviewComment,
+        r.approved_at AS approvedAt,
+        r.rejected_at AS rejectedAt,
+        r.canceled_at AS canceledAt,
+        r.executed_at AS executedAt,
+        r.execution_audit_id AS executionAuditId,
+        r.execution_error AS executionError,
+        r.created_at AS createdAt,
+        r.updated_at AS updatedAt
+      FROM dbo.project_hard_delete_review_requests r
+      OUTER APPLY (
+        SELECT TOP 1 g.产品名称, g.产品图号, g.分类
+        FROM 货物信息 g
+        WHERE g.项目编号 = r.project_code
+        ORDER BY g.货物ID DESC
+      ) g
+      ${whereSql}
+      ORDER BY
+        CASE WHEN r.status = N'${HARD_DELETE_REVIEW_STATUS.PENDING}' THEN 0 ELSE 1 END,
+        r.created_at DESC,
+        r.id DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+    `)
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: (dataResult.recordset || []).map((row) => toHardDeleteReviewTaskData(row)),
+        total
+      }
+    })
+  } catch (error) {
+    const status = Number(error?.statusCode) || 500
+    console.error('获取硬删除审核任务失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message: status === 403 ? '当前用户没有审核权限' : '获取审核任务失败',
+      error: error?.message || '未知错误'
+    })
+  }
+})
+
+// 审核中心：驳回硬删除
+router.post('/hard-delete-review/reject', async (req, res) => {
+  try {
+    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    const requestIdValue = parseInt(req.body?.requestId, 10)
+    const comment = String(req.body?.reason || '').trim()
+    if (!Number.isInteger(requestIdValue) || requestIdValue <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'requestId 无效' })
+    }
+    if (!comment) {
+      return res.status(400).json({ code: 400, success: false, message: '请填写驳回原因' })
+    }
+
+    const reviewer = resolveActorFromReq(req)
+    const pool = await getPool()
+    await ensureHardDeleteReviewTable(pool)
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const lockReq = new sql.Request(tx)
+      lockReq.input('requestId', sql.BigInt, requestIdValue)
+      const rowResult = await lockReq.query(`
+        SELECT TOP 1 id, status
+        FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE id = @requestId
+      `)
+      const row = rowResult.recordset?.[0]
+      if (!row) {
+        const err = new Error('审核申请不存在')
+        err.httpStatus = 404
+        throw err
+      }
+      if (String(row.status || '').trim() !== HARD_DELETE_REVIEW_STATUS.PENDING) {
+        const err = new Error('仅待审核状态可以驳回')
+        err.httpStatus = 409
+        throw err
+      }
+
+      const updateReq = new sql.Request(tx)
+      updateReq.input('requestId', sql.BigInt, requestIdValue)
+      updateReq.input('statusRejected', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.REJECTED)
+      updateReq.input('reviewerName', sql.NVarChar(200), reviewer || null)
+      updateReq.input('reviewComment', sql.NVarChar(1000), comment)
+      await updateReq.query(`
+        UPDATE dbo.project_hard_delete_review_requests
+        SET
+          status = @statusRejected,
+          reviewer_name = @reviewerName,
+          review_comment = @reviewComment,
+          rejected_at = SYSDATETIME(),
+          updated_at = SYSDATETIME()
+        WHERE id = @requestId
+      `)
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
+
+    return res.json({ code: 0, success: true, message: '已驳回' })
+  } catch (error) {
+    const status = Number(error?.httpStatus || error?.statusCode) || 500
+    console.error('驳回硬删除申请失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message: status === 403 ? '当前用户没有审核权限' : status === 409 ? '状态冲突，无法驳回' : '驳回失败',
+      error: error?.message || '未知错误'
+    })
+  }
+})
+
+// 审核中心：通过硬删除并执行
+router.post('/hard-delete-review/approve', async (req, res) => {
+  try {
+    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    const requestIdValue = parseInt(req.body?.requestId, 10)
+    if (!Number.isInteger(requestIdValue) || requestIdValue <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'requestId 无效' })
+    }
+
+    const reviewer = resolveActorFromReq(req)
+    const requestId = resolveRequestId(req)
+    const pool = await getPool()
+    await ensureHardDeleteReviewTable(pool)
+
+    let reviewRow = null
+    const lockTx = new sql.Transaction(pool)
+    await lockTx.begin()
+    try {
+      const lockReq = new sql.Request(lockTx)
+      lockReq.input('requestId', sql.BigInt, requestIdValue)
+      const rowResult = await lockReq.query(`
+        SELECT TOP 1 id, goods_id AS goodsId, project_code AS projectCode, requester_name AS requesterName, status
+        FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE id = @requestId
+      `)
+      reviewRow = rowResult.recordset?.[0]
+      if (!reviewRow) {
+        const err = new Error('审核申请不存在')
+        err.httpStatus = 404
+        throw err
+      }
+      if (String(reviewRow.status || '').trim() !== HARD_DELETE_REVIEW_STATUS.PENDING) {
+        const err = new Error('仅待审核状态可以通过')
+        err.httpStatus = 409
+        throw err
+      }
+      if (
+        reviewRow.requesterName &&
+        reviewer &&
+        String(reviewRow.requesterName).trim() === String(reviewer).trim()
+      ) {
+        const err = new Error('不允许申请人与审核人为同一人')
+        err.httpStatus = 403
+        throw err
+      }
+
+      const updateReq = new sql.Request(lockTx)
+      updateReq.input('requestId', sql.BigInt, requestIdValue)
+      updateReq.input('statusApproved', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.APPROVED)
+      updateReq.input('reviewerName', sql.NVarChar(200), reviewer || null)
+      await updateReq.query(`
+        UPDATE dbo.project_hard_delete_review_requests
+        SET
+          status = @statusApproved,
+          reviewer_name = @reviewerName,
+          approved_at = SYSDATETIME(),
+          updated_at = SYSDATETIME()
+        WHERE id = @requestId
+      `)
+      await lockTx.commit()
+    } catch (e) {
+      try {
+        await lockTx.rollback()
+      } catch {}
+      throw e
+    }
+
+    const goodsId = Number(reviewRow?.goodsId || 0)
+    if (!Number.isInteger(goodsId) || goodsId <= 0) {
+      return res.status(409).json({ code: 409, success: false, message: '申请记录缺少有效 goodsId' })
+    }
+
+    try {
+      const executeResult = await executeHardDeleteByGoodsId({
+        pool,
+        goodsId,
+        actor: reviewer,
+        requestId,
+        requireApprovedReviewRequest: false
+      })
+      const finishReq = pool.request()
+      finishReq.input('requestId', sql.BigInt, requestIdValue)
+      finishReq.input('executionAuditId', sql.BigInt, executeResult.auditId || null)
+      finishReq.input(
+        'executionResult',
+        sql.NVarChar(sql.MAX),
+        JSON.stringify(executeResult.cascadeSummary || {})
+      )
+      await finishReq.query(`
+        UPDATE dbo.project_hard_delete_review_requests
+        SET
+          execution_audit_id = @executionAuditId,
+          execution_result = @executionResult,
+          execution_error = NULL,
+          executed_at = SYSDATETIME(),
+          updated_at = SYSDATETIME()
+        WHERE id = @requestId
+      `)
+
+      return res.json({
+        code: 0,
+        success: true,
+        message: '审核通过并已执行硬删除',
+        data: executeResult
+      })
+    } catch (executeError) {
+      const failReq = pool.request()
+      failReq.input('requestId', sql.BigInt, requestIdValue)
+      failReq.input('executionError', sql.NVarChar(1000), executeError?.message || '硬删除执行失败')
+      await failReq.query(`
+        UPDATE dbo.project_hard_delete_review_requests
+        SET
+          execution_error = @executionError,
+          updated_at = SYSDATETIME()
+        WHERE id = @requestId
+      `)
+      throw executeError
+    }
+  } catch (error) {
+    const status = Number(error?.httpStatus || error?.statusCode) || 500
+    console.error('审核通过硬删除申请失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message:
+        status === 403
+          ? '当前用户没有审核权限'
+          : status === 409
+            ? '状态冲突，无法审核通过'
+            : status === 404
+              ? '审核申请不存在'
+              : '审核通过失败',
+      error: error?.message || '未知错误'
     })
   }
 })
@@ -238,14 +811,24 @@ router.delete('/batch', async (req, res) => {
       const placeholders = ids.map((_, i) => `@id${i}`).join(', ')
       ids.forEach((v, i) => getReq.input(`id${i}`, sql.Int, parseInt(v, 10)))
       const rows = await getReq.query(`
-        SELECT DISTINCT 项目编号 as projectCode
+        SELECT 项目编号 as projectCode, MIN(货物ID) as goodsId
         FROM 货物信息
         WHERE 货物ID IN (${placeholders})
           AND 项目编号 IS NOT NULL AND 项目编号 <> ''
+        GROUP BY 项目编号
       `)
-      const codes = Array.from(new Set((rows.recordset || []).map((r) => String(r.projectCode || '').trim()).filter(Boolean)))
-      for (const projectCode of codes) {
+      for (const row of rows.recordset || []) {
+        const projectCode = String(row.projectCode || '').trim()
+        if (!projectCode) continue
         await softDeleteByProjectCode({ pool, tx, projectCode, actor })
+        await ensurePendingHardDeleteReviewRequest({
+          tx,
+          projectCode,
+          goodsId: Number(row.goodsId || 0),
+          requesterName: actor,
+          requestSource: 'SOFT_DELETE_AUTO_BATCH',
+          requestReason: '批量软删除后系统自动发起硬删除审核'
+        })
       }
       await tx.commit()
     } catch (e) {
@@ -255,7 +838,7 @@ router.delete('/batch', async (req, res) => {
       throw e
     }
 
-    res.json({ code: 0, success: true, message: '批量删除成功（已软删除）' })
+    res.json({ code: 0, success: true, message: '批量删除成功（已软删除并提交硬删除审核）' })
   } catch (error) {
     console.error('批量删除货物信息失败:', error)
     res.status(500).json({ code: 500, success: false, message: '批量删除失败', error: error.message })
@@ -600,6 +1183,14 @@ router.delete('/:id', async (req, res) => {
       }
 
       await softDeleteByProjectCode({ pool, tx, projectCode, actor })
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode,
+        goodsId: parseInt(id, 10),
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
       await tx.commit()
     } catch (e) {
       try {
@@ -611,7 +1202,7 @@ router.delete('/:id', async (req, res) => {
     res.json({
       code: 0,
       success: true,
-      message: '删除成功（已软删除）'
+      message: '删除成功（已软删除，并已提交硬删除审核）'
     })
   } catch (error) {
     console.error('删除货物信息失败:', error)
@@ -639,6 +1230,44 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// 硬删除（仅允许删除“已删除”状态，级联清理关联数据）
+router.delete('/permanent/:id', async (req, res) => {
+  const actor = resolveActorFromReq(req)
+  const requestId = resolveRequestId(req)
+
+  try {
+    const pool = await getPool()
+    const result = await executeHardDeleteByGoodsId({
+      pool,
+      goodsId: req.params.id,
+      actor,
+      requestId,
+      requireApprovedReviewRequest: true
+    })
+
+    return res.json({
+      code: 0,
+      success: true,
+      message: '硬删除成功',
+      data: result
+    })
+  } catch (error) {
+    const status = Number(error?.httpStatus) || 500
+    console.error('硬删除货物信息失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message:
+        status === 409
+          ? '未通过审核中心审批，或记录状态冲突，无法硬删除'
+          : status === 404
+            ? '记录不存在'
+            : '硬删除失败',
+      error: error?.message || '未知错误'
+    })
+  }
+})
+
 // 恢复整套项目（按项目编号）
 router.post('/restore', async (req, res) => {
   try {
@@ -651,6 +1280,12 @@ router.post('/restore', async (req, res) => {
     await tx.begin()
     try {
       await restoreByProjectCode({ pool, tx, projectCode: code })
+      await cancelPendingHardDeleteReviewRequest({
+        tx,
+        projectCode: code,
+        reviewerName: resolveActorFromReq(req),
+        comment: '记录已恢复，系统自动取消硬删除申请'
+      })
       await tx.commit()
     } catch (e) {
       try {

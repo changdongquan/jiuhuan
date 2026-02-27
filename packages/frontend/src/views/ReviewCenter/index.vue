@@ -3,16 +3,46 @@
     <div class="review-header">
       <div>
         <h3 class="review-title">审核中心</h3>
-        <p class="review-subtitle">统一处理待审核单据（当前已接入：BMO 立项）</p>
+        <p class="review-subtitle">统一处理待审核单据（已接入：硬删除、BMO 立项）</p>
       </div>
       <div class="review-actions">
         <el-button :loading="loading" @click="loadTasks">刷新</el-button>
       </div>
     </div>
 
-    <el-form :inline="!isMobile" class="review-filter">
+    <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+      <el-tab-pane label="硬删除审核" name="hardDelete" />
+      <el-tab-pane label="BMO立项审核" name="bmo" />
+    </el-tabs>
+
+    <el-form v-if="activeTab === 'hardDelete'" :inline="!isMobile" class="review-filter">
       <el-form-item label="状态">
-        <el-select v-model="query.status" :style="{ width: isMobile ? '100%' : '160px' }">
+        <el-select v-model="hardDeleteQuery.status" :style="{ width: isMobile ? '100%' : '160px' }">
+          <el-option label="全部" value="ALL" />
+          <el-option label="待审核" value="PENDING" />
+          <el-option label="已通过" value="APPROVED" />
+          <el-option label="已驳回" value="REJECTED" />
+          <el-option label="已取消" value="CANCELED" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="关键词">
+        <el-input
+          v-model="hardDeleteQuery.keyword"
+          :style="{ width: isMobile ? '100%' : '320px' }"
+          clearable
+          placeholder="项目编号/产品名称/产品图号/申请人"
+          @keydown.enter.prevent="handleSearch"
+        />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="handleSearch">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <el-form v-else :inline="!isMobile" class="review-filter">
+      <el-form-item label="状态">
+        <el-select v-model="bmoQuery.status" :style="{ width: isMobile ? '100%' : '160px' }">
           <el-option label="全部" value="ALL" />
           <el-option label="草稿" value="DRAFT" />
           <el-option label="审核中" value="PM_CONFIRMED" />
@@ -22,7 +52,7 @@
       </el-form-item>
       <el-form-item label="关键词">
         <el-input
-          v-model="query.keyword"
+          v-model="bmoQuery.keyword"
           :style="{ width: isMobile ? '100%' : '320px' }"
           clearable
           placeholder="项目编号/客户模号/图号/名称/记录ID"
@@ -36,105 +66,239 @@
     </el-form>
 
     <el-card shadow="never">
-      <el-table
-        v-if="!isMobile"
-        v-loading="loading"
-        :data="list"
-        border
-        size="small"
-        max-height="700"
-      >
-        <el-table-column type="index" label="#" width="56" />
-        <el-table-column prop="status_text" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)">{{ row.status_text || '-' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="project_code_candidate"
-          label="项目编号"
-          width="150"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="part_no" label="零部件图号" width="180" show-overflow-tooltip />
-        <el-table-column prop="part_name" label="零部件名称" width="160" show-overflow-tooltip />
-        <el-table-column prop="mold_number" label="客户模号" width="130" show-overflow-tooltip />
-        <el-table-column
-          prop="project_manager"
-          label="项目经理"
-          width="110"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="created_by" label="申请人" width="120" show-overflow-tooltip />
-        <el-table-column prop="updated_at" label="更新时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openInitiationViewDialog(row)"
-              >查看立项</el-button
-            >
-            <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
-              驳回
-            </el-button>
-            <el-button
-              v-if="canReview(row)"
-              link
-              type="success"
-              :loading="approvingId === row.bmo_record_id"
-              @click="handleApprove(row)"
-            >
-              审核通过并入库
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <template v-if="activeTab === 'hardDelete'">
+        <el-table
+          v-if="!isMobile"
+          v-loading="loading"
+          :data="hardDeleteList"
+          border
+          size="small"
+          max-height="700"
+        >
+          <el-table-column type="index" label="#" width="56" />
+          <el-table-column prop="statusText" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="hardDeleteStatusTagType(row.status)">{{
+                row.statusText || '-'
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="projectCode" label="项目编号" width="150" show-overflow-tooltip />
+          <el-table-column
+            prop="productName"
+            label="产品名称"
+            min-width="180"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="productDrawing"
+            label="产品图号"
+            min-width="180"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="requesterName" label="申请人" width="120" show-overflow-tooltip />
+          <el-table-column
+            prop="requestReason"
+            label="申请原因"
+            min-width="180"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            prop="reviewComment"
+            label="审核意见"
+            min-width="180"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="updatedAt" label="更新时间" width="170">
+            <template #default="{ row }">{{ formatTime(row.updatedAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="canHardDeleteReview(row)"
+                link
+                type="danger"
+                @click="handleHardDeleteReject(row)"
+              >
+                驳回
+              </el-button>
+              <el-button
+                v-if="canHardDeleteReview(row)"
+                link
+                type="success"
+                :loading="approvingId === `hard-${row.id}`"
+                @click="handleHardDeleteApprove(row)"
+              >
+                审核通过并硬删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
-      <div v-else v-loading="loading" class="review-mobile-list">
-        <el-empty v-if="!list.length && !loading" description="暂无数据" :image-size="72" />
-        <el-card v-for="row in list" :key="row.bmo_record_id" class="mobile-item" shadow="hover">
-          <div class="mobile-item__head">
-            <div class="mobile-item__title">{{ row.project_code_candidate || '-' }}</div>
-            <el-tag :type="statusTagType(row.status)" size="small">
-              {{ row.status_text || '-' }}
-            </el-tag>
-          </div>
-          <div class="mobile-item__grid">
-            <span>图号：{{ row.part_no || '-' }}</span>
-            <span>名称：{{ row.part_name || '-' }}</span>
-            <span>客户模号：{{ row.mold_number || '-' }}</span>
-            <span>项目经理：{{ row.project_manager || '-' }}</span>
-            <span>申请人：{{ row.created_by || '-' }}</span>
-            <span>更新时间：{{ formatTime(row.updated_at) }}</span>
-          </div>
-          <div class="mobile-item__actions">
-            <el-button link type="primary" @click="openInitiationViewDialog(row)"
-              >查看立项</el-button
-            >
-            <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
-              驳回
-            </el-button>
-            <el-button
-              v-if="canReview(row)"
-              link
-              type="success"
-              :loading="approvingId === row.bmo_record_id"
-              @click="handleApprove(row)"
-            >
-              审核通过并入库
-            </el-button>
-          </div>
-        </el-card>
-      </div>
+        <div v-else v-loading="loading" class="review-mobile-list">
+          <el-empty
+            v-if="!hardDeleteList.length && !loading"
+            description="暂无数据"
+            :image-size="72"
+          />
+          <el-card v-for="row in hardDeleteList" :key="row.id" class="mobile-item" shadow="hover">
+            <div class="mobile-item__head">
+              <div class="mobile-item__title">{{ row.projectCode || '-' }}</div>
+              <el-tag :type="hardDeleteStatusTagType(row.status)" size="small">
+                {{ row.statusText || '-' }}
+              </el-tag>
+            </div>
+            <div class="mobile-item__grid">
+              <span>产品：{{ row.productName || '-' }}</span>
+              <span>图号：{{ row.productDrawing || '-' }}</span>
+              <span>申请人：{{ row.requesterName || '-' }}</span>
+              <span>原因：{{ row.requestReason || '-' }}</span>
+              <span>审核意见：{{ row.reviewComment || '-' }}</span>
+              <span>更新时间：{{ formatTime(row.updatedAt) }}</span>
+            </div>
+            <div class="mobile-item__actions">
+              <el-button
+                v-if="canHardDeleteReview(row)"
+                link
+                type="danger"
+                @click="handleHardDeleteReject(row)"
+              >
+                驳回
+              </el-button>
+              <el-button
+                v-if="canHardDeleteReview(row)"
+                link
+                type="success"
+                :loading="approvingId === `hard-${row.id}`"
+                @click="handleHardDeleteApprove(row)"
+              >
+                审核通过并硬删除
+              </el-button>
+            </div>
+          </el-card>
+        </div>
+      </template>
+
+      <template v-else>
+        <el-table
+          v-if="!isMobile"
+          v-loading="loading"
+          :data="bmoList"
+          border
+          size="small"
+          max-height="700"
+        >
+          <el-table-column type="index" label="#" width="56" />
+          <el-table-column prop="status_text" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType(row.status)">{{ row.status_text || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="project_code_candidate"
+            label="项目编号"
+            width="150"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="part_no" label="零部件图号" width="180" show-overflow-tooltip />
+          <el-table-column prop="part_name" label="零部件名称" width="160" show-overflow-tooltip />
+          <el-table-column prop="mold_number" label="客户模号" width="130" show-overflow-tooltip />
+          <el-table-column
+            prop="project_manager"
+            label="项目经理"
+            width="110"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="created_by" label="申请人" width="120" show-overflow-tooltip />
+          <el-table-column prop="updated_at" label="更新时间" width="170">
+            <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="260" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openInitiationViewDialog(row)"
+                >查看立项</el-button
+              >
+              <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
+                驳回
+              </el-button>
+              <el-button
+                v-if="canReview(row)"
+                link
+                type="success"
+                :loading="approvingId === row.bmo_record_id"
+                @click="handleApprove(row)"
+              >
+                审核通过并入库
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-else v-loading="loading" class="review-mobile-list">
+          <el-empty v-if="!bmoList.length && !loading" description="暂无数据" :image-size="72" />
+          <el-card
+            v-for="row in bmoList"
+            :key="row.bmo_record_id"
+            class="mobile-item"
+            shadow="hover"
+          >
+            <div class="mobile-item__head">
+              <div class="mobile-item__title">{{ row.project_code_candidate || '-' }}</div>
+              <el-tag :type="statusTagType(row.status)" size="small">
+                {{ row.status_text || '-' }}
+              </el-tag>
+            </div>
+            <div class="mobile-item__grid">
+              <span>图号：{{ row.part_no || '-' }}</span>
+              <span>名称：{{ row.part_name || '-' }}</span>
+              <span>客户模号：{{ row.mold_number || '-' }}</span>
+              <span>项目经理：{{ row.project_manager || '-' }}</span>
+              <span>申请人：{{ row.created_by || '-' }}</span>
+              <span>更新时间：{{ formatTime(row.updated_at) }}</span>
+            </div>
+            <div class="mobile-item__actions">
+              <el-button link type="primary" @click="openInitiationViewDialog(row)"
+                >查看立项</el-button
+              >
+              <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
+                驳回
+              </el-button>
+              <el-button
+                v-if="canReview(row)"
+                link
+                type="success"
+                :loading="approvingId === row.bmo_record_id"
+                @click="handleApprove(row)"
+              >
+                审核通过并入库
+              </el-button>
+            </div>
+          </el-card>
+        </div>
+      </template>
 
       <div class="mt-3 review-pagination">
         <el-pagination
-          v-model:current-page="query.page"
-          v-model:page-size="query.pageSize"
+          v-if="activeTab === 'hardDelete'"
+          v-model:current-page="hardDeleteQuery.page"
+          v-model:page-size="hardDeleteQuery.pageSize"
           :layout="
             isMobile ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
           "
-          :total="total"
+          :total="hardDeleteTotal"
+          :page-sizes="[20, 50, 100]"
+          :small="isMobile"
+          @current-change="loadTasks"
+          @size-change="handlePageSizeChange"
+        />
+        <el-pagination
+          v-else
+          v-model:current-page="bmoQuery.page"
+          v-model:page-size="bmoQuery.pageSize"
+          :layout="
+            isMobile ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
+          "
+          :total="bmoTotal"
           :page-sizes="[20, 50, 100]"
           :small="isMobile"
           @current-change="loadTasks"
@@ -278,15 +442,28 @@ import {
   type BmoInitiationRequestRow,
   type BmoInitiationReviewTask
 } from '@/api/bmo'
+import {
+  approveHardDeleteReviewApi,
+  getHardDeleteReviewTasksApi,
+  rejectHardDeleteReviewApi,
+  type HardDeleteReviewTask
+} from '@/api/goods'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 type ReviewStatus = 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'REJECTED' | 'APPLIED'
+type HardDeleteReviewStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
 
 const route = useRoute()
 const MOBILE_BREAKPOINT = 900
 const loading = ref(false)
-const list = ref<BmoInitiationReviewTask[]>([])
-const total = ref(0)
+const activeTab = ref<'hardDelete' | 'bmo'>('hardDelete')
+
+const bmoList = ref<BmoInitiationReviewTask[]>([])
+const bmoTotal = ref(0)
+
+const hardDeleteList = ref<HardDeleteReviewTask[]>([])
+const hardDeleteTotal = ref(0)
+
 const approvingId = ref('')
 const viewDialogVisible = ref(false)
 const viewDialogLoading = ref(false)
@@ -294,8 +471,15 @@ const viewRow = ref<BmoInitiationReviewTask | null>(null)
 const viewRequest = ref<BmoInitiationRequestRow | null>(null)
 const isMobile = ref(false)
 
-const query = reactive({
+const bmoQuery = reactive({
   status: 'PM_CONFIRMED' as ReviewStatus,
+  keyword: '',
+  page: 1,
+  pageSize: 20
+})
+
+const hardDeleteQuery = reactive({
+  status: 'PENDING' as HardDeleteReviewStatus,
   keyword: '',
   page: 1,
   pageSize: 20
@@ -309,9 +493,26 @@ const statusTagType = (status: unknown) => {
   return 'info'
 }
 
+const hardDeleteStatusTagType = (status: unknown) => {
+  const s = String(status || '')
+    .trim()
+    .toUpperCase()
+  if (s === 'PENDING') return 'warning'
+  if (s === 'APPROVED') return 'success'
+  if (s === 'REJECTED') return 'danger'
+  return 'info'
+}
+
 const canReview = (row: Partial<BmoInitiationReviewTask> | null | undefined) => {
   const status = String(row?.status || '').trim()
   return status === 'PM_CONFIRMED'
+}
+
+const canHardDeleteReview = (row: Partial<HardDeleteReviewTask> | null | undefined) => {
+  const status = String(row?.status || '')
+    .trim()
+    .toUpperCase()
+  return status === 'PENDING'
 }
 
 const formatTime = (value: string | null | undefined) => {
@@ -326,7 +527,8 @@ const formatAmount = (value: number | null | undefined) => {
   return Number.isFinite(amount) ? amount.toLocaleString('zh-CN') : '-'
 }
 
-const normalizedKeyword = computed(() => String(query.keyword || '').trim())
+const normalizedBmoKeyword = computed(() => String(bmoQuery.keyword || '').trim())
+const normalizedHardDeleteKeyword = computed(() => String(hardDeleteQuery.keyword || '').trim())
 const descColumn = computed(() => (isMobile.value ? 1 : 4))
 
 const updateViewport = () => {
@@ -334,41 +536,85 @@ const updateViewport = () => {
   isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
 }
 
+const loadBmoTasks = async () => {
+  const res = await getBmoInitiationReviewTasksApi({
+    page: bmoQuery.page,
+    pageSize: bmoQuery.pageSize,
+    status: bmoQuery.status,
+    keyword: normalizedBmoKeyword.value || undefined
+  })
+  bmoList.value = res.data?.list || []
+  bmoTotal.value = Number(res.data?.total || 0) || 0
+}
+
+const loadHardDeleteTasks = async () => {
+  const res = await getHardDeleteReviewTasksApi({
+    page: hardDeleteQuery.page,
+    pageSize: hardDeleteQuery.pageSize,
+    status: hardDeleteQuery.status,
+    keyword: normalizedHardDeleteKeyword.value || undefined
+  })
+  hardDeleteList.value = res.data?.list || []
+  hardDeleteTotal.value = Number(res.data?.total || 0) || 0
+}
+
 const loadTasks = async () => {
   loading.value = true
   try {
-    const res = await getBmoInitiationReviewTasksApi({
-      page: query.page,
-      pageSize: query.pageSize,
-      status: query.status,
-      keyword: normalizedKeyword.value || undefined
-    })
-    list.value = res.data?.list || []
-    total.value = Number(res.data?.total || 0) || 0
+    if (activeTab.value === 'hardDelete') {
+      await loadHardDeleteTasks()
+    } else {
+      await loadBmoTasks()
+    }
   } catch (e: any) {
-    list.value = []
-    total.value = 0
-    ElMessage.error(e?.message || '读取审核任务失败')
+    if (activeTab.value === 'hardDelete') {
+      hardDeleteList.value = []
+      hardDeleteTotal.value = 0
+      ElMessage.error(e?.message || '读取硬删除审核任务失败')
+    } else {
+      bmoList.value = []
+      bmoTotal.value = 0
+      ElMessage.error(e?.message || '读取审核任务失败')
+    }
   } finally {
     loading.value = false
   }
 }
 
+const handleTabChange = async () => {
+  await loadTasks()
+}
+
 const handleSearch = async () => {
-  query.page = 1
+  if (activeTab.value === 'hardDelete') {
+    hardDeleteQuery.page = 1
+  } else {
+    bmoQuery.page = 1
+  }
   await loadTasks()
 }
 
 const handleReset = async () => {
-  query.status = 'PM_CONFIRMED'
-  query.keyword = ''
-  query.page = 1
-  query.pageSize = 20
+  if (activeTab.value === 'hardDelete') {
+    hardDeleteQuery.status = 'PENDING'
+    hardDeleteQuery.keyword = ''
+    hardDeleteQuery.page = 1
+    hardDeleteQuery.pageSize = 20
+  } else {
+    bmoQuery.status = 'PM_CONFIRMED'
+    bmoQuery.keyword = ''
+    bmoQuery.page = 1
+    bmoQuery.pageSize = 20
+  }
   await loadTasks()
 }
 
 const handlePageSizeChange = async () => {
-  query.page = 1
+  if (activeTab.value === 'hardDelete') {
+    hardDeleteQuery.page = 1
+  } else {
+    bmoQuery.page = 1
+  }
   await loadTasks()
 }
 
@@ -437,12 +683,59 @@ const handleApprove = async (row: Partial<BmoInitiationReviewTask>) => {
   }
 }
 
+const handleHardDeleteReject = async (row: Partial<HardDeleteReviewTask>) => {
+  const requestId = Number(row.id || 0)
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    ElMessage.error('缺少有效 requestId，无法驳回')
+    return
+  }
+  try {
+    const promptRes = await ElMessageBox.prompt('请输入驳回原因', '驳回硬删除申请', {
+      confirmButtonText: '确认驳回',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '请填写驳回原因',
+      inputValidator: (value) => (String(value || '').trim() ? true : '请填写驳回原因')
+    })
+    const reason = String(promptRes.value || '').trim()
+    if (!reason) return
+    await rejectHardDeleteReviewApi({ requestId, reason })
+    await refreshBmoMenuBadges()
+    ElMessage.success('已驳回')
+    await loadTasks()
+  } catch (e: any) {
+    if (e === 'cancel' || e?.action === 'cancel' || e?.action === 'close') return
+    ElMessage.error(e?.message || '驳回失败')
+  }
+}
+
+const handleHardDeleteApprove = async (row: Partial<HardDeleteReviewTask>) => {
+  const requestId = Number(row.id || 0)
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    ElMessage.error('缺少有效 requestId，无法审核通过')
+    return
+  }
+  const loadingId = `hard-${requestId}`
+  approvingId.value = loadingId
+  try {
+    await approveHardDeleteReviewApi({ requestId })
+    await refreshBmoMenuBadges()
+    ElMessage.success('审核通过，已执行硬删除')
+    await loadTasks()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '审核通过失败')
+  } finally {
+    approvingId.value = ''
+  }
+}
+
 onMounted(async () => {
   updateViewport()
   window.addEventListener('resize', updateViewport, { passive: true })
   const initBmoRecordId = String(route.query.bmoRecordId || '').trim()
   if (initBmoRecordId) {
-    query.keyword = initBmoRecordId
+    activeTab.value = 'bmo'
+    bmoQuery.keyword = initBmoRecordId
   }
   await loadTasks()
 })
