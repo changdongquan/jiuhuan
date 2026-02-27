@@ -35,7 +35,7 @@
         :data="latestList"
         border
         size="small"
-        max-height="500"
+        max-height="650"
       >
         <el-table-column type="index" label="#" width="52" />
         <el-table-column
@@ -78,7 +78,7 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openViewDialog(row)">查看</el-button>
             <el-button
-              v-if="!row.project_code"
+              v-if="canShowInitiateAction(row)"
               link
               type="primary"
               @click="openInitiateDialog(row)"
@@ -437,7 +437,12 @@
           <el-button :loading="initiateSaving" @click="handleSaveInitiationDraft"
             >保存草稿</el-button
           >
-          <el-button type="primary" :loading="initiateConfirming" @click="handleConfirmInitiation">
+          <el-button
+            type="primary"
+            :disabled="isInitiationStatusLocked(initiateRequest?.status)"
+            :loading="initiateConfirming"
+            @click="handleConfirmInitiation"
+          >
             提交审核
           </el-button>
           <el-button
@@ -504,8 +509,21 @@ const getBmoRowStatusText = (row: Partial<BmoMouldProcurementRow> | null | undef
   if (String(row.project_code || '').trim()) return '项目执行中'
 
   const s = String((row as any).initiation_status || '').trim()
+  if (s === 'APPLIED') return '已入库'
   if (s === 'PM_CONFIRMED' || s === 'SUBMITTED') return '审核中'
   return ''
+}
+
+const isInitiationStatusLocked = (status: unknown) => {
+  const s = String(status || '').trim()
+  return s === 'PM_CONFIRMED' || s === 'APPLIED'
+}
+
+const canShowInitiateAction = (row: Partial<BmoMouldProcurementRow> | null | undefined) => {
+  if (!row) return false
+  const hasProjectCode = Boolean(String(row.project_code || '').trim())
+  if (hasProjectCode) return false
+  return !isInitiationStatusLocked((row as any).initiation_status)
 }
 
 const TECH_FIELDS_FULL_ROW_LABELS = new Set<string>(['模具特殊需求及风险'])
@@ -1121,6 +1139,10 @@ const handleSaveInitiationDraft = async () => {
 }
 
 const handleConfirmInitiation = async () => {
+  if (isInitiationStatusLocked(initiateRequest.value?.status)) {
+    ElMessage.warning('当前状态不可重复提交审核')
+    return
+  }
   const payload = buildInitiationDraftPayload()
   if (!payload.bmo_record_id) {
     ElMessage.error('缺少 bmo_record_id，无法提交审核')
