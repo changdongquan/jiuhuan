@@ -87,6 +87,17 @@ router.post('/health/worker/restart', async (req, res) => {
 })
 
 router.get('/status', (req, res) => {
+  if (isHubOnlyMode()) {
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        mode: 'hub-only',
+        relayEnabled: isRelayEnabled(),
+        relayBaseUrl: getRelayBaseUrl() || null
+      }
+    })
+  }
   return res.json({
     code: 0,
     success: true,
@@ -152,6 +163,18 @@ router.post('/session/ensure', async (req, res) => {
         }
       })
     }
+  }
+
+  if (isHubOnlyMode()) {
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        state: 'error',
+        source: 'db',
+        message: 'BMO_HUB_ONLY=1 且未配置 BMO_RELAY_BASE_URL'
+      }
+    })
   }
 
   const maxWaitMs = toSafeInt(req.query.maxWaitMs ?? req.body?.maxWaitMs, 3000)
@@ -270,6 +293,7 @@ const toSafeInt = (value, fallback = 0) => {
 
 const getRelayBaseUrl = () => String(process.env.BMO_RELAY_BASE_URL || '').trim().replace(/\/+$/, '')
 const isRelayEnabled = () => Boolean(getRelayBaseUrl())
+const isHubOnlyMode = () => String(process.env.BMO_HUB_ONLY || '1') !== '0'
 
 const toIsoFromRelayTime = (value) => {
   const n = Number(value)
@@ -1003,6 +1027,13 @@ const runSyncWithTask = async (requestBody, triggeredBy) => {
 
 router.post('/sync', async (req, res) => {
   try {
+    if (isHubOnlyMode()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'BMO_HUB_ONLY=1：craftsys 不再执行直连同步，请在 jiuhuan-hub 执行同步任务'
+      })
+    }
     await markStaleRunningTasksFailed()
     const data = await runSyncWithTask(req.body || {}, req.headers['x-username'] || 'api')
     return res.json({
@@ -1022,6 +1053,13 @@ router.post('/sync', async (req, res) => {
 
 router.post('/sync/retry/:taskId', async (req, res) => {
   try {
+    if (isHubOnlyMode()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'BMO_HUB_ONLY=1：craftsys 不再执行直连同步重试，请在 jiuhuan-hub 重试任务'
+      })
+    }
     await markStaleRunningTasksFailed()
     const taskId = Number(req.params.taskId)
     if (!Number.isInteger(taskId) || taskId <= 0) {
@@ -1078,6 +1116,13 @@ router.post('/sync/retry/:taskId', async (req, res) => {
 
 router.get('/latest', async (req, res) => {
   try {
+    if (isHubOnlyMode()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'BMO_HUB_ONLY=1：latest 已停用，请从 /api/bmo/mould-procurement 读取中转结果'
+      })
+    }
     const limit = toSafeLimit(req.query.limit, 50, 500)
     const rows = await query(
       `
@@ -1127,6 +1172,13 @@ router.get('/latest', async (req, res) => {
 
 router.get('/tasks', async (req, res) => {
   try {
+    if (isHubOnlyMode()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'BMO_HUB_ONLY=1：tasks 已停用，请使用 /api/bmo/relay/jobs 跟踪中转任务'
+      })
+    }
     const limit = toSafeLimit(req.query.limit, 20, 200)
     const rows = await query(
       `
@@ -1273,6 +1325,31 @@ router.get('/mould-procurement/refresh', async (req, res) => {
   const sorts = parseQueryJsonObject(req.query.sorts)
   let relayErrorMessage = ''
   let relaySuccess = false
+
+  if (!relayEnabled && isHubOnlyMode()) {
+    try {
+      const rows = await fetchMouldProcurementFromDb(pageSize)
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          source: 'db',
+          connection: {
+            state: 'error',
+            message: 'BMO_HUB_ONLY=1 且未配置 BMO_RELAY_BASE_URL，已返回库内数据'
+          },
+          list: rows,
+          count: rows.length
+        }
+      })
+    } catch (dbError) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: formatBmoSqlErrorMessage(dbError, '读取 BMO 模具采购数据失败')
+      })
+    }
+  }
 
   if (relayEnabled) {
     try {
@@ -1477,6 +1554,13 @@ router.get('/mould-procurement/detail', async (req, res) => {
     if (!fdId) {
       return res.status(400).json({ code: 400, success: false, message: '缺少 fdId' })
     }
+    if (isHubOnlyMode() && !isRelayEnabled()) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: 'BMO_HUB_ONLY=1 但未配置 BMO_RELAY_BASE_URL，无法读取 1.4 详情'
+      })
+    }
 
     if (!forceLive) {
       const cached = await getDetailCacheByRecordId(fdId)
@@ -1545,6 +1629,13 @@ router.get('/mould-procurement/detail', async (req, res) => {
 
 router.post('/auto-sync/run', async (req, res) => {
   try {
+    if (isHubOnlyMode()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: 'BMO_HUB_ONLY=1：自动采集/下载/解析/入库由 jiuhuan-hub 负责'
+      })
+    }
     const result = await runBmoAutoSyncOnce({
       pageSize: req.body?.pageSize,
       maxPages: req.body?.maxPages,
@@ -1902,10 +1993,19 @@ router.get('/relay/files/:fileId', async (req, res) => {
 router.get('/attachment/download/:attachmentId', async (req, res) => {
   try {
     const attachmentId = String(req.params.attachmentId || '').trim()
-    const fdId = String(req.query.fdId || '').trim()
+    const fdId = String(
+      req.query.fdId || req.query.bmo_record_id || req.query.bmoRecordId || ''
+    ).trim()
     const fileName = String(req.query.fileName || '').trim()
     if (!attachmentId) {
       return res.status(400).json({ code: 400, success: false, message: '缺少 attachmentId' })
+    }
+    if (isHubOnlyMode() && !isRelayEnabled()) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: 'BMO_HUB_ONLY=1 但未配置 BMO_RELAY_BASE_URL，无法下载附件'
+      })
     }
 
     // Relay mode: use a single authoritative download path via relay worker.
@@ -2197,6 +2297,87 @@ router.get('/mould-procurement/live', async (req, res) => {
     const conditions = parseQueryJsonObject(req.query.conditions)
     const sorts = parseQueryJsonObject(req.query.sorts)
     const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
+
+    if (isRelayEnabled()) {
+      const created = await relayRequestJson('/jobs', {
+        method: 'POST',
+        timeoutMs: 15000,
+        body: {
+          type: 'collect',
+          payload: {
+            pageSize,
+            offset,
+            ...(conditions ? { conditions } : {}),
+            ...(sorts ? { sorts } : {})
+          }
+        }
+      })
+      const jobId = String(created?.data?.id || created?.id || '').trim()
+      if (!jobId) throw new Error('中转任务创建失败（缺少 jobId）')
+
+      const done = await relayWaitJob(jobId, {
+        timeoutMs: Math.max(3000, maxWaitMs),
+        intervalMs: 1000
+      })
+      if (String(done?.status || '') !== 'success') {
+        throw new Error(String(done?.error || '中转实时拉取失败'))
+      }
+
+      const relayResult = done?.result && typeof done.result === 'object' ? done.result : {}
+      const list = Array.isArray(relayResult?.list) ? relayResult.list : []
+      const projectInfoMap = await getProjectInfoByCustomerModelNo(
+        list.map((x) => x.moldNumber || x.mold_number).filter(Boolean)
+      )
+      const initiationStatusMap = await getInitiationStatusByBmoRecordId(
+        list.map((x) => x.bmoRecordId || x.bmo_record_id).filter(Boolean)
+      )
+      const viewList = list.map((row, idx) => {
+        const moldNumber = row.moldNumber || row.mold_number || null
+        const bmoRecordId = row.bmoRecordId || row.bmo_record_id || null
+        const bidTime = row.bidTime || row.bid_time || null
+        return {
+          seq: offset + idx + 1,
+          bmo_record_id: bmoRecordId,
+          project_manager: row.projectManager || row.project_manager || null,
+          part_no: row.partNo || row.part_no || null,
+          part_name: row.partName || row.part_name || null,
+          model: row.model || null,
+          mold_number: moldNumber,
+          project_code:
+            projectInfoMap.get(String(moldNumber || '').trim())?.projectCode || row.project_code || null,
+          project_status:
+            projectInfoMap.get(String(moldNumber || '').trim())?.projectStatus ||
+            row.project_status ||
+            null,
+          initiation_status:
+            initiationStatusMap.get(String(bmoRecordId || '').trim()) || row.initiation_status || null,
+          bid_price_tax_incl: row.bidPriceTaxIncl ?? row.bid_price_tax_incl ?? null,
+          bid_time: bidTime ? new Date(bidTime).toISOString() : null
+        }
+      })
+
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          list: viewList,
+          count: viewList.length,
+          offset: toSafeInt(relayResult?.offset, offset),
+          pageSize: toSafeInt(relayResult?.pageSize, pageSize),
+          totalSize: Number(relayResult?.total ?? relayResult?.totalSize ?? viewList.length),
+          traceId: relayResult?.traceId || null,
+          fetchedAt: new Date().toISOString()
+        }
+      })
+    }
+
+    if (isHubOnlyMode()) {
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: 'BMO_HUB_ONLY=1 但未配置 BMO_RELAY_BASE_URL，无法实时读取'
+      })
+    }
 
     const result = await fetchBmoMouldListLive({
       pageSize,
@@ -2616,6 +2797,19 @@ router.post('/initiation-request/confirm', async (req, res) => {
 
     // Ensure draft exists and is up-to-date.
     await upsertInitiationDraft({ ...req.body, actor })
+
+    const existingRows = await query(
+      `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
+      { bmoRecordId }
+    )
+    const existing = existingRows?.[0] || null
+    const existingStatus = String(existing?.status || '').trim()
+    if (existingStatus === 'APPLIED') {
+      return res.status(400).json({ code: 400, success: false, message: '已入库，不能重复提交审核' })
+    }
+    if (existingStatus === 'PM_CONFIRMED') {
+      return res.status(400).json({ code: 400, success: false, message: '已提交审核，请勿重复提交' })
+    }
 
     await query(
       `
