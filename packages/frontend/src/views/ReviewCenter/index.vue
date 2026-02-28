@@ -304,17 +304,19 @@ const normalizeHardDeleteStatus = (status: unknown): Exclude<StandardStatus, 'AL
 
 const mapStatusForBmoApi = (
   status: StandardStatus
-): 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'APPLIED' | 'REJECTED' => {
+): 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'APPLIED' | 'REJECTED' | null => {
   if (status === 'DRAFT') return 'DRAFT'
   if (status === 'PENDING') return 'PM_CONFIRMED'
   if (status === 'APPROVED') return 'APPLIED'
   if (status === 'REJECTED') return 'REJECTED'
+  if (status === 'CANCELED') return null
   return 'ALL'
 }
 
 const mapStatusForHardDeleteApi = (
   status: StandardStatus
-): 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' => {
+): 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | null => {
+  if (status === 'DRAFT') return null
   if (status === 'PENDING') return 'PENDING'
   if (status === 'APPROVED') return 'APPROVED'
   if (status === 'REJECTED') return 'REJECTED'
@@ -341,42 +343,8 @@ const updateViewport = () => {
   isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
 }
 
-const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
-  const tasks: Promise<any>[] = []
-  const includeHardDelete = query.category === 'ALL' || query.category === 'HARD_DELETE'
-  const includeBmo = query.category === 'ALL' || query.category === 'BMO_INITIATION'
-
-  if (includeHardDelete) {
-    tasks.push(
-      getHardDeleteReviewTasksApi({
-        status: mapStatusForHardDeleteApi(query.status),
-        keyword: normalizedKeyword.value || undefined,
-        page: 1,
-        pageSize: 500
-      })
-    )
-  } else {
-    tasks.push(Promise.resolve({ data: { list: [] } }))
-  }
-
-  if (includeBmo) {
-    tasks.push(
-      getBmoInitiationReviewTasksApi({
-        status: mapStatusForBmoApi(query.status),
-        keyword: normalizedKeyword.value || undefined,
-        page: 1,
-        pageSize: 500
-      })
-    )
-  } else {
-    tasks.push(Promise.resolve({ data: { list: [] } }))
-  }
-
-  const [hardDeleteRes, bmoRes] = await Promise.all(tasks)
-  const hardDeleteRows = (hardDeleteRes?.data?.list || []) as HardDeleteReviewTask[]
-  const bmoRows = (bmoRes?.data?.list || []) as BmoInitiationReviewTask[]
-
-  const mappedHardDelete: UnifiedReviewRow[] = hardDeleteRows.map((row) => {
+const mapHardDeleteRows = (hardDeleteRows: HardDeleteReviewTask[]): UnifiedReviewRow[] => {
+  return hardDeleteRows.map((row) => {
     const status = normalizeHardDeleteStatus(row.status)
     return {
       id: `hard-${row.id}`,
@@ -393,8 +361,10 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       raw: row
     }
   })
+}
 
-  const mappedBmo: UnifiedReviewRow[] = bmoRows.map((row) => {
+const mapBmoRows = (bmoRows: BmoInitiationReviewTask[]): UnifiedReviewRow[] => {
+  return bmoRows.map((row) => {
     const status = normalizeBmoStatus(row.status)
     return {
       id: `bmo-${row.bmo_record_id}`,
@@ -411,21 +381,136 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       raw: row
     }
   })
+}
 
-  return [...mappedHardDelete, ...mappedBmo].sort((a, b) => {
+const sortUnifiedRows = (rows: UnifiedReviewRow[]) =>
+  rows.sort((a, b) => {
     const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
     const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
     return tb - ta
   })
+
+const fetchAllHardDeleteRows = async (
+  status: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+): Promise<HardDeleteReviewTask[]> => {
+  const pageSize = 200
+  let page = 1
+  let totalRows = Number.POSITIVE_INFINITY
+  const rows: HardDeleteReviewTask[] = []
+
+  while ((page - 1) * pageSize < totalRows) {
+    const res = await getHardDeleteReviewTasksApi({
+      status,
+      keyword: normalizedKeyword.value || undefined,
+      page,
+      pageSize
+    })
+    const part = (res.data?.list || []) as HardDeleteReviewTask[]
+    totalRows = Number(res.data?.total || 0) || 0
+    rows.push(...part)
+    if (!part.length) break
+    page += 1
+  }
+  return rows
+}
+
+const fetchAllBmoRows = async (
+  status: 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'APPLIED' | 'REJECTED'
+): Promise<BmoInitiationReviewTask[]> => {
+  const pageSize = 200
+  let page = 1
+  let totalRows = Number.POSITIVE_INFINITY
+  const rows: BmoInitiationReviewTask[] = []
+
+  while ((page - 1) * pageSize < totalRows) {
+    const res = await getBmoInitiationReviewTasksApi({
+      status,
+      keyword: normalizedKeyword.value || undefined,
+      page,
+      pageSize
+    })
+    const part = (res.data?.list || []) as BmoInitiationReviewTask[]
+    totalRows = Number(res.data?.total || 0) || 0
+    rows.push(...part)
+    if (!part.length) break
+    page += 1
+  }
+  return rows
+}
+
+const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
+  const bmoStatus = mapStatusForBmoApi(query.status)
+  const hardDeleteStatus = mapStatusForHardDeleteApi(query.status)
+  const includeHardDelete =
+    (query.category === 'ALL' || query.category === 'HARD_DELETE') && hardDeleteStatus !== null
+  const includeBmo =
+    (query.category === 'ALL' || query.category === 'BMO_INITIATION') && bmoStatus !== null
+
+  // 单分类：直接使用后端分页，避免前端截断
+  if (query.category === 'HARD_DELETE') {
+    if (!includeHardDelete) {
+      total.value = 0
+      return []
+    }
+    const res = await getHardDeleteReviewTasksApi({
+      status: hardDeleteStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: query.page,
+      pageSize: query.pageSize
+    })
+    total.value = Number(res.data?.total || 0) || 0
+    return mapHardDeleteRows((res.data?.list || []) as HardDeleteReviewTask[])
+  }
+
+  if (query.category === 'BMO_INITIATION') {
+    if (!includeBmo) {
+      total.value = 0
+      return []
+    }
+    const res = await getBmoInitiationReviewTasksApi({
+      status: bmoStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: query.page,
+      pageSize: query.pageSize
+    })
+    total.value = Number(res.data?.total || 0) || 0
+    return mapBmoRows((res.data?.list || []) as BmoInitiationReviewTask[])
+  }
+
+  // 全部分类：拉取各来源全量后统一排序+分页，避免 500 上限与状态语义错位
+  const collected: UnifiedReviewRow[] = []
+  const tasks: Promise<void>[] = []
+  if (includeHardDelete) {
+    tasks.push(
+      (async () => {
+        const rows = await fetchAllHardDeleteRows(hardDeleteStatus)
+        collected.push(...mapHardDeleteRows(rows))
+      })()
+    )
+  }
+  if (includeBmo) {
+    tasks.push(
+      (async () => {
+        const rows = await fetchAllBmoRows(bmoStatus)
+        collected.push(...mapBmoRows(rows))
+      })()
+    )
+  }
+  await Promise.all(tasks)
+
+  let merged = sortUnifiedRows(collected)
+  if (query.status !== 'ALL') {
+    merged = merged.filter((row) => row.status === query.status)
+  }
+  total.value = merged.length
+  const offset = (query.page - 1) * query.pageSize
+  return merged.slice(offset, offset + query.pageSize)
 }
 
 const loadTasks = async () => {
   loading.value = true
   try {
-    const rows = await loadUnifiedRows()
-    total.value = rows.length
-    const offset = (query.page - 1) * query.pageSize
-    list.value = rows.slice(offset, offset + query.pageSize)
+    list.value = await loadUnifiedRows()
   } catch (e: any) {
     list.value = []
     total.value = 0
