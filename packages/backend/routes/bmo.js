@@ -2646,7 +2646,7 @@ const LOCKED_INITIATION_STATUSES = new Set(['PM_CONFIRMED', 'APPLIED'])
 const INITIATION_STATUS_TEXT_MAP = {
   DRAFT: '草稿',
   PM_CONFIRMED: '审核中',
-  APPLIED: '已入库',
+  APPLIED: '已通过',
   REJECTED: '已驳回'
 }
 
@@ -2960,7 +2960,7 @@ router.post('/initiation-request/confirm', async (req, res) => {
     const existing = existingRows?.[0] || null
     const existingStatus = String(existing?.status || '').trim()
     if (existingStatus === 'APPLIED') {
-      return res.status(400).json({ code: 400, success: false, message: '已入库，不能重复提交审核' })
+      return res.status(400).json({ code: 400, success: false, message: '已通过，不能重复提交审核' })
     }
     if (existingStatus === 'PM_CONFIRMED') {
       return res.status(400).json({ code: 400, success: false, message: '已提交审核，请勿重复提交' })
@@ -3134,7 +3134,7 @@ const rejectInitiationRequest = async (req, res, options = {}) => {
     if (!existing) return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
     const status = normalizeInitiationStatus(existing.status)
     if (status === 'APPLIED') {
-      return res.status(400).json({ code: 400, success: false, message: '已入库，不能驳回' })
+      return res.status(400).json({ code: 400, success: false, message: '已通过，不能驳回' })
     }
     if (status !== 'PM_CONFIRMED') {
       return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
@@ -3193,7 +3193,7 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
       return res.json({
         code: 0,
         success: true,
-        message: '已入库（跳过）',
+        message: '已通过（跳过）',
         data: { projectCode: requestRow.project_code_final, orderNo: requestRow.sales_order_no }
       })
     }
