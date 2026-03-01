@@ -259,7 +259,7 @@ export default defineComponent({
   .el-menu-item {
     &:hover {
       color: var(--left-menu-text-active-color) !important;
-      background-color: var(--left-menu-bg-color) !important;
+      background-color: var(--left-menu-bg-light-color) !important;
     }
   }
 
@@ -278,6 +278,23 @@ export default defineComponent({
 
 // 设置子菜单溢出时滚动样式
 .@{submenu-prefix-cls}--vertical {
+  .el-sub-menu__title,
+  .el-menu-item {
+    &:hover {
+      color: var(--left-menu-text-active-color) !important;
+      background-color: var(--left-menu-bg-light-color) !important;
+    }
+  }
+
+  .el-menu-item.is-active {
+    position: relative;
+    background-color: var(--left-menu-bg-active-color) !important;
+
+    &:hover {
+      background-color: var(--left-menu-bg-active-color) !important;
+    }
+  }
+
   max-height: 100%;
   overflow-y: auto;
 

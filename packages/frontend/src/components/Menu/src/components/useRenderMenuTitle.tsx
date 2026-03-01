@@ -3,10 +3,12 @@ import { ElBadge } from 'element-plus'
 import { Icon } from '@/components/Icon'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useAppStore } from '@/store/modules/app'
+import { computed, unref } from 'vue'
 
 export const useRenderMenuTitle = () => {
   const { t } = useI18n()
   const appStore = useAppStore()
+  const collapse = computed(() => appStore.getCollapse)
 
   const renderMenuTitle = (meta: RouteMeta, routeName?: string) => {
     const { title = 'Please set title', icon } = meta
@@ -16,25 +18,36 @@ export const useRenderMenuTitle = () => {
     const showReviewPendingBadge =
       (routeName === 'ReviewCenter' || routeName === 'ReviewCenterMenu') && pendingReviewCount > 0
 
-    const titleNode = (
-      <span class="v-menu__title-wrap inline-flex items-center gap-[6px]">
-        {icon ? <Icon icon={meta.icon}></Icon> : null}
-        <span class="v-menu__title overflow-hidden overflow-ellipsis whitespace-nowrap">
-          {t(title as string)}
-        </span>
+    const titleText = (
+      <span class="v-menu__title overflow-hidden overflow-ellipsis whitespace-nowrap">
+        {t(title as string)}
       </span>
+    )
+
+    const titleNode = (
+      <>
+        {icon ? <Icon icon={meta.icon}></Icon> : null}
+        {titleText}
+      </>
     )
 
     if (!showBmoPendingBadge && !showReviewPendingBadge) {
       return titleNode
     }
 
+    if (unref(collapse)) {
+      return titleNode
+    }
+
     const badgeCount = showReviewPendingBadge ? pendingReviewCount : pendingInitiationCount
 
     return (
-      <ElBadge value={badgeCount} max={99} class="v-menu__badge">
-        {titleNode}
-      </ElBadge>
+      <>
+        {icon ? <Icon icon={meta.icon}></Icon> : null}
+        <ElBadge value={badgeCount} max={99} class="v-menu__badge">
+          {titleText}
+        </ElBadge>
+      </>
     )
   }
 
