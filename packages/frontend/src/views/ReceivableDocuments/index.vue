@@ -421,6 +421,13 @@
             <el-form-item label="单据日期">
               <el-input v-model="dialogForm.deliveryDate" class="dialog-input" disabled />
             </el-form-item>
+            <el-form-item label="收款账户">
+              <el-input
+                v-model="dialogForm.accountName"
+                placeholder="请输入收款账户"
+                class="dialog-input"
+              />
+            </el-form-item>
             <el-form-item label="回款方式">
               <el-select
                 v-model="dialogForm.receiptMethod"
@@ -434,13 +441,6 @@
                   :value="item.value"
                 />
               </el-select>
-            </el-form-item>
-            <el-form-item label="收款账户">
-              <el-input
-                v-model="dialogForm.accountName"
-                placeholder="请输入收款账户"
-                class="dialog-input"
-              />
             </el-form-item>
           </div>
         </section>
@@ -471,17 +471,34 @@
                 <el-input v-model="row.productName" placeholder="请输入产品名称" />
               </template>
             </el-table-column>
-            <el-table-column label="收款账户" min-width="130">
+            <el-table-column label="产品图号" min-width="140">
               <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入收款账户" />
+                <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
               </template>
             </el-table-column>
-            <el-table-column label="付款方" min-width="130">
+            <el-table-column label="客户模号" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入付款方" />
+                <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
               </template>
             </el-table-column>
-            <el-table-column label="回款金额" width="120" align="right">
+            <el-table-column label="合同号" min-width="130">
+              <template #default="{ row }">
+                <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+              </template>
+            </el-table-column>
+            <el-table-column label="应收金额" width="120" align="right">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.receivableAmount"
+                  :min="0"
+                  :step="100"
+                  :precision="2"
+                  :controls="false"
+                  style="width: 100%"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="实收金额" width="120" align="right">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.amount"
@@ -493,14 +510,15 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="到账日期" width="150">
+            <el-table-column label="贴息金额" width="120" align="right">
               <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.deliveryDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择到账日期"
-                  style="width: 130px"
+                <el-input-number
+                  v-model="row.discountAmount"
+                  :min="0"
+                  :step="100"
+                  :precision="2"
+                  :controls="false"
+                  style="width: 100%"
                 />
               </template>
             </el-table-column>
@@ -509,9 +527,16 @@
                 <el-input v-model="row.remark" placeholder="备注" />
               </template>
             </el-table-column>
-            <el-table-column label="更多说明" min-width="145">
+            <el-table-column label="明细ID" width="90" align="center">
               <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="请输入说明" />
+                <el-input-number
+                  v-model="row.detailId"
+                  :min="0"
+                  :step="1"
+                  :precision="0"
+                  :controls="false"
+                  style="width: 100%"
+                />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="55" fixed="right">
@@ -568,7 +593,7 @@
       </el-table>
       <template #footer>
         <el-button @click="receiptCandidateDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyReceiptCandidates">带入明细</el-button>
+        <el-button type="primary" @click="applyReceiptCandidates">代入明细</el-button>
       </template>
     </el-dialog>
   </div>
@@ -618,7 +643,7 @@ interface ReceiptDetail {
   customerPartNo: string
   contractNo?: string
   receivableAmount?: number
-  amount: number
+  amount?: number
   discountAmount?: number
   receiptProgress?: string
   receiptDate?: string
@@ -804,8 +829,8 @@ const createEmptyDetail = (): ReceiptDetail => ({
   customerPartNo: '',
   contractNo: '',
   receivableAmount: 0,
-  amount: 0,
-  discountAmount: 0,
+  amount: undefined,
+  discountAmount: undefined,
   receiptProgress: '',
   receiptDate: '',
   receiptMethod: '',
@@ -838,6 +863,7 @@ const receiptCandidateKeyword = ref('')
 const receiptCandidates = ref<ReceiptCandidate[]>([])
 const selectedReceiptCandidates = ref<ReceiptCandidate[]>([])
 const receiptCandidateTableRef = ref<InstanceType<typeof ElTable>>()
+const syncingReceiptCandidateSelection = ref(false)
 
 const normalizeDetails = (details: ReceiptDetail[]): ReceiptDetail[] =>
   details.map((detail) => ({
@@ -848,7 +874,7 @@ const normalizeDetails = (details: ReceiptDetail[]): ReceiptDetail[] =>
 const calculateSummary = (details: ReceiptDetail[]) =>
   details.reduce(
     (acc, item) => {
-      acc.totalAmount += item.amount
+      acc.totalAmount += Number(item.amount) || 0
       return acc
     },
     { totalAmount: 0 }
@@ -966,7 +992,7 @@ const dialogRules: FormRules<ReceiptPayload> = {
   customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }]
 }
 
-const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
+const formatAmount = (value: number | null | undefined) => Number(value ?? 0).toFixed(2)
 const formatBoolean = (value: unknown) => (Boolean(value) ? '是' : '否')
 
 const mapReceiptToRow = (receipt: Receipt): ReceiptTableRow => {
@@ -1230,8 +1256,37 @@ const openReceiptCandidateDialog = async () => {
   await loadReceiptCandidates()
 }
 
+const syncReceiptCandidateSelection = async (rows: ReceiptCandidate[]) => {
+  if (!receiptCandidateTableRef.value) return
+  syncingReceiptCandidateSelection.value = true
+  receiptCandidateTableRef.value.clearSelection()
+  rows.forEach((row) => {
+    receiptCandidateTableRef.value?.toggleRowSelection(row, true)
+  })
+  await nextTick()
+  syncingReceiptCandidateSelection.value = false
+}
+
 const handleReceiptCandidateSelectionChange = (rows: ReceiptCandidate[]) => {
-  selectedReceiptCandidates.value = rows
+  if (syncingReceiptCandidateSelection.value) return
+  if (!rows.length) {
+    selectedReceiptCandidates.value = []
+    return
+  }
+
+  const expectedCustomer = (dialogForm.customerName || rows[0].customerName || '').trim()
+  const validRows = rows.filter((it) => String(it.customerName || '').trim() === expectedCustomer)
+
+  if (validRows.length !== rows.length) {
+    ElMessage.warning(
+      dialogForm.customerName
+        ? '仅可勾选与当前单据客户一致的候选明细'
+        : '仅可勾选同一客户的候选明细'
+    )
+    void syncReceiptCandidateSelection(validRows)
+  }
+
+  selectedReceiptCandidates.value = validRows
 }
 
 const applyReceiptCandidates = () => {
@@ -1270,8 +1325,8 @@ const applyReceiptCandidates = () => {
     detail.customerPartNo = it.customerPartNo
     detail.contractNo = it.contractNo
     detail.receivableAmount = it.receivableAmount
-    detail.amount = it.receivableAmount
-    detail.discountAmount = 0
+    detail.amount = undefined
+    detail.discountAmount = undefined
     detail.receiptMethod = dialogForm.receiptMethod || '现汇'
     detail.accountName = dialogForm.accountName || '交行'
     detail.customerName = dialogForm.customerName
@@ -1368,7 +1423,10 @@ const submitDialogForm = async () => {
   }
 
   const invalidDetail = dialogForm.details.find(
-    (detail) => !detail.productName.trim() || detail.amount <= 0
+    (detail) =>
+      !detail.productName.trim() ||
+      !Number.isFinite(Number(detail.amount)) ||
+      Number(detail.amount) <= 0
   )
 
   if (invalidDetail) {

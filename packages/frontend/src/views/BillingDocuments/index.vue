@@ -471,6 +471,9 @@
                 class="dialog-input"
               />
             </el-form-item>
+            <el-form-item label="单据日期">
+              <el-input v-model="dialogForm.deliveryDate" class="dialog-input" disabled />
+            </el-form-item>
             <el-form-item label="开票日期">
               <el-date-picker
                 v-model="dialogForm.invoiceDate"
@@ -480,9 +483,6 @@
                 class="dialog-date-picker"
                 style="width: 252px"
               />
-            </el-form-item>
-            <el-form-item label="单据日期">
-              <el-input v-model="dialogForm.deliveryDate" class="dialog-input" disabled />
             </el-form-item>
             <el-form-item label="单据状态" class="dialog-status-item">
               <el-select
@@ -521,35 +521,29 @@
 
           <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
             <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="行项目编号" min-width="140">
+            <el-table-column label="项目编号" min-width="140">
               <template #default="{ row }">
-                <el-input v-model="row.itemCode" placeholder="请输入行项目编号" />
+                <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
               </template>
             </el-table-column>
-            <el-table-column label="商品/服务名称" min-width="150">
+            <el-table-column label="产品名称" min-width="150">
               <template #default="{ row }">
-                <el-input v-model="row.productName" placeholder="请输入商品或服务名称" />
+                <el-input v-model="row.productName" placeholder="请输入产品名称" />
               </template>
             </el-table-column>
-            <el-table-column label="税收分类编码" min-width="130">
+            <el-table-column label="产品图号" min-width="140">
               <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入税收分类编码" />
+                <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
               </template>
             </el-table-column>
-            <el-table-column label="单位" min-width="130">
+            <el-table-column label="客户模号" min-width="130">
               <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入单位" />
+                <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
               </template>
             </el-table-column>
-            <el-table-column label="数量" width="140" align="center">
+            <el-table-column label="合同号" min-width="130">
               <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
+                <el-input v-model="row.contractNo" placeholder="请输入合同号" />
               </template>
             </el-table-column>
             <el-table-column label="单价(元)" width="120" align="right">
@@ -565,30 +559,25 @@
                 />
               </template>
             </el-table-column>
+            <el-table-column label="数量" width="140" align="center">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.quantity"
+                  :min="0"
+                  :step="1"
+                  style="width: 100%"
+                  @change="handleDetailQuantityChange(row)"
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="金额(元)" width="80" align="right">
               <template #default="{ row }">
                 {{ formatAmount(row.amount) }}
               </template>
             </el-table-column>
-            <el-table-column label="到期日期" width="150">
-              <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.deliveryDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择到期日期"
-                  style="width: 130px"
-                />
-              </template>
-            </el-table-column>
             <el-table-column label="备注" min-width="150">
               <template #default="{ row }">
                 <el-input v-model="row.remark" placeholder="备注" />
-              </template>
-            </el-table-column>
-            <el-table-column label="更多说明" min-width="145">
-              <template #default="{ row }">
-                <el-input v-model="row.costSource" placeholder="请输入说明" />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="55" fixed="right">
@@ -650,7 +639,7 @@
       </el-table>
       <template #footer>
         <el-button @click="invoiceCandidateDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyInvoiceCandidates">带入明细</el-button>
+        <el-button type="primary" @click="applyInvoiceCandidates">代入明细</el-button>
       </template>
     </el-dialog>
   </div>
@@ -914,6 +903,7 @@ const invoiceCandidateKeyword = ref('')
 const invoiceCandidates = ref<InvoiceCandidate[]>([])
 const selectedInvoiceCandidates = ref<InvoiceCandidate[]>([])
 const invoiceCandidateTableRef = ref<InstanceType<typeof ElTable>>()
+const syncingInvoiceCandidateSelection = ref(false)
 
 const normalizeDetails = (details: InvoiceLine[]): InvoiceLine[] =>
   details.map((detail) => {
@@ -1312,8 +1302,37 @@ const openInvoiceCandidateDialog = async () => {
   await loadInvoiceCandidates()
 }
 
+const syncInvoiceCandidateSelection = async (rows: InvoiceCandidate[]) => {
+  if (!invoiceCandidateTableRef.value) return
+  syncingInvoiceCandidateSelection.value = true
+  invoiceCandidateTableRef.value.clearSelection()
+  rows.forEach((row) => {
+    invoiceCandidateTableRef.value?.toggleRowSelection(row, true)
+  })
+  await nextTick()
+  syncingInvoiceCandidateSelection.value = false
+}
+
 const handleInvoiceCandidateSelectionChange = (rows: InvoiceCandidate[]) => {
-  selectedInvoiceCandidates.value = rows
+  if (syncingInvoiceCandidateSelection.value) return
+  if (!rows.length) {
+    selectedInvoiceCandidates.value = []
+    return
+  }
+
+  const expectedCustomer = (dialogForm.customerName || rows[0].customerName || '').trim()
+  const validRows = rows.filter((it) => String(it.customerName || '').trim() === expectedCustomer)
+
+  if (validRows.length !== rows.length) {
+    ElMessage.warning(
+      dialogForm.customerName
+        ? '仅可勾选与当前单据客户一致的候选明细'
+        : '仅可勾选同一客户的候选明细'
+    )
+    void syncInvoiceCandidateSelection(validRows)
+  }
+
+  selectedInvoiceCandidates.value = validRows
 }
 
 const applyInvoiceCandidates = () => {
