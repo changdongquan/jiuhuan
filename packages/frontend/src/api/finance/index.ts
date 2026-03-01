@@ -27,11 +27,26 @@ export interface FinanceReceiptQueryParams {
   receiptDateEnd?: string
 }
 
+export interface FinanceInvoiceCandidateQueryParams {
+  filterType?: 'no_invoice' | 'prepaid_pending' | 'full'
+  keyword?: string
+  customerName?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface FinanceReceiptCandidateQueryParams {
+  keyword?: string
+  customerName?: string
+  page?: number
+  pageSize?: number
+}
+
 export const getFinanceInvoiceListApi = (params?: FinanceInvoiceQueryParams) => {
   return request.get({ url: '/api/finance/invoices/list', params })
 }
 
-export const getFinanceInvoiceCandidatesApi = (params?: any) => {
+export const getFinanceInvoiceCandidatesApi = (params?: FinanceInvoiceCandidateQueryParams) => {
   return request.get({ url: '/api/finance/invoices/candidates', params })
 }
 
@@ -51,7 +66,7 @@ export const getFinanceReceiptListApi = (params?: FinanceReceiptQueryParams) => 
   return request.get({ url: '/api/finance/receipts/list', params })
 }
 
-export const getFinanceReceiptCandidatesApi = (params?: any) => {
+export const getFinanceReceiptCandidatesApi = (params?: FinanceReceiptCandidateQueryParams) => {
   return request.get({ url: '/api/finance/receipts/candidates', params })
 }
 

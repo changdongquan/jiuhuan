@@ -288,7 +288,7 @@
       </div>
     </div>
 
-    <div style="display: flex; margin-top: 16px; justify-content: center">
+    <div class="pagination-footer">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -565,14 +565,34 @@
       :close-on-click-modal="false"
     >
       <div class="finance-candidate-toolbar">
+        <el-select
+          v-model="receiptCandidateCustomerName"
+          placeholder="客户名称"
+          clearable
+          filterable
+          style="width: 220px"
+          :disabled="Boolean(dialogForm.customerName)"
+          @change="loadReceiptCandidates(true)"
+        >
+          <el-option
+            v-for="item in receiptCandidateCustomerSelectOptions"
+            :key="item"
+            :label="item"
+            :value="item"
+          />
+        </el-select>
         <el-input
           v-model="receiptCandidateKeyword"
           placeholder="明细ID/项目编号/产品名称/图号/模号/合同号"
           clearable
           style="width: 360px"
-          @keydown.enter.prevent="loadReceiptCandidates"
+          @keydown.enter.prevent="loadReceiptCandidates(true)"
         />
-        <el-button type="primary" @click="loadReceiptCandidates">查询</el-button>
+        <el-button type="primary" @click="loadReceiptCandidates(true)">查询</el-button>
+        <span class="finance-candidate-toolbar__selected"
+          >已选 {{ selectedReceiptCandidates.length }} 条</span
+        >
+        <el-button @click="clearReceiptCandidateSelection">清空已选</el-button>
       </div>
       <el-table
         ref="receiptCandidateTableRef"
@@ -594,6 +614,18 @@
           <template #default="{ row }">{{ formatAmount(row.receivableAmount || 0) }}</template>
         </el-table-column>
       </el-table>
+      <div class="finance-candidate-pagination">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next"
+          :current-page="receiptCandidatePage"
+          :page-size="receiptCandidatePageSize"
+          :page-sizes="[50, 100, 200]"
+          :total="receiptCandidateTotal"
+          @size-change="handleReceiptCandidateSizeChange"
+          @current-change="handleReceiptCandidatePageChange"
+        />
+      </div>
       <template #footer>
         <el-button @click="receiptCandidateDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="applyReceiptCandidates">代入明细</el-button>
@@ -862,11 +894,68 @@ const route = useRoute()
 const customerOptions = ref<string[]>([])
 const receiptCandidateDialogVisible = ref(false)
 const receiptCandidateLoading = ref(false)
+const receiptCandidateCustomerName = ref('')
+const receiptCandidateCustomerOptions = ref<string[]>([])
 const receiptCandidateKeyword = ref('')
+const receiptCandidatePage = ref(1)
+const receiptCandidatePageSize = ref(50)
+const receiptCandidateTotal = ref(0)
 const receiptCandidates = ref<ReceiptCandidate[]>([])
 const selectedReceiptCandidates = ref<ReceiptCandidate[]>([])
+const selectedReceiptCandidateMap = ref<Record<string, ReceiptCandidate>>({})
 const receiptCandidateTableRef = ref<InstanceType<typeof ElTable>>()
 const syncingReceiptCandidateSelection = ref(false)
+const RECEIPT_CANDIDATE_PREF_KEY = 'finance.receipt.candidate.pref.v1'
+
+const restoreReceiptCandidatePrefs = () => {
+  try {
+    const raw = localStorage.getItem(RECEIPT_CANDIDATE_PREF_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (typeof parsed?.customerName === 'string') {
+      receiptCandidateCustomerName.value = parsed.customerName
+    }
+    if (typeof parsed?.keyword === 'string') {
+      receiptCandidateKeyword.value = parsed.keyword
+    }
+    const size = Number(parsed?.pageSize)
+    if (Number.isFinite(size) && size >= 1) {
+      receiptCandidatePageSize.value = Math.min(200, Math.max(1, Math.trunc(size)))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const persistReceiptCandidatePrefs = () => {
+  try {
+    localStorage.setItem(
+      RECEIPT_CANDIDATE_PREF_KEY,
+      JSON.stringify({
+        customerName: receiptCandidateCustomerName.value,
+        keyword: receiptCandidateKeyword.value,
+        pageSize: receiptCandidatePageSize.value
+      })
+    )
+  } catch {
+    // ignore
+  }
+}
+
+restoreReceiptCandidatePrefs()
+
+const receiptCandidateCustomerSelectOptions = computed(() => {
+  if (dialogForm.customerName) {
+    return [dialogForm.customerName]
+  }
+  return receiptCandidateCustomerOptions.value
+})
+
+const getReceiptCandidateKey = (item: ReceiptCandidate) => String(item.detailId || '')
+
+const rebuildSelectedReceiptCandidates = () => {
+  selectedReceiptCandidates.value = Object.values(selectedReceiptCandidateMap.value)
+}
 
 const normalizeDetails = (details: ReceiptDetail[]): ReceiptDetail[] =>
   details.map((detail) => ({
@@ -1225,17 +1314,36 @@ const loadCustomerOptions = async () => {
     .filter((name: string) => !!name)
 }
 
-const loadReceiptCandidates = async () => {
+const loadReceiptCandidates = async (resetPage = false) => {
+  if (resetPage) {
+    receiptCandidatePage.value = 1
+    selectedReceiptCandidateMap.value = {}
+    selectedReceiptCandidates.value = []
+  }
   receiptCandidateLoading.value = true
   try {
+    const selectedCustomerName = (
+      dialogForm.customerName ||
+      receiptCandidateCustomerName.value ||
+      ''
+    ).trim()
     const resp = await getFinanceReceiptCandidatesApi({
       keyword: receiptCandidateKeyword.value.trim() || undefined,
-      customerName: dialogForm.customerName || undefined
+      customerName: selectedCustomerName || undefined,
+      page: receiptCandidatePage.value,
+      pageSize: receiptCandidatePageSize.value
     })
     const raw: any = resp
     const pr: any = raw?.data ?? raw
     const data: any = pr?.data ?? pr
     const list = Array.isArray(data?.list) ? data.list : []
+    const customerOptions = Array.isArray(data?.customerOptions) ? data.customerOptions : []
+    receiptCandidateCustomerOptions.value = customerOptions
+      .map((v: any) => String(v || '').trim())
+      .filter(Boolean)
+    receiptCandidateTotal.value = Number(data?.total || 0)
+    receiptCandidatePage.value = Number(data?.page || receiptCandidatePage.value)
+    receiptCandidatePageSize.value = Number(data?.pageSize || receiptCandidatePageSize.value)
     receiptCandidates.value = list.map((it: any) => ({
       detailId: Number(it.detailId) || 0,
       itemCode: String(it.itemCode || ''),
@@ -1246,7 +1354,9 @@ const loadReceiptCandidates = async () => {
       contractNo: String(it.contractNo || ''),
       receivableAmount: Number(it.receivableAmount) || 0
     }))
-    selectedReceiptCandidates.value = []
+    await nextTick()
+    await syncReceiptCandidateSelection()
+    persistReceiptCandidatePrefs()
   } finally {
     receiptCandidateLoading.value = false
   }
@@ -1259,11 +1369,30 @@ const openReceiptCandidateDialog = async () => {
   await loadReceiptCandidates()
 }
 
-const syncReceiptCandidateSelection = async (rows: ReceiptCandidate[]) => {
+const clearReceiptCandidateSelection = () => {
+  selectedReceiptCandidateMap.value = {}
+  selectedReceiptCandidates.value = []
+  receiptCandidateTableRef.value?.clearSelection()
+}
+
+const handleReceiptCandidatePageChange = (page: number) => {
+  receiptCandidatePage.value = page
+  void loadReceiptCandidates()
+}
+
+const handleReceiptCandidateSizeChange = (size: number) => {
+  receiptCandidatePageSize.value = size
+  receiptCandidatePage.value = 1
+  void loadReceiptCandidates()
+}
+
+const syncReceiptCandidateSelection = async () => {
   if (!receiptCandidateTableRef.value) return
   syncingReceiptCandidateSelection.value = true
   receiptCandidateTableRef.value.clearSelection()
-  rows.forEach((row) => {
+  receiptCandidates.value.forEach((row) => {
+    const key = getReceiptCandidateKey(row)
+    if (!selectedReceiptCandidateMap.value[key]) return
     receiptCandidateTableRef.value?.toggleRowSelection(row, true)
   })
   await nextTick()
@@ -1272,12 +1401,16 @@ const syncReceiptCandidateSelection = async (rows: ReceiptCandidate[]) => {
 
 const handleReceiptCandidateSelectionChange = (rows: ReceiptCandidate[]) => {
   if (syncingReceiptCandidateSelection.value) return
-  if (!rows.length) {
-    selectedReceiptCandidates.value = []
-    return
-  }
+  const currentPageKeys = new Set(receiptCandidates.value.map((it) => getReceiptCandidateKey(it)))
+  const map = { ...selectedReceiptCandidateMap.value }
 
-  const expectedCustomer = (dialogForm.customerName || rows[0].customerName || '').trim()
+  const existingSelected = Object.values(map)
+  const expectedCustomer = (
+    dialogForm.customerName ||
+    existingSelected[0]?.customerName ||
+    rows[0]?.customerName ||
+    ''
+  ).trim()
   const validRows = rows.filter((it) => String(it.customerName || '').trim() === expectedCustomer)
 
   if (validRows.length !== rows.length) {
@@ -1286,10 +1419,20 @@ const handleReceiptCandidateSelectionChange = (rows: ReceiptCandidate[]) => {
         ? '仅可勾选与当前单据客户一致的候选明细'
         : '仅可勾选同一客户的候选明细'
     )
-    void syncReceiptCandidateSelection(validRows)
   }
 
-  selectedReceiptCandidates.value = validRows
+  currentPageKeys.forEach((key) => {
+    delete map[key]
+  })
+  validRows.forEach((it) => {
+    map[getReceiptCandidateKey(it)] = it
+  })
+  selectedReceiptCandidateMap.value = map
+  rebuildSelectedReceiptCandidates()
+
+  if (validRows.length !== rows.length) {
+    void syncReceiptCandidateSelection()
+  }
 }
 
 const applyReceiptCandidates = () => {
@@ -1335,6 +1478,8 @@ const applyReceiptCandidates = () => {
     detail.customerName = dialogForm.customerName
     dialogForm.details.push(detail)
   })
+  selectedReceiptCandidateMap.value = {}
+  selectedReceiptCandidates.value = []
   receiptCandidateDialogVisible.value = false
 }
 
@@ -1626,6 +1771,18 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
+.finance-candidate-toolbar__selected {
+  margin-left: auto;
+  font-size: 12px;
+  color: #606266;
+}
+
+.finance-candidate-pagination {
+  display: flex;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
 .dialog-form-container {
   display: flex;
   flex-direction: column;
@@ -1663,6 +1820,16 @@ onMounted(() => {
 
 .dialog-product-summary__item {
   margin-right: 16px;
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 .so-timeline-layout {

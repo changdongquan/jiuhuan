@@ -211,38 +211,42 @@ router.get('/invoices/list', async (req, res) => {
 
 router.get('/invoices/candidates', async (req, res) => {
   try {
-    const { filterType = 'no_invoice', keyword, customerName } = req.query
-    const params = {}
-    const where = []
+    const { filterType = 'no_invoice', keyword, customerName, page = 1, pageSize = 50 } = req.query
+    const baseParams = {}
+    const baseWhere = []
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const sizeNum = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 50))
+    const offset = (pageNum - 1) * sizeNum
 
     if (filterType === 'no_invoice') {
-      where.push('f.项目编号 IS NULL')
+      baseWhere.push('f.项目编号 IS NULL')
     } else if (filterType === 'prepaid_pending') {
-      where.push(
+      baseWhere.push(
         'ISNULL(f.是否已开预付发票, 0) = 1 AND ISNULL(f.是否已开验收发票, 0) = 0 AND ISNULL(f.是否已开全额发票, 0) = 0'
       )
-      where.push(
+      baseWhere.push(
         's.项目编号 NOT IN (SELECT DISTINCT 项目编号 FROM 发票明细 WHERE ISNULL(是否已开全额发票, 0) = 1)'
       )
     } else if (filterType === 'full') {
-      where.push('ISNULL(f.是否已开全额发票, 0) = 1')
+      baseWhere.push('ISNULL(f.是否已开全额发票, 0) = 1')
     }
 
     if (keyword) {
-      where.push(
+      baseWhere.push(
         '(s.项目编号 LIKE @keyword OR h.产品名称 LIKE @keyword OR h.产品图号 LIKE @keyword OR p.客户模号 LIKE @keyword OR s.合同号 LIKE @keyword)'
       )
-      params.keyword = `%${String(keyword).trim()}%`
+      baseParams.keyword = `%${String(keyword).trim()}%`
     }
 
+    const params = { ...baseParams }
+    const where = [...baseWhere]
     if (customerName) {
       where.push('c.客户名称 = @customerName')
       params.customerName = String(customerName).trim()
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
-    const rows = await query(
-      `
+    const baseSql = `
       SELECT DISTINCT
         s.项目编号 as itemCode,
         h.产品名称 as productName,
@@ -257,13 +261,52 @@ router.get('/invoices/candidates', async (req, res) => {
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
       LEFT JOIN 发票明细 f ON s.项目编号 = f.项目编号
       ${whereClause}
-      ORDER BY s.项目编号 DESC
+    `
+    const optionWhere = [
+      ...baseWhere,
+      "c.客户名称 IS NOT NULL",
+      "LTRIM(RTRIM(c.客户名称)) <> ''"
+    ]
+    const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
+    const customerOptionRows = await query(
       `
-      ,
-      params
+      SELECT DISTINCT c.客户名称 as customerName
+      FROM 销售订单 s
+      INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
+      INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
+      LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+      LEFT JOIN 发票明细 f ON s.项目编号 = f.项目编号
+      ${optionWhereClause}
+      ORDER BY c.客户名称 ASC
+      `,
+      baseParams
+    )
+    const customerOptions = customerOptionRows.map((r) => String(r.customerName || '').trim()).filter(Boolean)
+
+    const countRows = await query(`SELECT COUNT(1) as total FROM (${baseSql}) t`, params)
+    const total = Number(countRows?.[0]?.total || 0)
+
+    const rows = await query(
+      `
+      SELECT *
+      FROM (${baseSql}) t
+      ORDER BY t.itemCode DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+      `,
+      { ...params, offset, pageSize: sizeNum }
     )
 
-    res.json({ code: 0, success: true, data: { list: rows } })
+    res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: rows,
+        customerOptions,
+        total,
+        page: pageNum,
+        pageSize: sizeNum
+      }
+    })
   } catch (error) {
     console.error('获取开票候选明细失败:', error)
     res.status(500).json({ code: 500, success: false, message: '获取开票候选明细失败', error: error.message })
@@ -442,25 +485,32 @@ router.get('/receipts/list', async (req, res) => {
 
 router.get('/receipts/candidates', async (req, res) => {
   try {
-    const { keyword, customerName } = req.query
-    const params = {}
-    const where = ['ISNULL(f.是否已红冲, 0) = 0']
+    const { keyword, customerName, page = 1, pageSize = 50 } = req.query
+    const baseParams = {}
+    const baseWhere = [
+      'ISNULL(f.是否已红冲, 0) = 0',
+      'ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0'
+    ]
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const sizeNum = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 50))
+    const offset = (pageNum - 1) * sizeNum
 
     if (keyword) {
-      where.push(
+      baseWhere.push(
         '(f.项目编号 LIKE @keyword OR f.产品名称 LIKE @keyword OR f.产品图号 LIKE @keyword OR f.客户模号 LIKE @keyword OR f.合同号 LIKE @keyword OR CONVERT(NVARCHAR(50), f.明细ID) LIKE @keyword)'
       )
-      params.keyword = `%${String(keyword).trim()}%`
+      baseParams.keyword = `%${String(keyword).trim()}%`
     }
 
+    const params = { ...baseParams }
+    const where = [...baseWhere]
     if (customerName) {
       where.push('c.客户名称 = @customerName')
       params.customerName = String(customerName).trim()
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
-    const rows = await query(
-      `
+    const baseSql = `
       SELECT
         f.明细ID as detailId,
         f.项目编号 as itemCode,
@@ -485,14 +535,58 @@ router.get('/receipts/candidates', async (req, res) => {
         GROUP BY 明细ID
       ) r ON r.明细ID = f.明细ID
       ${whereClause}
-      ORDER BY f.明细ID DESC
+    `
+    const optionWhere = [
+      ...baseWhere,
+      "c.客户名称 IS NOT NULL",
+      "LTRIM(RTRIM(c.客户名称)) <> ''"
+    ]
+    const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
+    const customerOptionRows = await query(
       `
-      ,
-      params
+      SELECT DISTINCT c.客户名称 as customerName
+      FROM 发票明细 f
+      LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
+      LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
+      LEFT JOIN (
+        SELECT
+          明细ID,
+          SUM(ISNULL(实收金额, 0)) as totalReceived,
+          SUM(ISNULL(贴息金额, 0)) as totalDiscount
+        FROM 回款单据
+        GROUP BY 明细ID
+      ) r ON r.明细ID = f.明细ID
+      ${optionWhereClause}
+      ORDER BY c.客户名称 ASC
+      `,
+      baseParams
+    )
+    const customerOptions = customerOptionRows.map((r) => String(r.customerName || '').trim()).filter(Boolean)
+
+    const countRows = await query(`SELECT COUNT(1) as total FROM (${baseSql}) t`, params)
+    const total = Number(countRows?.[0]?.total || 0)
+
+    const list = await query(
+      `
+      SELECT *
+      FROM (${baseSql}) t
+      ORDER BY t.detailId DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+      `,
+      { ...params, offset, pageSize: sizeNum }
     )
 
-    const list = rows.filter((r) => toNum(r.receivableAmount) > 0)
-    res.json({ code: 0, success: true, data: { list } })
+    res.json({
+      code: 0,
+      success: true,
+      data: {
+        list,
+        customerOptions,
+        total,
+        page: pageNum,
+        pageSize: sizeNum
+      }
+    })
   } catch (error) {
     console.error('获取回款候选明细失败:', error)
     res.status(500).json({ code: 500, success: false, message: '获取回款候选明细失败', error: error.message })

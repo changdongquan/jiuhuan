@@ -339,7 +339,7 @@
       </div>
     </div>
 
-    <div style="display: flex; margin-top: 16px; justify-content: center">
+    <div class="pagination-footer">
       <el-pagination
         background
         layout="total, sizes, prev, pager, next, jumper"
@@ -611,14 +611,34 @@
           <el-option label="预付已开待后续" value="prepaid_pending" />
           <el-option label="全额发票" value="full" />
         </el-select>
+        <el-select
+          v-model="invoiceCandidateCustomerName"
+          placeholder="客户名称"
+          clearable
+          filterable
+          style="width: 220px"
+          :disabled="Boolean(dialogForm.customerName)"
+          @change="loadInvoiceCandidates(true)"
+        >
+          <el-option
+            v-for="item in invoiceCandidateCustomerSelectOptions"
+            :key="item"
+            :label="item"
+            :value="item"
+          />
+        </el-select>
         <el-input
           v-model="invoiceCandidateKeyword"
           placeholder="项目编号/产品名称/图号/模号/合同号"
           clearable
           style="width: 320px"
-          @keydown.enter.prevent="loadInvoiceCandidates"
+          @keydown.enter.prevent="loadInvoiceCandidates(true)"
         />
-        <el-button type="primary" @click="loadInvoiceCandidates">查询</el-button>
+        <el-button type="primary" @click="loadInvoiceCandidates(true)">查询</el-button>
+        <span class="finance-candidate-toolbar__selected"
+          >已选 {{ selectedInvoiceCandidates.length }} 条</span
+        >
+        <el-button @click="clearInvoiceCandidateSelection">清空已选</el-button>
       </div>
       <el-table
         ref="invoiceCandidateTableRef"
@@ -640,6 +660,18 @@
           <template #default="{ row }">{{ formatAmount(row.unitPrice || 0) }}</template>
         </el-table-column>
       </el-table>
+      <div class="finance-candidate-pagination">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next"
+          :current-page="invoiceCandidatePage"
+          :page-size="invoiceCandidatePageSize"
+          :page-sizes="[50, 100, 200]"
+          :total="invoiceCandidateTotal"
+          @size-change="handleInvoiceCandidateSizeChange"
+          @current-change="handleInvoiceCandidatePageChange"
+        />
+      </div>
       <template #footer>
         <el-button @click="invoiceCandidateDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="applyInvoiceCandidates">代入明细</el-button>
@@ -902,11 +934,76 @@ const customerOptions = ref<string[]>([])
 const invoiceCandidateDialogVisible = ref(false)
 const invoiceCandidateLoading = ref(false)
 const invoiceCandidateFilterType = ref<'no_invoice' | 'prepaid_pending' | 'full'>('no_invoice')
+const invoiceCandidateCustomerName = ref('')
+const invoiceCandidateCustomerOptions = ref<string[]>([])
 const invoiceCandidateKeyword = ref('')
+const invoiceCandidatePage = ref(1)
+const invoiceCandidatePageSize = ref(50)
+const invoiceCandidateTotal = ref(0)
 const invoiceCandidates = ref<InvoiceCandidate[]>([])
 const selectedInvoiceCandidates = ref<InvoiceCandidate[]>([])
+const selectedInvoiceCandidateMap = ref<Record<string, InvoiceCandidate>>({})
 const invoiceCandidateTableRef = ref<InstanceType<typeof ElTable>>()
 const syncingInvoiceCandidateSelection = ref(false)
+const INVOICE_CANDIDATE_PREF_KEY = 'finance.invoice.candidate.pref.v1'
+
+const restoreInvoiceCandidatePrefs = () => {
+  try {
+    const raw = localStorage.getItem(INVOICE_CANDIDATE_PREF_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (
+      parsed?.filterType === 'no_invoice' ||
+      parsed?.filterType === 'prepaid_pending' ||
+      parsed?.filterType === 'full'
+    ) {
+      invoiceCandidateFilterType.value = parsed.filterType
+    }
+    if (typeof parsed?.keyword === 'string') {
+      invoiceCandidateKeyword.value = parsed.keyword
+    }
+    if (typeof parsed?.customerName === 'string') {
+      invoiceCandidateCustomerName.value = parsed.customerName
+    }
+    const size = Number(parsed?.pageSize)
+    if (Number.isFinite(size) && size >= 1) {
+      invoiceCandidatePageSize.value = Math.min(200, Math.max(1, Math.trunc(size)))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const persistInvoiceCandidatePrefs = () => {
+  try {
+    localStorage.setItem(
+      INVOICE_CANDIDATE_PREF_KEY,
+      JSON.stringify({
+        filterType: invoiceCandidateFilterType.value,
+        customerName: invoiceCandidateCustomerName.value,
+        keyword: invoiceCandidateKeyword.value,
+        pageSize: invoiceCandidatePageSize.value
+      })
+    )
+  } catch {
+    // ignore
+  }
+}
+
+restoreInvoiceCandidatePrefs()
+
+const invoiceCandidateCustomerSelectOptions = computed(() => {
+  if (dialogForm.customerName) {
+    return [dialogForm.customerName]
+  }
+  return invoiceCandidateCustomerOptions.value
+})
+
+const getInvoiceCandidateKey = (item: InvoiceCandidate) => String(item.itemCode || '').trim()
+
+const rebuildSelectedInvoiceCandidates = () => {
+  selectedInvoiceCandidates.value = Object.values(selectedInvoiceCandidateMap.value)
+}
 
 const normalizeDetails = (details: InvoiceLine[]): InvoiceLine[] =>
   details.map((detail) => {
@@ -1271,18 +1368,37 @@ const loadCustomerOptions = async () => {
     .filter((name: string) => !!name)
 }
 
-const loadInvoiceCandidates = async () => {
+const loadInvoiceCandidates = async (resetPage = false) => {
+  if (resetPage) {
+    invoiceCandidatePage.value = 1
+    selectedInvoiceCandidateMap.value = {}
+    selectedInvoiceCandidates.value = []
+  }
   invoiceCandidateLoading.value = true
   try {
+    const selectedCustomerName = (
+      dialogForm.customerName ||
+      invoiceCandidateCustomerName.value ||
+      ''
+    ).trim()
     const resp = await getFinanceInvoiceCandidatesApi({
       filterType: invoiceCandidateFilterType.value,
       keyword: invoiceCandidateKeyword.value.trim() || undefined,
-      customerName: dialogForm.customerName || undefined
+      customerName: selectedCustomerName || undefined,
+      page: invoiceCandidatePage.value,
+      pageSize: invoiceCandidatePageSize.value
     })
     const raw: any = resp
     const pr: any = raw?.data ?? raw
     const data: any = pr?.data ?? pr
     const list = Array.isArray(data?.list) ? data.list : []
+    const customerOptions = Array.isArray(data?.customerOptions) ? data.customerOptions : []
+    invoiceCandidateCustomerOptions.value = customerOptions
+      .map((v: any) => String(v || '').trim())
+      .filter(Boolean)
+    invoiceCandidateTotal.value = Number(data?.total || 0)
+    invoiceCandidatePage.value = Number(data?.page || invoiceCandidatePage.value)
+    invoiceCandidatePageSize.value = Number(data?.pageSize || invoiceCandidatePageSize.value)
     invoiceCandidates.value = list.map((it: any) => ({
       itemCode: String(it.itemCode || ''),
       productName: String(it.productName || ''),
@@ -1292,7 +1408,9 @@ const loadInvoiceCandidates = async () => {
       contractNo: String(it.contractNo || ''),
       unitPrice: Number(it.unitPrice) || 0
     }))
-    selectedInvoiceCandidates.value = []
+    await nextTick()
+    await syncInvoiceCandidateSelection()
+    persistInvoiceCandidatePrefs()
   } finally {
     invoiceCandidateLoading.value = false
   }
@@ -1305,11 +1423,30 @@ const openInvoiceCandidateDialog = async () => {
   await loadInvoiceCandidates()
 }
 
-const syncInvoiceCandidateSelection = async (rows: InvoiceCandidate[]) => {
+const clearInvoiceCandidateSelection = () => {
+  selectedInvoiceCandidateMap.value = {}
+  selectedInvoiceCandidates.value = []
+  invoiceCandidateTableRef.value?.clearSelection()
+}
+
+const handleInvoiceCandidatePageChange = (page: number) => {
+  invoiceCandidatePage.value = page
+  void loadInvoiceCandidates()
+}
+
+const handleInvoiceCandidateSizeChange = (size: number) => {
+  invoiceCandidatePageSize.value = size
+  invoiceCandidatePage.value = 1
+  void loadInvoiceCandidates()
+}
+
+const syncInvoiceCandidateSelection = async () => {
   if (!invoiceCandidateTableRef.value) return
   syncingInvoiceCandidateSelection.value = true
   invoiceCandidateTableRef.value.clearSelection()
-  rows.forEach((row) => {
+  invoiceCandidates.value.forEach((row) => {
+    const key = getInvoiceCandidateKey(row)
+    if (!selectedInvoiceCandidateMap.value[key]) return
     invoiceCandidateTableRef.value?.toggleRowSelection(row, true)
   })
   await nextTick()
@@ -1318,12 +1455,16 @@ const syncInvoiceCandidateSelection = async (rows: InvoiceCandidate[]) => {
 
 const handleInvoiceCandidateSelectionChange = (rows: InvoiceCandidate[]) => {
   if (syncingInvoiceCandidateSelection.value) return
-  if (!rows.length) {
-    selectedInvoiceCandidates.value = []
-    return
-  }
+  const currentPageKeys = new Set(invoiceCandidates.value.map((it) => getInvoiceCandidateKey(it)))
+  const map = { ...selectedInvoiceCandidateMap.value }
 
-  const expectedCustomer = (dialogForm.customerName || rows[0].customerName || '').trim()
+  const existingSelected = Object.values(map)
+  const expectedCustomer = (
+    dialogForm.customerName ||
+    existingSelected[0]?.customerName ||
+    rows[0]?.customerName ||
+    ''
+  ).trim()
   const validRows = rows.filter((it) => String(it.customerName || '').trim() === expectedCustomer)
 
   if (validRows.length !== rows.length) {
@@ -1332,10 +1473,20 @@ const handleInvoiceCandidateSelectionChange = (rows: InvoiceCandidate[]) => {
         ? '仅可勾选与当前单据客户一致的候选明细'
         : '仅可勾选同一客户的候选明细'
     )
-    void syncInvoiceCandidateSelection(validRows)
   }
 
-  selectedInvoiceCandidates.value = validRows
+  currentPageKeys.forEach((key) => {
+    delete map[key]
+  })
+  validRows.forEach((it) => {
+    map[getInvoiceCandidateKey(it)] = it
+  })
+  selectedInvoiceCandidateMap.value = map
+  rebuildSelectedInvoiceCandidates()
+
+  if (validRows.length !== rows.length) {
+    void syncInvoiceCandidateSelection()
+  }
 }
 
 const applyInvoiceCandidates = () => {
@@ -1377,6 +1528,8 @@ const applyInvoiceCandidates = () => {
     detail.amount = Number(detail.unitPrice.toFixed(2))
     dialogForm.details.push(detail)
   })
+  selectedInvoiceCandidateMap.value = {}
+  selectedInvoiceCandidates.value = []
   invoiceCandidateDialogVisible.value = false
 }
 
@@ -1679,6 +1832,18 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
+.finance-candidate-toolbar__selected {
+  margin-left: auto;
+  font-size: 12px;
+  color: #606266;
+}
+
+.finance-candidate-pagination {
+  display: flex;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
 .dialog-form-container {
   display: flex;
   flex-direction: column;
@@ -1716,6 +1881,16 @@ onMounted(() => {
 
 .dialog-product-summary__item {
   margin-right: 16px;
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 .so-timeline-layout {
