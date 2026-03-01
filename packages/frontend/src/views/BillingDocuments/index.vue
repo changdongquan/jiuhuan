@@ -73,6 +73,7 @@
         <el-table-column type="expand">
           <template #default="{ row }">
             <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
+              <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="id" label="明细ID" width="70" />
               <el-table-column prop="invoiceId" label="发票ID" width="70" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -289,10 +290,14 @@
                 size="small"
                 :row-class-name="timelineDetailRowClassName"
               >
-                <el-table-column prop="id" label="明细ID" width="70" />
-                <el-table-column prop="invoiceId" label="发票ID" width="70" />
+                <el-table-column type="index" label="序号" width="45" />
                 <el-table-column prop="itemCode" label="项目编号" min-width="140" />
                 <el-table-column prop="productName" label="产品名称" min-width="140" />
+                <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
+                <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+                <el-table-column prop="contractNo" label="合同号" min-width="120" />
+                <el-table-column prop="id" label="明细ID" width="70" />
+                <el-table-column prop="invoiceId" label="发票ID" width="70" />
                 <el-table-column label="数量" width="60" align="center">
                   <template #default="{ row }">{{ row.quantity }}</template>
                 </el-table-column>
@@ -306,9 +311,6 @@
                 <el-table-column label="是否已开全额发票" width="140" align="center">
                   <template #default="{ row }">{{ formatBoolean(row.fullIssued) }}</template>
                 </el-table-column>
-                <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
-                <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
-                <el-table-column prop="contractNo" label="合同号" min-width="120" />
                 <el-table-column label="是否已开预付发票" width="140" align="center">
                   <template #default="{ row }">{{ formatBoolean(row.prepaidIssued) }}</template>
                 </el-table-column>
@@ -397,6 +399,7 @@
           <h3 class="view-dialog-section-title">发票明细</h3>
           <div class="dialog-table-wrapper">
             <el-table :data="viewInvoiceData.details" border size="small">
+              <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="id" label="明细ID" width="70" />
               <el-table-column prop="invoiceId" label="发票ID" width="70" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -1038,7 +1041,7 @@ const dialogRules: FormRules<InvoicePayload> = {
 }
 
 const formatAmount = (value: number) => Number(value ?? 0).toFixed(2)
-const formatBoolean = (value: unknown) => (Boolean(value) ? '是' : '否')
+const formatBoolean = (value: unknown) => (value ? '是' : '否')
 
 const mapInvoiceToRow = (invoice: Invoice): InvoiceTableRow => {
   const { totalAmount, totalQuantity } = calculateSummary(invoice.details)

@@ -73,6 +73,7 @@
         <el-table-column type="expand">
           <template #default="{ row }">
             <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
+              <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="id" label="回款ID" width="70" />
               <el-table-column prop="detailId" label="明细ID" width="70" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -252,6 +253,7 @@
                 size="small"
                 :row-class-name="timelineDetailRowClassName"
               >
+                <el-table-column type="index" label="序号" width="45" />
                 <el-table-column prop="id" label="回款ID" width="70" />
                 <el-table-column prop="detailId" label="明细ID" width="70" />
                 <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -342,6 +344,7 @@
           <h3 class="view-dialog-section-title">回款明细</h3>
           <div class="dialog-table-wrapper">
             <el-table :data="viewReceiptData.details" border size="small">
+              <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="id" label="回款ID" width="70" />
               <el-table-column prop="detailId" label="明细ID" width="70" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" />
@@ -993,7 +996,7 @@ const dialogRules: FormRules<ReceiptPayload> = {
 }
 
 const formatAmount = (value: number | null | undefined) => Number(value ?? 0).toFixed(2)
-const formatBoolean = (value: unknown) => (Boolean(value) ? '是' : '否')
+const formatBoolean = (value: unknown) => (value ? '是' : '否')
 
 const mapReceiptToRow = (receipt: Receipt): ReceiptTableRow => {
   const { totalAmount } = calculateSummary(receipt.details)
