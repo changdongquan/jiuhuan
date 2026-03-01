@@ -701,11 +701,19 @@ const cloneCustomerPayload = (source: CustomerPayload): CustomerPayload => ({
 
 const handleDelete = async (row: CustomerTableRow) => {
   try {
-    await ElMessageBox.confirm(`确认删除客户 ${row.customerName} 吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+    await ElMessageBox.prompt(
+      `确认删除客户 ${row.customerName} 吗？<br/>请输入 "Y" 确认删除（不可恢复）`,
+      '删除确认',
+      {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPlaceholder: '请输入 Y',
+        inputPattern: /^[Yy]$/,
+        inputErrorMessage: '请输入 Y 确认删除',
+        type: 'warning'
+      }
+    )
 
     await deleteCustomerApi(row.id)
     await refreshTable()

@@ -147,6 +147,23 @@ export default defineComponent({
       }
     })
 
+    const renderTimelineViewSwitch = (
+      modelValue: 'table' | 'timeline',
+      onChange: (val: 'table' | 'timeline') => void
+    ) => (
+      <div class="tool-header-view-switch">
+        <span class="tool-header-view-switch__label">视图</span>
+        <ElRadioGroup
+          size="small"
+          modelValue={modelValue}
+          onUpdate:modelValue={(val) => onChange(val as 'table' | 'timeline')}
+        >
+          <ElRadioButton value="table">表格</ElRadioButton>
+          <ElRadioButton value="timeline">时间轴</ElRadioButton>
+        </ElRadioGroup>
+      </div>
+    )
+
     return () => (
       <div
         id={`${variables.namespace}-tool-header`}
@@ -229,106 +246,36 @@ export default defineComponent({
         ) : null}
 
         <div class="h-full flex items-center">
-          {isSalesOrdersPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={salesOrdersViewMode.value}
-                onUpdate:modelValue={(val) =>
-                  (salesOrdersViewMode.value = val as SalesOrdersViewMode)
-                }
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
-          {isOutboundDocumentPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={outboundDocumentViewMode.value}
-                onUpdate:modelValue={(val) =>
-                  (outboundDocumentViewMode.value = val as OutboundDocumentViewMode)
-                }
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
-          {isSalaryPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={salaryViewMode.value}
-                onUpdate:modelValue={(val) => (salaryViewMode.value = val as SalaryViewMode)}
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
-          {isProjectManagementPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={projectManagementViewMode.value}
-                onUpdate:modelValue={(val) =>
-                  (projectManagementViewMode.value = val as ProjectManagementViewMode)
-                }
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
-          {isBillingDocumentsPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={billingDocumentsViewMode.value}
-                onUpdate:modelValue={(val) =>
-                  (billingDocumentsViewMode.value = val as BillingDocumentsViewMode)
-                }
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
-          {isReceivableDocumentsPage.value && !isMobile.value ? (
-            <div class="flex items-center mr-3">
-              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
-                视图
-              </span>
-              <ElRadioGroup
-                size="small"
-                modelValue={receivableDocumentsViewMode.value}
-                onUpdate:modelValue={(val) =>
-                  (receivableDocumentsViewMode.value = val as ReceivableDocumentsViewMode)
-                }
-              >
-                <ElRadioButton value="table">表格</ElRadioButton>
-                <ElRadioButton value="timeline">时间轴</ElRadioButton>
-              </ElRadioGroup>
-            </div>
-          ) : null}
+          {isSalesOrdersPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(salesOrdersViewMode.value, (val) => {
+                salesOrdersViewMode.value = val as SalesOrdersViewMode
+              })
+            : null}
+          {isOutboundDocumentPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(outboundDocumentViewMode.value, (val) => {
+                outboundDocumentViewMode.value = val as OutboundDocumentViewMode
+              })
+            : null}
+          {isSalaryPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(salaryViewMode.value, (val) => {
+                salaryViewMode.value = val as SalaryViewMode
+              })
+            : null}
+          {isProjectManagementPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(projectManagementViewMode.value, (val) => {
+                projectManagementViewMode.value = val as ProjectManagementViewMode
+              })
+            : null}
+          {isBillingDocumentsPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(billingDocumentsViewMode.value, (val) => {
+                billingDocumentsViewMode.value = val as BillingDocumentsViewMode
+              })
+            : null}
+          {isReceivableDocumentsPage.value && !isMobile.value
+            ? renderTimelineViewSwitch(receivableDocumentsViewMode.value, (val) => {
+                receivableDocumentsViewMode.value = val as ReceivableDocumentsViewMode
+              })
+            : null}
           {props.showSetting ? (
             <div
               class="custom-hover mr-1 flex items-center justify-center"
@@ -476,6 +423,18 @@ export default defineComponent({
   .tool-header-summary-card--purple .title,
   .tool-header-summary-card--purple .value {
     color: #909399;
+  }
+
+  .tool-header-view-switch {
+    display: flex;
+    margin-right: 12px;
+    align-items: center;
+  }
+
+  .tool-header-view-switch__label {
+    margin-right: 4px;
+    font-size: 12px;
+    color: var(--top-header-text-color);
   }
 }
 </style>

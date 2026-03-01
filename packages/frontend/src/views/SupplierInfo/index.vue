@@ -650,11 +650,19 @@ const submitDialogForm = async () => {
 
 const handleDelete = async (row: SupplierTableRow) => {
   try {
-    await ElMessageBox.confirm(`确认删除供方 ${row.供方名称} 吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+    await ElMessageBox.prompt(
+      `确认删除供方 ${row.供方名称} 吗？<br/>请输入 "Y" 确认删除（不可恢复）`,
+      '删除确认',
+      {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPlaceholder: '请输入 Y',
+        inputPattern: /^[Yy]$/,
+        inputErrorMessage: '请输入 Y 确认删除',
+        type: 'warning'
+      }
+    )
 
     const response = (await deleteSupplier(row.供方ID)) as any
     if (response.code === 200) {

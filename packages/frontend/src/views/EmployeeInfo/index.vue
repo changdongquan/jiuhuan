@@ -682,11 +682,19 @@ const submitDialogForm = async () => {
 
 const handleDelete = async (row: EmployeeInfo) => {
   try {
-    await ElMessageBox.confirm(`确认删除员工 ${row.employeeName} 吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+    await ElMessageBox.prompt(
+      `确认删除员工 ${row.employeeName} 吗？<br/>请输入 "Y" 确认删除（不可恢复）`,
+      '删除确认',
+      {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPlaceholder: '请输入 Y',
+        inputPattern: /^[Yy]$/,
+        inputErrorMessage: '请输入 Y 确认删除',
+        type: 'warning'
+      }
+    )
     await deleteEmployeeApi(row.id)
     if (tableData.value.length === 1 && pagination.page > 1) {
       pagination.page -= 1
