@@ -3,7 +3,7 @@
     <div class="bmo-relay-header">
       <div>
         <h3 class="bmo-relay-title">BMO中转管理</h3>
-        <p class="bmo-relay-subtitle">中转状态检查、任务创建与任务追踪</p>
+        <p class="bmo-relay-subtitle">Hub 状态检查、任务创建与任务追踪（Craftsys 不再直连 BMO）</p>
       </div>
       <div class="bmo-relay-actions">
         <el-switch v-model="autoPolling" active-text="自动轮询" inactive-text="手动" />

@@ -236,7 +236,7 @@ const getCellClass = (index: number) => {
               gridTemplateRows: `repeat(${state.height}, var(--snake-cell-size))`
             }"
           >
-            <div v-for="index in cellCount" :key="index" :class="getCellClass(index - 1)" />
+            <div v-for="index in cellCount" :key="index" :class="getCellClass(index - 1)"></div>
           </div>
 
           <div class="snake-actions">

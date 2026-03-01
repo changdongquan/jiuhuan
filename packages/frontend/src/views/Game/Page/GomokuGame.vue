@@ -139,7 +139,7 @@ watch(
                 :class="{ black: cell === 'black', white: cell === 'white' }"
                 @click="handleCellClick(x, y)"
               >
-                <span v-if="cell" class="stone" />
+                <span v-if="cell" class="stone"></span>
               </button>
             </div>
           </div>

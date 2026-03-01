@@ -70,6 +70,12 @@ const routesToSync = [
     parent_route: 'ProjectManagement'
   },
   {
+    route_name: 'BmoRelayManage',
+    route_path: '/project-management/bmo-relay-manage',
+    page_title: 'BMO中转管理',
+    parent_route: 'ProjectManagement'
+  },
+  {
     route_name: 'ReviewCenter',
     route_path: '/review-center/index',
     page_title: '审核中心',

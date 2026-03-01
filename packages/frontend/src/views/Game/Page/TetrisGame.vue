@@ -220,7 +220,7 @@ watch(
                 :key="colIndex"
                 class="cell"
                 :class="`cell-${cell}`"
-              />
+              ></div>
             </div>
           </div>
 

@@ -43,6 +43,7 @@ let cachedFormConfigAt = 0
 
 const getRelayBaseUrl = () => String(process.env.BMO_RELAY_BASE_URL || '').trim().replace(/\/+$/, '')
 const isRelayEnabled = () => Boolean(getRelayBaseUrl())
+const isHubOnlyMode = () => String(process.env.BMO_HUB_ONLY || '1') !== '0'
 
 // Reuse one client instance to avoid logging in on every request (BMO may rate-limit / slow down).
 let sharedClient = null
@@ -944,6 +945,14 @@ const fetchBmoMouldDetail = async (input = {}) => {
   const fdId = String(input.fdId || input.bmoRecordId || '').trim()
   if (!fdId) {
     throw new Error('缺少 fdId')
+  }
+
+  // Hub-only mode: always fetch detail through relay, never direct-connect BMO.
+  if (isHubOnlyMode()) {
+    if (!isRelayEnabled()) {
+      throw new Error('BMO_HUB_ONLY=1 但未配置 BMO_RELAY_BASE_URL')
+    }
+    return fetchBmoMouldDetailViaRelay(fdId)
   }
 
   try {

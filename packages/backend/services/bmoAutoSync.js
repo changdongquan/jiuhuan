@@ -557,7 +557,8 @@ let timer = null
 const startBmoAutoSyncLoop = () => {
   if (started) return
   started = true
-  const enabled = String(process.env.BMO_AUTO_SYNC_ENABLED || '1') !== '0'
+  // After BMO capability is centralized into jiuhuan-hub, craftsys should not auto-sync by default.
+  const enabled = String(process.env.BMO_AUTO_SYNC_ENABLED || '0') !== '0'
   if (!enabled) {
     console.log('[bmo-auto-sync] disabled by BMO_AUTO_SYNC_ENABLED=0')
     return
