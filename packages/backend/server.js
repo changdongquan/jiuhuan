@@ -46,6 +46,7 @@ const salaryRoutes = require('./routes/salary')
 const gameRoutes = require('./routes/game')
 const bmoRoutes = require('./routes/bmo')
 const financeRoutes = require('./routes/finance')
+const comprehensiveQueryRoutes = require('./routes/comprehensive-query')
 const { startBmoAutoSyncLoop } = require('./services/bmoAutoSync')
 
 const app = express()
@@ -187,6 +188,7 @@ app.use('/api/salary', salaryRoutes)
 app.use('/api/game', gameRoutes)
 app.use('/api/bmo', bmoRoutes)
 app.use('/api/finance', financeRoutes)
+app.use('/api/comprehensive-query', comprehensiveQueryRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
