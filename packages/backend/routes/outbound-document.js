@@ -6,6 +6,7 @@ const fs = require('fs')
 const fsp = fs.promises
 const multer = require('multer')
 const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 
 const router = express.Router()
 
@@ -1636,6 +1637,17 @@ router.delete('/delete', async (req, res) => {
         const moved = shippedAfter === completedQty
         await updateProjectMoveState(tx, code, moved ? '已经移模' : '待移模', null)
       }
+
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: documentNo,
+        moduleCode: 'OUTBOUND_DOCUMENT',
+        entityKey: documentNo,
+        displayCode: documentNo,
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
 
       await tx.commit()
       res.json({ code: 0, success: true, message: '删除成功（已软删除）' })

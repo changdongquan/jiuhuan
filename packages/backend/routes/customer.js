@@ -1,13 +1,31 @@
 const express = require('express')
 const { query } = require('../database')
+const { getPool } = require('../database')
+const sql = require('mssql')
+const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 const router = express.Router()
+
+const ensureCustomerSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'客户信息', N'是否删除') IS NULL
+      ALTER TABLE 客户信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_客户信息_是否删除 DEFAULT(0);
+    IF COL_LENGTH(N'客户信息', N'删除时间') IS NULL
+      ALTER TABLE 客户信息 ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'客户信息', N'删除人') IS NULL
+      ALTER TABLE 客户信息 ADD 删除人 NVARCHAR(100) NULL;
+  `)
+}
 
 // 获取客户信息列表
 router.get('/list', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureCustomerSoftDeleteColumns(pool)
     const { customerName, contact, status, page = 1, pageSize = 10 } = req.query
 
-    let whereConditions = []
+    let whereConditions = ['ISNULL(是否删除, 0) = 0']
     let params = {}
 
     // 构建查询条件
@@ -89,6 +107,8 @@ router.get('/list', async (req, res) => {
 // 获取客户统计信息
 router.get('/statistics', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureCustomerSoftDeleteColumns(pool)
     const queryString = `
       SELECT 
         COUNT(*) as totalCustomers,
@@ -96,6 +116,7 @@ router.get('/statistics', async (req, res) => {
         SUM(CASE WHEN 是否停用 = 1 THEN 1 ELSE 0 END) as inactiveCustomers,
         SUM(CASE WHEN 客户联系方式 IS NOT NULL AND 客户联系方式 != '' THEN 1 ELSE 0 END) as withContact
       FROM 客户信息
+      WHERE ISNULL(是否删除, 0) = 0
     `
 
     const result = await query(queryString)
@@ -118,6 +139,8 @@ router.get('/statistics', async (req, res) => {
 // 获取单个客户信息
 router.get('/:id', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureCustomerSoftDeleteColumns(pool)
     const { id } = req.params
 
     const queryString = `
@@ -134,7 +157,7 @@ router.get('/:id', async (req, res) => {
         END as status,
         SeqNumber as seqNumber
       FROM 客户信息 
-      WHERE 客户ID = @id
+      WHERE 客户ID = @id AND ISNULL(是否删除, 0) = 0
     `
 
     const result = await query(queryString, { id: parseInt(id) })
@@ -256,16 +279,57 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const customerId = parseInt(id)
+    if (Number.isNaN(customerId)) {
+      return res.status(400).json({ code: 400, success: false, message: '客户ID无效' })
+    }
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await ensureCustomerSoftDeleteColumns(tx)
+      const checkReq = new sql.Request(tx)
+      checkReq.input('id', sql.Int, customerId)
+      const checkRows = await checkReq.query(`
+        SELECT TOP 1 客户ID as id, 客户名称 as customerName
+        FROM 客户信息
+        WHERE 客户ID = @id AND ISNULL(是否删除, 0) = 0
+      `)
+      const row = checkRows.recordset?.[0]
+      if (!row) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '客户信息不存在' })
+      }
 
-    const queryString = `DELETE FROM 客户信息 WHERE 客户ID = @id`
+      const softReq = new sql.Request(tx)
+      softReq.input('id', sql.Int, customerId)
+      softReq.input('actor', sql.NVarChar(100), actor || null)
+      await softReq.query(`
+        UPDATE 客户信息
+        SET 是否删除 = 1, 删除时间 = SYSDATETIME(), 删除人 = @actor
+        WHERE 客户ID = @id AND ISNULL(是否删除, 0) = 0
+      `)
 
-    await query(queryString, { id: parseInt(id) })
-
-    res.json({
-      code: 0,
-      success: true,
-      message: '删除客户信息成功'
-    })
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: String(customerId),
+        moduleCode: 'CUSTOMER',
+        entityKey: String(customerId),
+        displayCode: String(customerId),
+        displayName: String(row.customerName || ''),
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
+      await tx.commit()
+      res.json({ code: 0, success: true, message: '删除成功（已软删除，并已提交硬删除审核）' })
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
   } catch (error) {
     console.error('删除客户信息失败:', error)
     res.status(500).json({

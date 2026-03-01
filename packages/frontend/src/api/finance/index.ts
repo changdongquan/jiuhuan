@@ -31,14 +31,38 @@ export const getFinanceInvoiceListApi = (params?: FinanceInvoiceQueryParams) => 
   return request.get({ url: '/api/finance/invoices/list', params })
 }
 
+export const getFinanceInvoiceCandidatesApi = (params?: any) => {
+  return request.get({ url: '/api/finance/invoices/candidates', params })
+}
+
 export const createFinanceInvoiceApi = (data: any) => {
   return request.post({ url: '/api/finance/invoices', data })
+}
+
+export const updateFinanceInvoiceApi = (invoiceId: number, data: any) => {
+  return request.put({ url: `/api/finance/invoices/${invoiceId}`, data })
+}
+
+export const deleteFinanceInvoiceApi = (invoiceId: number) => {
+  return request.delete({ url: `/api/finance/invoices/${invoiceId}` })
 }
 
 export const getFinanceReceiptListApi = (params?: FinanceReceiptQueryParams) => {
   return request.get({ url: '/api/finance/receipts/list', params })
 }
 
+export const getFinanceReceiptCandidatesApi = (params?: any) => {
+  return request.get({ url: '/api/finance/receipts/candidates', params })
+}
+
 export const createFinanceReceiptApi = (data: any) => {
   return request.post({ url: '/api/finance/receipts', data })
+}
+
+export const updateFinanceReceiptApi = (documentNo: string, data: any) => {
+  return request.put({ url: `/api/finance/receipts/${encodeURIComponent(documentNo)}`, data })
+}
+
+export const deleteFinanceReceiptApi = (documentNo: string) => {
+  return request.delete({ url: `/api/finance/receipts/${encodeURIComponent(documentNo)}` })
 }

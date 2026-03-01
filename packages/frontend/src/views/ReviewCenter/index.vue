@@ -59,6 +59,7 @@
             <el-tag :type="statusTagType(row.status)">{{ row.statusText }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="sourceText" label="内容来源" width="140" show-overflow-tooltip />
         <el-table-column prop="projectCode" label="项目编号" width="150" show-overflow-tooltip />
         <el-table-column prop="subject" label="审核内容" min-width="220" show-overflow-tooltip />
         <el-table-column prop="applicant" label="申请人" width="120" show-overflow-tooltip />
@@ -67,8 +68,16 @@
         <el-table-column prop="updatedAt" label="更新时间" width="170">
           <template #default="{ row }">{{ formatTime(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button
+              v-if="row.category === 'HARD_DELETE'"
+              link
+              type="primary"
+              @click="openHardDeleteViewDialog(row)"
+            >
+              查看详情
+            </el-button>
             <el-button
               v-if="row.category === 'BMO_INITIATION'"
               link
@@ -102,6 +111,7 @@
           </div>
           <div class="mobile-item__grid">
             <span>分类：{{ row.categoryText }}</span>
+            <span>来源：{{ row.sourceText || '-' }}</span>
             <span>内容：{{ row.subject || '-' }}</span>
             <span>申请人：{{ row.applicant || '-' }}</span>
             <span>审核人：{{ row.reviewer || '-' }}</span>
@@ -109,6 +119,14 @@
             <span>更新时间：{{ formatTime(row.updatedAt) }}</span>
           </div>
           <div class="mobile-item__actions">
+            <el-button
+              v-if="row.category === 'HARD_DELETE'"
+              link
+              type="primary"
+              @click="openHardDeleteViewDialog(row)"
+            >
+              查看详情
+            </el-button>
             <el-button
               v-if="row.category === 'BMO_INITIATION'"
               link
@@ -201,6 +219,64 @@
         <el-button @click="viewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="hardDeleteViewDialogVisible"
+      title="硬删除审核详情"
+      :width="isMobile ? '95vw' : '980px'"
+      destroy-on-close
+    >
+      <el-descriptions v-if="hardDeleteViewRow" :column="descColumn" border size="small">
+        <el-descriptions-item label="内容来源">{{
+          resolveHardDeleteSourceText(hardDeleteViewRow.moduleCode)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="审核状态">{{
+          normalizeStatusText(normalizeHardDeleteStatus(hardDeleteViewRow.status))
+        }}</el-descriptions-item>
+        <el-descriptions-item label="实体标识">{{
+          hardDeleteViewRow.entityKey || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="项目编号">{{
+          hardDeleteViewRow.projectCode || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="显示编码">{{
+          hardDeleteViewRow.displayCode || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="显示名称">{{
+          hardDeleteViewRow.displayName || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="申请人">{{
+          hardDeleteViewRow.requesterName || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{
+          hardDeleteViewRow.reviewerName || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="申请来源">{{
+          hardDeleteViewRow.requestSource || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="申请说明" :span="descColumn">{{
+          hardDeleteViewRow.requestReason || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="审核意见" :span="descColumn">{{
+          hardDeleteViewRow.reviewComment || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{
+          formatTime(hardDeleteViewRow.createdAt || null)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{
+          formatTime(hardDeleteViewRow.updatedAt || null)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="通过时间">{{
+          formatTime(hardDeleteViewRow.approvedAt || null)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="驳回时间">{{
+          formatTime(hardDeleteViewRow.rejectedAt || null)
+        }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="hardDeleteViewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -231,6 +307,7 @@ type UnifiedReviewRow = {
   id: string
   category: Exclude<ReviewCategory, 'ALL'>
   categoryText: string
+  sourceText: string
   status: Exclude<StandardStatus, 'ALL'>
   statusText: string
   projectCode: string
@@ -253,6 +330,8 @@ const viewDialogVisible = ref(false)
 const viewDialogLoading = ref(false)
 const viewRow = ref<BmoInitiationReviewTask | null>(null)
 const viewRequest = ref<BmoInitiationRequestRow | null>(null)
+const hardDeleteViewDialogVisible = ref(false)
+const hardDeleteViewRow = ref<HardDeleteReviewTask | null>(null)
 const isMobile = ref(false)
 
 const query = reactive({
@@ -343,6 +422,23 @@ const updateViewport = () => {
   isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
 }
 
+const resolveHardDeleteSourceText = (moduleCode: unknown) => {
+  const code = String(moduleCode || 'GOODS')
+    .trim()
+    .toUpperCase()
+  if (code === 'SALES_ORDER') return '销售订单删除'
+  if (code === 'FINANCE_INVOICE') return '开票单据删除'
+  if (code === 'FINANCE_RECEIPT') return '回款单据删除'
+  if (code === 'SALARY') return '工资删除'
+  if (code === 'OUTBOUND_DOCUMENT') return '出库单删除'
+  if (code === 'PROJECT_INFO') return '项目信息删除'
+  if (code === 'CUSTOMER') return '客户信息删除'
+  if (code === 'SUPPLIER') return '供方信息删除'
+  if (code === 'EMPLOYEE') return '员工信息删除'
+  if (code === 'GOODS') return '货物信息删除'
+  return '硬删除申请'
+}
+
 const mapHardDeleteRows = (hardDeleteRows: HardDeleteReviewTask[]): UnifiedReviewRow[] => {
   return hardDeleteRows.map((row) => {
     const status = normalizeHardDeleteStatus(row.status)
@@ -350,10 +446,14 @@ const mapHardDeleteRows = (hardDeleteRows: HardDeleteReviewTask[]): UnifiedRevie
       id: `hard-${row.id}`,
       category: 'HARD_DELETE',
       categoryText: '硬删除审核',
+      sourceText: resolveHardDeleteSourceText(row.moduleCode),
       status,
       statusText: normalizeStatusText(status),
       projectCode: String(row.projectCode || ''),
-      subject: [row.productName, row.productDrawing].filter(Boolean).join(' / ') || '-',
+      subject:
+        [row.displayName, row.displayCode, row.productName, row.productDrawing]
+          .filter((v, i, arr) => !!v && arr.indexOf(v) === i)
+          .join(' / ') || '-',
       applicant: String(row.requesterName || ''),
       reviewer: String(row.reviewerName || ''),
       reason: String(row.requestReason || row.reviewComment || ''),
@@ -370,6 +470,7 @@ const mapBmoRows = (bmoRows: BmoInitiationReviewTask[]): UnifiedReviewRow[] => {
       id: `bmo-${row.bmo_record_id}`,
       category: 'BMO_INITIATION',
       categoryText: 'BMO立项审核',
+      sourceText: 'BMO立项审核',
       status,
       statusText: normalizeStatusText(status),
       projectCode: String(row.project_code_candidate || ''),
@@ -560,6 +661,12 @@ const openBmoViewDialog = async (row: UnifiedReviewRow) => {
   } finally {
     viewDialogLoading.value = false
   }
+}
+
+const openHardDeleteViewDialog = (row: UnifiedReviewRow) => {
+  if (row.category !== 'HARD_DELETE') return
+  hardDeleteViewRow.value = row.raw as HardDeleteReviewTask
+  hardDeleteViewDialogVisible.value = true
 }
 
 const handleReject = async (row: UnifiedReviewRow) => {

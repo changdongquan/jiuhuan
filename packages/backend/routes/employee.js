@@ -1,13 +1,31 @@
 const express = require('express')
 const router = express.Router()
 const { query } = require('../database')
+const { getPool } = require('../database')
+const sql = require('mssql')
+const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+
+const ensureEmployeeSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'员工信息', N'是否删除') IS NULL
+      ALTER TABLE 员工信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_员工信息_是否删除 DEFAULT(0);
+    IF COL_LENGTH(N'员工信息', N'删除时间') IS NULL
+      ALTER TABLE 员工信息 ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'员工信息', N'删除人') IS NULL
+      ALTER TABLE 员工信息 ADD 删除人 NVARCHAR(100) NULL;
+  `)
+}
 
 // 获取员工列表
 router.get('/list', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureEmployeeSoftDeleteColumns(pool)
     const { employeeName, employeeNumber, department, status, page = 1, pageSize = 10 } = req.query
 
-    let whereClause = 'WHERE 1=1'
+    let whereClause = 'WHERE ISNULL(是否删除, 0) = 0'
     const params = {}
 
     if (employeeName) {
@@ -89,6 +107,8 @@ router.get('/list', async (req, res) => {
 // 获取员工统计信息
 router.get('/statistics', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureEmployeeSoftDeleteColumns(pool)
     const result = await query(`
       SELECT 
         COUNT(*) as totalEmployees,
@@ -96,6 +116,7 @@ router.get('/statistics', async (req, res) => {
         SUM(CASE WHEN 在职状态 = '离职' THEN 1 ELSE 0 END) as inactiveEmployees,
         SUM(CASE WHEN 在职状态 = '休假' THEN 1 ELSE 0 END) as leaveEmployees
       FROM 员工信息
+      WHERE ISNULL(是否删除, 0) = 0
     `)
 
     const stats = result[0]
@@ -114,6 +135,8 @@ router.get('/statistics', async (req, res) => {
 // 获取员工详情
 router.get('/:id', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureEmployeeSoftDeleteColumns(pool)
     const { id } = req.params
 
     const result = await query(
@@ -137,7 +160,7 @@ router.get('/:id', async (req, res) => {
         银行账号 as bankAccount,
         开户行 as bankBranch
       FROM 员工信息 
-      WHERE ID = @id
+      WHERE ID = @id AND ISNULL(是否删除, 0) = 0
     `,
       { id: parseInt(id) }
     )
@@ -282,20 +305,57 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const employeeId = parseInt(id)
+    if (Number.isNaN(employeeId)) return res.status(400).json({ code: 400, message: 'ID 无效' })
+    const actor = resolveActorFromReq(req)
 
-    const pool = await require('../database').getPool()
-    const request = pool.request()
-    request.input('id', require('mssql').Int, parseInt(id))
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await ensureEmployeeSoftDeleteColumns(tx)
 
-    const result = await request.query(`
-      DELETE FROM 员工信息 WHERE ID = @id
-    `)
+      const checkReq = new sql.Request(tx)
+      checkReq.input('id', sql.Int, employeeId)
+      const checkResult = await checkReq.query(`
+        SELECT TOP 1 ID as id, 姓名 as employeeName
+        FROM 员工信息
+        WHERE ID = @id AND ISNULL(是否删除, 0) = 0
+      `)
+      const row = checkResult.recordset?.[0]
+      if (!row) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, message: '员工信息不存在' })
+      }
 
-    if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ code: 404, message: '员工信息不存在' })
+      const softReq = new sql.Request(tx)
+      softReq.input('id', sql.Int, employeeId)
+      softReq.input('actor', sql.NVarChar(100), actor || null)
+      await softReq.query(`
+        UPDATE 员工信息
+        SET 是否删除 = 1, 删除时间 = SYSDATETIME(), 删除人 = @actor
+        WHERE ID = @id AND ISNULL(是否删除, 0) = 0
+      `)
+
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: String(employeeId),
+        moduleCode: 'EMPLOYEE',
+        entityKey: String(employeeId),
+        displayCode: String(employeeId),
+        displayName: String(row.employeeName || ''),
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
+      await tx.commit()
+      res.json({ code: 0, message: '删除成功（已软删除，并已提交硬删除审核）' })
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
     }
-
-    res.json({ code: 0, message: '员工删除成功' })
   } catch (error) {
     console.error('删除员工失败:', error)
     res.status(500).json({ code: 500, message: '删除员工失败' })

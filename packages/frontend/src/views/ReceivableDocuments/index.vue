@@ -7,12 +7,12 @@
       inline
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] py-2 shadow-sm"
     >
-      <el-form-item label="单据编号">
+      <el-form-item label="模号查询">
         <el-input
           v-model="queryForm.itemCode"
-          placeholder="请输入单据编号"
+          placeholder="单据号/项目号/产品名/图号/模号"
           clearable
-          style="width: 160px"
+          style="width: 260px"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -194,43 +194,52 @@
       <div class="so-timeline-right">
         <div v-if="timelineSelectedReceipt" class="so-timeline-detail-panel">
           <div class="view-dialog-section">
-            <h3 class="view-dialog-section-title">回款基本信息</h3>
-            <div class="view-dialog-info-grid">
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">单据编号：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedReceipt.documentNo || '-'
-                }}</span>
+            <div class="view-dialog-section-header view-dialog-section-header--timeline">
+              <div class="view-dialog-section-main">
+                <h3 class="view-dialog-section-title">回款基本信息</h3>
+                <div class="view-dialog-info-grid">
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">单据编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedReceipt.documentNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">客户名称：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedReceipt.customerName || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">合同编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedReceipt.contractNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">回款日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedReceipt.receiptDate || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">单据日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedReceipt.deliveryDate || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">总金额：</span>
+                    <span class="view-dialog-info-value">
+                      {{ formatAmount(timelineSelectedReceipt.totalAmount) }} 元
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">客户名称：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedReceipt.customerName || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">合同编号：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedReceipt.contractNo || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">回款日期：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedReceipt.receiptDate || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">单据日期：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedReceipt.deliveryDate || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">总金额：</span>
-                <span class="view-dialog-info-value">
-                  {{ formatAmount(timelineSelectedReceipt.totalAmount) }} 元
-                </span>
+              <div class="so-timeline-header-actions">
+                <el-button type="success" size="small" @click="handleTimelineView">查看</el-button>
+                <el-button type="primary" size="small" @click="handleTimelineEdit">编辑</el-button>
+                <el-button type="danger" size="small" @click="handleTimelineDelete">删除</el-button>
               </div>
             </div>
           </div>
@@ -289,6 +298,74 @@
         @current-change="handleCurrentChange"
       />
     </div>
+
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="查看回款单据"
+      width="1400px"
+      :close-on-click-modal="false"
+      class="so-dialog so-dialog-view"
+    >
+      <div v-if="viewReceiptData" class="view-dialog-container">
+        <div class="view-dialog-section">
+          <h3 class="view-dialog-section-title">回款基本信息</h3>
+          <div class="view-dialog-info-grid">
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">单据编号：</span>
+              <span class="view-dialog-info-value">{{ viewReceiptData.documentNo || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">客户名称：</span>
+              <span class="view-dialog-info-value">{{ viewReceiptData.customerName || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">合同编号：</span>
+              <span class="view-dialog-info-value">{{ viewReceiptData.contractNo || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">回款日期：</span>
+              <span class="view-dialog-info-value">{{ viewReceiptData.receiptDate || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">单据日期：</span>
+              <span class="view-dialog-info-value">{{ viewReceiptData.deliveryDate || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">总金额：</span>
+              <span class="view-dialog-info-value">
+                {{ formatAmount(viewReceiptData.totalAmount) }} 元
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="view-dialog-section">
+          <h3 class="view-dialog-section-title">回款明细</h3>
+          <div class="dialog-table-wrapper">
+            <el-table :data="viewReceiptData.details" border size="small">
+              <el-table-column prop="id" label="回款ID" width="70" />
+              <el-table-column prop="detailId" label="明细ID" width="70" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
+              <el-table-column prop="productName" label="产品名称" min-width="130" />
+              <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+              <el-table-column prop="contractNo" label="合同号" min-width="120" />
+              <el-table-column label="应收金额" width="110" align="right">
+                <template #default="{ row }">{{ formatAmount(row.receivableAmount) }}</template>
+              </el-table-column>
+              <el-table-column label="实收金额" width="110" align="right">
+                <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column label="贴息金额" width="110" align="right">
+                <template #default="{ row }">{{ formatAmount(row.discountAmount) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="dialogVisible"
@@ -378,6 +455,7 @@
               <span class="finance-dialog-summary__item"
                 >实收合计 {{ formatAmount(dialogTotals.totalAmount) }}</span
               >
+              <el-button @click="openReceiptCandidateDialog">从应收池选择</el-button>
               <el-button type="primary" plain @click="addDetailRow">新增明细</el-button>
             </div>
           </div>
@@ -451,6 +529,48 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="receiptCandidateDialogVisible"
+      title="选择回款明细"
+      width="1200px"
+      :close-on-click-modal="false"
+    >
+      <div class="finance-candidate-toolbar">
+        <el-input
+          v-model="receiptCandidateKeyword"
+          placeholder="明细ID/项目编号/产品名称/图号/模号/合同号"
+          clearable
+          style="width: 360px"
+          @keydown.enter.prevent="loadReceiptCandidates"
+        />
+        <el-button type="primary" @click="loadReceiptCandidates">查询</el-button>
+      </div>
+      <el-table
+        ref="receiptCandidateTableRef"
+        v-loading="receiptCandidateLoading"
+        :data="receiptCandidates"
+        border
+        height="460"
+        row-key="detailId"
+        @selection-change="handleReceiptCandidateSelectionChange"
+      >
+        <el-table-column type="selection" width="50" />
+        <el-table-column prop="detailId" label="明细ID" width="90" />
+        <el-table-column prop="itemCode" label="项目编号" min-width="130" />
+        <el-table-column prop="productName" label="产品名称" min-width="150" />
+        <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
+        <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+        <el-table-column prop="customerName" label="客户名称" min-width="160" />
+        <el-table-column label="应收金额" width="120" align="right">
+          <template #default="{ row }">{{ formatAmount(row.receivableAmount || 0) }}</template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="receiptCandidateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="applyReceiptCandidates">带入明细</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -476,7 +596,13 @@ import {
   ElTableColumn,
   ElTag
 } from 'element-plus'
-import { createFinanceReceiptApi, getFinanceReceiptListApi } from '@/api/finance'
+import {
+  createFinanceReceiptApi,
+  deleteFinanceReceiptApi,
+  getFinanceReceiptCandidatesApi,
+  getFinanceReceiptListApi,
+  updateFinanceReceiptApi
+} from '@/api/finance'
 import { getCustomerListApi } from '@/api/customer'
 
 type ReceiptStatus = 'pending' | 'received'
@@ -542,6 +668,17 @@ interface PaginatedReceipts {
 
 interface ReceiptTableRow extends Receipt {
   totalAmount: number
+}
+
+interface ReceiptCandidate {
+  detailId: number
+  itemCode: string
+  productName: string
+  productDrawingNo: string
+  customerPartNo: string
+  customerName: string
+  contractNo: string
+  receivableAmount: number
 }
 
 type ReceiptPayload = Omit<Receipt, 'id'>
@@ -692,14 +829,15 @@ const createEmptyReceipt = (): ReceiptPayload => ({
   details: [createEmptyDetail()]
 })
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    globalThis.setTimeout(resolve, ms)
-  })
-
-const readOnlyMode = true
+const readOnlyMode = false
 const route = useRoute()
 const customerOptions = ref<string[]>([])
+const receiptCandidateDialogVisible = ref(false)
+const receiptCandidateLoading = ref(false)
+const receiptCandidateKeyword = ref('')
+const receiptCandidates = ref<ReceiptCandidate[]>([])
+const selectedReceiptCandidates = ref<ReceiptCandidate[]>([])
+const receiptCandidateTableRef = ref<InstanceType<typeof ElTable>>()
 
 const normalizeDetails = (details: ReceiptDetail[]): ReceiptDetail[] =>
   details.map((detail) => ({
@@ -738,15 +876,6 @@ const listReceipts = async (params: ListReceiptsParams): Promise<PaginatedReceip
   return { list, total }
 }
 
-const getReceipt = async (id: number): Promise<Receipt> => {
-  await wait(200)
-  const target = mockReceipts.value.find((item) => item.id === id)
-  if (!target) {
-    throw new Error('回款单据不存在')
-  }
-  return JSON.parse(JSON.stringify(target))
-}
-
 const createReceipt = async (payload: ReceiptPayload): Promise<Receipt> => {
   await createFinanceReceiptApi(payload)
   return {
@@ -761,14 +890,10 @@ const createReceipt = async (payload: ReceiptPayload): Promise<Receipt> => {
   }
 }
 
-const updateReceipt = async (id: number, payload: ReceiptPayload): Promise<Receipt> => {
-  await wait(300)
-  const index = mockReceipts.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('回款单据不存在')
-  }
-  const updated: Receipt = {
-    id,
+const updateReceipt = async (documentNo: string, payload: ReceiptPayload): Promise<Receipt> => {
+  await updateFinanceReceiptApi(documentNo, payload)
+  return {
+    id: 0,
     receiptNo: payload.receiptNo,
     customerName: payload.customerName,
     contractNo: payload.contractNo,
@@ -777,17 +902,10 @@ const updateReceipt = async (id: number, payload: ReceiptPayload): Promise<Recei
     deliveryDate: payload.deliveryDate,
     details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
   }
-  mockReceipts.value.splice(index, 1, updated)
-  return JSON.parse(JSON.stringify(updated))
 }
 
-const removeReceipt = async (id: number): Promise<void> => {
-  await wait(200)
-  const index = mockReceipts.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('回款单据不存在')
-  }
-  mockReceipts.value.splice(index, 1)
+const removeReceipt = async (documentNo: string): Promise<void> => {
+  await deleteFinanceReceiptApi(documentNo)
 }
 
 const statusTagMap: Record<ReceiptStatus, { label: string; type: TagType }> = {
@@ -834,10 +952,12 @@ const timelineActiveReceiptNo = ref<string | null>(null)
 const timelineActiveDetailKey = ref<string | null>(null)
 
 const dialogVisible = ref(false)
+const viewDialogVisible = ref(false)
 const dialogTitle = ref('')
 const dialogSubmitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
-const currentReceiptId = ref<number | null>(null)
+const currentReceiptNo = ref<string | null>(null)
+const viewReceiptData = ref<ReceiptTableRow | null>(null)
 
 const dialogForm = reactive<ReceiptPayload>(createEmptyReceipt())
 
@@ -903,6 +1023,26 @@ const handleTimelineReceiptClick = (receipt: ReceiptTableRow) => {
 const handleTimelineDetailClick = (receipt: ReceiptTableRow, detail: ReceiptDetail) => {
   timelineActiveReceiptNo.value = receipt.receiptNo
   timelineActiveDetailKey.value = makeTimelineDetailKey(receipt.receiptNo, detail)
+}
+
+const openViewDialog = (row: ReceiptTableRow) => {
+  viewReceiptData.value = JSON.parse(JSON.stringify(row))
+  viewDialogVisible.value = true
+}
+
+const handleTimelineView = () => {
+  if (!timelineSelectedReceipt.value) return
+  openViewDialog(timelineSelectedReceipt.value)
+}
+
+const handleTimelineEdit = () => {
+  if (!timelineSelectedReceipt.value) return
+  handleEdit(timelineSelectedReceipt.value)
+}
+
+const handleTimelineDelete = () => {
+  if (!timelineSelectedReceipt.value) return
+  void handleDelete(timelineSelectedReceipt.value)
 }
 
 const timelineDetailRowClassName = ({ row }: { row: ReceiptDetail }) => {
@@ -1056,9 +1196,93 @@ const loadCustomerOptions = async () => {
     .filter((name: string) => !!name)
 }
 
+const loadReceiptCandidates = async () => {
+  receiptCandidateLoading.value = true
+  try {
+    const resp = await getFinanceReceiptCandidatesApi({
+      keyword: receiptCandidateKeyword.value.trim() || undefined,
+      customerName: dialogForm.customerName || undefined
+    })
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const data: any = pr?.data ?? pr
+    const list = Array.isArray(data?.list) ? data.list : []
+    receiptCandidates.value = list.map((it: any) => ({
+      detailId: Number(it.detailId) || 0,
+      itemCode: String(it.itemCode || ''),
+      productName: String(it.productName || ''),
+      productDrawingNo: String(it.productDrawingNo || ''),
+      customerPartNo: String(it.customerPartNo || ''),
+      customerName: String(it.customerName || ''),
+      contractNo: String(it.contractNo || ''),
+      receivableAmount: Number(it.receivableAmount) || 0
+    }))
+    selectedReceiptCandidates.value = []
+  } finally {
+    receiptCandidateLoading.value = false
+  }
+}
+
+const openReceiptCandidateDialog = async () => {
+  receiptCandidateDialogVisible.value = true
+  await nextTick()
+  receiptCandidateTableRef.value?.clearSelection()
+  await loadReceiptCandidates()
+}
+
+const handleReceiptCandidateSelectionChange = (rows: ReceiptCandidate[]) => {
+  selectedReceiptCandidates.value = rows
+}
+
+const applyReceiptCandidates = () => {
+  if (!selectedReceiptCandidates.value.length) {
+    ElMessage.warning('请先勾选候选明细')
+    return
+  }
+  const firstCustomer = selectedReceiptCandidates.value[0].customerName
+  const mixed = selectedReceiptCandidates.value.some((it) => it.customerName !== firstCustomer)
+  if (mixed) {
+    ElMessage.warning('只能选择同一客户的候选明细')
+    return
+  }
+  if (dialogForm.customerName && dialogForm.customerName !== firstCustomer) {
+    ElMessage.warning('候选明细客户与单据客户不一致')
+    return
+  }
+  if (!dialogForm.customerName) {
+    dialogForm.customerName = firstCustomer
+  }
+  if (
+    dialogForm.details.length === 1 &&
+    !dialogForm.details[0].itemCode &&
+    !dialogForm.details[0].productName
+  ) {
+    dialogForm.details.splice(0, 1)
+  }
+  const existingDetailIds = new Set(dialogForm.details.map((d) => String(d.detailId || '')))
+  selectedReceiptCandidates.value.forEach((it) => {
+    if (existingDetailIds.has(String(it.detailId))) return
+    const detail = createEmptyDetail()
+    detail.detailId = it.detailId
+    detail.itemCode = it.itemCode
+    detail.productName = it.productName
+    detail.productDrawingNo = it.productDrawingNo
+    detail.customerPartNo = it.customerPartNo
+    detail.contractNo = it.contractNo
+    detail.receivableAmount = it.receivableAmount
+    detail.amount = it.receivableAmount
+    detail.discountAmount = 0
+    detail.receiptMethod = dialogForm.receiptMethod || '现汇'
+    detail.accountName = dialogForm.accountName || '交行'
+    detail.customerName = dialogForm.customerName
+    dialogForm.details.push(detail)
+  })
+  receiptCandidateDialogVisible.value = false
+}
+
 const handleCreate = async () => {
   dialogTitle.value = '新增回款单据'
-  currentReceiptId.value = null
+  currentReceiptNo.value = null
   resetDialogForm()
   const today = getTodayText()
   dialogForm.receiptNo = generateDialogDocumentNo()
@@ -1071,12 +1295,12 @@ const handleCreate = async () => {
   dialogFormRef.value?.clearValidate()
 }
 
-const openEditDialog = async (id: number) => {
+const openEditDialog = async (row: ReceiptTableRow) => {
   try {
-    const receipt = await getReceipt(id)
-    const { id: _id, ...payload } = receipt
+    const receipt = JSON.parse(JSON.stringify(row)) as ReceiptTableRow
+    const { totalAmount: _totalAmount, ...payload } = receipt
     dialogTitle.value = '编辑回款单据'
-    currentReceiptId.value = id
+    currentReceiptNo.value = receipt.documentNo || receipt.receiptNo || ''
     assignDialogForm(payload)
     dialogVisible.value = true
     await nextTick()
@@ -1091,14 +1315,14 @@ const handleEdit = (row: ReceiptTableRow) => {
     ElMessage.warning('当前阶段为只读模式，暂不支持编辑')
     return
   }
-  void openEditDialog(row.id)
+  void openEditDialog(row)
 }
 
 const handleRowDblClick = (row: ReceiptTableRow) => {
   if (readOnlyMode) {
     return
   }
-  void openEditDialog(row.id)
+  void openEditDialog(row)
 }
 
 const addDetailRow = () => {
@@ -1161,12 +1385,12 @@ const submitDialogForm = async () => {
   dialogSubmitting.value = true
 
   try {
-    if (currentReceiptId.value === null) {
+    if (currentReceiptNo.value === null) {
       await createReceipt(payload)
       pagination.page = 1
       ElMessage.success('新增成功')
     } else {
-      await updateReceipt(currentReceiptId.value, payload)
+      await updateReceipt(currentReceiptNo.value, payload)
       ElMessage.success('更新成功')
     }
     dialogVisible.value = false
@@ -1184,31 +1408,43 @@ const handleDelete = async (row: ReceiptTableRow) => {
     return
   }
   try {
-    await ElMessageBox.confirm(`确认删除回款单据 ${row.receiptNo} 吗？`, '提示', {
-      confirmButtonText: '确定',
+    const message = `<div style="line-height: 1.8;">
+      <div>确定删除回款单据 ${row.documentNo || row.receiptNo} 吗？删除后将无法恢复！</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
+      confirmButtonText: '确定删除',
       cancelButtonText: '取消',
-      type: 'warning'
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
     })
 
-    await removeReceipt(row.id)
-    if (tableData.value.length === 1 && pagination.page > 1) {
-      pagination.page -= 1
+    if (value && value.toUpperCase() === 'Y') {
+      await removeReceipt(row.documentNo || row.receiptNo)
+      if (tableData.value.length === 1 && pagination.page > 1) {
+        pagination.page -= 1
+      }
+      await loadData()
+      ElMessage.success('删除成功')
     }
-    await loadData()
-    ElMessage.success('删除成功')
-  } catch (error) {
+  } catch (error: any) {
     if (error === 'cancel' || error === 'close') {
       return
     }
     if (error instanceof Error) {
       ElMessage.error(error.message || '删除失败')
+    } else {
+      ElMessage.error('删除失败')
     }
   }
 }
 
 const handleDialogClosed = () => {
   resetDialogForm()
-  currentReceiptId.value = null
+  currentReceiptNo.value = null
   dialogFormRef.value?.clearValidate()
 }
 
@@ -1320,6 +1556,13 @@ onMounted(() => {
   color: #606266;
   background: #eef2f7;
   border-radius: 999px;
+}
+
+.finance-candidate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .dialog-form-container {
@@ -1507,9 +1750,26 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.view-dialog-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.view-dialog-section-header--timeline {
+  align-items: flex-start;
+}
+
+.view-dialog-section-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .view-dialog-info-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px 12px;
 }
 
@@ -1523,6 +1783,13 @@ onMounted(() => {
 
 .view-dialog-info-value {
   color: var(--el-text-color-primary);
+}
+
+.so-timeline-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .dialog-table-wrapper {

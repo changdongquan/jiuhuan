@@ -7,6 +7,7 @@ const sql = require('mssql')
 const router = express.Router()
 const fsp = fs.promises
 const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 
 // 销售订单附件存储配置
 // 生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -1075,28 +1076,15 @@ router.delete('/delete/:orderNo', async (req, res) => {
     }
 
     const actor = resolveActorFromReq(req)
-    await query(
-      `
-      UPDATE 销售订单
-      SET
-        删除前状态 = CASE
-          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
-          ELSE 删除前状态
-        END,
-        状态 = N'已删除',
-        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
-        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
-      WHERE 订单编号 = @orderNo
-      `,
-      { orderNo, actor }
-    )
-
-    // 软删附件（按订单编号）
-    await query(
-      `
-      IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
-      BEGIN
-        UPDATE dbo.销售订单附件
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const softDeleteReq = new sql.Request(tx)
+      softDeleteReq.input('orderNo', sql.NVarChar(100), orderNo)
+      softDeleteReq.input('actor', sql.NVarChar(100), actor || null)
+      await softDeleteReq.query(`
+        UPDATE 销售订单
         SET
           删除前状态 = CASE
             WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
@@ -1105,11 +1093,40 @@ router.delete('/delete/:orderNo', async (req, res) => {
           状态 = N'已删除',
           删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
           删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
-        WHERE 订单编号 = @orderNo
-      END
-      `,
-      { orderNo, actor }
-    )
+        WHERE 订单编号 = @orderNo;
+
+        IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
+        BEGIN
+          UPDATE dbo.销售订单附件
+          SET
+            删除前状态 = CASE
+              WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+              ELSE 删除前状态
+            END,
+            状态 = N'已删除',
+            删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+            删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+          WHERE 订单编号 = @orderNo
+        END
+      `)
+
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: orderNo,
+        moduleCode: 'SALES_ORDER',
+        entityKey: orderNo,
+        displayCode: orderNo,
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
 
     res.json({
       code: 0,

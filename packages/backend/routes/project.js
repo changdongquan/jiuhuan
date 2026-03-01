@@ -15,6 +15,7 @@ const { pdfFirstPageToPngBuffer } = require('../utils/pdf/pdfToImage')
 const { ocrMouldTransferPng } = require('../utils/ocr/mouldTransferOcrClient')
 const { resolveActorFromReq } = require('../utils/actor')
 const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 const sql = require('mssql')
 const { getPool } = require('../database')
 
@@ -2664,11 +2665,22 @@ router.delete('/delete', async (req, res) => {
     }
 
     const actor = resolveActorFromReq(req)
+    const code = String(projectCode).trim()
     const pool = await getPool()
     const tx = new sql.Transaction(pool)
     await tx.begin()
     try {
-      await softDeleteByProjectCode({ pool, tx, projectCode: String(projectCode).trim(), actor })
+      await softDeleteByProjectCode({ pool, tx, projectCode: code, actor })
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: code,
+        moduleCode: 'PROJECT_INFO',
+        entityKey: code,
+        displayCode: code,
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
       await tx.commit()
     } catch (e) {
       try {

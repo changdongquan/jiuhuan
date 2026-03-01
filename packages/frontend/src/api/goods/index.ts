@@ -99,6 +99,10 @@ export interface HardDeleteReviewTask {
   id: number
   projectCode: string | null
   goodsId: number | null
+  moduleCode?: string | null
+  entityKey?: string | null
+  displayCode?: string | null
+  displayName?: string | null
   productName: string | null
   productDrawing: string | null
   category: string | null

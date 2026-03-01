@@ -1,6 +1,8 @@
 const express = require('express')
 const sql = require('mssql')
 const config = require('../config')
+const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 
 const router = express.Router()
 
@@ -13,7 +15,7 @@ router.get('/list', async (req, res) => {
     const { page = 1, size = 10, supplierName = '', category = '', status = '' } = req.query
     
     // 构建查询条件
-    let whereConditions = []
+    let whereConditions = ['是否删除 = 0']
     let params = {}
     
     if (supplierName) {
@@ -370,9 +372,10 @@ router.delete('/delete/:id', async (req, res) => {
   try {
     pool = await sql.connect(config)
     const { id } = req.params
+    const actor = resolveActorFromReq(req) || 'system'
     
     // 检查记录是否存在
-    const checkQuery = `SELECT 供方ID FROM 供方信息 WHERE 供方ID = @id AND 是否删除 = 0`
+    const checkQuery = `SELECT 供方ID, 供方名称 FROM 供方信息 WHERE 供方ID = @id AND 是否删除 = 0`
     const checkRequest = pool.request()
     checkRequest.input('id', sql.BigInt, id)
     const checkResult = await checkRequest.query(checkQuery)
@@ -384,23 +387,44 @@ router.delete('/delete/:id', async (req, res) => {
       })
     }
     
-    const deleteQuery = `
-      UPDATE 供方信息 SET
-        是否删除 = 1,
-        更新时间 = GETDATE(),
-        更新人 = @更新人
-      WHERE 供方ID = @id
-    `
-    
-    const request = pool.request()
-    request.input('id', sql.BigInt, id)
-    request.input('更新人', sql.VarChar, 'system')
-    
-    await request.query(deleteQuery)
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const deleteQuery = `
+        UPDATE 供方信息 SET
+          是否删除 = 1,
+          更新时间 = GETDATE(),
+          更新人 = @更新人
+        WHERE 供方ID = @id
+      `
+
+      const request = new sql.Request(tx)
+      request.input('id', sql.BigInt, id)
+      request.input('更新人', sql.VarChar, actor)
+      await request.query(deleteQuery)
+
+      await ensurePendingHardDeleteReviewRequest({
+        tx,
+        projectCode: String(id),
+        moduleCode: 'SUPPLIER',
+        entityKey: String(id),
+        displayCode: String(id),
+        displayName: String(checkResult.recordset?.[0]?.供方名称 || ''),
+        requesterName: actor,
+        requestSource: 'SOFT_DELETE_AUTO',
+        requestReason: '软删除后系统自动发起硬删除审核'
+      })
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
     
     res.json({
       code: 200,
-      message: '删除成功'
+      message: '删除成功（已软删除，并已提交硬删除审核）'
     })
     
   } catch (error) {

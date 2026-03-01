@@ -6,6 +6,8 @@ const multer = require('multer')
 const XLSX = require('xlsx')
 const router = express.Router()
 const { query, getPool } = require('../database')
+const { resolveActorFromReq } = require('../utils/actor')
+const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 
 const TABLE_SUMMARY = '工资汇总'
 const TABLE_DETAIL = '工资明细'
@@ -42,6 +44,18 @@ const TAX_IMPORT_HEADERS = [
   '减免税额',
   '备注'
 ]
+
+const ensureSalarySoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'工资汇总', N'是否删除') IS NULL
+      ALTER TABLE 工资汇总 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_工资汇总_是否删除 DEFAULT(0);
+    IF COL_LENGTH(N'工资汇总', N'删除时间') IS NULL
+      ALTER TABLE 工资汇总 ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'工资汇总', N'删除人') IS NULL
+      ALTER TABLE 工资汇总 ADD 删除人 NVARCHAR(100) NULL;
+  `)
+}
 
 const uploadTaxFile = multer({
   storage: multer.memoryStorage(),
@@ -280,8 +294,10 @@ const upsertDraftStep1 = async ({ month, employeeIds }) => {
 // 列表（汇总）
 router.get('/list', async (req, res) => {
   try {
+    const pool = await getPool()
+    await ensureSalarySoftDeleteColumns(pool)
     const { month, keyword, page = 1, pageSize = 10 } = req.query
-    let whereClause = `WHERE 1=1`
+    let whereClause = `WHERE ISNULL(h.是否删除, 0) = 0`
     const params = {}
 
     if (month) {
@@ -927,10 +943,12 @@ router.delete('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id)
     if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
+    const actor = resolveActorFromReq(req)
 
     const pool = await getPool()
     transaction = new sql.Transaction(pool)
     await transaction.begin()
+    await ensureSalarySoftDeleteColumns(transaction)
 
     // 如果锁表不存在，忽略（兼容旧库）
     await ensureAttendanceLockTable(transaction)
@@ -940,13 +958,22 @@ router.delete('/:id', async (req, res) => {
     const existed = await existedReq.query(`
       SELECT TOP 1 月份 as month
       FROM ${TABLE_SUMMARY}
-      WHERE ID = @id
+      WHERE ID = @id AND ISNULL(是否删除, 0) = 0
     `)
     const month = String(existed.recordset?.[0]?.month || '').trim()
+    if (!month) {
+      await transaction.rollback()
+      return res.status(404).json({ code: 404, message: '记录不存在' })
+    }
 
     const delReq = new sql.Request(transaction)
     delReq.input('id', sql.Int, id)
-    await delReq.query(`DELETE FROM ${TABLE_SUMMARY} WHERE ID = @id`)
+    delReq.input('actor', sql.NVarChar(100), actor || null)
+    await delReq.query(`
+      UPDATE ${TABLE_SUMMARY}
+      SET 是否删除 = 1, 删除时间 = SYSDATETIME(), 删除人 = @actor
+      WHERE ID = @id AND ISNULL(是否删除, 0) = 0
+    `)
 
     // 删除工资时：若该月考勤锁定来源就是本工资，则自动解锁，避免留下陈旧锁
     if (isValidMonth(month)) {
@@ -961,8 +988,20 @@ router.delete('/:id', async (req, res) => {
       `)
     }
 
+    await ensurePendingHardDeleteReviewRequest({
+      tx: transaction,
+      projectCode: String(id),
+      moduleCode: 'SALARY',
+      entityKey: String(id),
+      displayCode: month,
+      displayName: month,
+      requesterName: actor,
+      requestSource: 'SOFT_DELETE_AUTO',
+      requestReason: '软删除后系统自动发起硬删除审核'
+    })
+
     await transaction.commit()
-    res.json({ code: 0, message: '删除成功' })
+    res.json({ code: 0, message: '删除成功（已软删除，并已提交硬删除审核）' })
   } catch (error) {
     if (transaction) await transaction.rollback()
     console.error('删除工资失败:', error)

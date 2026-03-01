@@ -12,6 +12,8 @@ const {
 const {
   HARD_DELETE_REVIEW_STATUS,
   ensureHardDeleteReviewTable,
+  ensurePendingHardDeleteReviewRequest,
+  cancelPendingHardDeleteReviewRequest,
   assertHardDeleteReviewerPermission,
   toHardDeleteReviewTaskData
 } = require('../services/projectHardDeleteReview')
@@ -19,80 +21,6 @@ const router = express.Router()
 
 const resolveRequestId = (req) =>
   String(req.headers['x-request-id'] || req.headers['x-correlation-id'] || '').trim() || null
-
-const ensurePendingHardDeleteReviewRequest = async ({
-  tx,
-  projectCode,
-  goodsId,
-  requesterName,
-  requestSource = 'SOFT_DELETE_AUTO',
-  requestReason = null
-}) => {
-  if (!tx || !projectCode) return null
-  await ensureHardDeleteReviewTable(tx)
-
-  const lockReq = new sql.Request(tx)
-  lockReq.input('projectCode', sql.NVarChar(100), projectCode)
-  const existsResult = await lockReq.query(`
-    SELECT TOP 1 id
-    FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
-    WHERE project_code = @projectCode
-      AND status = N'${HARD_DELETE_REVIEW_STATUS.PENDING}'
-    ORDER BY id DESC
-  `)
-  const pendingId = Number(existsResult.recordset?.[0]?.id || 0)
-  if (pendingId > 0) return pendingId
-
-  const insertReq = new sql.Request(tx)
-  insertReq.input('projectCode', sql.NVarChar(100), projectCode)
-  insertReq.input('goodsId', sql.Int, Number.isInteger(goodsId) && goodsId > 0 ? goodsId : null)
-  insertReq.input('requestSource', sql.NVarChar(40), requestSource)
-  insertReq.input('requestReason', sql.NVarChar(1000), requestReason || null)
-  insertReq.input('status', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
-  insertReq.input('requesterName', sql.NVarChar(200), requesterName || null)
-  const insertResult = await insertReq.query(`
-    INSERT INTO dbo.project_hard_delete_review_requests (
-      project_code,
-      goods_id,
-      request_source,
-      request_reason,
-      status,
-      requester_name
-    )
-    VALUES (
-      @projectCode,
-      @goodsId,
-      @requestSource,
-      @requestReason,
-      @status,
-      @requesterName
-    );
-    SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS requestId;
-  `)
-  return Number(insertResult.recordset?.[0]?.requestId || 0) || null
-}
-
-const cancelPendingHardDeleteReviewRequest = async ({ tx, projectCode, reviewerName, comment }) => {
-  if (!tx || !projectCode) return
-  await ensureHardDeleteReviewTable(tx)
-  const req = new sql.Request(tx)
-  req.input('projectCode', sql.NVarChar(100), projectCode)
-  req.input('statusPending', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
-  req.input('statusCanceled', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.CANCELED)
-  req.input('reviewerName', sql.NVarChar(200), reviewerName || null)
-  req.input('reviewComment', sql.NVarChar(1000), comment || '记录已恢复，系统自动取消硬删除申请')
-  await req.query(`
-    UPDATE dbo.project_hard_delete_review_requests
-    SET
-      status = @statusCanceled,
-      reviewer_name = COALESCE(reviewer_name, @reviewerName),
-      review_comment = @reviewComment,
-      canceled_at = SYSDATETIME(),
-      updated_at = SYSDATETIME()
-    WHERE project_code = @projectCode
-      AND status = @statusPending
-  `)
-}
 
 const executeHardDeleteByGoodsId = async ({
   pool,
@@ -225,6 +153,256 @@ const executeHardDeleteByGoodsId = async ({
     auditId,
     projectCode,
     cascadeSummary
+  }
+}
+
+const normalizeModuleCode = (row) => String(row?.moduleCode || 'GOODS').trim().toUpperCase()
+const normalizeEntityKey = (row) =>
+  String(row?.entityKey || row?.projectCode || '')
+    .trim()
+
+const restoreSoftDeletedByReviewRow = async ({ tx, row, actor }) => {
+  const moduleCode = normalizeModuleCode(row)
+  const entityKey = normalizeEntityKey(row)
+  if (!entityKey) return
+
+  if (moduleCode === 'GOODS' || moduleCode === 'PROJECT_INFO') {
+    await restoreByProjectCode({ tx, projectCode: entityKey })
+    return
+  }
+
+  if (moduleCode === 'SALES_ORDER') {
+    const req = new sql.Request(tx)
+    req.input('orderNo', sql.NVarChar(100), entityKey)
+    req.input('actor', sql.NVarChar(100), actor || null)
+    await req.query(`
+      UPDATE 销售订单
+      SET 状态 = ISNULL(删除前状态, N''),
+          删除前状态 = NULL,
+          删除时间 = NULL,
+          删除人 = NULL
+      WHERE 订单编号 = @orderNo
+
+      UPDATE 销售订单附件
+      SET 状态 = ISNULL(删除前状态, N''),
+          删除前状态 = NULL,
+          删除时间 = NULL,
+          删除人 = NULL
+      WHERE 订单编号 = @orderNo
+    `)
+    return
+  }
+
+  if (moduleCode === 'OUTBOUND_DOCUMENT') {
+    const req = new sql.Request(tx)
+    req.input('documentNo', sql.NVarChar(100), entityKey)
+    await req.query(`
+      UPDATE 出库单明细
+      SET 状态 = ISNULL(删除前状态, N''),
+          删除前状态 = NULL,
+          删除时间 = NULL,
+          删除人 = NULL
+      WHERE 出库单号 = @documentNo
+
+      UPDATE 出库单附件
+      SET 状态 = ISNULL(删除前状态, N''),
+          删除前状态 = NULL,
+          删除时间 = NULL,
+          删除人 = NULL
+      WHERE 出库单号 = @documentNo
+    `)
+    return
+  }
+
+  if (moduleCode === 'FINANCE_INVOICE') {
+    const req = new sql.Request(tx)
+    req.input('invoiceId', sql.Int, parseInt(entityKey, 10))
+    await req.batch(`
+      IF COL_LENGTH(N'开票单据', N'是否删除') IS NULL
+        ALTER TABLE 开票单据 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_开票单据_是否删除 DEFAULT(0);
+      IF COL_LENGTH(N'开票单据', N'删除时间') IS NULL
+        ALTER TABLE 开票单据 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'开票单据', N'删除人') IS NULL
+        ALTER TABLE 开票单据 ADD 删除人 NVARCHAR(100) NULL;
+
+      UPDATE 开票单据
+      SET 是否删除 = 0, 删除时间 = NULL, 删除人 = NULL
+      WHERE 发票ID = @invoiceId
+    `)
+    return
+  }
+
+  if (moduleCode === 'FINANCE_RECEIPT') {
+    const req = new sql.Request(tx)
+    req.input('documentNo', sql.NVarChar(100), entityKey)
+    await req.batch(`
+      IF COL_LENGTH(N'回款单据', N'是否删除') IS NULL
+        ALTER TABLE 回款单据 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_回款单据_是否删除 DEFAULT(0);
+      IF COL_LENGTH(N'回款单据', N'删除时间') IS NULL
+        ALTER TABLE 回款单据 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'回款单据', N'删除人') IS NULL
+        ALTER TABLE 回款单据 ADD 删除人 NVARCHAR(100) NULL;
+
+      UPDATE 回款单据
+      SET 是否删除 = 0, 删除时间 = NULL, 删除人 = NULL
+      WHERE 单据编号 = @documentNo
+    `)
+    return
+  }
+
+  if (moduleCode === 'SALARY') {
+    const req = new sql.Request(tx)
+    req.input('id', sql.Int, parseInt(entityKey, 10))
+    await req.batch(`
+      IF COL_LENGTH(N'工资汇总', N'是否删除') IS NULL
+        ALTER TABLE 工资汇总 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_工资汇总_是否删除 DEFAULT(0);
+      IF COL_LENGTH(N'工资汇总', N'删除时间') IS NULL
+        ALTER TABLE 工资汇总 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'工资汇总', N'删除人') IS NULL
+        ALTER TABLE 工资汇总 ADD 删除人 NVARCHAR(100) NULL;
+
+      UPDATE 工资汇总
+      SET 是否删除 = 0, 删除时间 = NULL, 删除人 = NULL
+      WHERE ID = @id
+    `)
+    return
+  }
+
+  if (moduleCode === 'CUSTOMER') {
+    const req = new sql.Request(tx)
+    req.input('id', sql.Int, parseInt(entityKey, 10))
+    await req.batch(`
+      IF COL_LENGTH(N'客户信息', N'是否删除') IS NULL
+        ALTER TABLE 客户信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_客户信息_是否删除 DEFAULT(0);
+      IF COL_LENGTH(N'客户信息', N'删除时间') IS NULL
+        ALTER TABLE 客户信息 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'客户信息', N'删除人') IS NULL
+        ALTER TABLE 客户信息 ADD 删除人 NVARCHAR(100) NULL;
+
+      UPDATE 客户信息
+      SET 是否删除 = 0, 删除时间 = NULL, 删除人 = NULL
+      WHERE 客户ID = @id
+    `)
+    return
+  }
+
+  if (moduleCode === 'SUPPLIER') {
+    const req = new sql.Request(tx)
+    req.input('id', sql.BigInt, parseInt(entityKey, 10))
+    req.input('actor', sql.NVarChar(100), actor || null)
+    await req.query(`
+      UPDATE 供方信息
+      SET 是否删除 = 0, 更新时间 = GETDATE(), 更新人 = @actor
+      WHERE 供方ID = @id
+    `)
+    return
+  }
+
+  if (moduleCode === 'EMPLOYEE') {
+    const req = new sql.Request(tx)
+    req.input('id', sql.Int, parseInt(entityKey, 10))
+    await req.batch(`
+      IF COL_LENGTH(N'员工信息', N'是否删除') IS NULL
+        ALTER TABLE 员工信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_员工信息_是否删除 DEFAULT(0);
+      IF COL_LENGTH(N'员工信息', N'删除时间') IS NULL
+        ALTER TABLE 员工信息 ADD 删除时间 DATETIME2 NULL;
+      IF COL_LENGTH(N'员工信息', N'删除人') IS NULL
+        ALTER TABLE 员工信息 ADD 删除人 NVARCHAR(100) NULL;
+
+      UPDATE 员工信息
+      SET 是否删除 = 0, 删除时间 = NULL, 删除人 = NULL
+      WHERE ID = @id
+    `)
+  }
+}
+
+const executeHardDeleteByReviewRow = async ({ pool, row, actor, requestId }) => {
+  const moduleCode = normalizeModuleCode(row)
+  const entityKey = normalizeEntityKey(row)
+
+  if (moduleCode === 'GOODS') {
+    const goodsId = Number(row?.goodsId || 0)
+    if (!Number.isInteger(goodsId) || goodsId <= 0) {
+      const err = new Error('申请记录缺少有效 goodsId')
+      err.httpStatus = 409
+      throw err
+    }
+    return executeHardDeleteByGoodsId({
+      pool,
+      goodsId,
+      actor,
+      requestId,
+      requireApprovedReviewRequest: false
+    })
+  }
+
+  if (!entityKey) {
+    const err = new Error('申请记录缺少有效实体标识')
+    err.httpStatus = 409
+    throw err
+  }
+
+  const tx = new sql.Transaction(pool)
+  await tx.begin()
+  try {
+    if (moduleCode === 'PROJECT_INFO') {
+      const cascadeSummary = await hardDeleteByProjectCode({ tx, projectCode: entityKey })
+      await tx.commit()
+      return { projectCode: entityKey, cascadeSummary, auditId: null }
+    }
+
+    const req = new sql.Request(tx)
+    if (moduleCode === 'SALES_ORDER') {
+      req.input('orderNo', sql.NVarChar(100), entityKey)
+      await req.query(`
+        DELETE FROM 销售订单附件 WHERE 订单编号 = @orderNo;
+        DELETE FROM 销售订单 WHERE 订单编号 = @orderNo;
+      `)
+    } else if (moduleCode === 'OUTBOUND_DOCUMENT') {
+      req.input('documentNo', sql.NVarChar(100), entityKey)
+      await req.query(`
+        DELETE FROM 出库单附件 WHERE 出库单号 = @documentNo;
+        DELETE FROM 出库单明细 WHERE 出库单号 = @documentNo;
+      `)
+    } else if (moduleCode === 'FINANCE_INVOICE') {
+      req.input('invoiceId', sql.Int, parseInt(entityKey, 10))
+      await req.query(`
+        DELETE FROM 发票明细 WHERE 发票ID = @invoiceId;
+        DELETE FROM 开票单据 WHERE 发票ID = @invoiceId;
+      `)
+    } else if (moduleCode === 'FINANCE_RECEIPT') {
+      req.input('documentNo', sql.NVarChar(100), entityKey)
+      await req.query(`DELETE FROM 回款单据 WHERE 单据编号 = @documentNo;`)
+    } else if (moduleCode === 'SALARY') {
+      req.input('id', sql.Int, parseInt(entityKey, 10))
+      await req.query(`
+        DELETE FROM 工资明细 WHERE 汇总ID = @id;
+        DELETE FROM 工资汇总 WHERE ID = @id;
+      `)
+    } else if (moduleCode === 'CUSTOMER') {
+      req.input('id', sql.Int, parseInt(entityKey, 10))
+      await req.query(`
+        DELETE FROM 客户收货地址 WHERE 客户ID = @id;
+        DELETE FROM 客户信息 WHERE 客户ID = @id;
+      `)
+    } else if (moduleCode === 'SUPPLIER') {
+      req.input('id', sql.BigInt, parseInt(entityKey, 10))
+      await req.query(`DELETE FROM 供方信息 WHERE 供方ID = @id;`)
+    } else if (moduleCode === 'EMPLOYEE') {
+      req.input('id', sql.Int, parseInt(entityKey, 10))
+      await req.query(`DELETE FROM 员工信息 WHERE ID = @id;`)
+    } else {
+      const err = new Error(`不支持的模块: ${moduleCode}`)
+      err.httpStatus = 400
+      throw err
+    }
+    await tx.commit()
+    return { auditId: null, projectCode: entityKey, cascadeSummary: { moduleCode, entityKey } }
+  } catch (error) {
+    try {
+      await tx.rollback()
+    } catch {}
+    throw error
   }
 }
 
@@ -449,7 +627,15 @@ router.get('/hard-delete-review/tasks', async (req, res) => {
     const keywordText = String(keyword || '').trim()
     if (keywordText) {
       where.push(
-        '(r.project_code LIKE @keyword OR g.产品名称 LIKE @keyword OR g.产品图号 LIKE @keyword OR r.requester_name LIKE @keyword)'
+        `(
+          r.project_code LIKE @keyword
+          OR ISNULL(r.display_code, N'') LIKE @keyword
+          OR ISNULL(r.display_name, N'') LIKE @keyword
+          OR ISNULL(r.entity_key, N'') LIKE @keyword
+          OR g.产品名称 LIKE @keyword
+          OR g.产品图号 LIKE @keyword
+          OR r.requester_name LIKE @keyword
+        )`
       )
       params.keyword = `%${keywordText}%`
     }
@@ -484,6 +670,10 @@ router.get('/hard-delete-review/tasks', async (req, res) => {
         r.id,
         r.project_code AS projectCode,
         r.goods_id AS goodsId,
+        ISNULL(r.module_code, N'GOODS') AS moduleCode,
+        ISNULL(r.entity_key, r.project_code) AS entityKey,
+        r.display_code AS displayCode,
+        r.display_name AS displayName,
         g.产品名称 AS productName,
         g.产品图号 AS productDrawing,
         g.分类 AS category,
@@ -558,7 +748,13 @@ router.post('/hard-delete-review/reject', async (req, res) => {
       const lockReq = new sql.Request(tx)
       lockReq.input('requestId', sql.BigInt, requestIdValue)
       const rowResult = await lockReq.query(`
-        SELECT TOP 1 id, status
+        SELECT TOP 1
+          id,
+          status,
+          project_code AS projectCode,
+          goods_id AS goodsId,
+          ISNULL(module_code, N'GOODS') AS moduleCode,
+          ISNULL(entity_key, project_code) AS entityKey
         FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
         WHERE id = @requestId
       `)
@@ -589,6 +785,8 @@ router.post('/hard-delete-review/reject', async (req, res) => {
           updated_at = SYSDATETIME()
         WHERE id = @requestId
       `)
+
+      await restoreSoftDeletedByReviewRow({ tx, row, actor: reviewer })
       await tx.commit()
     } catch (e) {
       try {
@@ -631,7 +829,14 @@ router.post('/hard-delete-review/approve', async (req, res) => {
       const lockReq = new sql.Request(lockTx)
       lockReq.input('requestId', sql.BigInt, requestIdValue)
       const rowResult = await lockReq.query(`
-        SELECT TOP 1 id, goods_id AS goodsId, project_code AS projectCode, requester_name AS requesterName, status
+        SELECT TOP 1
+          id,
+          goods_id AS goodsId,
+          project_code AS projectCode,
+          requester_name AS requesterName,
+          status,
+          ISNULL(module_code, N'GOODS') AS moduleCode,
+          ISNULL(entity_key, project_code) AS entityKey
         FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
         WHERE id = @requestId
       `)
@@ -677,19 +882,8 @@ router.post('/hard-delete-review/approve', async (req, res) => {
       throw e
     }
 
-    const goodsId = Number(reviewRow?.goodsId || 0)
-    if (!Number.isInteger(goodsId) || goodsId <= 0) {
-      return res.status(409).json({ code: 409, success: false, message: '申请记录缺少有效 goodsId' })
-    }
-
     try {
-      const executeResult = await executeHardDeleteByGoodsId({
-        pool,
-        goodsId,
-        actor: reviewer,
-        requestId,
-        requireApprovedReviewRequest: false
-      })
+      const executeResult = await executeHardDeleteByReviewRow({ pool, row: reviewRow, actor: reviewer, requestId })
       const finishReq = pool.request()
       finishReq.input('requestId', sql.BigInt, requestIdValue)
       finishReq.input('executionAuditId', sql.BigInt, executeResult.auditId || null)
@@ -825,6 +1019,10 @@ router.delete('/batch', async (req, res) => {
           tx,
           projectCode,
           goodsId: Number(row.goodsId || 0),
+          moduleCode: 'GOODS',
+          entityKey: projectCode,
+          displayCode: projectCode,
+          displayName: null,
           requesterName: actor,
           requestSource: 'SOFT_DELETE_AUTO_BATCH',
           requestReason: '批量软删除后系统自动发起硬删除审核'
@@ -1187,6 +1385,10 @@ router.delete('/:id', async (req, res) => {
         tx,
         projectCode,
         goodsId: parseInt(id, 10),
+        moduleCode: 'GOODS',
+        entityKey: projectCode,
+        displayCode: projectCode,
+        displayName: null,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'
@@ -1282,7 +1484,8 @@ router.post('/restore', async (req, res) => {
       await restoreByProjectCode({ pool, tx, projectCode: code })
       await cancelPendingHardDeleteReviewRequest({
         tx,
-        projectCode: code,
+        moduleCode: 'GOODS',
+        entityKey: code,
         reviewerName: resolveActorFromReq(req),
         comment: '记录已恢复，系统自动取消硬删除申请'
       })

@@ -7,12 +7,12 @@
       inline
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] py-2 shadow-sm"
     >
-      <el-form-item label="单据编号/发票号">
+      <el-form-item label="模糊查询">
         <el-input
           v-model="queryForm.itemCode"
-          placeholder="请输入单据编号或发票号码"
+          placeholder="项目编号/产品名称/图号/模号/发票号/单据号"
           clearable
-          style="width: 160px"
+          style="width: 280px"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -121,6 +121,12 @@
                   formatBoolean(detail.detailIsSettled)
                 }}</template>
               </el-table-column>
+              <el-table-column
+                prop="ssmaTimestamp"
+                label="SSMA时间戳"
+                min-width="170"
+                show-overflow-tooltip
+              />
             </el-table>
           </template>
         </el-table-column>
@@ -219,49 +225,58 @@
       <div class="so-timeline-right">
         <div v-if="timelineSelectedInvoice" class="so-timeline-detail-panel">
           <div class="view-dialog-section">
-            <h3 class="view-dialog-section-title">开票基本信息</h3>
-            <div class="view-dialog-info-grid">
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">单据编号：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.documentNo || '-'
-                }}</span>
+            <div class="view-dialog-section-header view-dialog-section-header--timeline">
+              <div class="view-dialog-section-main">
+                <h3 class="view-dialog-section-title">开票基本信息</h3>
+                <div class="view-dialog-info-grid">
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">单据编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.documentNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">发票号码：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.invoiceNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">客户名称：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.customerName || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">合同编号：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.contractNo || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">开票日期：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.invoiceDate || '-'
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">总数量：</span>
+                    <span class="view-dialog-info-value">{{
+                      timelineSelectedInvoice.totalQuantity
+                    }}</span>
+                  </div>
+                  <div class="view-dialog-info-item">
+                    <span class="view-dialog-info-label">总金额：</span>
+                    <span class="view-dialog-info-value">
+                      {{ formatAmount(timelineSelectedInvoice.totalAmount) }} 元
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">发票号码：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.invoiceNo || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">客户名称：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.customerName || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">合同编号：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.contractNo || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">开票日期：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.invoiceDate || '-'
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">总数量：</span>
-                <span class="view-dialog-info-value">{{
-                  timelineSelectedInvoice.totalQuantity
-                }}</span>
-              </div>
-              <div class="view-dialog-info-item">
-                <span class="view-dialog-info-label">总金额：</span>
-                <span class="view-dialog-info-value">
-                  {{ formatAmount(timelineSelectedInvoice.totalAmount) }} 元
-                </span>
+              <div class="so-timeline-header-actions">
+                <el-button type="success" size="small" @click="handleTimelineView">查看</el-button>
+                <el-button type="primary" size="small" @click="handleTimelineEdit">编辑</el-button>
+                <el-button type="danger" size="small" @click="handleTimelineDelete">删除</el-button>
               </div>
             </div>
           </div>
@@ -306,6 +321,12 @@
                 <el-table-column label="是否结清" width="100" align="center">
                   <template #default="{ row }">{{ formatBoolean(row.detailIsSettled) }}</template>
                 </el-table-column>
+                <el-table-column
+                  prop="ssmaTimestamp"
+                  label="SSMA时间戳"
+                  min-width="170"
+                  show-overflow-tooltip
+                />
               </el-table>
             </div>
           </div>
@@ -328,6 +349,79 @@
         @current-change="handleCurrentChange"
       />
     </div>
+
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="查看开票单据"
+      width="1400px"
+      :close-on-click-modal="false"
+      class="so-dialog so-dialog-view"
+    >
+      <div v-if="viewInvoiceData" class="view-dialog-container">
+        <div class="view-dialog-section">
+          <h3 class="view-dialog-section-title">开票基本信息</h3>
+          <div class="view-dialog-info-grid">
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">单据编号：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.documentNo || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">发票号码：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.invoiceNo || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">客户名称：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.customerName || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">合同编号：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.contractNo || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">开票日期：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.invoiceDate || '-' }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">总数量：</span>
+              <span class="view-dialog-info-value">{{ viewInvoiceData.totalQuantity }}</span>
+            </div>
+            <div class="view-dialog-info-item">
+              <span class="view-dialog-info-label">总金额：</span>
+              <span class="view-dialog-info-value">
+                {{ formatAmount(viewInvoiceData.totalAmount) }} 元
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="view-dialog-section">
+          <h3 class="view-dialog-section-title">发票明细</h3>
+          <div class="dialog-table-wrapper">
+            <el-table :data="viewInvoiceData.details" border size="small">
+              <el-table-column prop="id" label="明细ID" width="70" />
+              <el-table-column prop="invoiceId" label="发票ID" width="70" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="140" />
+              <el-table-column prop="productName" label="产品名称" min-width="140" />
+              <el-table-column label="数量" width="60" align="center">
+                <template #default="{ row }">{{ row.quantity }}</template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="90" align="right">
+                <template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template>
+              </el-table-column>
+              <el-table-column label="金额(元)" width="100" align="right">
+                <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+              <el-table-column prop="contractNo" label="合同号" min-width="120" />
+            </el-table>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="dialogVisible"
@@ -420,6 +514,7 @@
               <span class="finance-dialog-summary__item"
                 >金额合计 {{ formatAmount(dialogTotals.totalAmount) }}</span
               >
+              <el-button @click="openInvoiceCandidateDialog">从候选池选择</el-button>
               <el-button type="primary" plain @click="addDetailRow">新增明细</el-button>
             </div>
           </div>
@@ -511,6 +606,53 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="invoiceCandidateDialogVisible"
+      title="选择开票明细"
+      width="1200px"
+      :close-on-click-modal="false"
+    >
+      <div class="finance-candidate-toolbar">
+        <el-select v-model="invoiceCandidateFilterType" style="width: 180px">
+          <el-option label="未开票" value="no_invoice" />
+          <el-option label="预付已开待后续" value="prepaid_pending" />
+          <el-option label="全额发票" value="full" />
+        </el-select>
+        <el-input
+          v-model="invoiceCandidateKeyword"
+          placeholder="项目编号/产品名称/图号/模号/合同号"
+          clearable
+          style="width: 320px"
+          @keydown.enter.prevent="loadInvoiceCandidates"
+        />
+        <el-button type="primary" @click="loadInvoiceCandidates">查询</el-button>
+      </div>
+      <el-table
+        ref="invoiceCandidateTableRef"
+        v-loading="invoiceCandidateLoading"
+        :data="invoiceCandidates"
+        border
+        height="460"
+        row-key="itemCode"
+        @selection-change="handleInvoiceCandidateSelectionChange"
+      >
+        <el-table-column type="selection" width="50" />
+        <el-table-column prop="itemCode" label="项目编号" min-width="130" />
+        <el-table-column prop="productName" label="产品名称" min-width="160" />
+        <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
+        <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+        <el-table-column prop="customerName" label="客户名称" min-width="160" />
+        <el-table-column prop="contractNo" label="合同号" min-width="120" />
+        <el-table-column label="单价" width="120" align="right">
+          <template #default="{ row }">{{ formatAmount(row.unitPrice || 0) }}</template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="invoiceCandidateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="applyInvoiceCandidates">带入明细</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -536,7 +678,13 @@ import {
   ElTableColumn,
   ElTag
 } from 'element-plus'
-import { createFinanceInvoiceApi, getFinanceInvoiceListApi } from '@/api/finance'
+import {
+  createFinanceInvoiceApi,
+  deleteFinanceInvoiceApi,
+  getFinanceInvoiceCandidatesApi,
+  getFinanceInvoiceListApi,
+  updateFinanceInvoiceApi
+} from '@/api/finance'
 import { getCustomerListApi } from '@/api/customer'
 
 type InvoiceStatus = 'normal' | 'red'
@@ -561,6 +709,7 @@ interface InvoiceLine {
   acceptanceIssued?: boolean
   detailIsRed?: boolean
   detailIsSettled?: boolean
+  ssmaTimestamp?: string
 }
 
 interface Invoice {
@@ -599,6 +748,16 @@ interface PaginatedInvoices {
 interface InvoiceTableRow extends Invoice {
   totalQuantity: number
   totalAmount: number
+}
+
+interface InvoiceCandidate {
+  itemCode: string
+  productName: string
+  productDrawingNo: string
+  customerPartNo: string
+  customerName: string
+  contractNo: string
+  unitPrice: number
 }
 
 type InvoicePayload = Omit<Invoice, 'id'> & { documentNo: string }
@@ -745,14 +904,16 @@ const createEmptyInvoice = (): InvoicePayload => ({
   details: [createEmptyDetail()]
 })
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    globalThis.setTimeout(resolve, ms)
-  })
-
-const readOnlyMode = true
+const readOnlyMode = false
 const route = useRoute()
 const customerOptions = ref<string[]>([])
+const invoiceCandidateDialogVisible = ref(false)
+const invoiceCandidateLoading = ref(false)
+const invoiceCandidateFilterType = ref<'no_invoice' | 'prepaid_pending' | 'full'>('no_invoice')
+const invoiceCandidateKeyword = ref('')
+const invoiceCandidates = ref<InvoiceCandidate[]>([])
+const selectedInvoiceCandidates = ref<InvoiceCandidate[]>([])
+const invoiceCandidateTableRef = ref<InstanceType<typeof ElTable>>()
 
 const normalizeDetails = (details: InvoiceLine[]): InvoiceLine[] =>
   details.map((detail) => {
@@ -799,15 +960,6 @@ const listInvoices = async (params: ListInvoicesParams): Promise<PaginatedInvoic
   return { list, total }
 }
 
-const getInvoice = async (id: number): Promise<Invoice> => {
-  await wait(200)
-  const target = mockInvoices.value.find((item) => item.id === id)
-  if (!target) {
-    throw new Error('发票不存在')
-  }
-  return JSON.parse(JSON.stringify(target))
-}
-
 const createInvoice = async (payload: InvoicePayload): Promise<Invoice> => {
   await createFinanceInvoiceApi(payload)
   return {
@@ -824,13 +976,10 @@ const createInvoice = async (payload: InvoicePayload): Promise<Invoice> => {
 }
 
 const updateInvoice = async (id: number, payload: InvoicePayload): Promise<Invoice> => {
-  await wait(300)
-  const index = mockInvoices.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('发票不存在')
-  }
-  const updated: Invoice = {
+  await updateFinanceInvoiceApi(id, payload)
+  return {
     id,
+    documentNo: payload.documentNo,
     invoiceNo: payload.invoiceNo,
     customerName: payload.customerName,
     contractNo: payload.contractNo,
@@ -839,17 +988,10 @@ const updateInvoice = async (id: number, payload: InvoicePayload): Promise<Invoi
     deliveryDate: payload.deliveryDate,
     details: normalizeDetails(payload.details.map((detail) => ({ ...detail })))
   }
-  mockInvoices.value.splice(index, 1, updated)
-  return JSON.parse(JSON.stringify(updated))
 }
 
 const removeInvoice = async (id: number): Promise<void> => {
-  await wait(200)
-  const index = mockInvoices.value.findIndex((item) => item.id === id)
-  if (index === -1) {
-    throw new Error('发票不存在')
-  }
-  mockInvoices.value.splice(index, 1)
+  await deleteFinanceInvoiceApi(id)
 }
 
 const statusTagMap: Record<InvoiceStatus, { label: string; type: TagType }> = {
@@ -890,10 +1032,12 @@ const timelineActiveInvoiceId = ref<number | null>(null)
 const timelineActiveDetailKey = ref<string | null>(null)
 
 const dialogVisible = ref(false)
+const viewDialogVisible = ref(false)
 const dialogTitle = ref('')
 const dialogSubmitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
 const currentInvoiceId = ref<number | null>(null)
+const viewInvoiceData = ref<InvoiceTableRow | null>(null)
 
 const dialogForm = reactive<InvoicePayload>(createEmptyInvoice())
 
@@ -962,6 +1106,26 @@ const handleTimelineInvoiceClick = (invoice: InvoiceTableRow) => {
 const handleTimelineDetailClick = (invoice: InvoiceTableRow, detail: InvoiceLine) => {
   timelineActiveInvoiceId.value = invoice.id
   timelineActiveDetailKey.value = makeTimelineDetailKey(invoice.id, detail)
+}
+
+const openViewDialog = (row: InvoiceTableRow) => {
+  viewInvoiceData.value = JSON.parse(JSON.stringify(row))
+  viewDialogVisible.value = true
+}
+
+const handleTimelineView = () => {
+  if (!timelineSelectedInvoice.value) return
+  openViewDialog(timelineSelectedInvoice.value)
+}
+
+const handleTimelineEdit = () => {
+  if (!timelineSelectedInvoice.value) return
+  handleEdit(timelineSelectedInvoice.value)
+}
+
+const handleTimelineDelete = () => {
+  if (!timelineSelectedInvoice.value) return
+  void handleDelete(timelineSelectedInvoice.value)
 }
 
 const timelineDetailRowClassName = ({ row }: { row: InvoiceLine }) => {
@@ -1114,6 +1278,86 @@ const loadCustomerOptions = async () => {
     .filter((name: string) => !!name)
 }
 
+const loadInvoiceCandidates = async () => {
+  invoiceCandidateLoading.value = true
+  try {
+    const resp = await getFinanceInvoiceCandidatesApi({
+      filterType: invoiceCandidateFilterType.value,
+      keyword: invoiceCandidateKeyword.value.trim() || undefined,
+      customerName: dialogForm.customerName || undefined
+    })
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const data: any = pr?.data ?? pr
+    const list = Array.isArray(data?.list) ? data.list : []
+    invoiceCandidates.value = list.map((it: any) => ({
+      itemCode: String(it.itemCode || ''),
+      productName: String(it.productName || ''),
+      productDrawingNo: String(it.productDrawingNo || ''),
+      customerPartNo: String(it.customerPartNo || ''),
+      customerName: String(it.customerName || ''),
+      contractNo: String(it.contractNo || ''),
+      unitPrice: Number(it.unitPrice) || 0
+    }))
+    selectedInvoiceCandidates.value = []
+  } finally {
+    invoiceCandidateLoading.value = false
+  }
+}
+
+const openInvoiceCandidateDialog = async () => {
+  invoiceCandidateDialogVisible.value = true
+  await nextTick()
+  invoiceCandidateTableRef.value?.clearSelection()
+  await loadInvoiceCandidates()
+}
+
+const handleInvoiceCandidateSelectionChange = (rows: InvoiceCandidate[]) => {
+  selectedInvoiceCandidates.value = rows
+}
+
+const applyInvoiceCandidates = () => {
+  if (!selectedInvoiceCandidates.value.length) {
+    ElMessage.warning('请先勾选候选明细')
+    return
+  }
+  const firstCustomer = selectedInvoiceCandidates.value[0].customerName
+  const mixed = selectedInvoiceCandidates.value.some((it) => it.customerName !== firstCustomer)
+  if (mixed) {
+    ElMessage.warning('只能选择同一客户的候选明细')
+    return
+  }
+  if (dialogForm.customerName && dialogForm.customerName !== firstCustomer) {
+    ElMessage.warning('候选明细客户与单据客户不一致')
+    return
+  }
+  if (!dialogForm.customerName) {
+    dialogForm.customerName = firstCustomer
+  }
+  if (
+    dialogForm.details.length === 1 &&
+    !dialogForm.details[0].itemCode &&
+    !dialogForm.details[0].productName
+  ) {
+    dialogForm.details.splice(0, 1)
+  }
+  const existingCodes = new Set(dialogForm.details.map((d) => d.itemCode))
+  selectedInvoiceCandidates.value.forEach((it) => {
+    if (existingCodes.has(it.itemCode)) return
+    const detail = createEmptyDetail()
+    detail.itemCode = it.itemCode
+    detail.productName = it.productName
+    detail.productDrawingNo = it.productDrawingNo
+    detail.customerPartNo = it.customerPartNo
+    detail.contractNo = it.contractNo
+    detail.quantity = 1
+    detail.unitPrice = Number(it.unitPrice) || 0
+    detail.amount = Number(detail.unitPrice.toFixed(2))
+    dialogForm.details.push(detail)
+  })
+  invoiceCandidateDialogVisible.value = false
+}
+
 const handleCreate = async () => {
   dialogTitle.value = '新增发票'
   currentInvoiceId.value = null
@@ -1127,10 +1371,10 @@ const handleCreate = async () => {
   dialogFormRef.value?.clearValidate()
 }
 
-const openEditDialog = async (id: number) => {
+const openEditDialog = async (row: InvoiceTableRow) => {
   try {
-    const invoice = await getInvoice(id)
-    const { id: _id, ...rest } = invoice
+    const invoice = JSON.parse(JSON.stringify(row)) as InvoiceTableRow
+    const { id, totalAmount: _totalAmount, totalQuantity: _totalQuantity, ...rest } = invoice
     const payload: InvoicePayload = {
       ...rest,
       documentNo: invoice.documentNo || invoice.invoiceNo || ''
@@ -1151,14 +1395,14 @@ const handleEdit = (row: InvoiceTableRow) => {
     ElMessage.warning('当前阶段为只读模式，暂不支持编辑')
     return
   }
-  void openEditDialog(row.id)
+  void openEditDialog(row)
 }
 
 const handleRowDblClick = (row: InvoiceTableRow) => {
   if (readOnlyMode) {
     return
   }
-  void openEditDialog(row.id)
+  void openEditDialog(row)
 }
 
 const recalculateDetail = (detail: InvoiceLine) => {
@@ -1256,24 +1500,36 @@ const handleDelete = async (row: InvoiceTableRow) => {
     return
   }
   try {
-    await ElMessageBox.confirm(`确认删除发票 ${row.invoiceNo} 吗？`, '提示', {
-      confirmButtonText: '确定',
+    const message = `<div style="line-height: 1.8;">
+      <div>确定删除开票单据 ${row.documentNo || row.invoiceNo} 吗？删除后将无法恢复！</div>
+      <div style="margin-top: 8px;">请输入 "Y" 确认删除：</div>
+    </div>`
+
+    const { value } = await ElMessageBox.prompt(message, '警告', {
+      confirmButtonText: '确定删除',
       cancelButtonText: '取消',
-      type: 'warning'
+      type: 'warning',
+      inputPattern: /^[Yy]$/,
+      inputErrorMessage: '请输入字母 Y 才能确认删除',
+      dangerouslyUseHTMLString: true
     })
 
-    await removeInvoice(row.id)
-    if (tableData.value.length === 1 && pagination.page > 1) {
-      pagination.page -= 1
+    if (value && value.toUpperCase() === 'Y') {
+      await removeInvoice(row.id)
+      if (tableData.value.length === 1 && pagination.page > 1) {
+        pagination.page -= 1
+      }
+      await loadData()
+      ElMessage.success('删除成功')
     }
-    await loadData()
-    ElMessage.success('删除成功')
-  } catch (error) {
+  } catch (error: any) {
     if (error === 'cancel' || error === 'close') {
       return
     }
     if (error instanceof Error) {
       ElMessage.error(error.message || '删除失败')
+    } else {
+      ElMessage.error('删除失败')
     }
   }
 }
@@ -1392,6 +1648,13 @@ onMounted(() => {
   color: #606266;
   background: #eef2f7;
   border-radius: 999px;
+}
+
+.finance-candidate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .dialog-form-container {
@@ -1579,9 +1842,26 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.view-dialog-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.view-dialog-section-header--timeline {
+  align-items: flex-start;
+}
+
+.view-dialog-section-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .view-dialog-info-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px 12px;
 }
 
@@ -1595,6 +1875,13 @@ onMounted(() => {
 
 .view-dialog-info-value {
   color: var(--el-text-color-primary);
+}
+
+.so-timeline-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .dialog-table-wrapper {
