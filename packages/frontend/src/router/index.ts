@@ -590,9 +590,77 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/authorization',
+    component: Layout,
+    redirect: '/authorization/user',
+    name: 'Authorization',
+    meta: {
+      title: t('router.authorization'),
+      icon: 'vi-eos-icons:role-binding',
+      alwaysShow: true,
+      hidden: true
+    },
+    children: [
+      {
+        path: 'department',
+        component: () => import('@/views/Authorization/Department/Department.vue'),
+        name: 'Department',
+        meta: {
+          title: t('router.department')
+        }
+      },
+      {
+        path: 'user',
+        component: () => import('@/views/Authorization/User/User.vue'),
+        name: 'User',
+        meta: {
+          title: t('router.user')
+        }
+      },
+      {
+        path: 'menu',
+        component: () => import('@/views/Authorization/Menu/Menu.vue'),
+        name: 'Menu',
+        meta: {
+          title: t('router.menuManagement')
+        }
+      },
+      {
+        path: 'role',
+        component: () => import('@/views/Authorization/Role/Role.vue'),
+        name: 'Role',
+        meta: {
+          title: t('router.role')
+        }
+      }
+    ]
+  },
+  {
+    path: '/permission-management',
+    component: Layout,
+    redirect: '/permission-management/index',
+    name: 'PermissionManagement',
+    meta: {
+      title: '权限管理',
+      icon: 'vi-eos-icons:role-binding'
+    },
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/Authorization/Permission/Permission.vue'),
+        name: 'Permission',
+        meta: {
+          title: '权限管理'
+        }
+      }
+    ]
+  },
+  {
     path: '/external-link',
     component: Layout,
-    meta: {},
+    meta: {
+      hidden: true
+    },
     name: 'ExternalLink',
     children: [
       {
@@ -600,7 +668,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: 'DocumentLink',
         meta: {
           title: t('router.document'),
-          icon: 'vi-clarity:document-solid'
+          icon: 'vi-clarity:document-solid',
+          hidden: true
         }
       }
     ]
@@ -609,7 +678,9 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     path: '/guide',
     component: Layout,
     name: 'Guide',
-    meta: {},
+    meta: {
+      hidden: true
+    },
     children: [
       {
         path: 'index',
@@ -617,7 +688,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: 'GuideDemo',
         meta: {
           title: t('router.guide'),
-          icon: 'vi-cib:telegram-plane'
+          icon: 'vi-cib:telegram-plane',
+          hidden: true
         }
       }
     ]
@@ -629,7 +701,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     meta: {
       title: t('router.component'),
       icon: 'vi-bx:bxs-component',
-      alwaysShow: true
+      alwaysShow: true,
+      hidden: true
     },
     children: [
       {
@@ -894,7 +967,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     meta: {
       title: t('router.function'),
       icon: 'vi-ri:function-fill',
-      alwaysShow: true
+      alwaysShow: true,
+      hidden: true
     },
     children: [
       {
@@ -943,7 +1017,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     meta: {
       title: 'hooks',
       icon: 'vi-ic:outline-webhook',
-      alwaysShow: true
+      alwaysShow: true,
+      hidden: true
     },
     children: [
       {
@@ -1003,7 +1078,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     name: 'Level',
     meta: {
       title: t('router.level'),
-      icon: 'vi-carbon:skill-level-advanced'
+      icon: 'vi-carbon:skill-level-advanced',
+      hidden: true
     },
     children: [
       {
@@ -1063,7 +1139,8 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     meta: {
       title: t('router.example'),
       icon: 'vi-ep:management',
-      alwaysShow: true
+      alwaysShow: true,
+      hidden: true
     },
     children: [
       {
@@ -1201,59 +1278,6 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: '500Demo',
         meta: {
           title: '500'
-        }
-      }
-    ]
-  },
-  {
-    path: '/authorization',
-    component: Layout,
-    redirect: '/authorization/user',
-    name: 'Authorization',
-    meta: {
-      title: t('router.authorization'),
-      icon: 'vi-eos-icons:role-binding',
-      alwaysShow: true
-    },
-    children: [
-      {
-        path: 'department',
-        component: () => import('@/views/Authorization/Department/Department.vue'),
-        name: 'Department',
-        meta: {
-          title: t('router.department')
-        }
-      },
-      {
-        path: 'user',
-        component: () => import('@/views/Authorization/User/User.vue'),
-        name: 'User',
-        meta: {
-          title: t('router.user')
-        }
-      },
-      {
-        path: 'menu',
-        component: () => import('@/views/Authorization/Menu/Menu.vue'),
-        name: 'Menu',
-        meta: {
-          title: t('router.menuManagement')
-        }
-      },
-      {
-        path: 'role',
-        component: () => import('@/views/Authorization/Role/Role.vue'),
-        name: 'Role',
-        meta: {
-          title: t('router.role')
-        }
-      },
-      {
-        path: 'permission',
-        component: () => import('@/views/Authorization/Permission/Permission.vue'),
-        name: 'Permission',
-        meta: {
-          title: '权限管理'
         }
       }
     ]
