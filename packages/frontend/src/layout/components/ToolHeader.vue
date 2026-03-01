@@ -57,6 +57,8 @@ export default defineComponent({
     const isOutboundDocumentPage = computed(() => route.name === 'OutboundDocumentIndex')
     const isSalaryPage = computed(() => route.name === 'Salary')
     const isProjectManagementPage = computed(() => route.name === 'ProjectManagementIndex')
+    const isBillingDocumentsPage = computed(() => route.name === 'BillingDocuments')
+    const isReceivableDocumentsPage = computed(() => route.name === 'ReceivableDocuments')
     const salesSummary = computed(() => appStore.getSalesOrdersSummary)
     const projectManagementSummary = computed(() => appStore.getProjectManagementSummary)
 
@@ -64,6 +66,8 @@ export default defineComponent({
     type OutboundDocumentViewMode = 'table' | 'timeline'
     type SalaryViewMode = 'table' | 'timeline'
     type ProjectManagementViewMode = 'table' | 'timeline'
+    type BillingDocumentsViewMode = 'table' | 'timeline'
+    type ReceivableDocumentsViewMode = 'table' | 'timeline'
 
     const salesOrdersViewMode = computed<SalesOrdersViewMode>({
       get() {
@@ -112,6 +116,32 @@ export default defineComponent({
       },
       set(val) {
         if (route.name !== 'ProjectManagementIndex') return
+        const query = { ...route.query, view: val }
+        router.replace({ path: route.path, query })
+      }
+    })
+
+    const billingDocumentsViewMode = computed<BillingDocumentsViewMode>({
+      get() {
+        const v = route.query.view
+        if (v === 'table' || v === 'timeline') return v as BillingDocumentsViewMode
+        return 'timeline'
+      },
+      set(val) {
+        if (route.name !== 'BillingDocuments') return
+        const query = { ...route.query, view: val }
+        router.replace({ path: route.path, query })
+      }
+    })
+
+    const receivableDocumentsViewMode = computed<ReceivableDocumentsViewMode>({
+      get() {
+        const v = route.query.view
+        if (v === 'table' || v === 'timeline') return v as ReceivableDocumentsViewMode
+        return 'timeline'
+      },
+      set(val) {
+        if (route.name !== 'ReceivableDocuments') return
         const query = { ...route.query, view: val }
         router.replace({ path: route.path, query })
       }
@@ -258,6 +288,40 @@ export default defineComponent({
                 modelValue={projectManagementViewMode.value}
                 onUpdate:modelValue={(val) =>
                   (projectManagementViewMode.value = val as ProjectManagementViewMode)
+                }
+              >
+                <ElRadioButton value="table">表格</ElRadioButton>
+                <ElRadioButton value="timeline">时间轴</ElRadioButton>
+              </ElRadioGroup>
+            </div>
+          ) : null}
+          {isBillingDocumentsPage.value && !isMobile.value ? (
+            <div class="flex items-center mr-3">
+              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
+                视图
+              </span>
+              <ElRadioGroup
+                size="small"
+                modelValue={billingDocumentsViewMode.value}
+                onUpdate:modelValue={(val) =>
+                  (billingDocumentsViewMode.value = val as BillingDocumentsViewMode)
+                }
+              >
+                <ElRadioButton value="table">表格</ElRadioButton>
+                <ElRadioButton value="timeline">时间轴</ElRadioButton>
+              </ElRadioGroup>
+            </div>
+          ) : null}
+          {isReceivableDocumentsPage.value && !isMobile.value ? (
+            <div class="flex items-center mr-3">
+              <span class="mr-1 text-[12px]" style="color: var(--top-header-text-color);">
+                视图
+              </span>
+              <ElRadioGroup
+                size="small"
+                modelValue={receivableDocumentsViewMode.value}
+                onUpdate:modelValue={(val) =>
+                  (receivableDocumentsViewMode.value = val as ReceivableDocumentsViewMode)
                 }
               >
                 <ElRadioButton value="table">表格</ElRadioButton>

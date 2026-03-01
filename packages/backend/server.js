@@ -45,6 +45,7 @@ const attendanceRoutes = require('./routes/attendance')
 const salaryRoutes = require('./routes/salary')
 const gameRoutes = require('./routes/game')
 const bmoRoutes = require('./routes/bmo')
+const financeRoutes = require('./routes/finance')
 const { startBmoAutoSyncLoop } = require('./services/bmoAutoSync')
 
 const app = express()
@@ -185,6 +186,7 @@ app.use('/api/attendance', attendanceRoutes)
 app.use('/api/salary', salaryRoutes)
 app.use('/api/game', gameRoutes)
 app.use('/api/bmo', bmoRoutes)
+app.use('/api/finance', financeRoutes)
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -230,6 +232,8 @@ const startServer = async () => {
   try {
     // 初始化数据库连接
     await initDatabase()
+    // BMO auto sync is disabled by default (BMO responsibility moved to jiuhuan-hub).
+    // Enable explicitly only for emergency fallback.
     startBmoAutoSyncLoop()
 
     // 启动HTTP服务器
