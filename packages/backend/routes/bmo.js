@@ -23,6 +23,7 @@ const {
   markPersistError
 } = require('../services/bmoStatus')
 const { resolveActorFromReq } = require('../utils/actor')
+const { assertReviewPermission } = require('../services/reviewAcl')
 const {
   createDownloadJob,
   getDownloadJob,
@@ -2666,25 +2667,15 @@ const getReviewerWhitelist = () => {
     .filter(Boolean)
 }
 
-const assertInitiationReviewerPermission = (req) => {
+const assertInitiationReviewerPermission = async (req) => {
   const whitelist = getReviewerWhitelist()
-  if (!whitelist.length) return
-
-  const actor = String(resolveActorFromReq(req) || '').trim().toLowerCase()
-  const usernameRaw = req?.headers?.['x-username']
-  const username = String(Array.isArray(usernameRaw) ? usernameRaw[0] : usernameRaw || '')
-    .trim()
-    .toLowerCase()
-  if (!actor && !username) {
-    const e = new Error('当前用户没有审核权限')
-    e.statusCode = 403
-    throw e
-  }
-  if (whitelist.includes(actor) || whitelist.includes(username)) return
-
-  const e = new Error('当前用户没有审核权限')
-  e.statusCode = 403
-  throw e
+  await assertReviewPermission({
+    req,
+    actionKey: 'BMO_INITIATION.REVIEW',
+    resolveActorFromReq,
+    legacyEnvName: 'BMO_INITIATION_REVIEWERS',
+    legacyAllowWhenEmpty: !whitelist.length
+  })
 }
 
 const toInitiationReviewTaskData = (row) => {
@@ -3008,7 +2999,7 @@ router.post('/initiation-request/confirm', async (req, res) => {
 
 router.get('/initiation-review/tasks', async (req, res) => {
   try {
-    assertInitiationReviewerPermission(req)
+    await assertInitiationReviewerPermission(req)
     const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1)
     const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || '20'), 10) || 20))
     const statusInput = normalizeInitiationStatus(req.query.status)
@@ -3119,7 +3110,7 @@ router.get('/initiation-review/tasks', async (req, res) => {
 const rejectInitiationRequest = async (req, res, options = {}) => {
   try {
     if (options.requireReviewerPermission) {
-      assertInitiationReviewerPermission(req)
+      await assertInitiationReviewerPermission(req)
     }
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
     const reason = String(req.body?.reason || '').trim()
@@ -3175,7 +3166,7 @@ router.post('/initiation-review/reject', async (req, res) => {
 const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
   try {
     if (options.requireReviewerPermission) {
-      assertInitiationReviewerPermission(req)
+      await assertInitiationReviewerPermission(req)
     }
     const actor = resolveActorFromReq(req)
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()

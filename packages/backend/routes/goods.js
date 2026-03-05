@@ -610,7 +610,7 @@ router.get('/hard-delete-review/pending-count', async (req, res) => {
 // 审核中心：硬删除任务列表
 router.get('/hard-delete-review/tasks', async (req, res) => {
   try {
-    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    await assertHardDeleteReviewerPermission(req, resolveActorFromReq)
 
     const { status = 'PENDING', keyword = '', page = 1, pageSize = 20 } = req.query
     const statusText = String(status || 'PENDING').trim().toUpperCase()
@@ -729,7 +729,7 @@ router.get('/hard-delete-review/tasks', async (req, res) => {
 // 审核中心：驳回硬删除
 router.post('/hard-delete-review/reject', async (req, res) => {
   try {
-    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    await assertHardDeleteReviewerPermission(req, resolveActorFromReq)
     const requestIdValue = parseInt(req.body?.requestId, 10)
     const comment = String(req.body?.reason || '').trim()
     if (!Number.isInteger(requestIdValue) || requestIdValue <= 0) {
@@ -811,7 +811,7 @@ router.post('/hard-delete-review/reject', async (req, res) => {
 // 审核中心：通过硬删除并执行
 router.post('/hard-delete-review/approve', async (req, res) => {
   try {
-    assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    await assertHardDeleteReviewerPermission(req, resolveActorFromReq)
     const requestIdValue = parseInt(req.body?.requestId, 10)
     if (!Number.isInteger(requestIdValue) || requestIdValue <= 0) {
       return res.status(400).json({ code: 400, success: false, message: 'requestId 无效' })

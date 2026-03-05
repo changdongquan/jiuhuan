@@ -32,6 +32,16 @@ import {
   type AdUserItem,
   type AdGroupItem
 } from '@/api/permission'
+import {
+  assignGroupReviewAclApi,
+  assignUserReviewAclApi,
+  getGroupReviewAclApi,
+  getReviewAclActionsApi,
+  getUserReviewAclApi,
+  removeGroupReviewAclApi,
+  removeUserReviewAclApi,
+  type ReviewAclActionItem
+} from '@/api/reviewAcl'
 
 // ========================
 // 通用状态
@@ -320,6 +330,7 @@ const checkedUserPermissionsCount = computed(() => userCheckedRouteNames.value.l
 onMounted(() => {
   loadPermissionList()
   loadAdUsers()
+  loadReviewActions()
 })
 
 // ========================
@@ -533,6 +544,201 @@ const totalGroupPermissions = computed(() => permissionList.value.length)
 const checkedGroupPermissionsCount = computed(() => groupCheckedRouteNames.value.length)
 
 // ========================
+// 接口审核权限（Review ACL）
+// ========================
+
+const reviewActions = ref<ReviewAclActionItem[]>([])
+const loadingReviewActions = ref(false)
+const reviewAclTab = ref<'user' | 'group'>('user')
+
+const reviewActionTreeData = computed(() => {
+  const grouped = reviewActions.value.reduce(
+    (acc, item) => {
+      const key = item.moduleCode || 'OTHER'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(item)
+      return acc
+    },
+    {} as Record<string, ReviewAclActionItem[]>
+  )
+  return Object.keys(grouped).map((key) => ({
+    key,
+    label: key,
+    children: grouped[key]
+  }))
+})
+
+const loadReviewActions = async () => {
+  loadingReviewActions.value = true
+  try {
+    const res = await getReviewAclActionsApi({ includeDisabled: 1 })
+    reviewActions.value = (res.data as ReviewAclActionItem[]) || []
+  } catch (error: any) {
+    ElMessage.error('加载接口审核动作失败: ' + (error?.message || '未知错误'))
+  } finally {
+    loadingReviewActions.value = false
+  }
+}
+
+const selectedReviewUser = ref<AdUserItem | null>(null)
+const reviewUserOriginalActionKeys = ref<string[]>([])
+const reviewUserCheckedActionKeys = ref<string[]>([])
+const savingReviewUserAcl = ref(false)
+const reviewUserFilter = ref('')
+
+const filteredReviewActionTreeByUser = computed(() => {
+  const keyword = reviewUserFilter.value.trim().toLowerCase()
+  if (!keyword) return reviewActionTreeData.value
+  return reviewActionTreeData.value
+    .map((group) => {
+      const children = group.children.filter((item) => {
+        return (
+          item.actionKey.toLowerCase().includes(keyword) ||
+          item.actionName.toLowerCase().includes(keyword)
+        )
+      })
+      if (!children.length) return null
+      return { ...group, children }
+    })
+    .filter(Boolean) as typeof reviewActionTreeData.value
+})
+
+const selectReviewUser = async (user: AdUserItem) => {
+  selectedReviewUser.value = user
+  try {
+    const res = await getUserReviewAclApi(user.username)
+    const keys = ((res.data as string[]) || []).map((x) =>
+      String(x || '')
+        .trim()
+        .toUpperCase()
+    )
+    reviewUserOriginalActionKeys.value = keys
+    reviewUserCheckedActionKeys.value = [...keys]
+  } catch (error: any) {
+    reviewUserOriginalActionKeys.value = []
+    reviewUserCheckedActionKeys.value = []
+    ElMessage.error('加载用户接口审核权限失败: ' + (error?.message || '未知错误'))
+  }
+}
+
+const toggleReviewUserAction = (actionKey: string, checked: boolean) => {
+  const current = new Set(reviewUserCheckedActionKeys.value)
+  if (checked) current.add(actionKey)
+  else current.delete(actionKey)
+  reviewUserCheckedActionKeys.value = Array.from(current)
+}
+
+const resetReviewUserSelection = () => {
+  reviewUserFilter.value = ''
+  reviewUserCheckedActionKeys.value = [...reviewUserOriginalActionKeys.value]
+}
+
+const saveReviewUserAcl = async () => {
+  const user = selectedReviewUser.value
+  if (!user) return
+  const originalSet = new Set(reviewUserOriginalActionKeys.value)
+  const currentSet = new Set(reviewUserCheckedActionKeys.value)
+  const toAdd = Array.from(currentSet).filter((x) => !originalSet.has(x))
+  const toRemove = Array.from(originalSet).filter((x) => !currentSet.has(x))
+  if (!toAdd.length && !toRemove.length) {
+    ElMessage.info('接口审核权限未变化，无需保存')
+    return
+  }
+  savingReviewUserAcl.value = true
+  try {
+    if (toAdd.length) await assignUserReviewAclApi(user.username, toAdd)
+    if (toRemove.length) await removeUserReviewAclApi(user.username, toRemove)
+    reviewUserOriginalActionKeys.value = [...reviewUserCheckedActionKeys.value]
+    ElMessage.success('用户接口审核权限保存成功')
+  } catch (error: any) {
+    ElMessage.error('保存用户接口审核权限失败: ' + (error?.message || '未知错误'))
+  } finally {
+    savingReviewUserAcl.value = false
+  }
+}
+
+const selectedReviewGroup = ref<AdGroupItem | null>(null)
+const reviewGroupOriginalActionKeys = ref<string[]>([])
+const reviewGroupCheckedActionKeys = ref<string[]>([])
+const savingReviewGroupAcl = ref(false)
+const reviewGroupFilter = ref('')
+
+const filteredReviewActionTreeByGroup = computed(() => {
+  const keyword = reviewGroupFilter.value.trim().toLowerCase()
+  if (!keyword) return reviewActionTreeData.value
+  return reviewActionTreeData.value
+    .map((group) => {
+      const children = group.children.filter((item) => {
+        return (
+          item.actionKey.toLowerCase().includes(keyword) ||
+          item.actionName.toLowerCase().includes(keyword)
+        )
+      })
+      if (!children.length) return null
+      return { ...group, children }
+    })
+    .filter(Boolean) as typeof reviewActionTreeData.value
+})
+
+const selectReviewGroup = async (group: AdGroupItem) => {
+  selectedReviewGroup.value = group
+  try {
+    const res = await getGroupReviewAclApi(group.group_dn)
+    const keys = ((res.data as string[]) || []).map((x) =>
+      String(x || '')
+        .trim()
+        .toUpperCase()
+    )
+    reviewGroupOriginalActionKeys.value = keys
+    reviewGroupCheckedActionKeys.value = [...keys]
+  } catch (error: any) {
+    reviewGroupOriginalActionKeys.value = []
+    reviewGroupCheckedActionKeys.value = []
+    ElMessage.error('加载组接口审核权限失败: ' + (error?.message || '未知错误'))
+  }
+}
+
+const toggleReviewGroupAction = (actionKey: string, checked: boolean) => {
+  const current = new Set(reviewGroupCheckedActionKeys.value)
+  if (checked) current.add(actionKey)
+  else current.delete(actionKey)
+  reviewGroupCheckedActionKeys.value = Array.from(current)
+}
+
+const resetReviewGroupSelection = () => {
+  reviewGroupFilter.value = ''
+  reviewGroupCheckedActionKeys.value = [...reviewGroupOriginalActionKeys.value]
+}
+
+const saveReviewGroupAcl = async () => {
+  const group = selectedReviewGroup.value
+  if (!group) return
+  const originalSet = new Set(reviewGroupOriginalActionKeys.value)
+  const currentSet = new Set(reviewGroupCheckedActionKeys.value)
+  const toAdd = Array.from(currentSet).filter((x) => !originalSet.has(x))
+  const toRemove = Array.from(originalSet).filter((x) => !currentSet.has(x))
+  if (!toAdd.length && !toRemove.length) {
+    ElMessage.info('接口审核权限未变化，无需保存')
+    return
+  }
+  savingReviewGroupAcl.value = true
+  try {
+    if (toAdd.length) await assignGroupReviewAclApi(group.group_dn, group.group_name, toAdd)
+    if (toRemove.length) await removeGroupReviewAclApi(group.group_dn, toRemove)
+    reviewGroupOriginalActionKeys.value = [...reviewGroupCheckedActionKeys.value]
+    ElMessage.success('组接口审核权限保存成功')
+  } catch (error: any) {
+    ElMessage.error('保存组接口审核权限失败: ' + (error?.message || '未知错误'))
+  } finally {
+    savingReviewGroupAcl.value = false
+  }
+}
+
+const totalReviewActions = computed(() => reviewActions.value.length)
+const checkedReviewUserActions = computed(() => reviewUserCheckedActionKeys.value.length)
+const checkedReviewGroupActions = computed(() => reviewGroupCheckedActionKeys.value.length)
+
+// ========================
 // 路由/权限同步
 // ========================
 
@@ -562,6 +768,10 @@ const handleTabChange = (tab: string) => {
     loadAdUsers()
   } else if (tab === 'group' && adGroups.value.length === 0) {
     loadAdGroups()
+  } else if (tab === 'reviewAcl') {
+    if (!reviewActions.value.length) loadReviewActions()
+    if (!adUsers.value.length) loadAdUsers()
+    if (!adGroups.value.length) loadAdGroups()
   }
 }
 </script>
@@ -903,6 +1113,271 @@ const handleTabChange = (tab: string) => {
             </div>
           </div>
         </div>
+      </ElTabPane>
+
+      <!-- 接口审核权限 -->
+      <ElTabPane label="接口审核权限" name="reviewAcl">
+        <ElTabs v-model="reviewAclTab">
+          <ElTabPane label="按用户配置" name="user">
+            <div class="permission-layout">
+              <div class="permission-sidebar">
+                <div class="permission-sidebar-header">
+                  <div class="permission-sidebar-title">域用户</div>
+                  <div class="permission-sidebar-subtitle">选择用户后配置“可审核动作”</div>
+                </div>
+                <div class="mb-10px">
+                  <ElInput
+                    v-model="userSearchKeyword"
+                    placeholder="按姓名 / 账号 / 邮箱搜索"
+                    clearable
+                    @keyup.enter="searchUsers"
+                    @clear="searchUsers"
+                  >
+                    <template #append>
+                      <BaseButton type="primary" @click="searchUsers">搜索</BaseButton>
+                    </template>
+                  </ElInput>
+                </div>
+                <ElTable
+                  v-loading="loadingUsers"
+                  :data="adUsers"
+                  size="small"
+                  height="380"
+                  highlight-current-row
+                  class="permission-sidebar-table"
+                  @row-click="selectReviewUser"
+                >
+                  <ElTableColumn
+                    prop="displayName"
+                    label="用户名"
+                    min-width="120"
+                    :formatter="(row: any) => row.displayName || row.username"
+                  />
+                  <ElTableColumn prop="username" label="账号" min-width="120" />
+                </ElTable>
+                <div class="permission-pagination">
+                  <ElPagination
+                    v-model:current-page="userPagination.page"
+                    v-model:page-size="userPagination.pageSize"
+                    :total="userPagination.total"
+                    layout="total, prev, pager, next, sizes"
+                    :page-sizes="[10, 20, 50]"
+                    small
+                    background
+                    @current-change="handleUserPageChange"
+                    @size-change="handleUserPageSizeChange"
+                  />
+                </div>
+              </div>
+
+              <div class="permission-main">
+                <div v-if="!selectedReviewUser" class="permission-empty">
+                  <ElEmpty description="请先在左侧选择一个用户" />
+                </div>
+                <div v-else class="user-permission-panel">
+                  <div class="permission-main-header">
+                    <div>
+                      <div class="permission-main-title">
+                        {{ selectedReviewUser.displayName || selectedReviewUser.username }}
+                      </div>
+                      <div class="permission-main-subtitle">
+                        账号：{{ selectedReviewUser.username }}
+                      </div>
+                    </div>
+                  </div>
+                  <ElDivider />
+                  <div class="permission-toolbar">
+                    <div class="permission-toolbar-left">
+                      <ElInput
+                        v-model="reviewUserFilter"
+                        placeholder="筛选审核动作（按名称/Key）"
+                        clearable
+                        style="width: 260px"
+                      />
+                      <span class="permission-toolbar-summary">
+                        已选 {{ checkedReviewUserActions }} / 共 {{ totalReviewActions }} 个动作
+                      </span>
+                    </div>
+                    <div class="permission-toolbar-right">
+                      <BaseButton text type="primary" @click="resetReviewUserSelection">
+                        重置为已保存状态
+                      </BaseButton>
+                    </div>
+                  </div>
+                  <div v-loading="loadingReviewActions" class="permission-tree">
+                    <template v-if="filteredReviewActionTreeByUser.length">
+                      <div
+                        v-for="group in filteredReviewActionTreeByUser"
+                        :key="group.key"
+                        class="permission-group"
+                      >
+                        <div class="permission-group-header">
+                          <span class="permission-group-title">{{ group.label }}</span>
+                        </div>
+                        <div class="permission-group-body">
+                          <div
+                            v-for="item in group.children"
+                            :key="item.actionKey"
+                            class="permission-item"
+                          >
+                            <ElCheckbox
+                              :model-value="reviewUserCheckedActionKeys.includes(item.actionKey)"
+                              @change="(val: boolean | string) => toggleReviewUserAction(item.actionKey, !!val)"
+                            >
+                              {{ item.actionName }} ({{ item.actionKey }})
+                            </ElCheckbox>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <ElEmpty description="未匹配到任何审核动作" />
+                    </template>
+                  </div>
+                  <div class="permission-actions">
+                    <BaseButton
+                      type="primary"
+                      :loading="savingReviewUserAcl"
+                      @click="saveReviewUserAcl"
+                    >
+                      保存用户接口审核权限
+                    </BaseButton>
+                    <BaseButton text @click="resetReviewUserSelection">取消修改</BaseButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ElTabPane>
+
+          <ElTabPane label="按组配置" name="group">
+            <div class="permission-layout">
+              <div class="permission-sidebar">
+                <div class="permission-sidebar-header">
+                  <div class="permission-sidebar-title">域安全组</div>
+                  <div class="permission-sidebar-subtitle">按组批量配置“可审核动作”</div>
+                </div>
+                <div class="mb-10px">
+                  <ElInput
+                    v-model="groupSearchKeyword"
+                    placeholder="按组名 / 描述搜索"
+                    clearable
+                    @keyup.enter="searchGroups"
+                    @clear="searchGroups"
+                  >
+                    <template #append>
+                      <BaseButton type="primary" @click="searchGroups">搜索</BaseButton>
+                    </template>
+                  </ElInput>
+                </div>
+                <ElTable
+                  v-loading="loadingGroups"
+                  :data="adGroups"
+                  size="small"
+                  height="380"
+                  highlight-current-row
+                  class="permission-sidebar-table"
+                  @row-click="selectReviewGroup"
+                >
+                  <ElTableColumn prop="group_name" label="组名" min-width="150" />
+                  <ElTableColumn
+                    prop="description"
+                    label="说明"
+                    min-width="150"
+                    show-overflow-tooltip
+                  />
+                </ElTable>
+                <div class="permission-pagination">
+                  <ElPagination
+                    v-model:current-page="groupPagination.page"
+                    v-model:page-size="groupPagination.pageSize"
+                    :total="groupPagination.total"
+                    layout="total, prev, pager, next, sizes"
+                    :page-sizes="[10, 20, 50]"
+                    small
+                    background
+                    @current-change="handleGroupPageChange"
+                    @size-change="handleGroupPageSizeChange"
+                  />
+                </div>
+              </div>
+
+              <div class="permission-main">
+                <div v-if="!selectedReviewGroup" class="permission-empty">
+                  <ElEmpty description="请先在左侧选择一个 AD 组" />
+                </div>
+                <div v-else class="group-permission-panel">
+                  <div class="permission-main-header">
+                    <div>
+                      <div class="permission-main-title">{{ selectedReviewGroup.group_name }}</div>
+                      <div class="permission-main-subtitle"
+                        >DN：{{ selectedReviewGroup.group_dn }}</div
+                      >
+                    </div>
+                  </div>
+                  <ElDivider />
+                  <div class="permission-toolbar">
+                    <div class="permission-toolbar-left">
+                      <ElInput
+                        v-model="reviewGroupFilter"
+                        placeholder="筛选审核动作（按名称/Key）"
+                        clearable
+                        style="width: 260px"
+                      />
+                      <span class="permission-toolbar-summary">
+                        已选 {{ checkedReviewGroupActions }} / 共 {{ totalReviewActions }} 个动作
+                      </span>
+                    </div>
+                    <div class="permission-toolbar-right">
+                      <BaseButton text type="primary" @click="resetReviewGroupSelection">
+                        重置为已保存状态
+                      </BaseButton>
+                    </div>
+                  </div>
+                  <div v-loading="loadingReviewActions" class="permission-tree">
+                    <template v-if="filteredReviewActionTreeByGroup.length">
+                      <div
+                        v-for="group in filteredReviewActionTreeByGroup"
+                        :key="group.key"
+                        class="permission-group"
+                      >
+                        <div class="permission-group-header">
+                          <span class="permission-group-title">{{ group.label }}</span>
+                        </div>
+                        <div class="permission-group-body">
+                          <div
+                            v-for="item in group.children"
+                            :key="item.actionKey"
+                            class="permission-item"
+                          >
+                            <ElCheckbox
+                              :model-value="reviewGroupCheckedActionKeys.includes(item.actionKey)"
+                              @change="(val: boolean | string) => toggleReviewGroupAction(item.actionKey, !!val)"
+                            >
+                              {{ item.actionName }} ({{ item.actionKey }})
+                            </ElCheckbox>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <ElEmpty description="未匹配到任何审核动作" />
+                    </template>
+                  </div>
+                  <div class="permission-actions">
+                    <BaseButton
+                      type="primary"
+                      :loading="savingReviewGroupAcl"
+                      @click="saveReviewGroupAcl"
+                    >
+                      保存组接口审核权限
+                    </BaseButton>
+                    <BaseButton text @click="resetReviewGroupSelection">取消修改</BaseButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ElTabPane>
+        </ElTabs>
       </ElTabPane>
     </ElTabs>
   </ContentWrap>

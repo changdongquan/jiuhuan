@@ -1,4 +1,5 @@
 const sql = require('mssql')
+const { assertReviewPermission } = require('./reviewAcl')
 
 const HARD_DELETE_REVIEW_TABLE = 'project_hard_delete_review_requests'
 
@@ -183,28 +184,15 @@ const getHardDeleteReviewerWhitelist = () => {
     .filter(Boolean)
 }
 
-const assertHardDeleteReviewerPermission = (req, resolveActorFromReq) => {
-  const whitelist = getHardDeleteReviewerWhitelist()
-  if (!whitelist.length) return
-
-  const actor = String(resolveActorFromReq(req) || '')
-    .trim()
-    .toLowerCase()
-  const usernameRaw = req?.headers?.['x-username']
-  const username = String(Array.isArray(usernameRaw) ? usernameRaw[0] : usernameRaw || '')
-    .trim()
-    .toLowerCase()
-
-  if (!actor && !username) {
-    const e = new Error('当前用户没有审核权限')
-    e.statusCode = 403
-    throw e
-  }
-  if (whitelist.includes(actor) || whitelist.includes(username)) return
-
-  const e = new Error('当前用户没有审核权限')
-  e.statusCode = 403
-  throw e
+const assertHardDeleteReviewerPermission = async (req, resolveActorFromReq) => {
+  const _legacyWhitelist = getHardDeleteReviewerWhitelist()
+  await assertReviewPermission({
+    req,
+    actionKey: 'HARD_DELETE.REVIEW',
+    resolveActorFromReq,
+    legacyEnvName: 'HARD_DELETE_REVIEWERS',
+    legacyAllowWhenEmpty: !_legacyWhitelist.length
+  })
 }
 
 const toHardDeleteReviewTaskData = (row) => {
