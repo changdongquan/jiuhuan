@@ -214,6 +214,8 @@ const hoverColor = 'var(--el-color-primary)'
 
 const redirect = ref<string>('')
 
+const DEFAULT_LOGIN_FALLBACK_PATH = '/dashboard/analysis'
+
 watch(
   () => currentRoute.value,
   (route: RouteLocationNormalizedLoaded) => {
@@ -293,7 +295,8 @@ const signIn = async () => {
               addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
             })
             permissionStore.setIsAddRouters(true)
-            push({ path: redirect.value || permissionStore.addRouters[0].path })
+            const targetPath = String(redirect.value || '').trim() || DEFAULT_LOGIN_FALLBACK_PATH
+            push({ path: targetPath })
           } catch (error) {
             console.error('[权限] 生成用户路由失败:', error)
           }
