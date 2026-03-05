@@ -484,61 +484,6 @@ const mapBmoRows = (bmoRows: BmoInitiationReviewTask[]): UnifiedReviewRow[] => {
   })
 }
 
-const sortUnifiedRows = (rows: UnifiedReviewRow[]) =>
-  rows.sort((a, b) => {
-    const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
-    const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
-    return tb - ta
-  })
-
-const fetchAllHardDeleteRows = async (
-  status: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
-): Promise<HardDeleteReviewTask[]> => {
-  const pageSize = 200
-  let page = 1
-  let totalRows = Number.POSITIVE_INFINITY
-  const rows: HardDeleteReviewTask[] = []
-
-  while ((page - 1) * pageSize < totalRows) {
-    const res = await getHardDeleteReviewTasksApi({
-      status,
-      keyword: normalizedKeyword.value || undefined,
-      page,
-      pageSize
-    })
-    const part = (res.data?.list || []) as HardDeleteReviewTask[]
-    totalRows = Number(res.data?.total || 0) || 0
-    rows.push(...part)
-    if (!part.length) break
-    page += 1
-  }
-  return rows
-}
-
-const fetchAllBmoRows = async (
-  status: 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'APPLIED' | 'REJECTED'
-): Promise<BmoInitiationReviewTask[]> => {
-  const pageSize = 200
-  let page = 1
-  let totalRows = Number.POSITIVE_INFINITY
-  const rows: BmoInitiationReviewTask[] = []
-
-  while ((page - 1) * pageSize < totalRows) {
-    const res = await getBmoInitiationReviewTasksApi({
-      status,
-      keyword: normalizedKeyword.value || undefined,
-      page,
-      pageSize
-    })
-    const part = (res.data?.list || []) as BmoInitiationReviewTask[]
-    totalRows = Number(res.data?.total || 0) || 0
-    rows.push(...part)
-    if (!part.length) break
-    page += 1
-  }
-  return rows
-}
-
 const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   const bmoStatus = mapStatusForBmoApi(query.status)
   const hardDeleteStatus = mapStatusForHardDeleteApi(query.status)
@@ -578,34 +523,138 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     return mapBmoRows((res.data?.list || []) as BmoInitiationReviewTask[])
   }
 
-  // 全部分类：拉取各来源全量后统一排序+分页，避免 500 上限与状态语义错位
-  const collected: UnifiedReviewRow[] = []
-  const tasks: Promise<void>[] = []
-  if (includeHardDelete) {
-    tasks.push(
-      (async () => {
-        const rows = await fetchAllHardDeleteRows(hardDeleteStatus)
-        collected.push(...mapHardDeleteRows(rows))
-      })()
-    )
-  }
-  if (includeBmo) {
-    tasks.push(
-      (async () => {
-        const rows = await fetchAllBmoRows(bmoStatus)
-        collected.push(...mapBmoRows(rows))
-      })()
-    )
-  }
-  await Promise.all(tasks)
+  if (query.status === 'ALL') {
+    const fetchAllHardDelete = async () => {
+      if (!includeHardDelete) return [] as UnifiedReviewRow[]
+      const rows: UnifiedReviewRow[] = []
+      const pageSize = 200
+      let page = 1
+      let totalRows = Number.POSITIVE_INFINITY
+      while ((page - 1) * pageSize < totalRows) {
+        const res = await getHardDeleteReviewTasksApi({
+          status: hardDeleteStatus,
+          keyword: normalizedKeyword.value || undefined,
+          page,
+          pageSize
+        })
+        const part = mapHardDeleteRows((res.data?.list || []) as HardDeleteReviewTask[])
+        totalRows = Number(res.data?.total || 0) || 0
+        rows.push(...part)
+        if (!part.length) break
+        page += 1
+      }
+      return rows
+    }
 
-  let merged = sortUnifiedRows(collected)
-  if (query.status !== 'ALL') {
-    merged = merged.filter((row) => row.status === query.status)
+    const fetchAllBmo = async () => {
+      if (!includeBmo) return [] as UnifiedReviewRow[]
+      const rows: UnifiedReviewRow[] = []
+      const pageSize = 200
+      let page = 1
+      let totalRows = Number.POSITIVE_INFINITY
+      while ((page - 1) * pageSize < totalRows) {
+        const res = await getBmoInitiationReviewTasksApi({
+          status: bmoStatus,
+          keyword: normalizedKeyword.value || undefined,
+          page,
+          pageSize
+        })
+        const part = mapBmoRows((res.data?.list || []) as BmoInitiationReviewTask[])
+        totalRows = Number(res.data?.total || 0) || 0
+        rows.push(...part)
+        if (!part.length) break
+        page += 1
+      }
+      return rows
+    }
+
+    const [hardRows, bmoRows] = await Promise.all([fetchAllHardDelete(), fetchAllBmo()])
+    const mergedRows = [...hardRows, ...bmoRows].sort((a, b) => {
+      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
+      return tb - ta
+    })
+    total.value = mergedRows.length
+    return mergedRows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
   }
-  total.value = merged.length
-  const offset = (query.page - 1) * query.pageSize
-  return merged.slice(offset, offset + query.pageSize)
+
+  // 全部分类：按时间做双路增量归并，避免全量拉取导致慢查询
+  const mergePageSize = Math.max(50, query.pageSize)
+  const targetCount = query.page * query.pageSize
+  const merged: UnifiedReviewRow[] = []
+  const readTimestamp = (row: UnifiedReviewRow | null) =>
+    row?.updatedAt ? new Date(row.updatedAt).getTime() || 0 : 0
+
+  let hardPage = 1
+  let hardTotal = 0
+  let hardLoaded = 0
+  let hardBuffer: UnifiedReviewRow[] = []
+  let hardCursor = 0
+
+  let bmoPage = 1
+  let bmoTotal = 0
+  let bmoLoaded = 0
+  let bmoBuffer: UnifiedReviewRow[] = []
+  let bmoCursor = 0
+
+  const fetchHardNext = async () => {
+    if (!includeHardDelete) return
+    if (hardLoaded >= hardTotal && hardPage > 1) return
+    const res = await getHardDeleteReviewTasksApi({
+      status: hardDeleteStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: hardPage,
+      pageSize: mergePageSize
+    })
+    const part = mapHardDeleteRows((res.data?.list || []) as HardDeleteReviewTask[])
+    hardTotal = Number(res.data?.total || 0) || 0
+    hardLoaded += part.length
+    hardPage += 1
+    hardBuffer = part
+    hardCursor = 0
+  }
+
+  const fetchBmoNext = async () => {
+    if (!includeBmo) return
+    if (bmoLoaded >= bmoTotal && bmoPage > 1) return
+    const res = await getBmoInitiationReviewTasksApi({
+      status: bmoStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: bmoPage,
+      pageSize: mergePageSize
+    })
+    const part = mapBmoRows((res.data?.list || []) as BmoInitiationReviewTask[])
+    bmoTotal = Number(res.data?.total || 0) || 0
+    bmoLoaded += part.length
+    bmoPage += 1
+    bmoBuffer = part
+    bmoCursor = 0
+  }
+
+  while (merged.length < targetCount) {
+    const shouldFetchHard = includeHardDelete && hardCursor >= hardBuffer.length
+    const shouldFetchBmo = includeBmo && bmoCursor >= bmoBuffer.length
+
+    await Promise.all([
+      shouldFetchHard ? fetchHardNext() : Promise.resolve(),
+      shouldFetchBmo ? fetchBmoNext() : Promise.resolve()
+    ])
+
+    const hardHead = hardCursor < hardBuffer.length ? hardBuffer[hardCursor] : null
+    const bmoHead = bmoCursor < bmoBuffer.length ? bmoBuffer[bmoCursor] : null
+    if (!hardHead && !bmoHead) break
+
+    if (!bmoHead || (hardHead && readTimestamp(hardHead) >= readTimestamp(bmoHead))) {
+      merged.push(hardHead as UnifiedReviewRow)
+      hardCursor += 1
+      continue
+    }
+    merged.push(bmoHead)
+    bmoCursor += 1
+  }
+
+  total.value = (includeHardDelete ? hardTotal : 0) + (includeBmo ? bmoTotal : 0)
+  return merged.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
 }
 
 const loadTasks = async () => {

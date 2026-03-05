@@ -36,6 +36,8 @@ const DEFAULT_REVIEW_ACTIONS = [
 
 const normalizeText = (value) => String(value || '').trim()
 const normalizePrincipal = (value) => normalizeText(value).toLowerCase()
+const isDevEnv =
+  process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev' || !process.env.NODE_ENV
 
 const extractSamCandidates = (rawUsername) => {
   const raw = normalizeText(rawUsername)
@@ -487,6 +489,8 @@ const assertReviewPermission = async ({
   const actor = normalizePrincipal(resolveActorFromReq(req))
   const usernameCandidates = getReqUsernameCandidates(req)
   if (actor === 'admin' || usernameCandidates.includes('admin')) return
+  // 开发环境兜底：dev-user 默认允许审核，避免本机调试被 ACL 阻塞。
+  if (isDevEnv && (actor === 'dev-user' || usernameCandidates.includes('dev-user'))) return
 
   let dbDecision = null
   try {

@@ -68,10 +68,14 @@ export const getGroupPermissionsApi = (groupDn: string) => {
 }
 
 // 分配组权限
-export const assignGroupPermissionsApi = (groupDn: string, permissionIds: number[]) => {
+export const assignGroupPermissionsApi = (
+  groupDn: string,
+  permissionIds: number[],
+  groupName?: string
+) => {
   return request.post({
     url: `/api/permission/group/${encodeURIComponent(groupDn)}/assign`,
-    data: { permissionIds, groupDn }
+    data: { permissionIds, groupDn, groupName }
   })
 }
 

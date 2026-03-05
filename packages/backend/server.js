@@ -41,6 +41,8 @@ const authRoutes = require('./routes/auth')
 const analysisRoutes = require('./routes/analysis')
 const permissionRoutes = require('./routes/permission')
 const reviewAclRoutes = require('./routes/review-acl')
+const { authenticateRequest } = require('./middleware/auth')
+const { requireRoutePermission } = require('./middleware/route-permission')
 const userRoutes = require('./routes/user')
 const attendanceRoutes = require('./routes/attendance')
 const salaryRoutes = require('./routes/salary')
@@ -117,7 +119,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Username', 'X-Display-Name']
 }
 
 app.use(cors(corsOptions))
@@ -170,27 +172,36 @@ app.use('/uploads/_temp/project-images', express.static(PROJECT_TEMP_IMAGES_DIR)
 // 由于路径包含中文，通过API预览接口（/api/project/part-image）访问更可靠
 
 // 路由
-app.use('/api/goods', goodsRoutes)
-app.use('/api/customer', customerRoutes)
-app.use('/api/supplier', supplierRoutes)
-app.use('/api/employee', employeeRoutes)
-app.use('/api/database', databaseRoutes)
-app.use('/api/project', projectRoutes)
-app.use('/api/sales-orders', salesOrdersRoutes)
-app.use('/api/outbound-document', outboundDocumentRoutes)
-app.use('/api/quotation', quotationRoutes)
-app.use('/api/production-task', productionTaskRoutes)
+// 认证接口保持匿名访问（登录/自动登录）
 app.use('/api/auth', authRoutes)
-app.use('/api/analysis', analysisRoutes)
+
+// 其他 API 统一要求携带认证 token
+app.use('/api', authenticateRequest)
+
+app.use('/api/goods', goodsRoutes)
+app.use('/api/customer', requireRoutePermission('CustomerInfoIndex'), customerRoutes)
+app.use('/api/supplier', requireRoutePermission('SupplierInfoIndex'), supplierRoutes)
+app.use('/api/employee', requireRoutePermission('EmployeeInfoIndex'), employeeRoutes)
+app.use('/api/database', databaseRoutes)
+app.use('/api/project', requireRoutePermission('ProjectManagementIndex'), projectRoutes)
+app.use('/api/sales-orders', requireRoutePermission('SalesOrdersIndex'), salesOrdersRoutes)
+app.use('/api/outbound-document', requireRoutePermission('OutboundDocumentIndex'), outboundDocumentRoutes)
+app.use('/api/quotation', requireRoutePermission('QuotationIndex'), quotationRoutes)
+app.use('/api/production-task', requireRoutePermission('ProductionTasksIndex'), productionTaskRoutes)
+app.use('/api/analysis', requireRoutePermission('Analysis'), analysisRoutes)
 app.use('/api/permission', permissionRoutes)
 app.use('/api/review-acl', reviewAclRoutes)
 app.use('/api/user', userRoutes)
-app.use('/api/attendance', attendanceRoutes)
-app.use('/api/salary', salaryRoutes)
-app.use('/api/game', gameRoutes)
+app.use('/api/attendance', requireRoutePermission('AttendanceIndex'), attendanceRoutes)
+app.use('/api/salary', requireRoutePermission('Salary'), salaryRoutes)
+app.use('/api/game', requireRoutePermission('BreakSnakeGame'), gameRoutes)
 app.use('/api/bmo', bmoRoutes)
-app.use('/api/finance', financeRoutes)
-app.use('/api/comprehensive-query', comprehensiveQueryRoutes)
+app.use('/api/finance', requireRoutePermission('BillingDocuments'), financeRoutes)
+app.use(
+  '/api/comprehensive-query',
+  requireRoutePermission('ComprehensiveQuery'),
+  comprehensiveQueryRoutes
+)
 
 // 健康检查
 app.get('/health', (req, res) => {

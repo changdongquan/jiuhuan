@@ -507,7 +507,7 @@ const saveGroupPermissions = async () => {
   const loading = ElLoading.service({ target: '.group-permission-panel' })
   try {
     if (toAddIds.length) {
-      await assignGroupPermissionsApi(groupDn, toAddIds)
+      await assignGroupPermissionsApi(groupDn, toAddIds, selectedGroup.value?.group_name || '')
     }
 
     if (toRemoveIds.length) {

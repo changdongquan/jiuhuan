@@ -590,6 +590,14 @@ router.get('/list', async (req, res) => {
 // 审核中心：硬删除待审核数量
 router.get('/hard-delete-review/pending-count', async (req, res) => {
   try {
+    try {
+      await assertHardDeleteReviewerPermission(req, resolveActorFromReq)
+    } catch (e) {
+      if (Number(e?.statusCode || 0) === 403) {
+        return res.json({ code: 0, success: true, data: { pendingCount: 0 } })
+      }
+      throw e
+    }
     const pool = await getPool()
     await ensureHardDeleteReviewTable(pool)
     const request = pool.request()

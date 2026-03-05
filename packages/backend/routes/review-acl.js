@@ -1,4 +1,6 @@
 const express = require('express')
+const { requireAdmin } = require('../middleware/auth')
+const { recordPermissionAudit } = require('../services/permissionAudit')
 const {
   listReviewActions,
   upsertReviewAction,
@@ -11,6 +13,15 @@ const {
 } = require('../services/reviewAcl')
 
 const router = express.Router()
+
+// 审核 ACL 配置接口仅管理员可访问
+router.use(requireAdmin)
+
+const resolveOperator = (req) => {
+  const username = String(req?.auth?.username || req?.headers?.['x-username'] || '').trim()
+  const displayName = String(req?.auth?.displayName || '').trim() || username
+  return { username, displayName }
+}
 
 router.get('/actions', async (req, res) => {
   try {
@@ -27,6 +38,16 @@ router.post('/actions/upsert', async (req, res) => {
   try {
     const { actionKey, actionName, moduleCode, enabled } = req.body || {}
     await upsertReviewAction({ actionKey, actionName, moduleCode, enabled })
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'UPSERT_REVIEW_ACTION',
+      moduleCode: 'REVIEW_ACL',
+      targetType: 'ACTION',
+      targetKey: String(actionKey || '').trim().toUpperCase(),
+      detail: { actionName, moduleCode, enabled },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     return res.json({ code: 0, success: true, message: '保存审核动作成功' })
   } catch (error) {
     console.error('保存审核动作失败:', error)
@@ -57,6 +78,16 @@ router.post('/user/:username/assign', async (req, res) => {
       return res.status(400).json({ code: 400, success: false, message: 'actionKeys 不能为空' })
     }
     await addUserActionKeys(username, actionKeys)
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'ASSIGN_USER_REVIEW_ACTION',
+      moduleCode: 'REVIEW_ACL',
+      targetType: 'USER',
+      targetKey: username,
+      detail: { actionKeys },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     return res.json({ code: 0, success: true, message: '用户审核权限分配成功' })
   } catch (error) {
     console.error('分配用户审核权限失败:', error)
@@ -72,6 +103,16 @@ router.delete('/user/:username/remove', async (req, res) => {
       return res.status(400).json({ code: 400, success: false, message: 'actionKeys 不能为空' })
     }
     await removeUserActionKeys(username, actionKeys)
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'REMOVE_USER_REVIEW_ACTION',
+      moduleCode: 'REVIEW_ACL',
+      targetType: 'USER',
+      targetKey: username,
+      detail: { actionKeys },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     return res.json({ code: 0, success: true, message: '用户审核权限移除成功' })
   } catch (error) {
     console.error('移除用户审核权限失败:', error)
@@ -98,6 +139,16 @@ router.post('/group/:groupDn/assign', async (req, res) => {
       return res.status(400).json({ code: 400, success: false, message: 'actionKeys 不能为空' })
     }
     await addGroupActionKeys(groupDn, groupName, actionKeys)
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'ASSIGN_GROUP_REVIEW_ACTION',
+      moduleCode: 'REVIEW_ACL',
+      targetType: 'GROUP',
+      targetKey: groupDn,
+      detail: { groupName, actionKeys },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     return res.json({ code: 0, success: true, message: '组审核权限分配成功' })
   } catch (error) {
     console.error('分配组审核权限失败:', error)
@@ -113,6 +164,16 @@ router.delete('/group/:groupDn/remove', async (req, res) => {
       return res.status(400).json({ code: 400, success: false, message: 'actionKeys 不能为空' })
     }
     await removeGroupActionKeys(groupDn, actionKeys)
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'REMOVE_GROUP_REVIEW_ACTION',
+      moduleCode: 'REVIEW_ACL',
+      targetType: 'GROUP',
+      targetKey: groupDn,
+      detail: { actionKeys },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     return res.json({ code: 0, success: true, message: '组审核权限移除成功' })
   } catch (error) {
     console.error('移除组审核权限失败:', error)

@@ -1269,6 +1269,14 @@ router.get('/mould-procurement/pending-count', async (req, res) => {
 
 router.get('/initiation-review/pending-count', async (req, res) => {
   try {
+    try {
+      await assertInitiationReviewerPermission(req)
+    } catch (e) {
+      if (Number(e?.statusCode || 0) === 403) {
+        return res.json({ code: 0, success: true, data: { pendingCount: 0 } })
+      }
+      throw e
+    }
     const rows = await query(
       `
         SELECT COUNT(1) AS pendingCount
@@ -3117,30 +3125,55 @@ const rejectInitiationRequest = async (req, res, options = {}) => {
     if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
     if (!reason) return res.status(400).json({ code: 400, success: false, message: '缺少驳回原因' })
 
-    const existingRows = await query(
-      `SELECT TOP 1 status FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
-      { bmoRecordId }
-    )
-    const existing = existingRows?.[0] || null
-    if (!existing) return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
-    const status = normalizeInitiationStatus(existing.status)
-    if (status === 'APPLIED') {
-      return res.status(400).json({ code: 400, success: false, message: '已通过，不能驳回' })
-    }
-    if (status !== 'PM_CONFIRMED') {
-      return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
-    }
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      const lockReq = new sql.Request(tx)
+      lockReq.input('bmoRecordId', sql.NVarChar, bmoRecordId)
+      const existingRows = await lockReq.query(`
+        SELECT TOP 1 status
+        FROM dbo.bmo_initiation_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE bmo_record_id = @bmoRecordId
+      `)
+      const existing = existingRows.recordset?.[0] || null
+      if (!existing) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+      }
+      const status = normalizeInitiationStatus(existing.status)
+      if (status === 'APPLIED') {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '已通过，不能驳回' })
+      }
+      if (status !== 'PM_CONFIRMED') {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
+      }
 
-    await query(
-      `
+      const updateReq = new sql.Request(tx)
+      updateReq.input('bmoRecordId', sql.NVarChar, bmoRecordId)
+      updateReq.input('reason', sql.NVarChar, reason)
+      updateReq.input('statusPending', sql.NVarChar, 'PM_CONFIRMED')
+      const updateResult = await updateReq.query(`
         UPDATE dbo.bmo_initiation_requests
         SET status = N'REJECTED',
             rejected_reason = @reason,
             updated_at = SYSDATETIME()
         WHERE bmo_record_id = @bmoRecordId
-      `,
-      { bmoRecordId, reason }
-    )
+          AND status = @statusPending
+      `)
+      if ((updateResult.rowsAffected?.[0] || 0) <= 0) {
+        await tx.rollback()
+        return res.status(409).json({ code: 409, success: false, message: '状态冲突，无法驳回' })
+      }
+      await tx.commit()
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
     return res.json({ code: 0, success: true, message: '已驳回' })
   } catch (error) {
     console.error('驳回 BMO 立项申请单失败:', error)
@@ -3156,7 +3189,7 @@ const rejectInitiationRequest = async (req, res, options = {}) => {
 }
 
 router.post('/initiation-request/reject', async (req, res) => {
-  return rejectInitiationRequest(req, res)
+  return rejectInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
 router.post('/initiation-review/reject', async (req, res) => {
@@ -3172,35 +3205,52 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
     if (!bmoRecordId) return res.status(400).json({ code: 400, success: false, message: '缺少 bmo_record_id' })
 
-    const rows = await query(
-      `SELECT TOP 1 * FROM dbo.bmo_initiation_requests WHERE bmo_record_id = @bmoRecordId`,
-      { bmoRecordId }
-    )
-    const requestRow = rows?.[0] || null
-    if (!requestRow) {
-      return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
-    }
-    if (String(requestRow.status || '') === 'APPLIED') {
-      return res.json({
-        code: 0,
-        success: true,
-        message: '已通过（跳过）',
-        data: { projectCode: requestRow.project_code_final, orderNo: requestRow.sales_order_no }
-      })
-    }
-    if (String(requestRow.status || '') !== 'PM_CONFIRMED') {
-      return res.status(400).json({ code: 400, success: false, message: '未确认，不能入库' })
-    }
-
-    const goodsDraft = safeJsonParse(requestRow.goods_draft_json) || {}
-    const salesDraft = safeJsonParse(requestRow.sales_order_draft_json) || {}
-    const projectCode = String(goodsDraft.projectCode || requestRow.project_code_candidate || '').trim()
-    if (!projectCode) return res.status(400).json({ code: 400, success: false, message: '缺少项目编号' })
-
     const pool = await getPool()
     const tx = new sql.Transaction(pool)
     await tx.begin()
     try {
+      const lockReq = new sql.Request(tx)
+      lockReq.input('bmoRecordId', sql.NVarChar, bmoRecordId)
+      const rows = await lockReq.query(`
+        SELECT TOP 1 *
+        FROM dbo.bmo_initiation_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE bmo_record_id = @bmoRecordId
+      `)
+      const requestRow = rows.recordset?.[0] || null
+      if (!requestRow) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+      }
+      if (String(requestRow.status || '') === 'APPLIED') {
+        await tx.rollback()
+        return res.json({
+          code: 0,
+          success: true,
+          message: '已通过（跳过）',
+          data: { projectCode: requestRow.project_code_final, orderNo: requestRow.sales_order_no }
+        })
+      }
+      if (String(requestRow.status || '') !== 'PM_CONFIRMED') {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '未确认，不能入库' })
+      }
+      if (
+        requestRow.created_by &&
+        actor &&
+        String(requestRow.created_by).trim() === String(actor).trim()
+      ) {
+        await tx.rollback()
+        return res.status(403).json({ code: 403, success: false, message: '不允许申请人与审核人为同一人' })
+      }
+
+      const goodsDraft = safeJsonParse(requestRow.goods_draft_json) || {}
+      const salesDraft = safeJsonParse(requestRow.sales_order_draft_json) || {}
+      const projectCode = String(goodsDraft.projectCode || requestRow.project_code_candidate || '').trim()
+      if (!projectCode) {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '缺少项目编号' })
+      }
+
       // 0) projectCode unique
       {
         const checkReq = new sql.Request(tx)
@@ -3359,7 +3409,8 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
         upd.input('projectCode', sql.NVarChar, projectCode)
         upd.input('orderNo', sql.NVarChar, orderNo)
         upd.input('actor', sql.NVarChar, actor)
-        await upd.query(`
+        upd.input('statusPending', sql.NVarChar, 'PM_CONFIRMED')
+        const updateResult = await upd.query(`
           UPDATE dbo.bmo_initiation_requests
           SET status = N'APPLIED',
               project_code_final = @projectCode,
@@ -3368,7 +3419,13 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
               approved_at = SYSDATETIME(),
               updated_at = SYSDATETIME()
           WHERE bmo_record_id = @bmoRecordId
+            AND status = @statusPending
         `)
+        if ((updateResult.rowsAffected?.[0] || 0) <= 0) {
+          const err = new Error('状态冲突，无法审核通过')
+          err.statusCode = 409
+          throw err
+        }
       }
 
       await tx.commit()
@@ -3391,6 +3448,9 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
     if (Number(error?.statusCode || 0) === 403) {
       return res.status(403).json({ code: 403, success: false, message: error.message || '无权限' })
     }
+    if (Number(error?.statusCode || 0) === 409) {
+      return res.status(409).json({ code: 409, success: false, message: error.message || '状态冲突' })
+    }
     return res.status(500).json({
       code: 500,
       success: false,
@@ -3400,7 +3460,7 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
 }
 
 router.post('/initiation-request/approve-and-apply', async (req, res) => {
-  return approveAndApplyInitiationRequest(req, res)
+  return approveAndApplyInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
 router.post('/initiation-review/approve-and-apply', async (req, res) => {

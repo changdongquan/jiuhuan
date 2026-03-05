@@ -2,6 +2,17 @@ const express = require('express')
 const router = express.Router()
 const { query } = require('../database')
 const { syncRoutesToPermissions } = require('../scripts/sync-routes-to-permissions')
+const { requireAdmin } = require('../middleware/auth')
+const { recordPermissionAudit } = require('../services/permissionAudit')
+
+// 权限管理接口仅管理员可访问
+router.use(requireAdmin)
+
+const resolveOperator = (req) => {
+  const username = String(req?.auth?.username || req?.headers?.['x-username'] || '').trim()
+  const displayName = String(req?.auth?.displayName || '').trim() || username
+  return { username, displayName }
+}
 
 // 尝试动态加载 ldapjs（用于域用户验证）
 let ldap = null
@@ -72,6 +83,16 @@ router.get('/list', async (req, res) => {
 router.post('/sync-routes', async (req, res) => {
   try {
     await syncRoutesToPermissions()
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'SYNC_ROUTES',
+      moduleCode: 'PAGE_PERMISSION',
+      targetType: 'SYSTEM',
+      targetKey: 'permissions',
+      detail: { action: 'sync-routes' },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
     res.json({
       code: 0,
       success: true,
@@ -195,23 +216,28 @@ router.get('/user/:username', async (req, res) => {
 
 /**
  * 获取组的权限
- * GET /api/permission/group/:groupName
+ * GET /api/permission/group/:groupKey
  */
-router.get('/group/:groupName', async (req, res) => {
+router.get('/group/:groupKey', async (req, res) => {
   try {
-    const { groupName } = req.params
-
-    // TODO: 需要 groupName 转换为 group_dn
-    // 暂时使用 groupName 查询（后续需要 AD 查询支持）
+    const { groupKey } = req.params
+    const normalizedGroupKey = String(groupKey || '').trim()
+    if (!normalizedGroupKey) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '组标识不能为空'
+      })
+    }
 
     const groupPermissions = await query(
       `
       SELECT DISTINCT p.route_name
       FROM permissions p
       INNER JOIN group_permissions gp ON p.id = gp.permission_id
-      WHERE gp.group_name = @groupName
+      WHERE gp.group_dn = @groupKey OR gp.group_name = @groupKey
     `,
-      { groupName }
+      { groupKey: normalizedGroupKey }
     )
 
     const permissionList = groupPermissions.map((p) => p.route_name)
@@ -281,6 +307,17 @@ router.post('/user/:username/assign', async (req, res) => {
 
     await Promise.all(insertPromises)
 
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'ASSIGN_USER_PERMISSION',
+      moduleCode: 'PAGE_PERMISSION',
+      targetType: 'USER',
+      targetKey: username,
+      detail: { permissionIds },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
+
     res.json({
       code: 0,
       success: true,
@@ -322,6 +359,17 @@ router.delete('/user/:username/remove', async (req, res) => {
       { username, ...Object.fromEntries(permissionIds.map((id, i) => [`id${i}`, id])) }
     )
 
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'REMOVE_USER_PERMISSION',
+      moduleCode: 'PAGE_PERMISSION',
+      targetType: 'USER',
+      targetKey: username,
+      detail: { permissionIds },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
+
     res.json({
       code: 0,
       success: true,
@@ -339,27 +387,19 @@ router.delete('/user/:username/remove', async (req, res) => {
 
 /**
  * 分配组权限
- * POST /api/permission/group/:groupName/assign
+ * POST /api/permission/group/:groupKey/assign
  * Body: { permissionIds: [1, 2, 3], groupDn: 'CN=组名,OU=模具,DC=JIUHUAN,DC=LOCAL' }
  */
-router.post('/group/:groupName/assign', async (req, res) => {
+router.post('/group/:groupKey/assign', async (req, res) => {
   try {
-    const { groupName } = req.params
-    const { permissionIds, groupDn } = req.body
+    const { groupKey } = req.params
+    const { permissionIds, groupDn, groupName } = req.body
 
     if (!Array.isArray(permissionIds) || permissionIds.length === 0) {
       return res.status(400).json({
         code: 400,
         success: false,
         message: '权限ID列表不能为空'
-      })
-    }
-
-    if (!groupDn) {
-      return res.status(400).json({
-        code: 400,
-        success: false,
-        message: '组DN不能为空'
       })
     }
 
@@ -379,6 +419,19 @@ router.post('/group/:groupName/assign', async (req, res) => {
       })
     }
 
+    const normalizedGroupDn = String(groupDn || groupKey || '').trim()
+    if (!normalizedGroupDn) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '组DN不能为空'
+      })
+    }
+    const fallbackGroupName = normalizedGroupDn.startsWith('CN=')
+      ? normalizedGroupDn.split(',')[0].replace(/^CN=/i, '').trim()
+      : normalizedGroupDn
+    const normalizedGroupName = String(groupName || fallbackGroupName || '').trim()
+
     // 批量插入（忽略重复）
     const insertPromises = permissionIds.map((permissionId) =>
       query(
@@ -389,11 +442,22 @@ router.post('/group/:groupName/assign', async (req, res) => {
           VALUES (@groupDn, @groupName, @permissionId)
         END
       `,
-        { groupDn, groupName, permissionId }
+        { groupDn: normalizedGroupDn, groupName: normalizedGroupName, permissionId }
       )
     )
 
     await Promise.all(insertPromises)
+
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'ASSIGN_GROUP_PERMISSION',
+      moduleCode: 'PAGE_PERMISSION',
+      targetType: 'GROUP',
+      targetKey: normalizedGroupDn,
+      detail: { groupName: normalizedGroupName, permissionIds },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
 
     res.json({
       code: 0,
@@ -412,12 +476,12 @@ router.post('/group/:groupName/assign', async (req, res) => {
 
 /**
  * 移除组权限
- * DELETE /api/permission/group/:groupName/remove
+ * DELETE /api/permission/group/:groupKey/remove
  * Body: { permissionIds: [1, 2, 3] }
  */
-router.delete('/group/:groupName/remove', async (req, res) => {
+router.delete('/group/:groupKey/remove', async (req, res) => {
   try {
-    const { groupName } = req.params
+    const { groupKey } = req.params
     const { permissionIds, groupDn } = req.body
 
     if (!Array.isArray(permissionIds) || permissionIds.length === 0) {
@@ -428,7 +492,8 @@ router.delete('/group/:groupName/remove', async (req, res) => {
       })
     }
 
-    if (!groupDn) {
+    const normalizedGroupDn = String(groupDn || groupKey || '').trim()
+    if (!normalizedGroupDn) {
       return res.status(400).json({
         code: 400,
         success: false,
@@ -441,8 +506,19 @@ router.delete('/group/:groupName/remove', async (req, res) => {
       DELETE FROM group_permissions
       WHERE group_dn = @groupDn AND permission_id IN (${permissionIds.map((_, i) => `@id${i}`).join(',')})
     `,
-      { groupDn, ...Object.fromEntries(permissionIds.map((id, i) => [`id${i}`, id])) }
+      { groupDn: normalizedGroupDn, ...Object.fromEntries(permissionIds.map((id, i) => [`id${i}`, id])) }
     )
+
+    const operator = resolveOperator(req)
+    await recordPermissionAudit({
+      actionType: 'REMOVE_GROUP_PERMISSION',
+      moduleCode: 'PAGE_PERMISSION',
+      targetType: 'GROUP',
+      targetKey: normalizedGroupDn,
+      detail: { permissionIds },
+      operatorUsername: operator.username,
+      operatorDisplayName: operator.displayName
+    })
 
     res.json({
       code: 0,
@@ -455,30 +531,6 @@ router.delete('/group/:groupName/remove', async (req, res) => {
       code: 500,
       success: false,
       message: '移除组权限失败: ' + error.message
-    })
-  }
-})
-
-/**
- * 同步路由到权限表
- * POST /api/permission/sync-routes
- */
-router.post('/sync-routes', async (req, res) => {
-  try {
-    const { syncRoutesToPermissions } = require('../scripts/sync-routes-to-permissions')
-    await syncRoutesToPermissions()
-
-    res.json({
-      code: 0,
-      success: true,
-      message: '路由同步成功'
-    })
-  } catch (error) {
-    console.error('同步路由失败:', error)
-    res.status(500).json({
-      code: 500,
-      success: false,
-      message: '同步路由失败: ' + error.message
     })
   }
 })
