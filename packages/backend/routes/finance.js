@@ -382,9 +382,26 @@ router.get('/receipts/list', async (req, res) => {
         r.应收金额 as receivableAmount,
         r.实收金额 as amount,
         r.贴息金额 as discountAmount,
+        ISNULL(soMatched.数量, 0) as orderQuantity,
+        ISNULL(soMatched.单价, 0) as orderUnitPrice,
+        ISNULL(soMatched.总金额, 0) as orderAmount,
         r.是否结清 as isSettled,
         r.合计金额 as totalAmount
       FROM 回款单据 r
+      OUTER APPLY (
+        SELECT TOP 1
+          so.数量,
+          so.单价,
+          so.总金额
+        FROM 销售订单 so
+        WHERE (so.状态 IS NULL OR so.状态 <> N'已删除')
+          AND so.项目编号 = NULLIF(r.项目编号, '')
+          AND (
+            NULLIF(r.合同号, '') IS NULL
+            OR so.合同号 = NULLIF(r.合同号, '')
+          )
+        ORDER BY so.订单日期 DESC, so.订单ID DESC
+      ) soMatched
       ${whereClause}
       ORDER BY r.单据日期 DESC, r.单据编号 DESC, r.回款ID ASC
       `,
@@ -428,6 +445,9 @@ router.get('/receipts/list', async (req, res) => {
         receivableAmount: toNum(row.receivableAmount),
         amount: toNum(row.amount),
         discountAmount: toNum(row.discountAmount),
+        orderQuantity: toNum(row.orderQuantity),
+        orderUnitPrice: toNum(row.orderUnitPrice),
+        orderAmount: toNum(row.orderAmount),
         receiptProgress: String(row.receiptProgress || ''),
         receiptDate: toDateText(row.receiptDate),
         deliveryDate: toDateText(row.documentDate),
@@ -518,6 +538,9 @@ router.get('/receipts/candidates', async (req, res) => {
         f.产品图号 as productDrawingNo,
         f.客户模号 as customerPartNo,
         f.合同号 as contractNo,
+        ISNULL(soMatched.数量, 0) as orderQuantity,
+        ISNULL(soMatched.单价, 0) as orderUnitPrice,
+        ISNULL(soMatched.总金额, 0) as orderAmount,
         c.客户名称 as customerName,
         ISNULL(f.金额, 0) as invoiceAmount,
         ISNULL(r.totalReceived, 0) as receivedAmount,
@@ -526,6 +549,20 @@ router.get('/receipts/candidates', async (req, res) => {
       FROM 发票明细 f
       LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
       LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
+      OUTER APPLY (
+        SELECT TOP 1
+          so.数量,
+          so.单价,
+          so.总金额
+        FROM 销售订单 so
+        WHERE (so.状态 IS NULL OR so.状态 <> N'已删除')
+          AND so.项目编号 = f.项目编号
+          AND (
+            NULLIF(f.合同号, '') IS NULL
+            OR so.合同号 = f.合同号
+          )
+        ORDER BY so.订单日期 DESC, so.订单ID DESC
+      ) soMatched
       LEFT JOIN (
         SELECT
           明细ID,

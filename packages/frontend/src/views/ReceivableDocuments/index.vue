@@ -489,6 +489,42 @@
                 <el-input v-model="row.contractNo" placeholder="请输入合同号" />
               </template>
             </el-table-column>
+            <el-table-column label="订单数量" width="130" align="right">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.orderQuantity"
+                  :min="0"
+                  :step="1"
+                  :precision="0"
+                  :controls="false"
+                  style="width: 100%"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="订单单价" width="130" align="right">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.orderUnitPrice"
+                  :min="0"
+                  :step="100"
+                  :precision="2"
+                  :controls="false"
+                  style="width: 100%"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="订单金额" width="130" align="right">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.orderAmount"
+                  :min="0"
+                  :step="100"
+                  :precision="2"
+                  :controls="false"
+                  style="width: 100%"
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="应收金额" width="120" align="right">
               <template #default="{ row }">
                 <el-input-number
@@ -677,6 +713,9 @@ interface ReceiptDetail {
   productDrawingNo: string
   customerPartNo: string
   contractNo?: string
+  orderQuantity?: number
+  orderUnitPrice?: number
+  orderAmount?: number
   receivableAmount?: number
   amount?: number
   discountAmount?: number
@@ -738,6 +777,9 @@ interface ReceiptCandidate {
   customerPartNo: string
   customerName: string
   contractNo: string
+  orderQuantity: number
+  orderUnitPrice: number
+  orderAmount: number
   receivableAmount: number
 }
 
@@ -863,6 +905,9 @@ const createEmptyDetail = (): ReceiptDetail => ({
   productDrawingNo: '',
   customerPartNo: '',
   contractNo: '',
+  orderQuantity: undefined,
+  orderUnitPrice: undefined,
+  orderAmount: undefined,
   receivableAmount: 0,
   amount: undefined,
   discountAmount: undefined,
@@ -1352,6 +1397,9 @@ const loadReceiptCandidates = async (resetPage = false) => {
       customerPartNo: String(it.customerPartNo || ''),
       customerName: String(it.customerName || ''),
       contractNo: String(it.contractNo || ''),
+      orderQuantity: Number(it.orderQuantity) || 0,
+      orderUnitPrice: Number(it.orderUnitPrice) || 0,
+      orderAmount: Number(it.orderAmount) || 0,
       receivableAmount: Number(it.receivableAmount) || 0
     }))
     await nextTick()
@@ -1470,6 +1518,9 @@ const applyReceiptCandidates = () => {
     detail.productDrawingNo = it.productDrawingNo
     detail.customerPartNo = it.customerPartNo
     detail.contractNo = it.contractNo
+    detail.orderQuantity = it.orderQuantity
+    detail.orderUnitPrice = it.orderUnitPrice
+    detail.orderAmount = it.orderAmount
     detail.receivableAmount = it.receivableAmount
     detail.amount = undefined
     detail.discountAmount = undefined
