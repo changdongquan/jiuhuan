@@ -3,9 +3,12 @@ import request from '@/axios'
 export interface ComprehensiveQueryListParams {
   keyword?: string
   customerName?: string
-  owner?: string
+  category?: string
   startDate?: string
   endDate?: string
+  anomalyType?: string
+  projectStatus?: string
+  productionStatus?: string
   page?: number
   pageSize?: number
 }
@@ -15,6 +18,7 @@ export interface ComprehensiveQueryRow {
   customerName: string
   productName: string
   productDrawing: string
+  category: string
   owner: string
   salesOrderCount: number
   salesAmount: number
@@ -27,10 +31,24 @@ export interface ComprehensiveQueryRow {
   invoiceAmount: number
   receiptCount: number
   receiptAmount: number
+  uninvoicedAmount: number
+  unreceivedAmount: number
+  anomalyType: string
   latestOrderDate: string
   latestOutboundDate: string
   latestInvoiceDate: string
   latestReceiptDate: string
+}
+
+export interface ComprehensiveQuerySummary {
+  projectCount: number
+  salesAmount: number
+  invoiceAmount: number
+  receiptAmount: number
+  completedQty: number
+  outboundQty: number
+  uninvoicedAmount: number
+  unreceivedAmount: number
 }
 
 export interface JourneyStage {
@@ -67,5 +85,12 @@ export const getProjectJourneyApi = (projectCode: string) => {
   return request.get({
     url: '/api/comprehensive-query/project-journey',
     params: { projectCode }
+  })
+}
+
+export const getComprehensiveQuerySummaryApi = (params?: ComprehensiveQueryListParams) => {
+  return request.get({
+    url: '/api/comprehensive-query/summary',
+    params
   })
 }

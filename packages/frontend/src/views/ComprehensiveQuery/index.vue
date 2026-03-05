@@ -1,37 +1,68 @@
 <template>
-  <div class="comprehensive-query-page space-y-4 p-4">
-    <section class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm">
-      <div class="mb-4 text-sm font-medium text-[var(--el-text-color-secondary)]">综合查询</div>
-      <el-form ref="queryFormRef" :model="queryForm" label-width="90px" class="filter-form">
+  <div class="comprehensive-query-page space-y-2 p-3">
+    <section class="query-section rounded-lg bg-[var(--el-bg-color-overlay)] p-3 shadow-sm">
+      <el-form ref="queryFormRef" :model="queryForm" label-width="74px" class="filter-form">
         <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :lg="6">
+          <el-col :xs="24" :sm="12" :lg="3">
             <el-form-item label="关键词">
               <el-input
                 v-model="queryForm.keyword"
                 placeholder="项目编号 / 产品名称 / 产品图号"
                 clearable
+                class="filter-control"
                 @keyup.enter="handleSearch"
               />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="6">
+          <el-col :xs="24" :sm="12" :lg="4">
             <el-form-item label="客户名称">
-              <el-input
+              <el-select
                 v-model="queryForm.customerName"
-                placeholder="请输入客户名称"
+                filterable
                 clearable
-                @keyup.enter="handleSearch"
-              />
+                placeholder="请选择客户"
+                class="filter-control"
+              >
+                <el-option
+                  v-for="item in customerOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="6">
-            <el-form-item label="负责人">
-              <el-input
-                v-model="queryForm.owner"
-                placeholder="请输入负责人"
+          <el-col :xs="24" :sm="12" :lg="4">
+            <el-form-item label="分类">
+              <el-select
+                v-model="queryForm.category"
+                filterable
                 clearable
-                @keyup.enter="handleSearch"
-              />
+                placeholder="请选择分类"
+                class="filter-control"
+              >
+                <el-option
+                  v-for="item in categoryOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :lg="3">
+            <el-form-item label="异常类型">
+              <el-select
+                v-model="queryForm.anomalyType"
+                placeholder="全部"
+                clearable
+                class="filter-control"
+              >
+                <el-option label="已销售未开票" value="uninvoiced" />
+                <el-option label="已开票未回款" value="unreceived" />
+                <el-option label="生产完成未出货" value="unshipped" />
+                <el-option label="订单超期未回款" value="overdue" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
@@ -44,72 +75,68 @@
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
                 clearable
-                style="width: 100%"
+                class="filter-control"
               />
             </el-form-item>
           </el-col>
+          <el-col :xs="24" :sm="12" :lg="4">
+            <el-form-item label=" " class="filter-actions-item">
+              <div class="filter-actions">
+                <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
+                <el-button @click="handleReset">重置</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
         </el-row>
-        <div class="flex flex-wrap items-center justify-end gap-2">
-          <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </div>
       </el-form>
     </section>
 
     <el-row :gutter="16">
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--blue">
           <div class="summary-card__title">项目数</div>
-          <div class="summary-card__value">{{ summaryCards.projectCount }}</div>
-          <div class="summary-card__meta">当前页项目条数</div>
+          <div class="summary-card__value">{{ summaryCards.projectCount.toLocaleString() }}</div>
+          <div class="summary-card__meta">筛选范围项目总数</div>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--green">
           <div class="summary-card__title">销售金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.salesAmount) }}</div>
-          <div class="summary-card__meta">当前页销售订单汇总</div>
+          <div class="summary-card__meta">筛选范围销售订单汇总</div>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--orange">
           <div class="summary-card__title">开票金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.invoiceAmount) }}</div>
-          <div class="summary-card__meta">当前页开票汇总</div>
+          <div class="summary-card__meta">筛选范围开票汇总</div>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--gray">
           <div class="summary-card__title">回款金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.receiptAmount) }}</div>
-          <div class="summary-card__meta">当前页回款汇总</div>
+          <div class="summary-card__meta">筛选范围回款汇总</div>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--blue">
-          <div class="summary-card__title">已完成产量</div>
-          <div class="summary-card__value">{{ summaryCards.completedQty.toLocaleString() }}</div>
-          <div class="summary-card__meta">生产任务累计</div>
+          <div class="summary-card__title">未开票金额</div>
+          <div class="summary-card__value">{{ formatAmount(summaryCards.uninvoicedAmount) }}</div>
+          <div class="summary-card__meta">销售金额减开票金额</div>
         </el-card>
       </el-col>
-      <el-col :xs="24" :sm="12" :lg="8">
+      <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--gray">
-          <div class="summary-card__title">出货数量</div>
-          <div class="summary-card__value">{{ summaryCards.outboundQty.toLocaleString() }}</div>
-          <div class="summary-card__meta">出库累计</div>
+          <div class="summary-card__title">未回款金额</div>
+          <div class="summary-card__value">{{ formatAmount(summaryCards.unreceivedAmount) }}</div>
+          <div class="summary-card__meta">开票金额减回款金额</div>
         </el-card>
       </el-col>
     </el-row>
 
-    <section class="rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm">
-      <div class="mb-4 flex items-center justify-between">
-        <div class="text-base font-medium text-[var(--el-text-color-primary)]">综合视图</div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-[var(--el-text-color-secondary)]">筛选结果：{{ total }}</span>
-          <el-button text type="primary" :loading="loading" @click="loadList">刷新</el-button>
-        </div>
-      </div>
-
+    <section class="rounded-lg bg-[var(--el-bg-color-overlay)] p-3 shadow-sm">
       <el-tabs v-model="activeView">
         <el-tab-pane label="表格视图" name="table">
           <el-table
@@ -117,55 +144,75 @@
             :data="tableData"
             border
             row-key="projectCode"
-            height="540"
+            :height="tableHeight"
             @row-click="handleRowClick"
           >
-            <el-table-column type="index" width="60" label="#" align="center" />
-            <el-table-column prop="projectCode" label="项目编号" min-width="150" />
-            <el-table-column prop="customerName" label="客户名称" min-width="150" />
+            <el-table-column type="index" width="60" label="序号" align="center" />
+            <el-table-column prop="projectCode" label="项目编号" min-width="145" />
+            <el-table-column
+              prop="customerName"
+              label="客户名称"
+              min-width="130"
+              show-overflow-tooltip
+              class-name="col-customer-name"
+            />
             <el-table-column
               prop="productName"
               label="产品名称"
-              min-width="150"
+              min-width="125"
               show-overflow-tooltip
             />
             <el-table-column
               prop="productDrawing"
               label="产品图号"
-              min-width="140"
+              min-width="120"
               show-overflow-tooltip
             />
-            <el-table-column prop="owner" label="负责人" width="110" align="center" />
-            <el-table-column label="销售金额" width="140" align="right">
+            <el-table-column prop="owner" label="负责人" width="88" align="center" />
+            <el-table-column label="销售金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.salesAmount) }}</template>
             </el-table-column>
-            <el-table-column label="项目状态" width="130" align="center">
+            <el-table-column label="项目状态" width="100" align="center" show-overflow-tooltip>
               <template #default="{ row }">
                 <el-tag type="info">{{ row.projectStatus || '-' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="生产状态" width="130" align="center">
+            <el-table-column label="生产状态" width="100" align="center" show-overflow-tooltip>
               <template #default="{ row }">
                 <el-tag type="warning">{{ row.productionStatus || '-' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="开票金额" width="140" align="right">
+            <el-table-column label="开票金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.invoiceAmount) }}</template>
             </el-table-column>
-            <el-table-column label="回款金额" width="140" align="right">
+            <el-table-column label="回款金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.receiptAmount) }}</template>
             </el-table-column>
-            <el-table-column prop="outboundQty" label="出货数量" width="100" align="right" />
-            <el-table-column prop="latestOrderDate" label="最近订单" width="120" align="center" />
-            <el-table-column prop="latestInvoiceDate" label="最近开票" width="120" align="center" />
-            <el-table-column prop="latestReceiptDate" label="最近回款" width="120" align="center" />
+            <el-table-column label="未开票金额" width="118" align="right">
+              <template #default="{ row }">{{ formatAmount(row.uninvoicedAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="未回款金额" width="118" align="right">
+              <template #default="{ row }">{{ formatAmount(row.unreceivedAmount) }}</template>
+            </el-table-column>
+            <el-table-column prop="outboundQty" label="出货数量" width="82" align="right" />
+            <el-table-column label="异常类型" width="108" align="center" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-tag v-if="row.anomalyType" type="danger">
+                  {{ anomalyLabelMap[row.anomalyType] || row.anomalyType }}
+                </el-tag>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="latestOrderDate" label="最近订单" width="110" align="center" />
+            <el-table-column prop="latestInvoiceDate" label="最近开票" width="110" align="center" />
+            <el-table-column prop="latestReceiptDate" label="最近回款" width="110" align="center" />
             <el-table-column
               prop="latestOutboundDate"
               label="最近出货"
-              width="120"
+              width="110"
               align="center"
             />
-            <el-table-column label="操作" width="110" align="center" fixed="right">
+            <el-table-column label="操作" width="86" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link @click.stop="handleViewInsight(row)"
                   >查看洞察</el-button
@@ -177,7 +224,11 @@
             </template>
           </el-table>
 
-          <div v-if="total > 0" class="flex justify-center pt-4">
+          <div
+            v-if="total > 0"
+            class="pagination-footer"
+            :class="{ 'pagination-footer--mobile': isMobile }"
+          >
             <el-pagination
               background
               layout="total, sizes, prev, pager, next, jumper"
@@ -323,13 +374,25 @@ import {
 } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import type { ComprehensiveQueryRow, ProjectJourney } from '@/api/comprehensive-query'
-import { getComprehensiveQueryListApi, getProjectJourneyApi } from '@/api/comprehensive-query'
+import { getCustomerListApi } from '@/api/customer'
+import type {
+  ComprehensiveQueryListParams,
+  ComprehensiveQueryRow,
+  ComprehensiveQuerySummary,
+  ProjectJourney
+} from '@/api/comprehensive-query'
+import {
+  getComprehensiveQueryListApi,
+  getComprehensiveQuerySummaryApi,
+  getProjectJourneyApi
+} from '@/api/comprehensive-query'
+import { useAppStore } from '@/store/modules/app'
 
 interface QueryForm {
   keyword: string
   customerName: string
-  owner: string
+  category: string
+  anomalyType: string
   dateRange: [string, string] | []
 }
 
@@ -337,13 +400,17 @@ const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<QueryForm>({
   keyword: '',
   customerName: '',
-  owner: '',
+  category: '',
+  anomalyType: '',
   dateRange: []
 })
 
 const loading = ref(false)
 const tableData = ref<ComprehensiveQueryRow[]>([])
 const total = ref(0)
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 400px)'))
 
 const pagination = reactive({
   page: 1,
@@ -354,6 +421,19 @@ const activeView = ref<'table' | 'insights'>('table')
 const selectedProjectCode = ref('')
 const journeyLoading = ref(false)
 const journey = ref<ProjectJourney | null>(null)
+const customerOptions = ref<string[]>([])
+const categoryOptions = ref<string[]>(['塑胶模具', '修改模具', '零件加工'])
+
+const summaryCards = ref<ComprehensiveQuerySummary>({
+  projectCount: 0,
+  salesAmount: 0,
+  invoiceAmount: 0,
+  receiptAmount: 0,
+  completedQty: 0,
+  outboundQty: 0,
+  uninvoicedAmount: 0,
+  unreceivedAmount: 0
+})
 
 const projectOptions = computed(() =>
   tableData.value.map((item) => ({
@@ -362,27 +442,12 @@ const projectOptions = computed(() =>
   }))
 )
 
-const summaryCards = computed(() => {
-  return tableData.value.reduce(
-    (acc, row) => {
-      acc.projectCount += 1
-      acc.salesAmount += Number(row.salesAmount || 0)
-      acc.invoiceAmount += Number(row.invoiceAmount || 0)
-      acc.receiptAmount += Number(row.receiptAmount || 0)
-      acc.completedQty += Number(row.completedQty || 0)
-      acc.outboundQty += Number(row.outboundQty || 0)
-      return acc
-    },
-    {
-      projectCount: 0,
-      salesAmount: 0,
-      invoiceAmount: 0,
-      receiptAmount: 0,
-      completedQty: 0,
-      outboundQty: 0
-    }
-  )
-})
+const anomalyLabelMap: Record<string, string> = {
+  uninvoiced: '已销售未开票',
+  unreceived: '已开票未回款',
+  unshipped: '生产完成未出货',
+  overdue: '订单超期未回款'
+}
 
 const stageDateLabelMap: Record<string, string> = {
   latestOrderDate: '最近订单',
@@ -443,35 +508,111 @@ const formatAmount = (value: number) => {
   })}`
 }
 
+const buildListParams = (): ComprehensiveQueryListParams => {
+  return {
+    keyword: queryForm.keyword.trim() || undefined,
+    customerName: queryForm.customerName.trim() || undefined,
+    category: queryForm.category || undefined,
+    anomalyType: queryForm.anomalyType || undefined,
+    startDate: queryForm.dateRange[0] || undefined,
+    endDate: queryForm.dateRange[1] || undefined
+  }
+}
+
+const parseResponseData = (rawResp: unknown) => {
+  const raw = rawResp as any
+  const pr: any = raw?.data ?? raw
+  return pr?.data ?? pr
+}
+
+const loadSummary = async () => {
+  try {
+    const params = buildListParams()
+    const resp = await getComprehensiveQuerySummaryApi(params)
+    const summary = parseResponseData(resp)
+    summaryCards.value = {
+      projectCount: Number(summary?.projectCount || 0),
+      salesAmount: Number(summary?.salesAmount || 0),
+      invoiceAmount: Number(summary?.invoiceAmount || 0),
+      receiptAmount: Number(summary?.receiptAmount || 0),
+      completedQty: Number(summary?.completedQty || 0),
+      outboundQty: Number(summary?.outboundQty || 0),
+      uninvoicedAmount: Number(summary?.uninvoicedAmount || 0),
+      unreceivedAmount: Number(summary?.unreceivedAmount || 0)
+    }
+  } catch (error) {
+    console.error('[ComprehensiveQuery] loadSummary failed:', error)
+    summaryCards.value = {
+      projectCount: 0,
+      salesAmount: 0,
+      invoiceAmount: 0,
+      receiptAmount: 0,
+      completedQty: 0,
+      outboundQty: 0,
+      uninvoicedAmount: 0,
+      unreceivedAmount: 0
+    }
+  }
+}
+
+const loadFilterOptions = async () => {
+  try {
+    const customersResp = await getCustomerListApi({ status: 'active', page: 1, pageSize: 5000 })
+    const customerData = parseResponseData(customersResp)
+    const customers = Array.isArray(customerData?.list) ? customerData.list : []
+
+    customerOptions.value = customers
+      .map((item: any) => String(item?.customerName || '').trim())
+      .filter(Boolean)
+      .filter((item: string, idx: number, arr: string[]) => arr.indexOf(item) === idx)
+  } catch (error) {
+    console.error('[ComprehensiveQuery] loadFilterOptions failed:', error)
+    customerOptions.value = []
+    categoryOptions.value = ['塑胶模具', '修改模具', '零件加工']
+  }
+}
+
 const loadList = async () => {
   loading.value = true
   try {
     const params = {
-      keyword: queryForm.keyword.trim() || undefined,
-      customerName: queryForm.customerName.trim() || undefined,
-      owner: queryForm.owner.trim() || undefined,
-      startDate: queryForm.dateRange[0] || undefined,
-      endDate: queryForm.dateRange[1] || undefined,
+      ...buildListParams(),
       page: pagination.page,
       pageSize: pagination.pageSize
     }
 
     const resp = await getComprehensiveQueryListApi(params)
-    const raw: any = resp
-    const pr: any = raw?.data ?? raw
-    const list = pr?.data?.list ?? pr?.list ?? []
-    const totalCount = pr?.data?.total ?? pr?.total ?? 0
+    const data = parseResponseData(resp)
+    const list = data?.list ?? []
+    const totalCount = data?.total ?? 0
 
     if (Array.isArray(list)) {
       tableData.value = list
       total.value = Number(totalCount) || 0
+      const dynamicCategories = list
+        .map((row) => String(row?.category || '').trim())
+        .filter(Boolean)
+      if (dynamicCategories.length) {
+        categoryOptions.value = Array.from(
+          new Set([...categoryOptions.value, ...dynamicCategories])
+        )
+      }
 
-      if (!selectedProjectCode.value && list[0]?.projectCode) {
+      if (!list.length) {
+        selectedProjectCode.value = ''
+        journey.value = null
+      } else if (
+        !selectedProjectCode.value ||
+        !list.some((row) => row.projectCode === selectedProjectCode.value)
+      ) {
         selectedProjectCode.value = list[0].projectCode
+        journey.value = null
       }
     } else {
       tableData.value = []
       total.value = 0
+      selectedProjectCode.value = ''
+      journey.value = null
     }
   } catch (error) {
     console.error('[ComprehensiveQuery] loadList failed:', error)
@@ -480,6 +621,10 @@ const loadList = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadAll = async () => {
+  await Promise.all([loadList(), loadSummary()])
 }
 
 const loadJourney = async () => {
@@ -505,17 +650,18 @@ const loadJourney = async () => {
 
 const handleSearch = () => {
   pagination.page = 1
-  void loadList()
+  void loadAll()
 }
 
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.customerName = ''
-  queryForm.owner = ''
+  queryForm.category = ''
+  queryForm.anomalyType = ''
   queryForm.dateRange = []
   queryFormRef.value?.clearValidate?.()
   pagination.page = 1
-  void loadList()
+  void loadAll()
 }
 
 const handlePageSizeChange = (size: number) => {
@@ -536,7 +682,6 @@ const handleRowClick = (row: ComprehensiveQueryRow) => {
 const handleViewInsight = (row: ComprehensiveQueryRow) => {
   selectedProjectCode.value = row.projectCode
   activeView.value = 'insights'
-  void loadJourney()
 }
 
 watch(
@@ -562,18 +707,52 @@ watch(
 )
 
 onMounted(() => {
-  void loadList()
+  void loadFilterOptions()
+  void loadAll()
 })
 </script>
 
 <style scoped>
 .filter-form :deep(.el-form-item) {
-  margin-bottom: 14px;
+  margin-bottom: 6px;
+}
+
+.filter-form :deep(.el-form-item__label) {
+  font-size: 12px;
+}
+
+.filter-control {
+  width: 100%;
+}
+
+.filter-form :deep(.filter-control .el-input__wrapper) {
+  min-height: 30px;
+}
+
+.filter-actions-item :deep(.el-form-item__label) {
+  color: transparent;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.query-section {
+  padding-top: 10px !important;
+  padding-bottom: 6px !important;
 }
 
 .summary-card {
+  min-height: 64px;
   border: none;
   transition: all 0.25s ease;
+}
+
+:deep(.summary-card .el-card__body) {
+  padding: 6px 8px;
 }
 
 .summary-card:hover {
@@ -597,20 +776,23 @@ onMounted(() => {
 }
 
 .summary-card__title {
-  margin-bottom: 6px;
-  font-size: 13px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  line-height: 1.1;
   color: var(--el-text-color-secondary);
 }
 
 .summary-card__value {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.1;
   color: var(--el-text-color-primary);
 }
 
 .summary-card__meta {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.1;
   color: var(--el-text-color-secondary);
 }
 
@@ -618,7 +800,17 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 .insight-empty {
@@ -631,12 +823,16 @@ onMounted(() => {
 .insight-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 16px;
+  gap: 10px;
+  height: calc(100vh - 460px);
+  max-height: calc(100vh - 460px);
+  min-height: calc(100vh - 460px);
 }
 
 .insight-left,
 .insight-right {
-  padding: 14px;
+  padding: 10px;
+  overflow: auto;
   background: var(--el-fill-color-blank);
   border: 1px solid var(--el-border-color-light);
   border-radius: 12px;
@@ -705,6 +901,10 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 
+:deep(.col-customer-name .cell) {
+  white-space: nowrap;
+}
+
 @media (width <= 1200px) {
   .insight-layout {
     grid-template-columns: 1fr;
@@ -719,6 +919,13 @@ onMounted(() => {
   .insight-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .pagination-footer--mobile {
+    position: static;
+    left: auto;
+    margin-top: 8px;
+    transform: none;
   }
 }
 </style>

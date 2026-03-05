@@ -3,22 +3,37 @@ const { query } = require('../database')
 
 const router = express.Router()
 
+const ANOMALY_TYPES = ['uninvoiced', 'unreceived', 'unshipped', 'overdue']
+
 const safeNumber = (value) => {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
 
+const pad2 = (n) => String(n).padStart(2, '0')
+
+const formatLocalDate = (date) => {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
 const toDateString = (value) => {
   if (!value) return ''
-  if (typeof value === 'string') return value.slice(0, 10)
+  if (typeof value === 'string') {
+    const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    return m ? m[1] : value.slice(0, 10)
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatLocalDate(value)
+  }
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
-  return d.toISOString().slice(0, 10)
+  return formatLocalDate(d)
 }
 
 const toTime = (value) => {
-  if (!value) return 0
-  const t = new Date(value).getTime()
+  const s = toDateString(value)
+  if (!s) return 0
+  const t = new Date(`${s}T00:00:00`).getTime()
   return Number.isFinite(t) ? t : 0
 }
 
@@ -42,6 +57,242 @@ const getMaxDate = (list, key) => {
   )
 }
 
+const parseCsvValues = (raw) => {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+const parseAnomalyTypes = (raw) => {
+  const list = parseCsvValues(raw)
+  return list.filter((item) => ANOMALY_TYPES.includes(item))
+}
+
+const buildListFilters = (inputQuery) => {
+  const params = {}
+  const sourceWhere = [`(p.状态 IS NULL OR p.状态 <> N'已删除')`]
+  const baseWhere = []
+
+  const keyword = String(inputQuery.keyword || '').trim()
+  const customerName = String(inputQuery.customerName || '').trim()
+  const owner = String(inputQuery.owner || '').trim()
+  const category = String(inputQuery.category || '').trim()
+  const startDate = String(inputQuery.startDate || '').trim()
+  const endDate = String(inputQuery.endDate || '').trim()
+  const projectStatus = String(inputQuery.projectStatus || '').trim()
+  const productionStatus = String(inputQuery.productionStatus || '').trim()
+  const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
+
+  if (keyword) {
+    params.keyword = `%${keyword}%`
+    sourceWhere.push(`(
+      p.项目编号 LIKE @keyword
+      OR g.productName LIKE @keyword
+      OR g.productDrawing LIKE @keyword
+    )`)
+  }
+
+  if (customerName) {
+    params.customerName = `%${customerName}%`
+    sourceWhere.push(`c.customerName LIKE @customerName`)
+  }
+
+  if (owner) {
+    params.owner = `%${owner}%`
+    sourceWhere.push(`(
+      EXISTS (
+        SELECT 1
+        FROM 生产任务 ptFilter
+        WHERE ptFilter.项目编号 = p.项目编号
+          AND (ptFilter.状态 IS NULL OR ptFilter.状态 <> N'已删除')
+          AND ptFilter.负责人 LIKE @owner
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM 销售订单 soFilter
+        WHERE soFilter.项目编号 = p.项目编号
+          AND (soFilter.状态 IS NULL OR soFilter.状态 <> N'已删除')
+          AND soFilter.经办人 LIKE @owner
+      )
+    )`)
+  }
+
+  if (category) {
+    params.category = category
+    sourceWhere.push(`EXISTS (
+      SELECT 1
+      FROM 货物信息 gCat
+      WHERE gCat.项目编号 = p.项目编号
+        AND (gCat.状态 IS NULL OR gCat.状态 <> N'已删除')
+        AND (gCat.IsNew IS NULL OR CAST(gCat.IsNew AS INT) != 1)
+        AND gCat.分类 = @category
+    )`)
+  }
+
+  if (startDate) {
+    params.startDate = startDate
+    sourceWhere.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate >= @startDate)`)
+  }
+
+  if (endDate) {
+    params.endDate = endDate
+    sourceWhere.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate <= @endDate)`)
+  }
+
+  if (projectStatus) {
+    params.projectStatus = `%${projectStatus}%`
+    sourceWhere.push(`p.项目状态 LIKE @projectStatus`)
+  }
+
+  if (productionStatus) {
+    params.productionStatus = `%${productionStatus}%`
+    sourceWhere.push(`pt.productionStatus LIKE @productionStatus`)
+  }
+
+  if (anomalyTypes.length > 0) {
+    const checks = []
+    if (anomalyTypes.includes('uninvoiced')) {
+      checks.push('(base.salesAmount > base.invoiceAmount)')
+    }
+    if (anomalyTypes.includes('unreceived')) {
+      checks.push('(base.invoiceAmount > base.receiptAmount)')
+    }
+    if (anomalyTypes.includes('unshipped')) {
+      checks.push('(base.completedQty > base.outboundQty)')
+    }
+    if (anomalyTypes.includes('overdue')) {
+      checks.push(`(
+        base.latestOrderDate IS NOT NULL
+        AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
+        AND base.receiptAmount < base.salesAmount
+      )`)
+    }
+
+    if (checks.length > 0) {
+      baseWhere.push(`(${checks.join(' OR ')})`)
+    }
+  }
+
+  return {
+    params,
+    sourceWhereSql: sourceWhere.length ? `WHERE ${sourceWhere.join(' AND ')}` : '',
+    baseWhereSql: baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : ''
+  }
+}
+
+const buildBaseCteSql = (sourceWhereSql) => {
+  return `
+    WITH base AS (
+      SELECT
+        p.项目编号 as projectCode,
+        ISNULL(c.customerName, N'') as customerName,
+        ISNULL(g.productName, N'') as productName,
+        ISNULL(g.productDrawing, N'') as productDrawing,
+        ISNULL(g.category, N'') as category,
+        ISNULL(pt.owner, ISNULL(soOwner.owner, N'')) as owner,
+        ISNULL(s.orderCount, 0) as salesOrderCount,
+        ISNULL(s.salesAmount, 0) as salesAmount,
+        p.项目状态 as projectStatus,
+        pt.productionStatus as productionStatus,
+        ISNULL(pt.completedQty, 0) as completedQty,
+        ISNULL(od.outboundDocCount, 0) as outboundDocCount,
+        ISNULL(od.outboundQty, 0) as outboundQty,
+        ISNULL(fi.invoiceCount, 0) as invoiceCount,
+        ISNULL(fi.invoiceAmount, 0) as invoiceAmount,
+        ISNULL(fr.receiptCount, 0) as receiptCount,
+        ISNULL(fr.receiptAmount, 0) as receiptAmount,
+        s.latestOrderDate as latestOrderDate,
+        od.latestOutboundDate as latestOutboundDate,
+        fi.latestInvoiceDate as latestInvoiceDate,
+        fr.latestReceiptDate as latestReceiptDate,
+        CASE
+          WHEN ISNULL(s.salesAmount, 0) > ISNULL(fi.invoiceAmount, 0)
+          THEN ISNULL(s.salesAmount, 0) - ISNULL(fi.invoiceAmount, 0)
+          ELSE 0
+        END as uninvoicedAmount,
+        CASE
+          WHEN ISNULL(fi.invoiceAmount, 0) > ISNULL(fr.receiptAmount, 0)
+          THEN ISNULL(fi.invoiceAmount, 0) - ISNULL(fr.receiptAmount, 0)
+          ELSE 0
+        END as unreceivedAmount
+      FROM 项目管理 p
+      OUTER APPLY (
+        SELECT TOP 1
+          g1.产品名称 as productName,
+          g1.产品图号 as productDrawing,
+          g1.分类 as category
+        FROM 货物信息 g1
+        WHERE g1.项目编号 = p.项目编号
+          AND (g1.状态 IS NULL OR g1.状态 <> N'已删除')
+          AND (g1.IsNew IS NULL OR CAST(g1.IsNew AS INT) != 1)
+        ORDER BY g1.货物ID ASC
+      ) g
+      OUTER APPLY (
+        SELECT TOP 1 c1.客户名称 as customerName
+        FROM 客户信息 c1
+        WHERE c1.客户ID = p.客户ID
+      ) c
+      OUTER APPLY (
+        SELECT
+          COUNT(1) as orderCount,
+          ISNULL(SUM(ISNULL(so.总金额, 0)), 0) as salesAmount,
+          MAX(so.订单日期) as latestOrderDate
+        FROM 销售订单 so
+        WHERE so.项目编号 = p.项目编号
+          AND (so.状态 IS NULL OR so.状态 <> N'已删除')
+      ) s
+      OUTER APPLY (
+        SELECT TOP 1
+          so2.经办人 as owner
+        FROM 销售订单 so2
+        WHERE so2.项目编号 = p.项目编号
+          AND (so2.状态 IS NULL OR so2.状态 <> N'已删除')
+        ORDER BY so2.订单日期 DESC, so2.订单ID DESC
+      ) soOwner
+      OUTER APPLY (
+        SELECT TOP 1
+          pt1.生产状态 as productionStatus,
+          pt1.负责人 as owner,
+          ISNULL(pt1.已完成数量, 0) as completedQty
+        FROM 生产任务 pt1
+        WHERE pt1.项目编号 = p.项目编号
+          AND (pt1.状态 IS NULL OR pt1.状态 <> N'已删除')
+        ORDER BY pt1.下达日期 DESC, pt1.项目编号 DESC
+      ) pt
+      OUTER APPLY (
+        SELECT
+          COUNT(DISTINCT od1.出库单号) as outboundDocCount,
+          ISNULL(SUM(ISNULL(od1.出库数量, 0)), 0) as outboundQty,
+          MAX(od1.出库日期) as latestOutboundDate
+        FROM 出库单明细 od1
+        WHERE od1.项目编号 = p.项目编号
+          AND (od1.状态 IS NULL OR od1.状态 <> N'已删除')
+      ) od
+      OUTER APPLY (
+        SELECT
+          COUNT(DISTINCT inv.发票ID) as invoiceCount,
+          ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as invoiceAmount,
+          MAX(COALESCE(inv.开票日期, inv.单据日期)) as latestInvoiceDate
+        FROM 发票明细 fd
+        INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
+        WHERE fd.项目编号 = p.项目编号
+          AND ISNULL(inv.是否删除, 0) = 0
+      ) fi
+      OUTER APPLY (
+        SELECT
+          COUNT(DISTINCT r.单据编号) as receiptCount,
+          ISNULL(SUM(ISNULL(r.实收金额, 0)), 0) as receiptAmount,
+          MAX(COALESCE(r.回款日期, r.单据日期)) as latestReceiptDate
+        FROM 回款单据 r
+        WHERE r.项目编号 = p.项目编号
+          AND ISNULL(r.是否删除, 0) = 0
+      ) fr
+      ${sourceWhereSql}
+    )
+  `
+}
+
 const buildJourney = ({
   projectCode,
   salesRows,
@@ -56,13 +307,20 @@ const buildJourney = ({
   const shippedOrderCount = salesRows.filter((row) => Number(row.isShipped) === 1).length
 
   const outboundQty = outboundRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0)
+  const outboundDocCount = new Set(
+    outboundRows.map((row) => String(row.documentNo || '').trim()).filter(Boolean)
+  ).size
   const completedQty = safeNumber(taskRow?.completedQty)
 
-  const invoiceCount = invoiceRows.length
   const invoiceAmount = invoiceRows.reduce((sum, row) => sum + safeNumber(row.amount), 0)
+  const invoiceCount = new Set(
+    invoiceRows.map((row) => String(row.documentNo || row.invoiceNo || '').trim()).filter(Boolean)
+  ).size
 
-  const receiptCount = receiptRows.length
   const receivedAmount = receiptRows.reduce((sum, row) => sum + safeNumber(row.receivedAmount), 0)
+  const receiptCount = new Set(
+    receiptRows.map((row) => String(row.documentNo || '').trim()).filter(Boolean)
+  ).size
 
   let salesStatus = 'pending'
   if (salesCount > 0) {
@@ -169,9 +427,9 @@ const buildJourney = ({
       key: 'outbound',
       name: '出货',
       status: normalizeStageStatus(outboundStatus),
-      summary: outboundRows.length > 0 ? `出库 ${outboundRows.length} 单` : '暂无出货单据',
+      summary: outboundDocCount > 0 ? `出库 ${outboundDocCount} 单` : '暂无出货单据',
       metrics: {
-        documentCount: outboundRows.length,
+        documentCount: outboundDocCount,
         quantity: outboundQty
       },
       dates: {
@@ -317,163 +575,75 @@ const buildJourney = ({
       invoiceAmount,
       invoiceCount,
       receivedAmount,
-      receiptCount
+      receiptCount,
+      uninvoicedAmount: Math.max(0, salesAmount - invoiceAmount),
+      unreceivedAmount: Math.max(0, invoiceAmount - receivedAmount)
     }
   }
 }
 
 router.get('/list', async (req, res) => {
   try {
-    const {
-      keyword = '',
-      customerName = '',
-      owner = '',
-      startDate = '',
-      endDate = '',
-      page = 1,
-      pageSize = 20
-    } = req.query
+    const { page = 1, pageSize = 20 } = req.query
 
     const pageNum = Math.max(parseInt(String(page), 10) || 1, 1)
     const sizeNum = Math.max(parseInt(String(pageSize), 10) || 20, 1)
     const offset = (pageNum - 1) * sizeNum
 
-    const params = {}
-    const where = [`(p.状态 IS NULL OR p.状态 <> N'已删除')`]
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
+    const baseCteSql = buildBaseCteSql(sourceWhereSql)
 
-    if (keyword) {
-      params.keyword = `%${String(keyword).trim()}%`
-      where.push(`(
-        p.项目编号 LIKE @keyword
-        OR g.productName LIKE @keyword
-        OR g.productDrawing LIKE @keyword
-      )`)
-    }
-
-    if (customerName) {
-      params.customerName = `%${String(customerName).trim()}%`
-      where.push(`c.customerName LIKE @customerName`)
-    }
-
-    if (owner) {
-      params.owner = `%${String(owner).trim()}%`
-      where.push(`(
-        pt.owner LIKE @owner
-        OR s.owner LIKE @owner
-      )`)
-    }
-
-    if (startDate) {
-      params.startDate = String(startDate).trim()
-      where.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate >= @startDate)`)
-    }
-
-    if (endDate) {
-      params.endDate = String(endDate).trim()
-      where.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate <= @endDate)`)
-    }
-
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-    const baseSql = `
-      FROM 项目管理 p
-      OUTER APPLY (
-        SELECT TOP 1
-          g1.产品名称 as productName,
-          g1.产品图号 as productDrawing
-        FROM 货物信息 g1
-        WHERE g1.项目编号 = p.项目编号
-          AND (g1.状态 IS NULL OR g1.状态 <> N'已删除')
-          AND (g1.IsNew IS NULL OR CAST(g1.IsNew AS INT) != 1)
-        ORDER BY g1.货物ID ASC
-      ) g
-      OUTER APPLY (
-        SELECT TOP 1 c1.客户名称 as customerName
-        FROM 客户信息 c1
-        WHERE c1.客户ID = p.客户ID
-      ) c
-      OUTER APPLY (
-        SELECT
-          COUNT(1) as orderCount,
-          ISNULL(SUM(ISNULL(so.总金额, 0)), 0) as salesAmount,
-          MAX(so.订单日期) as latestOrderDate,
-          MAX(so.经办人) as owner
-        FROM 销售订单 so
-        WHERE so.项目编号 = p.项目编号
-          AND (so.状态 IS NULL OR so.状态 <> N'已删除')
-      ) s
-      OUTER APPLY (
-        SELECT TOP 1
-          pt1.生产状态 as productionStatus,
-          pt1.负责人 as owner,
-          ISNULL(pt1.已完成数量, 0) as completedQty
-        FROM 生产任务 pt1
-        WHERE pt1.项目编号 = p.项目编号
-          AND (pt1.状态 IS NULL OR pt1.状态 <> N'已删除')
-        ORDER BY pt1.下达日期 DESC, pt1.项目编号 DESC
-      ) pt
-      OUTER APPLY (
-        SELECT
-          COUNT(DISTINCT od.出库单号) as outboundDocCount,
-          ISNULL(SUM(ISNULL(od.出库数量, 0)), 0) as outboundQty,
-          MAX(od.出库日期) as latestOutboundDate
-        FROM 出库单明细 od
-        WHERE od.项目编号 = p.项目编号
-          AND (od.状态 IS NULL OR od.状态 <> N'已删除')
-      ) od
-      OUTER APPLY (
-        SELECT
-          COUNT(DISTINCT inv.发票ID) as invoiceCount,
-          ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as invoiceAmount,
-          MAX(COALESCE(inv.开票日期, inv.单据日期)) as latestInvoiceDate
-        FROM 发票明细 fd
-        INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
-        WHERE fd.项目编号 = p.项目编号
-          AND ISNULL(inv.是否删除, 0) = 0
-      ) fi
-      OUTER APPLY (
-        SELECT
-          COUNT(DISTINCT r.单据编号) as receiptCount,
-          ISNULL(SUM(ISNULL(r.实收金额, 0)), 0) as receiptAmount,
-          MAX(COALESCE(r.回款日期, r.单据日期)) as latestReceiptDate
-        FROM 回款单据 r
-        WHERE r.项目编号 = p.项目编号
-          AND ISNULL(r.是否删除, 0) = 0
-      ) fr
-      ${whereSql}
-    `
-
-    const countRows = await query(`SELECT COUNT(1) as total ${baseSql}`, params)
+    const countRows = await query(
+      `${baseCteSql}
+      SELECT COUNT(1) as total
+      FROM base
+      ${baseWhereSql}`,
+      params
+    )
     const total = safeNumber(countRows?.[0]?.total)
 
-    const listSql = `
+    const rows = await query(
+      `${baseCteSql}
       SELECT
-        p.项目编号 as projectCode,
-        ISNULL(c.customerName, N'') as customerName,
-        ISNULL(g.productName, N'') as productName,
-        ISNULL(g.productDrawing, N'') as productDrawing,
-        ISNULL(s.owner, pt.owner) as owner,
-        ISNULL(s.orderCount, 0) as salesOrderCount,
-        ISNULL(s.salesAmount, 0) as salesAmount,
-        p.项目状态 as projectStatus,
-        pt.productionStatus as productionStatus,
-        ISNULL(pt.completedQty, 0) as completedQty,
-        ISNULL(od.outboundDocCount, 0) as outboundDocCount,
-        ISNULL(od.outboundQty, 0) as outboundQty,
-        ISNULL(fi.invoiceCount, 0) as invoiceCount,
-        ISNULL(fi.invoiceAmount, 0) as invoiceAmount,
-        ISNULL(fr.receiptCount, 0) as receiptCount,
-        ISNULL(fr.receiptAmount, 0) as receiptAmount,
-        CONVERT(varchar(10), s.latestOrderDate, 23) as latestOrderDate,
-        CONVERT(varchar(10), od.latestOutboundDate, 23) as latestOutboundDate,
-        CONVERT(varchar(10), fi.latestInvoiceDate, 23) as latestInvoiceDate,
-        CONVERT(varchar(10), fr.latestReceiptDate, 23) as latestReceiptDate
-      ${baseSql}
-      ORDER BY p.项目编号 DESC
-      OFFSET ${offset} ROWS FETCH NEXT ${sizeNum} ROWS ONLY
-    `
-
-    const rows = await query(listSql, params)
+        base.projectCode,
+        base.customerName,
+        base.productName,
+        base.productDrawing,
+        base.category,
+        base.owner,
+        base.salesOrderCount,
+        base.salesAmount,
+        base.projectStatus,
+        base.productionStatus,
+        base.completedQty,
+        base.outboundDocCount,
+        base.outboundQty,
+        base.invoiceCount,
+        base.invoiceAmount,
+        base.receiptCount,
+        base.receiptAmount,
+        base.uninvoicedAmount,
+        base.unreceivedAmount,
+        CASE
+          WHEN base.salesAmount > base.invoiceAmount THEN 'uninvoiced'
+          WHEN base.invoiceAmount > base.receiptAmount THEN 'unreceived'
+          WHEN base.completedQty > base.outboundQty THEN 'unshipped'
+          WHEN base.latestOrderDate IS NOT NULL
+            AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
+            AND base.receiptAmount < base.salesAmount
+          THEN 'overdue'
+          ELSE ''
+        END as anomalyType,
+        CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
+        CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
+        CONVERT(varchar(10), base.latestInvoiceDate, 23) as latestInvoiceDate,
+        CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
+      FROM base
+      ${baseWhereSql}
+      ORDER BY base.projectCode DESC
+      OFFSET ${offset} ROWS FETCH NEXT ${sizeNum} ROWS ONLY`,
+      params
+    )
 
     res.json({
       code: 0,
@@ -491,6 +661,53 @@ router.get('/list', async (req, res) => {
       code: 500,
       success: false,
       message: '获取综合查询列表失败'
+    })
+  }
+})
+
+router.get('/summary', async (req, res) => {
+  try {
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
+    const baseCteSql = buildBaseCteSql(sourceWhereSql)
+
+    const rows = await query(
+      `${baseCteSql}
+      SELECT
+        COUNT(1) as projectCount,
+        ISNULL(SUM(base.salesAmount), 0) as salesAmount,
+        ISNULL(SUM(base.invoiceAmount), 0) as invoiceAmount,
+        ISNULL(SUM(base.receiptAmount), 0) as receiptAmount,
+        ISNULL(SUM(base.completedQty), 0) as completedQty,
+        ISNULL(SUM(base.outboundQty), 0) as outboundQty,
+        ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
+        ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount
+      FROM base
+      ${baseWhereSql}`,
+      params
+    )
+
+    const summary = rows?.[0] || {}
+
+    res.json({
+      code: 0,
+      success: true,
+      data: {
+        projectCount: safeNumber(summary.projectCount),
+        salesAmount: safeNumber(summary.salesAmount),
+        invoiceAmount: safeNumber(summary.invoiceAmount),
+        receiptAmount: safeNumber(summary.receiptAmount),
+        completedQty: safeNumber(summary.completedQty),
+        outboundQty: safeNumber(summary.outboundQty),
+        uninvoicedAmount: safeNumber(summary.uninvoicedAmount),
+        unreceivedAmount: safeNumber(summary.unreceivedAmount)
+      }
+    })
+  } catch (error) {
+    console.error('获取综合查询汇总失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取综合查询汇总失败'
     })
   }
 })
