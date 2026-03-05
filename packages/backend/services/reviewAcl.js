@@ -483,6 +483,11 @@ const assertReviewPermission = async ({
   legacyEnvName = '',
   legacyAllowWhenEmpty = true
 }) => {
+  // 超级管理员兜底：admin 账号始终允许审核。
+  const actor = normalizePrincipal(resolveActorFromReq(req))
+  const usernameCandidates = getReqUsernameCandidates(req)
+  if (actor === 'admin' || usernameCandidates.includes('admin')) return
+
   let dbDecision = null
   try {
     dbDecision = await decideReviewAccess({ req, actionKey, resolveActorFromReq })
@@ -507,8 +512,6 @@ const assertReviewPermission = async ({
   const whitelist = parseLegacyWhitelist(legacyEnvName)
   if (!whitelist.length && legacyAllowWhenEmpty) return
 
-  const actor = normalizePrincipal(resolveActorFromReq(req))
-  const usernameCandidates = getReqUsernameCandidates(req)
   const principals = Array.from(new Set([actor, ...usernameCandidates].filter(Boolean)))
   if (principals.some((x) => whitelist.includes(x))) return
 
