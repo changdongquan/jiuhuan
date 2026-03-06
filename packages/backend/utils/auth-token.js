@@ -3,7 +3,10 @@ const crypto = require('crypto')
 const TOKEN_SECRET =
   process.env.AUTH_TOKEN_SECRET || process.env.JWT_SECRET || 'jiuhuan-dev-insecure-secret-change-me'
 
-const DEFAULT_EXPIRES_IN_SECONDS = Number.parseInt(process.env.AUTH_TOKEN_EXPIRES_IN_SECONDS || '43200', 10)
+const DEFAULT_EXPIRES_IN_SECONDS = Number.parseInt(
+  process.env.AUTH_TOKEN_EXPIRES_IN_SECONDS || '0',
+  10
+)
 
 const toBase64Url = (input) => Buffer.from(input).toString('base64url')
 const fromBase64Url = (input) => Buffer.from(String(input || ''), 'base64url').toString('utf8')
@@ -20,14 +23,17 @@ const normalizeUsername = (value) => {
 
 const issueAuthToken = ({ username, displayName, role, roleId, domain }) => {
   const now = Math.floor(Date.now() / 1000)
+  const expiresIn = Number.isFinite(DEFAULT_EXPIRES_IN_SECONDS) ? DEFAULT_EXPIRES_IN_SECONDS : 0
   const payload = {
     sub: normalizeUsername(username),
     displayName: String(displayName || '').trim(),
     role: String(role || '').trim(),
     roleId: String(roleId || '').trim(),
     domain: domain ? String(domain).trim() : null,
-    iat: now,
-    exp: now + (Number.isFinite(DEFAULT_EXPIRES_IN_SECONDS) ? DEFAULT_EXPIRES_IN_SECONDS : 43200)
+    iat: now
+  }
+  if (expiresIn > 0) {
+    payload.exp = now + expiresIn
   }
 
   const payloadBase64 = toBase64Url(JSON.stringify(payload))
@@ -84,7 +90,7 @@ const verifyAuthToken = (tokenLike) => {
     e.statusCode = 401
     throw e
   }
-  if (Number(payload.exp || 0) <= now) {
+  if (Number(payload.exp || 0) > 0 && Number(payload.exp || 0) <= now) {
     const e = new Error('登录已过期，请重新登录')
     e.statusCode = 401
     throw e

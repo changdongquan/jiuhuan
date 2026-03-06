@@ -48,12 +48,14 @@ onMounted(async () => {
   if (!info || !info.username) return
 
   // /api/permission/ad/users 是管理员接口，普通用户调用会 403
+  const isDev = import.meta.env.DEV
   const normalizedCurrentUser = String(info.username || '')
     .split('\\')
     .pop()
     ?.split('@')[0]
     ?.toLowerCase()
-  const isAdminUser = normalizedCurrentUser === 'admin'
+  const isAdminUser =
+    normalizedCurrentUser === 'admin' || (isDev && normalizedCurrentUser === 'dev-user')
   if (!isAdminUser) return
 
   // 提取纯用户名（去掉域名前缀和 @ 域名）
