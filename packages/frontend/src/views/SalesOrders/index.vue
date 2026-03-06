@@ -1489,6 +1489,7 @@ import {
 } from 'element-plus'
 import {
   getSalesOrdersListApi,
+  getSalesOrderCustomerOptionsApi,
   getSalesOrderByOrderNoApi,
   updateSalesOrderApi,
   createSalesOrderApi,
@@ -1507,9 +1508,9 @@ import {
   type CreateSalesOrderPayload,
   type SalesOrderStatistics,
   type SalesOrderAttachment,
-  type SalesOrderAttachmentSummary
+  type SalesOrderAttachmentSummary,
+  type SalesOrderCustomerOption
 } from '@/api/sales-orders'
-import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
 import { createImageViewer } from '@/components/ImageViewer'
@@ -1679,7 +1680,7 @@ const dialogTitle = ref('编辑销售订单')
 const dialogFormRef = ref<FormInstance>()
 const dialogSubmitting = ref(false)
 const currentOrderNo = ref<string | null>(null)
-const customerList = ref<CustomerInfo[]>([])
+const customerList = ref<SalesOrderCustomerOption[]>([])
 const isCreateMode = ref(false) // 标识是新建模式还是编辑模式
 
 // 查看对话框相关变量
@@ -2548,11 +2549,11 @@ const handleView = async (row: OrderTableRow) => {
 // 加载客户列表
 const loadCustomerList = async () => {
   try {
-    const response = await getCustomerListApi({ pageSize: 1000, status: 'active' })
+    const response = await getSalesOrderCustomerOptionsApi({ status: 'active' })
     const raw: any = response
     const pr: any = raw?.data ?? raw
     const list = pr?.data?.list ?? pr?.list ?? []
-    customerList.value = list.filter((c: CustomerInfo) => c.status === 'active')
+    customerList.value = list.filter((c: SalesOrderCustomerOption) => c.status === 'active')
   } catch (error) {
     console.error('加载客户列表失败:', error)
     customerList.value = []

@@ -6,7 +6,8 @@
   "scripts": {
     "prepare": "husky install",
     "dev": "pnpm -C packages/frontend dev",
-    "ts:check": "pnpm -C packages/frontend ts:check",
+    "ts:check": "pnpm -C packages/frontend ts:check && pnpm check:customer-api-usage",
+    "check:customer-api-usage": "node ./tools/check-customer-api-usage.mjs",
     "build:pro": "pnpm -C packages/frontend build:pro",
     "build:gitee": "pnpm -C packages/frontend build:gitee",
     "build:dev": "pnpm -C packages/frontend build:dev",

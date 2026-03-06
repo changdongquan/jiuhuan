@@ -1470,6 +1470,8 @@ import {
   deleteOutboundDocumentApi,
   getOutboundDocumentStatisticsApi,
   getOutboundInventoryListApi,
+  getOutboundCustomerOptionsApi,
+  getOutboundCustomerDeliveryAddressesApi,
   getOutboundDocumentItemAttachmentsApi,
   getOutboundDocumentAttachmentsSummaryApi,
   deleteOutboundDocumentAttachmentApi,
@@ -1477,7 +1479,9 @@ import {
   type OutboundDocument,
   type OutboundDocumentAttachment,
   type OutboundDocumentAttachmentSummary,
-  type OutboundInventoryItem
+  type OutboundInventoryItem,
+  type OutboundCustomerOption,
+  type OutboundCustomerDeliveryAddress
 } from '@/api/outbound-document'
 import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
@@ -1856,8 +1860,7 @@ const loadDeliveryAddresses = async (customerId: number) => {
   }
   addressLoading.value = true
   try {
-    const { getCustomerDeliveryAddressesApi } = await import('@/api/customer')
-    const response = await getCustomerDeliveryAddressesApi(customerId, 'SHIP_TO')
+    const response = await getOutboundCustomerDeliveryAddressesApi(customerId, 'SHIP_TO')
     if (response.code === 0) {
       deliveryAddressList.value = response.data || []
     }
@@ -2309,10 +2312,10 @@ const warehouseOptions = [
 ]
 
 // 客户列表
-const customerList = ref<Array<{ id: number; customerName: string }>>([])
+const customerList = ref<OutboundCustomerOption[]>([])
 
 // 收货地址相关
-const deliveryAddressList = ref<any[]>([])
+const deliveryAddressList = ref<OutboundCustomerDeliveryAddress[]>([])
 const addressLoading = ref(false)
 
 // 表单验证规则
@@ -2388,10 +2391,9 @@ const handleEditConsigneeNameChange = (consigneeName: string | null) => {
 // 加载客户列表
 const loadCustomerList = async () => {
   try {
-    const { getCustomerListApi } = await import('@/api/customer')
-    const response = await getCustomerListApi({ pageSize: 1000, status: 'active' })
+    const response = await getOutboundCustomerOptionsApi({ status: 'active' })
     const list = response?.data?.list || response?.data || []
-    customerList.value = list.filter((c: any) => c.status === 'active')
+    customerList.value = list.filter((c: OutboundCustomerOption) => c.status === 'active')
   } catch (error) {
     console.error('加载客户列表失败:', error)
     customerList.value = []

@@ -1151,7 +1151,6 @@ import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
 
 const userStore = useUserStore()
-import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
 import {
   generateQuotationNoApi,
@@ -1159,11 +1158,13 @@ import {
   updateQuotationApi,
   deleteQuotationApi,
   getQuotationListApi,
+  getQuotationCustomerOptionsApi,
   downloadQuotationPdfApi,
   downloadQuotationCompletionPdfApi,
   uploadQuotationPartItemImageApi,
   deleteQuotationTempPartItemImageApi,
-  type QuotationFormData
+  type QuotationFormData,
+  type QuotationCustomerOption
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
 
@@ -1236,7 +1237,7 @@ type ViewMode = 'table' | 'card'
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
 
 // 客户列表
-const customerList = ref<CustomerInfo[]>([])
+const customerList = ref<QuotationCustomerOption[]>([])
 const customerLoading = ref(false)
 
 // 查询表单
@@ -1696,11 +1697,7 @@ const formatQuotationType = (type: string | null | undefined) => {
 const fetchCustomerList = async () => {
   try {
     customerLoading.value = true
-    const response = await getCustomerListApi({
-      status: 'active',
-      page: 1,
-      pageSize: 10000
-    })
+    const response = await getQuotationCustomerOptionsApi({ status: 'active' })
 
     if (response && response.data && response.data.list) {
       customerList.value = response.data.list

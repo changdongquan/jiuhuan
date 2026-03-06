@@ -151,6 +151,113 @@ const ensureTables = async () => {
   tablesReady = true
 }
 
+const ensureOutboundCustomerSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'客户信息', N'是否删除') IS NULL
+      ALTER TABLE 客户信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_客户信息_是否删除 DEFAULT(0);
+  `)
+}
+
+router.get('/customer-options', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureOutboundCustomerSoftDeleteColumns(pool)
+
+    const status = String(req.query.status || 'active')
+      .trim()
+      .toLowerCase()
+    const whereParts = ['ISNULL(是否删除, 0) = 0']
+    if (status === 'active') whereParts.push('(是否停用 = 0 OR 是否停用 IS NULL)')
+    if (status === 'inactive') whereParts.push('是否停用 = 1')
+
+    const rows = await query(
+      `
+        SELECT
+          客户ID as id,
+          客户名称 as customerName,
+          CASE WHEN 是否停用 = 1 THEN 'inactive' ELSE 'active' END as status
+        FROM 客户信息
+        WHERE ${whereParts.join(' AND ')}
+        ORDER BY SeqNumber ASC, 客户ID ASC
+      `
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: { list: rows || [] }
+    })
+  } catch (error) {
+    console.error('获取出库单客户选项失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取出库单客户选项失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/customer/:customerId/delivery-addresses', async (req, res) => {
+  try {
+    await ensureDeliveryAddressTable()
+    const customerId = Number.parseInt(String(req.params.customerId || ''), 10)
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'customerId 非法' })
+    }
+
+    const addressUsageRaw = String(req.query.addressUsage || '').trim()
+    const whereParts = ['客户ID = @customerId', '是否启用 = 1']
+    const params = { customerId }
+    if (addressUsageRaw) {
+      whereParts.push('地址用途 = @addressUsage')
+      params.addressUsage = addressUsageRaw
+    }
+
+    const rows = await query(
+      `
+        SELECT
+          收货地址ID as id,
+          客户ID as customerId,
+          收货方名称,
+          收货方简称,
+          收货地址,
+          邮政编码,
+          所在地区,
+          所在城市,
+          所在省份,
+          所在国家,
+          联系人,
+          联系电话,
+          联系手机,
+          电子邮箱,
+          地址用途 as addressUsage,
+          CASE WHEN 是否默认 = 1 THEN 1 ELSE 0 END as isDefault,
+          排序号 as sortOrder,
+          CASE WHEN 是否启用 = 1 THEN 1 ELSE 0 END as isEnabled,
+          备注,
+          创建时间 as createdAt,
+          更新时间 as updatedAt,
+          创建人 as createdBy,
+          更新人 as updatedBy
+        FROM 客户收货地址
+        WHERE ${whereParts.join(' AND ')}
+        ORDER BY 是否默认 DESC, 排序号 ASC, 创建时间 ASC
+      `,
+      params
+    )
+
+    return res.json({ code: 0, success: true, data: rows || [] })
+  } catch (error) {
+    console.error('获取出库单客户收货地址失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取出库单客户收货地址失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
 const ensureAttachmentsTable = async () => {
   if (attachmentsTableReady) return
 

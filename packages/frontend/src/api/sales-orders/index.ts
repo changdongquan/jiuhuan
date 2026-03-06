@@ -99,10 +99,25 @@ export interface SalesOrderAttachmentSummary {
   attachmentCount: number
 }
 
+export interface SalesOrderCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
 // 获取销售订单列表（按订单号分组）
 export const getSalesOrdersListApi = (params?: SalesOrderQueryParams) => {
   return request.get<SalesOrderPageResponse>({
     url: '/api/sales-orders/list',
+    params
+  })
+}
+
+export const getSalesOrderCustomerOptionsApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: SalesOrderCustomerOption[] }>({
+    url: '/api/sales-orders/customer-options',
     params
   })
 }

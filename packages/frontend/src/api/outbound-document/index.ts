@@ -73,6 +73,38 @@ export interface OutboundInventoryItem {
   剩余可出货: number
 }
 
+export interface OutboundCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
+export interface OutboundCustomerDeliveryAddress {
+  id: number
+  customerId: number
+  收货方名称: string
+  收货方简称?: string
+  收货地址: string
+  邮政编码?: string
+  所在地区?: string
+  所在城市?: string
+  所在省份?: string
+  所在国家?: string
+  联系人?: string
+  联系电话?: string
+  联系手机?: string
+  电子邮箱?: string
+  addressUsage: string
+  isDefault: boolean
+  sortOrder: number
+  isEnabled: boolean
+  备注?: string
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string
+  updatedBy?: string
+}
+
 // 出库单查询参数
 export interface OutboundDocumentQueryParams {
   keyword?: string // 出库单号/客户名称/项目编号
@@ -130,6 +162,25 @@ export const getOutboundInventoryListApi = (params?: OutboundInventoryQueryParam
   return request.get({
     url: '/api/outbound-document/inventory',
     params
+  })
+}
+
+export const getOutboundCustomerOptionsApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: OutboundCustomerOption[] }>({
+    url: '/api/outbound-document/customer-options',
+    params
+  })
+}
+
+export const getOutboundCustomerDeliveryAddressesApi = (
+  customerId: number,
+  addressUsage?: string
+) => {
+  return request.get<OutboundCustomerDeliveryAddress[]>({
+    url: `/api/outbound-document/customer/${customerId}/delivery-addresses`,
+    params: addressUsage ? { addressUsage } : undefined
   })
 }
 

@@ -705,11 +705,11 @@ import {
 import {
   createFinanceInvoiceApi,
   deleteFinanceInvoiceApi,
+  getFinanceCustomerOptionsApi,
   getFinanceInvoiceCandidatesApi,
   getFinanceInvoiceListApi,
   updateFinanceInvoiceApi
 } from '@/api/finance'
-import { getCustomerListApi } from '@/api/customer'
 
 type InvoiceStatus = 'normal' | 'red'
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
@@ -1358,7 +1358,7 @@ const generateDialogDocumentNo = () => {
 }
 
 const loadCustomerOptions = async () => {
-  const resp = await getCustomerListApi({ page: 1, pageSize: 1000, status: 'active' })
+  const resp = await getFinanceCustomerOptionsApi({ status: 'active' })
   const raw: any = resp
   const pr: any = raw?.data ?? raw
   const data: any = pr?.data ?? pr

@@ -1,5 +1,11 @@
 import request from '@/axios'
 
+export interface QuotationCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
 // 生成新的报价单编号
 export const generateQuotationNoApi = () => {
   return request.get<{
@@ -8,6 +14,15 @@ export const generateQuotationNoApi = () => {
     data: { quotationNo: string }
   }>({
     url: '/api/quotation/generate-no'
+  })
+}
+
+export const getQuotationCustomerOptionsApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: QuotationCustomerOption[] }>({
+    url: '/api/quotation/customer-options',
+    params
   })
 }
 

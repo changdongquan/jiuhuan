@@ -78,10 +78,25 @@ export interface ProjectQueryParams {
   pageSize?: number
 }
 
+export interface ProjectCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
 // 获取项目信息列表
 export const getProjectListApi = (params?: ProjectQueryParams) => {
   return request.get({
     url: '/api/project/list',
+    params
+  })
+}
+
+export const getProjectCustomerOptionsApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: ProjectCustomerOption[] }>({
+    url: '/api/project/customer-options',
     params
   })
 }

@@ -425,7 +425,7 @@ import {
   type GoodsInfo,
   type GoodsQueryParams
 } from '@/api/goods'
-import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
+import { getProjectCustomerOptionsApi, type ProjectCustomerOption } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 import {
@@ -486,7 +486,7 @@ const sortState = reactive<{ prop: string; order: '' | 'ascending' | 'descending
 })
 
 // 客户列表数据
-const customerList = ref<CustomerInfo[]>([])
+const customerList = ref<ProjectCustomerOption[]>([])
 const customerLoading = ref(false)
 
 // 最大序号提示
@@ -679,14 +679,9 @@ const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending
 const fetchCustomerList = async () => {
   try {
     customerLoading.value = true
-    const response = await getCustomerListApi({
-      status: 'active',
-      page: 1,
-      pageSize: 10000 // 设置一个足够大的数值以获取所有未停用的客户
-    })
+    const response = await getProjectCustomerOptionsApi({ status: 'active' })
 
     if (response && response.data && response.data.list) {
-      // 后端已经按 SeqNumber ASC 排序，直接使用
       customerList.value = response.data.list
     } else {
       ElMessage.error('获取客户列表失败')

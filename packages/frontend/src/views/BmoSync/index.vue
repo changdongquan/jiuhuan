@@ -472,6 +472,7 @@ import {
   createBmoRelayJobApi,
   getBmoRelayJobApi,
   getBmoMouldProcurementDetailApi,
+  getBmoInitiationCustomersApi,
   getBmoInitiationRequestApi,
   getBmoInitiationRequestByProjectApi,
   saveBmoInitiationDraftApi,
@@ -479,10 +480,10 @@ import {
   type BmoMouldProcurementRow,
   type BmoMouldProcurementDetail,
   type BmoMouldProcurementDetailField,
+  type BmoInitiationCustomerOption,
   type BmoInitiationRequestRow
 } from '@/api/bmo'
 import { getMaxSerialApi } from '@/api/goods'
-import { getCustomerListApi, type CustomerInfo } from '@/api/customer'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 const router = useRouter()
@@ -626,7 +627,7 @@ const initiateSaving = ref(false)
 const initiateConfirming = ref(false)
 const initiateRecommendingCode = ref(false)
 const initiateCustomerLoading = ref(false)
-const initiateCustomerOptions = ref<CustomerInfo[]>([])
+const initiateCustomerOptions = ref<BmoInitiationCustomerOption[]>([])
 const initiate14CollapseActive = ref<string[]>([])
 
 const DEFAULT_INITIATE_CUSTOMER_NAME = '长虹美菱股份有限公司'
@@ -870,7 +871,7 @@ const recommendInitiateProjectCode = async () => {
 const loadInitiateCustomers = async () => {
   initiateCustomerLoading.value = true
   try {
-    const res = await getCustomerListApi({ status: 'active', page: 1, pageSize: 10000 })
+    const res = await getBmoInitiationCustomersApi({ status: 'active' })
     initiateCustomerOptions.value = res.data?.list || []
   } catch (e: any) {
     initiateCustomerOptions.value = []

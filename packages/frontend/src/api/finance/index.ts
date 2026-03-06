@@ -42,8 +42,23 @@ export interface FinanceReceiptCandidateQueryParams {
   pageSize?: number
 }
 
+export interface FinanceCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
 export const getFinanceInvoiceListApi = (params?: FinanceInvoiceQueryParams) => {
   return request.get({ url: '/api/finance/invoices/list', params })
+}
+
+export const getFinanceCustomerOptionsApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: FinanceCustomerOption[] }>({
+    url: '/api/finance/customer-options',
+    params
+  })
 }
 
 export const getFinanceInvoiceCandidatesApi = (params?: FinanceInvoiceCandidateQueryParams) => {

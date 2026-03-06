@@ -58,6 +58,12 @@ export interface BmoMouldProcurementDetail {
   }
 }
 
+export interface BmoInitiationCustomerOption {
+  id: number
+  customerName: string
+  status: 'active' | 'inactive'
+}
+
 export type BmoInitiationStatus = 'DRAFT' | 'PM_CONFIRMED' | 'REJECTED' | 'APPLIED' | string
 
 export interface BmoInitiationGoodsDraft {
@@ -328,6 +334,15 @@ export const refreshBmoInitiationCavitySnapshotApi = (data: {
 export const getBmoInitiationRequestApi = (params: { bmo_record_id: string }) => {
   return request.get<BmoInitiationRequestRow | null>({
     url: '/api/bmo/initiation-request',
+    params
+  })
+}
+
+export const getBmoInitiationCustomersApi = (
+  params: { status?: 'active' | 'inactive' | 'all' } = {}
+) => {
+  return request.get<{ list: BmoInitiationCustomerOption[] }>({
+    url: '/api/bmo/initiation/customers',
     params
   })
 }

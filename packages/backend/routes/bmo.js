@@ -2466,6 +2466,53 @@ router.get('/mould-procurement/live', async (req, res) => {
   }
 })
 
+const ensureBmoInitiationCustomerSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'客户信息', N'是否删除') IS NULL
+      ALTER TABLE 客户信息 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_客户信息_是否删除 DEFAULT(0);
+  `)
+}
+
+router.get('/initiation/customers', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureBmoInitiationCustomerSoftDeleteColumns(pool)
+
+    const status = String(req.query.status || 'active')
+      .trim()
+      .toLowerCase()
+    const whereParts = ['ISNULL(是否删除, 0) = 0']
+    if (status === 'active') whereParts.push('(是否停用 = 0 OR 是否停用 IS NULL)')
+    if (status === 'inactive') whereParts.push('是否停用 = 1')
+
+    const list = await query(
+      `
+        SELECT
+          客户ID as id,
+          客户名称 as customerName,
+          CASE WHEN 是否停用 = 1 THEN 'inactive' ELSE 'active' END as status
+        FROM 客户信息
+        WHERE ${whereParts.join(' AND ')}
+        ORDER BY SeqNumber ASC, 客户ID ASC
+      `
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: { list: list || [] }
+    })
+  } catch (error) {
+    console.error('读取 BMO 立项客户列表失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: formatBmoSqlErrorMessage(error, '读取 BMO 立项客户列表失败')
+    })
+  }
+})
+
 // === BMO 立项申请单（申请/确认/审核/自动入库） ===
 const safeJsonParse = (s) => {
   if (!s) return null

@@ -695,11 +695,11 @@ import {
 import {
   createFinanceReceiptApi,
   deleteFinanceReceiptApi,
+  getFinanceCustomerOptionsApi,
   getFinanceReceiptCandidatesApi,
   getFinanceReceiptListApi,
   updateFinanceReceiptApi
 } from '@/api/finance'
-import { getCustomerListApi } from '@/api/customer'
 
 type ReceiptStatus = 'pending' | 'received'
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
@@ -1349,7 +1349,7 @@ const generateDialogDocumentNo = () => {
 }
 
 const loadCustomerOptions = async () => {
-  const resp = await getCustomerListApi({ page: 1, pageSize: 1000, status: 'active' })
+  const resp = await getFinanceCustomerOptionsApi({ status: 'active' })
   const raw: any = resp
   const pr: any = raw?.data ?? raw
   const data: any = pr?.data ?? pr
