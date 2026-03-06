@@ -542,6 +542,7 @@ const stageDateLabelMap: Record<string, string> = {
   issuedDate: '下达日期',
   startDate: '开始日期',
   endDate: '结束日期',
+  totalHours: '工时合计',
   latestOutboundDate: '最近出货',
   latestInvoiceDate: '最近开票',
   latestReceiptDate: '最近回款'

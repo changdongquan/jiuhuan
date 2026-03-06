@@ -367,6 +367,7 @@ const buildJourney = ({
     outboundRows.map((row) => String(row.documentNo || '').trim()).filter(Boolean)
   ).size
   const completedQty = safeNumber(taskRow?.completedQty)
+  const totalHours = safeNumber(taskRow?.totalHours)
 
   const invoiceAmount = invoiceRows.reduce((sum, row) => sum + safeNumber(row.amount), 0)
   const invoiceCount = new Set(
@@ -473,12 +474,14 @@ const buildJourney = ({
       summary: rawProductionStatus || '暂无生产任务状态',
       metrics: {
         plannedQty: safeNumber(taskRow?.plannedQty),
-        completedQty: completedQty
+        completedQty: completedQty,
+        totalHours
       },
       dates: {
         issuedDate: toDateString(taskRow?.issuedDate),
         startDate: toDateString(taskRow?.startDate),
-        endDate: toDateString(taskRow?.endDate)
+        endDate: toDateString(taskRow?.endDate),
+        totalHours: totalHours > 0 ? String(totalHours) : ''
       }
     },
     {
@@ -841,6 +844,7 @@ router.get('/project-journey', async (req, res) => {
               pt.生产状态 as productionStatus,
               pt.投产数量 as plannedQty,
               pt.已完成数量 as completedQty,
+              pt.合计工时 as totalHours,
               pt.下达日期 as issuedDate,
               pt.开始日期 as startDate,
               pt.结束日期 as endDate,
