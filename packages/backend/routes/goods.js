@@ -161,6 +161,59 @@ const normalizeEntityKey = (row) =>
   String(row?.entityKey || row?.projectCode || '')
     .trim()
 
+const autoResetBmoInitiationAfterHardDelete = async ({ pool, projectCode, actor }) => {
+  const code = String(projectCode || '').trim()
+  if (!code) return { matched: 0, reset: 0, skipped: true, reason: 'empty-project-code' }
+
+  try {
+    const req = pool.request()
+    req.input('projectCode', sql.NVarChar(100), code)
+    req.input('statusApplied', sql.NVarChar(20), 'APPLIED')
+    req.input('statusDraft', sql.NVarChar(20), 'DRAFT')
+    req.input('actor', sql.NVarChar(200), actor || null)
+    const result = await req.query(`
+      ;WITH target_rows AS (
+        SELECT id
+        FROM dbo.bmo_initiation_requests
+        WHERE (
+          project_code_final = @projectCode
+          OR project_code_candidate = @projectCode
+          OR JSON_VALUE(goods_draft_json, '$.projectCode') = @projectCode
+        )
+          AND status = @statusApplied
+      )
+      UPDATE r
+      SET
+        status = @statusDraft,
+        project_code_final = NULL,
+        sales_order_no = NULL,
+        approved_by = NULL,
+        approved_at = NULL,
+        confirmed_by = NULL,
+        confirmed_at = NULL,
+        rejected_reason = NULL,
+        updated_at = SYSDATETIME()
+      FROM dbo.bmo_initiation_requests r
+      INNER JOIN target_rows t ON t.id = r.id;
+
+      SELECT
+        CAST((SELECT COUNT(1) FROM target_rows) AS INT) AS matched,
+        CAST(@@ROWCOUNT AS INT) AS reset;
+    `)
+
+    return {
+      matched: Number(result.recordset?.[0]?.matched || 0) || 0,
+      reset: Number(result.recordset?.[0]?.reset || 0) || 0,
+      skipped: false
+    }
+  } catch (e) {
+    if (String(e?.message || '').includes("Invalid object name 'dbo.bmo_initiation_requests'")) {
+      return { matched: 0, reset: 0, skipped: true, reason: 'table-not-found' }
+    }
+    throw e
+  }
+}
+
 const restoreSoftDeletedByReviewRow = async ({ tx, row, actor }) => {
   const moduleCode = normalizeModuleCode(row)
   const entityKey = normalizeEntityKey(row)
@@ -892,13 +945,33 @@ router.post('/hard-delete-review/approve', async (req, res) => {
 
     try {
       const executeResult = await executeHardDeleteByReviewRow({ pool, row: reviewRow, actor: reviewer, requestId })
+      let bmoResetResult = null
+      try {
+        bmoResetResult = await autoResetBmoInitiationAfterHardDelete({
+          pool,
+          projectCode: reviewRow?.projectCode,
+          actor: reviewer
+        })
+      } catch (resetError) {
+        bmoResetResult = {
+          matched: 0,
+          reset: 0,
+          skipped: false,
+          error: resetError?.message || 'unknown-error'
+        }
+        console.error('硬删除后自动重置 BMO 立项状态失败:', resetError)
+      }
+
       const finishReq = pool.request()
       finishReq.input('requestId', sql.BigInt, requestIdValue)
       finishReq.input('executionAuditId', sql.BigInt, executeResult.auditId || null)
       finishReq.input(
         'executionResult',
         sql.NVarChar(sql.MAX),
-        JSON.stringify(executeResult.cascadeSummary || {})
+        JSON.stringify({
+          cascadeSummary: executeResult.cascadeSummary || {},
+          bmoInitiationReset: bmoResetResult || { matched: 0, reset: 0, skipped: true, reason: 'not-run' }
+        })
       )
       await finishReq.query(`
         UPDATE dbo.project_hard_delete_review_requests
@@ -915,7 +988,10 @@ router.post('/hard-delete-review/approve', async (req, res) => {
         code: 0,
         success: true,
         message: '审核通过并已执行硬删除',
-        data: executeResult
+        data: {
+          ...executeResult,
+          bmoInitiationReset: bmoResetResult || { matched: 0, reset: 0, skipped: true, reason: 'not-run' }
+        }
       })
     } catch (executeError) {
       const failReq = pool.request()
