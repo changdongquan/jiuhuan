@@ -17,6 +17,7 @@
           <el-upload
             v-if="!readonly && drawing"
             :action="uploadAction"
+            :headers="uploadAuthHeaders"
             :data="uploadData"
             multiple
             :show-file-list="false"
@@ -107,6 +108,7 @@ import {
   type ProjectAttachment
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
+import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 
 const props = defineProps<{
   modelValue: boolean
@@ -119,6 +121,7 @@ const emit = defineEmits<{
 }>()
 
 const appStore = useAppStore()
+const uploadAuthHeaders = useUploadAuthHeaders()
 const isMobile = computed(() => appStore.getMobile)
 
 const visible = computed({

@@ -243,6 +243,12 @@ const routesToSync = [
     page_title: '角色管理',
     parent_route: 'Authorization'
   },
+  {
+    route_name: 'Permission',
+    route_path: '/permission-management/index',
+    page_title: '权限管理',
+    parent_route: 'PermissionManagement'
+  },
 
   // 小憩
   {

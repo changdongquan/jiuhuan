@@ -835,6 +835,7 @@
                     <template v-if="!isCreateMode && detail.id">
                       <el-upload
                         :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${detail.id}/attachments`"
+                        :headers="uploadAuthHeaders"
                         :show-file-list="false"
                         :before-upload="beforeAttachmentUpload"
                         :on-success="() => handleEditAttachmentUploadSuccess(detail)"
@@ -1025,6 +1026,7 @@
         <el-upload
           v-if="!attachmentReadonly"
           :action="`/api/sales-orders/${encodeURIComponent(attachmentOrderNo)}/details/${attachmentDetailId}/attachments`"
+          :headers="uploadAuthHeaders"
           :show-file-list="false"
           :before-upload="beforeAttachmentUpload"
           :on-success="handleAttachmentDialogUploadSuccess"
@@ -1513,6 +1515,7 @@ import {
 } from '@/api/sales-orders'
 import { getNewProductsApi, type NewProductInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
+import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 
@@ -1537,6 +1540,7 @@ interface TimelineGroup {
 }
 
 const appStore = useAppStore()
+const uploadAuthHeaders = useUploadAuthHeaders()
 const isMobile = computed(() => appStore.getMobile)
 const route = useRoute()
 const router = useRouter()

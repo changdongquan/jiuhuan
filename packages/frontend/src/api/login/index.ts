@@ -48,6 +48,8 @@ export const autoLoginApi = (): Promise<
     roles: string[]
     role: string
     roleId: string
+    permissions?: string[]
+    capabilities?: string[]
   }>
 > => {
   return request.get({

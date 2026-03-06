@@ -8,7 +8,6 @@ import {
   ElCheckbox,
   ElMessage,
   ElLoading,
-  ElTag,
   ElTable,
   ElTableColumn,
   ElPagination,
@@ -42,6 +41,13 @@ import {
   removeUserReviewAclApi,
   type ReviewAclActionItem
 } from '@/api/reviewAcl'
+import {
+  assignUserCapabilitiesApi,
+  getCapabilityActionsApi,
+  getUserCapabilitiesApi,
+  removeUserCapabilitiesApi,
+  type CapabilityActionItem
+} from '@/api/capability'
 
 // ========================
 // 通用状态
@@ -113,6 +119,9 @@ const loadingUserGroups = ref(false)
 const userOriginalRouteNames = ref<string[]>([])
 const userCheckedRouteNames = ref<string[]>([])
 const userPermissionFilter = ref('')
+const userOriginalCapabilityKeys = ref<string[]>([])
+const userCheckedCapabilityKeys = ref<string[]>([])
+const userCapabilityFilter = ref('')
 const savingUserPermissions = ref(false)
 
 const userPagination = ref({
@@ -176,7 +185,9 @@ const loadUserGroups = async (username: string) => {
 
 const resetUserPermissionSelection = () => {
   userPermissionFilter.value = ''
+  userCapabilityFilter.value = ''
   userCheckedRouteNames.value = [...userOriginalRouteNames.value]
+  userCheckedCapabilityKeys.value = [...userOriginalCapabilityKeys.value]
 }
 
 // 选择用户并加载权限
@@ -184,10 +195,20 @@ const selectUser = async (user: AdUserItem) => {
   selectedUser.value = user
   loadingUserPermissions.value = true
   try {
-    const res = await getUserPermissionsApi(user.username)
-    const permissions = (res.data as any[]) || []
+    const [permissionRes, capabilityRes] = await Promise.all([
+      getUserPermissionsApi(user.username),
+      getUserCapabilitiesApi(user.username)
+    ])
+    const permissions = (permissionRes.data as any[]) || []
+    const capabilities = ((capabilityRes.data as string[]) || []).map((x) =>
+      String(x || '')
+        .trim()
+        .toUpperCase()
+    )
     userOriginalRouteNames.value = permissions
     userCheckedRouteNames.value = [...permissions]
+    userOriginalCapabilityKeys.value = capabilities
+    userCheckedCapabilityKeys.value = [...capabilities]
     await loadUserGroups(user.username)
   } catch (error: any) {
     ElMessage.error('加载用户权限失败: ' + (error.message || '未知错误'))
@@ -204,8 +225,22 @@ const toggleUserPermission = (routeName: string, checked: boolean) => {
     current.add(routeName)
   } else {
     current.delete(routeName)
+    const routeKeys = getCapabilityKeysByRouteName(routeName)
+    if (routeKeys.length) {
+      const capabilitySet = new Set(userCheckedCapabilityKeys.value)
+      routeKeys.forEach((k) => capabilitySet.delete(k))
+      userCheckedCapabilityKeys.value = Array.from(capabilitySet)
+    }
   }
   userCheckedRouteNames.value = Array.from(current)
+  if (checked) {
+    const readKey = getCapabilityKeyByRouteAction(routeName, 'READ')
+    if (readKey) {
+      const capabilitySet = new Set(userCheckedCapabilityKeys.value)
+      capabilitySet.add(readKey)
+      userCheckedCapabilityKeys.value = Array.from(capabilitySet)
+    }
+  }
 }
 
 const toggleUserGroupPermissions = (groupKey: string, checked: boolean) => {
@@ -265,11 +300,6 @@ const saveUserPermissions = async () => {
     }
   })
 
-  if (!toAddRouteNames.length && !toRemoveRouteNames.length) {
-    ElMessage.info('权限未变化，无需保存')
-    return
-  }
-
   const map = permissionMapByRouteName.value
   const toAddIds = toAddRouteNames
     .map((name) => {
@@ -286,6 +316,25 @@ const saveUserPermissions = async () => {
     })
     .filter((id) => Number.isFinite(id))
 
+  const originalCapabilitySet = new Set(userOriginalCapabilityKeys.value)
+  const currentCapabilitySet = new Set(userCheckedCapabilityKeys.value)
+  const toAddCapabilityKeys = Array.from(currentCapabilitySet).filter(
+    (x) => !originalCapabilitySet.has(x)
+  )
+  const toRemoveCapabilityKeys = Array.from(originalCapabilitySet).filter(
+    (x) => !currentCapabilitySet.has(x)
+  )
+
+  if (
+    !toAddIds.length &&
+    !toRemoveIds.length &&
+    !toAddCapabilityKeys.length &&
+    !toRemoveCapabilityKeys.length
+  ) {
+    ElMessage.info('权限未变化，无需保存')
+    return
+  }
+
   savingUserPermissions.value = true
   const loading = ElLoading.service({ target: '.user-permission-panel' })
   try {
@@ -297,8 +346,17 @@ const saveUserPermissions = async () => {
       await removeUserPermissionsApi(username, toRemoveIds)
     }
 
+    if (toAddCapabilityKeys.length) {
+      await assignUserCapabilitiesApi(username, toAddCapabilityKeys)
+    }
+
+    if (toRemoveCapabilityKeys.length) {
+      await removeUserCapabilitiesApi(username, toRemoveCapabilityKeys)
+    }
+
     userOriginalRouteNames.value = [...userCheckedRouteNames.value]
-    ElMessage.success('用户权限保存成功')
+    userOriginalCapabilityKeys.value = [...userCheckedCapabilityKeys.value]
+    ElMessage.success('用户权限保存成功（页面权限 + 模块能力权限）')
   } catch (error: any) {
     ElMessage.error('保存用户权限失败: ' + (error.message || '未知错误'))
   } finally {
@@ -325,12 +383,19 @@ const handleUserPageSizeChange = (size: number) => {
 
 const totalUserPermissions = computed(() => permissionList.value.length)
 const checkedUserPermissionsCount = computed(() => userCheckedRouteNames.value.length)
+const checkedUserCapabilityCount = computed(() => userCheckedCapabilityKeys.value.length)
+
+const switchCenter = (tab: string) => {
+  activeTab.value = tab
+  handleTabChange(tab)
+}
 
 // 初始加载
 onMounted(() => {
   loadPermissionList()
   loadAdUsers()
   loadReviewActions()
+  loadCapabilityActions()
 })
 
 // ========================
@@ -739,6 +804,96 @@ const checkedReviewUserActions = computed(() => reviewUserCheckedActionKeys.valu
 const checkedReviewGroupActions = computed(() => reviewGroupCheckedActionKeys.value.length)
 
 // ========================
+// 模块能力权限（Capability）
+// ========================
+
+const capabilityActions = ref<CapabilityActionItem[]>([])
+const loadingCapabilityActions = ref(false)
+
+const capabilityActionColumns = [
+  { code: 'READ', label: '读' },
+  { code: 'CREATE', label: '增' },
+  { code: 'UPDATE', label: '改' },
+  { code: 'DELETE', label: '删' },
+  { code: 'UPLOAD', label: '传' },
+  { code: 'EXPORT', label: '导' },
+  { code: 'APPROVE', label: '审' }
+]
+
+const loadCapabilityActions = async () => {
+  loadingCapabilityActions.value = true
+  try {
+    const res = await getCapabilityActionsApi({ includeDisabled: 1 })
+    capabilityActions.value = (res.data as CapabilityActionItem[]) || []
+  } catch (error: any) {
+    ElMessage.error('加载模块能力动作失败: ' + (error?.message || '未知错误'))
+  } finally {
+    loadingCapabilityActions.value = false
+  }
+}
+
+const capabilityRouteActionMap = computed(() => {
+  const routeMap = new Map<string, Map<string, string>>()
+  capabilityActions.value.forEach((item) => {
+    const routeName = String(item.routeName || '').trim()
+    const actionCode = String(item.actionCode || '')
+      .trim()
+      .toUpperCase()
+    const key = String(item.capabilityKey || '')
+      .trim()
+      .toUpperCase()
+    if (!routeName || !actionCode || !key) return
+    const actionMap = routeMap.get(routeName) || new Map<string, string>()
+    actionMap.set(actionCode, key)
+    routeMap.set(routeName, actionMap)
+  })
+  return routeMap
+})
+
+const getCapabilityKeyByRouteAction = (routeName: string, actionCode: string) => {
+  const actionMap = capabilityRouteActionMap.value.get(String(routeName || '').trim())
+  if (!actionMap) return ''
+  return (
+    actionMap.get(
+      String(actionCode || '')
+        .trim()
+        .toUpperCase()
+    ) || ''
+  )
+}
+
+const getCapabilityKeysByRouteName = (routeName: string) => {
+  const actionMap = capabilityRouteActionMap.value.get(String(routeName || '').trim())
+  if (!actionMap) return []
+  return Array.from(actionMap.values())
+}
+
+const userSelectedPageRows = computed(() => {
+  const map = permissionMapByRouteName.value
+  const keyword = userCapabilityFilter.value.trim().toLowerCase()
+  return userCheckedRouteNames.value
+    .map((routeName) => map.get(routeName))
+    .filter(Boolean)
+    .filter((perm) => {
+      if (!keyword) return true
+      const routeName = String(perm?.route_name || '').toLowerCase()
+      const title = String(perm?.page_title || '').toLowerCase()
+      return routeName.includes(keyword) || title.includes(keyword)
+    }) as PermissionItem[]
+})
+
+const toggleUserRouteCapability = (routeName: string, actionCode: string, checked: boolean) => {
+  const capKey = getCapabilityKeyByRouteAction(routeName, actionCode)
+  if (!capKey) return
+  const set = new Set(userCheckedCapabilityKeys.value)
+  if (checked) set.add(capKey)
+  else set.delete(capKey)
+  userCheckedCapabilityKeys.value = Array.from(set)
+}
+
+const totalCapabilityActions = computed(() => capabilityActions.value.length)
+
+// ========================
 // 路由/权限同步
 // ========================
 
@@ -783,182 +938,228 @@ const handleTabChange = (tab: string) => {
         同步菜单权限
       </BaseButton>
     </div>
-    <ElTabs v-model="activeTab" class="permission-tabs" @tab-change="handleTabChange">
-      <!-- 用户权限 -->
-      <ElTabPane label="按用户分配" name="user">
-        <div class="permission-layout">
-          <!-- 左侧：用户列表 -->
-          <div class="permission-sidebar">
-            <div class="permission-sidebar-header">
-              <div class="permission-sidebar-title">域用户</div>
-              <div class="permission-sidebar-subtitle">从 AD 中选择需要分配权限的用户</div>
-            </div>
-            <div class="mb-10px">
-              <ElInput
-                v-model="userSearchKeyword"
-                placeholder="按姓名 / 账号 / 邮箱搜索"
-                clearable
-                @keyup.enter="searchUsers"
-                @clear="searchUsers"
-              >
-                <template #append>
-                  <BaseButton type="primary" @click="searchUsers">搜索</BaseButton>
-                </template>
-              </ElInput>
-            </div>
-            <ElTable
-              v-loading="loadingUsers"
-              :data="adUsers"
-              size="small"
-              height="380"
-              highlight-current-row
-              class="permission-sidebar-table"
-              @row-click="selectUser"
-            >
-              <ElTableColumn
-                prop="displayName"
-                label="用户名"
-                min-width="120"
-                :formatter="(row: any) => row.displayName || row.username"
-              />
-              <ElTableColumn prop="username" label="账号" min-width="120" />
-              <ElTableColumn prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
-            </ElTable>
-            <div class="permission-pagination">
-              <ElPagination
-                v-model:current-page="userPagination.page"
-                v-model:page-size="userPagination.pageSize"
-                :total="userPagination.total"
-                layout="total, prev, pager, next, sizes"
-                :page-sizes="[10, 20, 50]"
-                small
-                background
-                @current-change="handleUserPageChange"
-                @size-change="handleUserPageSizeChange"
-              />
-            </div>
+    <div class="center-nav">
+      <BaseButton
+        :type="activeTab === 'user' ? 'primary' : 'default'"
+        @click="switchCenter('user')"
+      >
+        用户授权中心
+      </BaseButton>
+      <BaseButton
+        :type="activeTab === 'group' ? 'primary' : 'default'"
+        @click="switchCenter('group')"
+      >
+        组授权中心
+      </BaseButton>
+      <BaseButton
+        :type="activeTab === 'reviewAcl' ? 'primary' : 'default'"
+        @click="switchCenter('reviewAcl')"
+      >
+        审核权限中心
+      </BaseButton>
+    </div>
+
+    <div class="center-content">
+      <div v-if="activeTab === 'user'" class="user-center-layout">
+        <div class="center-column user-list-column">
+          <div class="permission-sidebar-header">
+            <div class="permission-sidebar-title">第一步：选择用户</div>
+            <div class="permission-sidebar-subtitle">选择后即可配置页面访问权与模块能力</div>
           </div>
-
-          <!-- 右侧：权限面板 -->
-          <div class="permission-main">
-            <div v-if="!selectedUser" class="permission-empty">
-              <ElEmpty description="请先在左侧选择一个用户" />
-            </div>
-            <div v-else class="user-permission-panel">
-              <div class="permission-main-header">
-                <div>
-                  <div class="permission-main-title">
-                    {{ selectedUser.displayName || selectedUser.username }}
-                  </div>
-                  <div class="permission-main-subtitle">
-                    账号：{{ selectedUser.username }}
-                    <template v-if="selectedUser.email">
-                      <ElDivider direction="vertical" />
-                      邮箱：{{ selectedUser.email }}
-                    </template>
-                  </div>
-                </div>
-                <div class="permission-main-tags">
-                  <template v-if="loadingUserGroups">
-                    <span class="text-12px text-gray-500">正在加载所属组...</span>
-                  </template>
-                  <template v-else-if="selectedUserGroups.length">
-                    <span class="text-12px text-gray-500 mr-6px">所属组：</span>
-                    <ElTag
-                      v-for="group in selectedUserGroups"
-                      :key="group.group_dn"
-                      size="small"
-                      class="mb-4px mr-4px"
-                    >
-                      {{ group.group_name }}
-                    </ElTag>
-                  </template>
-                  <template v-else>
-                    <span class="text-12px text-gray-500"
-                      >未查询到所属组（或用户不在任何组中）</span
-                    >
-                  </template>
-                </div>
-              </div>
-
-              <ElDivider />
-
-              <div class="permission-toolbar">
-                <div class="permission-toolbar-left">
-                  <ElInput
-                    v-model="userPermissionFilter"
-                    placeholder="筛选权限（按页面名称 / 路由名）"
-                    clearable
-                    style="width: 260px"
-                  />
-                  <span class="permission-toolbar-summary">
-                    已选 {{ checkedUserPermissionsCount }} / 共 {{ totalUserPermissions }} 个权限
-                  </span>
-                </div>
-                <div class="permission-toolbar-right">
-                  <BaseButton text type="primary" @click="resetUserPermissionSelection">
-                    重置为已保存状态
-                  </BaseButton>
-                </div>
-              </div>
-
-              <div
-                v-loading="loadingUserPermissions || loadingPermissions"
-                class="permission-tree user-permission-tree"
-              >
-                <template v-if="filteredUserPermissionTree.length">
-                  <div
-                    v-for="group in filteredUserPermissionTree"
-                    :key="group.key"
-                    class="permission-group"
-                  >
-                    <div class="permission-group-header">
-                      <ElCheckbox
-                        :indeterminate="isUserGroupIndeterminate(group.key)"
-                        :model-value="isUserGroupChecked(group.key)"
-                        @change="(val: boolean | string) => toggleUserGroupPermissions(group.key, !!val)"
-                      >
-                        <span class="permission-group-title">{{ group.label }}</span>
-                      </ElCheckbox>
-                    </div>
-                    <div class="permission-group-body">
-                      <div
-                        v-for="perm in group.children"
-                        :key="perm.route_name"
-                        class="permission-item"
-                      >
-                        <ElCheckbox
-                          :model-value="userCheckedRouteNames.includes(perm.route_name)"
-                          @change="(val: boolean | string) => toggleUserPermission(perm.route_name, !!val)"
-                        >
-                          {{ perm.label }}
-                        </ElCheckbox>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-                <template v-else>
-                  <ElEmpty description="未匹配到任何权限，请尝试调整筛选条件" />
-                </template>
-              </div>
-
-              <div class="permission-actions">
-                <BaseButton
-                  type="primary"
-                  :loading="savingUserPermissions"
-                  @click="saveUserPermissions"
-                >
-                  保存用户权限
-                </BaseButton>
-                <BaseButton text @click="resetUserPermissionSelection"> 取消修改 </BaseButton>
-              </div>
-            </div>
+          <div class="mb-10px">
+            <ElInput
+              v-model="userSearchKeyword"
+              placeholder="按姓名 / 账号 / 邮箱搜索"
+              clearable
+              @keyup.enter="searchUsers"
+              @clear="searchUsers"
+            >
+              <template #append>
+                <BaseButton type="primary" @click="searchUsers">搜索</BaseButton>
+              </template>
+            </ElInput>
+          </div>
+          <ElTable
+            v-loading="loadingUsers"
+            :data="adUsers"
+            size="small"
+            height="520"
+            highlight-current-row
+            class="permission-sidebar-table"
+            @row-click="selectUser"
+          >
+            <ElTableColumn
+              prop="displayName"
+              label="用户名"
+              min-width="120"
+              :formatter="(row: any) => row.displayName || row.username"
+            />
+            <ElTableColumn prop="username" label="账号" min-width="120" />
+          </ElTable>
+          <div class="permission-pagination">
+            <ElPagination
+              v-model:current-page="userPagination.page"
+              v-model:page-size="userPagination.pageSize"
+              :total="userPagination.total"
+              layout="total, prev, pager, next, sizes"
+              :page-sizes="[10, 20, 50]"
+              small
+              background
+              @current-change="handleUserPageChange"
+              @size-change="handleUserPageSizeChange"
+            />
           </div>
         </div>
-      </ElTabPane>
+
+        <div class="center-column page-permission-column user-permission-panel">
+          <div class="permission-sidebar-header">
+            <div class="permission-sidebar-title">第二步：分配页面访问权</div>
+            <div class="permission-sidebar-subtitle">
+              <template v-if="selectedUser">
+                当前用户：{{ selectedUser.displayName || selectedUser.username }}
+              </template>
+              <template v-else>请先在左侧选择用户</template>
+            </div>
+          </div>
+          <div class="permission-toolbar">
+            <div class="permission-toolbar-left">
+              <ElInput
+                v-model="userPermissionFilter"
+                placeholder="筛选页面（按名称 / 路由名）"
+                clearable
+                style="width: 220px"
+              />
+              <span class="permission-toolbar-summary">
+                已选 {{ checkedUserPermissionsCount }} / 共 {{ totalUserPermissions }} 个页面
+              </span>
+            </div>
+          </div>
+          <div
+            v-loading="loadingUserPermissions || loadingPermissions"
+            class="permission-tree user-permission-tree"
+          >
+            <template v-if="selectedUser && filteredUserPermissionTree.length">
+              <div
+                v-for="group in filteredUserPermissionTree"
+                :key="group.key"
+                class="permission-group"
+              >
+                <div class="permission-group-header">
+                  <ElCheckbox
+                    :indeterminate="isUserGroupIndeterminate(group.key)"
+                    :model-value="isUserGroupChecked(group.key)"
+                    @change="(val: boolean | string) => toggleUserGroupPermissions(group.key, !!val)"
+                  >
+                    <span class="permission-group-title">{{ group.label }}</span>
+                  </ElCheckbox>
+                </div>
+                <div class="permission-group-body">
+                  <div
+                    v-for="perm in group.children"
+                    :key="perm.route_name"
+                    class="permission-item"
+                  >
+                    <ElCheckbox
+                      :model-value="userCheckedRouteNames.includes(perm.route_name)"
+                      @change="(val: boolean | string) => toggleUserPermission(perm.route_name, !!val)"
+                    >
+                      {{ perm.label }}
+                    </ElCheckbox>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="selectedUser">
+              <ElEmpty description="未匹配到任何页面权限" />
+            </template>
+            <template v-else>
+              <ElEmpty description="请先在左侧选择用户" />
+            </template>
+          </div>
+        </div>
+
+        <div class="center-column capability-column user-permission-panel">
+          <div class="permission-sidebar-header">
+            <div class="permission-sidebar-title">第三步：分配模块能力权限</div>
+            <div class="permission-sidebar-subtitle">仅对已勾选页面开放能力配置</div>
+          </div>
+          <div class="permission-toolbar">
+            <div class="permission-toolbar-left">
+              <ElInput
+                v-model="userCapabilityFilter"
+                placeholder="筛选已选页面"
+                clearable
+                style="width: 180px"
+              />
+              <span class="permission-toolbar-summary">
+                已选 {{ checkedUserCapabilityCount }} / 共 {{ totalCapabilityActions }} 个能力
+              </span>
+            </div>
+            <div class="permission-toolbar-right">
+              <BaseButton text type="primary" @click="resetUserPermissionSelection">
+                重置
+              </BaseButton>
+            </div>
+          </div>
+          <div
+            v-loading="loadingUserPermissions || loadingCapabilityActions"
+            class="permission-tree capability-matrix"
+          >
+            <template v-if="selectedUser && userSelectedPageRows.length">
+              <table class="capability-table">
+                <thead>
+                  <tr>
+                    <th>页面</th>
+                    <th v-for="col in capabilityActionColumns" :key="col.code">{{ col.label }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="perm in userSelectedPageRows" :key="perm.route_name">
+                    <td class="capability-page-cell">{{ perm.page_title || perm.route_name }}</td>
+                    <td
+                      v-for="col in capabilityActionColumns"
+                      :key="`${perm.route_name}-${col.code}`"
+                    >
+                      <ElCheckbox
+                        v-if="getCapabilityKeyByRouteAction(perm.route_name, col.code)"
+                        :model-value="
+                          userCheckedCapabilityKeys.includes(
+                            getCapabilityKeyByRouteAction(perm.route_name, col.code)
+                          )
+                        "
+                        @change="
+                          (val: boolean | string) =>
+                            toggleUserRouteCapability(perm.route_name, col.code, !!val)
+                        "
+                      />
+                      <span v-else>-</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+            <template v-else-if="selectedUser">
+              <ElEmpty description="请先在第二步勾选页面访问权" />
+            </template>
+            <template v-else>
+              <ElEmpty description="请先在左侧选择用户" />
+            </template>
+          </div>
+
+          <div class="permission-actions">
+            <BaseButton
+              type="primary"
+              :loading="savingUserPermissions"
+              @click="saveUserPermissions"
+            >
+              保存全部权限
+            </BaseButton>
+          </div>
+        </div>
+      </div>
 
       <!-- 组权限 -->
-      <ElTabPane label="按组分配" name="group">
+      <div v-else-if="activeTab === 'group'">
         <div class="permission-layout">
           <!-- 左侧：组列表 -->
           <div class="permission-sidebar">
@@ -1113,10 +1314,10 @@ const handleTabChange = (tab: string) => {
             </div>
           </div>
         </div>
-      </ElTabPane>
+      </div>
 
       <!-- 接口审核权限 -->
-      <ElTabPane label="接口审核权限" name="reviewAcl">
+      <div v-else-if="activeTab === 'reviewAcl'">
         <ElTabs v-model="reviewAclTab">
           <ElTabPane label="按用户配置" name="user">
             <div class="permission-layout">
@@ -1378,14 +1579,28 @@ const handleTabChange = (tab: string) => {
             </div>
           </ElTabPane>
         </ElTabs>
-      </ElTabPane>
-    </ElTabs>
+      </div>
+    </div>
   </ContentWrap>
 </template>
 
 <style scoped>
-.permission-tabs {
-  width: 100%;
+.center-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.center-content {
+  min-height: 600px;
+}
+
+.user-center-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 620px;
 }
 
 .permission-layout {
@@ -1400,6 +1615,23 @@ const handleTabChange = (tab: string) => {
   padding-right: 20px;
   border-right: 1px solid #e5e7eb;
   flex-direction: column;
+}
+
+.center-column {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 620px;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-list-column {
+  padding-right: 12px;
+}
+
+.capability-column {
+  overflow: hidden;
 }
 
 .permission-sidebar-header {
@@ -1488,6 +1720,29 @@ const handleTabChange = (tab: string) => {
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   flex: 1;
+}
+
+.capability-matrix {
+  max-height: 500px;
+  padding: 0;
+}
+
+.capability-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.capability-table th,
+.capability-table td {
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.capability-page-cell {
+  text-align: left !important;
+  min-width: 180px;
 }
 
 .permission-group {

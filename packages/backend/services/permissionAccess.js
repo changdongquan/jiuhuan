@@ -1,4 +1,5 @@
 const { query } = require('../database')
+const { resolvePermissionCandidates, expandPermissionNames } = require('./permission-aliases')
 
 let ldap = null
 try {
@@ -147,11 +148,14 @@ const getUserGroupPermissionNames = async (pureUsername) => {
 const getEffectivePermissions = async (username) => {
   const pureUsername = normalizeUsername(username)
   if (!pureUsername) return []
-  if (isAdmin(pureUsername)) return getAllPermissionNames()
+  if (isAdmin(pureUsername)) {
+    const all = await getAllPermissionNames()
+    return expandPermissionNames(all)
+  }
 
   const direct = await getUserDirectPermissionNames(pureUsername)
   const group = await getUserGroupPermissionNames(pureUsername)
-  return Array.from(new Set([...direct, ...group]))
+  return expandPermissionNames([...direct, ...group])
 }
 
 const hasRoutePermission = async (username, routeName) => {
@@ -160,13 +164,23 @@ const hasRoutePermission = async (username, routeName) => {
   if (!pureUsername || !target) return false
   if (isAdmin(pureUsername)) return true
 
-  const rows = await query('SELECT TOP 1 id FROM permissions WHERE route_name = @routeName', {
-    routeName: target
-  })
+  const candidates = resolvePermissionCandidates(target)
+  const params = {}
+  const placeholders = candidates
+    .map((name, i) => {
+      const key = `routeName${i}`
+      params[key] = name
+      return `@${key}`
+    })
+    .join(',')
+  const rows = await query(
+    `SELECT TOP 1 id FROM permissions WHERE route_name IN (${placeholders})`,
+    params
+  )
   if (!rows?.length) return false
 
   const permissionSet = new Set(await getEffectivePermissions(pureUsername))
-  return permissionSet.has(target)
+  return candidates.some((name) => permissionSet.has(name))
 }
 
 module.exports = {

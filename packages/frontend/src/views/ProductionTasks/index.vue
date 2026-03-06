@@ -823,6 +823,7 @@
                             <div style="display: flex; gap: 8px">
                               <el-upload
                                 :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'appearance')"
                                 :show-file-list="false"
                                 accept="image/*"
@@ -833,6 +834,7 @@
                               </el-upload>
                               <el-upload
                                 :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'nameplate')"
                                 :show-file-list="false"
                                 accept="image/*"
@@ -986,6 +988,7 @@
                               </el-button>
                               <el-upload
                                 :action="getAttachmentAction('inspection')"
+                                :headers="uploadAuthHeaders"
                                 :show-file-list="false"
                                 accept=".xls,.xlsx,.pdf,.doc,.docx,image/*"
                                 :on-success="handleAttachmentUploadSuccess"
@@ -1246,6 +1249,7 @@ import {
   type TrialProcessRecord
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
+import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
@@ -1291,6 +1295,7 @@ const sortState = reactive<{ prop: string; order: string }>({
 type ViewMode = 'table' | 'card'
 
 const appStore = useAppStore()
+const uploadAuthHeaders = useUploadAuthHeaders()
 const isMobile = computed(() => appStore.getMobile)
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
 const showMobileFilters = ref(false)

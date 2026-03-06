@@ -2,6 +2,8 @@ const express = require('express')
 const router = express.Router()
 const { query } = require('../database')
 const { issueAuthToken } = require('../utils/auth-token')
+const { expandPermissionNames } = require('../services/permission-aliases')
+const { getEffectiveCapabilityKeys } = require('../services/capabilityAccess')
 
 // 检测是否是开发环境
 // 只在 NODE_ENV 显式为 development/dev 时才视为开发环境
@@ -522,7 +524,7 @@ const resolveUserPermissions = async ({ username, isDomainUser }) => {
 
   const userPermissions = await getUserDirectPermissionNames(pureUsername)
   const groupPermissions = isDomainUser ? await getDomainUserGroupPermissionNames(pureUsername) : []
-  return [...new Set([...userPermissions, ...groupPermissions])]
+  return expandPermissionNames([...userPermissions, ...groupPermissions])
 }
 
 /**
@@ -535,6 +537,13 @@ router.get('/auto-login', async (req, res) => {
     console.log('[DEV] 模拟自动登录，返回测试用户')
     const username = 'dev-user'
     const displayName = '开发测试用户'
+    let capabilities = []
+    try {
+      capabilities = await getEffectiveCapabilityKeys(username)
+    } catch (error) {
+      console.warn('[DEV] 查询模块能力失败:', error?.message || error)
+      capabilities = []
+    }
     return res.json({
       code: 0,
       success: true,
@@ -545,7 +554,8 @@ router.get('/auto-login', async (req, res) => {
         roles: [],
         role: 'test',
         roleId: '2',
-        permissions: []
+        permissions: [],
+        capabilities
       },
       token: issueAuthToken({
         username,
@@ -592,6 +602,13 @@ router.get('/auto-login', async (req, res) => {
     console.error('查询用户权限失败:', error)
     permissions = []
   }
+  let capabilities = []
+  try {
+    capabilities = await getEffectiveCapabilityKeys(parsed.username)
+  } catch (error) {
+    console.error('查询用户模块能力失败:', error)
+    capabilities = []
+  }
 
   // 尝试从 AD 获取显示名称和邮箱
   let displayName = parsed.username
@@ -627,7 +644,8 @@ router.get('/auto-login', async (req, res) => {
       roles: [],
       role: 'user',
       roleId: '3',
-      permissions // 添加权限列表
+      permissions, // 添加权限列表
+      capabilities
     },
     token
   })
@@ -773,6 +791,13 @@ router.post('/login', async (req, res) => {
       console.error('查询用户权限失败:', error)
       permissions = []
     }
+    let capabilities = []
+    try {
+      capabilities = await getEffectiveCapabilityKeys(userInfo.username)
+    } catch (error) {
+      console.error('查询用户模块能力失败:', error)
+      capabilities = []
+    }
 
     // 返回用户信息、权限和 token
     console.log('[登录] 登录成功，准备返回响应，权限数量:', permissions.length)
@@ -808,7 +833,8 @@ router.post('/login', async (req, res) => {
         ...userInfo,
         displayName,
         mail,
-        permissions // 添加权限列表
+        permissions, // 添加权限列表
+        capabilities
       },
       token
     }

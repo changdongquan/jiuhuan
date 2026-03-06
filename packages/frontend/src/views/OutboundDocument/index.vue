@@ -1389,6 +1389,7 @@
         <el-upload
           v-if="!outboundAttachmentReadonly"
           :action="outboundAttachmentUploadAction"
+          :headers="uploadAuthHeaders"
           :show-file-list="false"
           :on-success="handleOutboundAttachmentUploadSuccess"
           :on-error="handleOutboundAttachmentUploadError"
@@ -1485,6 +1486,7 @@ import {
 } from '@/api/outbound-document'
 import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
+import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 
@@ -1505,6 +1507,7 @@ const summary = reactive({
 
 const appStore = useAppStore()
 const userStore = useUserStore()
+const uploadAuthHeaders = useUploadAuthHeaders()
 const isMobile = computed(() => appStore.getMobile)
 const route = useRoute()
 const router = useRouter()

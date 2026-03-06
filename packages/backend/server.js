@@ -41,8 +41,9 @@ const authRoutes = require('./routes/auth')
 const analysisRoutes = require('./routes/analysis')
 const permissionRoutes = require('./routes/permission')
 const reviewAclRoutes = require('./routes/review-acl')
+const capabilityRoutes = require('./routes/capability')
 const { authenticateRequest } = require('./middleware/auth')
-const { requireRoutePermission } = require('./middleware/route-permission')
+const { requireCapability } = require('./middleware/capability')
 const userRoutes = require('./routes/user')
 const attendanceRoutes = require('./routes/attendance')
 const salaryRoutes = require('./routes/salary')
@@ -179,27 +180,64 @@ app.use('/api/auth', authRoutes)
 app.use('/api', authenticateRequest)
 
 app.use('/api/goods', goodsRoutes)
-app.use('/api/customer', requireRoutePermission('CustomerInfoIndex'), customerRoutes)
-app.use('/api/supplier', requireRoutePermission('SupplierInfoIndex'), supplierRoutes)
-app.use('/api/employee', requireRoutePermission('EmployeeInfoIndex'), employeeRoutes)
+app.use(
+  '/api/customer',
+  requireCapability('CUSTOMER_INFO.READ', { fallbackRoute: 'CustomerInfoIndex' }),
+  customerRoutes
+)
+app.use(
+  '/api/supplier',
+  requireCapability('SUPPLIER_INFO.READ', { fallbackRoute: 'SupplierInfoIndex' }),
+  supplierRoutes
+)
+app.use(
+  '/api/employee',
+  requireCapability('EMPLOYEE_INFO.READ', { fallbackRoute: 'EmployeeInfoIndex' }),
+  employeeRoutes
+)
 app.use('/api/database', databaseRoutes)
-app.use('/api/project', requireRoutePermission('ProjectManagementIndex'), projectRoutes)
-app.use('/api/sales-orders', requireRoutePermission('SalesOrdersIndex'), salesOrdersRoutes)
-app.use('/api/outbound-document', requireRoutePermission('OutboundDocumentIndex'), outboundDocumentRoutes)
-app.use('/api/quotation', requireRoutePermission('QuotationIndex'), quotationRoutes)
-app.use('/api/production-task', requireRoutePermission('ProductionTasksIndex'), productionTaskRoutes)
-app.use('/api/analysis', requireRoutePermission('Analysis'), analysisRoutes)
+app.use(
+  '/api/project',
+  requireCapability('PROJECT_MANAGEMENT.READ', { fallbackRoute: 'ProjectManagementIndex' }),
+  projectRoutes
+)
+app.use(
+  '/api/sales-orders',
+  requireCapability('SALES_ORDERS.READ', { fallbackRoute: 'SalesOrdersIndex' }),
+  salesOrdersRoutes
+)
+app.use(
+  '/api/outbound-document',
+  requireCapability('OUTBOUND_DOCUMENT.READ', { fallbackRoute: 'OutboundDocumentIndex' }),
+  outboundDocumentRoutes
+)
+app.use('/api/quotation', requireCapability('QUOTATION.READ', { fallbackRoute: 'QuotationIndex' }), quotationRoutes)
+app.use(
+  '/api/production-task',
+  requireCapability('PRODUCTION_TASKS.READ', { fallbackRoute: 'ProductionTasksIndex' }),
+  productionTaskRoutes
+)
+app.use('/api/analysis', requireCapability('ANALYSIS.READ', { fallbackRoute: 'Analysis' }), analysisRoutes)
 app.use('/api/permission', permissionRoutes)
 app.use('/api/review-acl', reviewAclRoutes)
+app.use('/api/capability', capabilityRoutes)
 app.use('/api/user', userRoutes)
-app.use('/api/attendance', requireRoutePermission('AttendanceIndex'), attendanceRoutes)
-app.use('/api/salary', requireRoutePermission('Salary'), salaryRoutes)
-app.use('/api/game', requireRoutePermission('BreakSnakeGame'), gameRoutes)
+app.use(
+  '/api/attendance',
+  requireCapability('ATTENDANCE.READ', { fallbackRoute: 'AttendanceIndex' }),
+  attendanceRoutes
+)
+app.use('/api/salary', requireCapability('SALARY.READ', { fallbackRoute: 'Salary' }), salaryRoutes)
+app.use('/api/game', requireCapability('BREAK_SNAKE_GAME.READ', { fallbackRoute: 'BreakSnakeGame' }), gameRoutes)
 app.use('/api/bmo', bmoRoutes)
-app.use('/api/finance', requireRoutePermission('BillingDocuments'), financeRoutes)
+app.use(
+  '/api/finance',
+  requireCapability('BILLING_DOCUMENTS.READ', { fallbackRoute: 'BillingDocuments' }),
+  financeRoutes
+)
 app.use(
   '/api/comprehensive-query',
-  requireRoutePermission('ComprehensiveQuery'),
+  requireCapability('COMPREHENSIVE_QUERY.READ', { fallbackRoute: 'ComprehensiveQuery' }),
   comprehensiveQueryRoutes
 )
 

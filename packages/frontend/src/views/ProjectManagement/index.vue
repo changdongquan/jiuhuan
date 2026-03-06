@@ -1509,6 +1509,7 @@
                             <span>移模流程单</span>
                             <el-upload
                               :action="getAttachmentAction('relocation-process')"
+                              :headers="uploadAuthHeaders"
                               :show-file-list="false"
                               accept=".xls,.xlsx,.pdf,image/*"
                               :before-upload="
@@ -1606,6 +1607,7 @@
                               </el-button>
                               <el-upload
                                 :action="getAttachmentAction('trial-record')"
+                                :headers="uploadAuthHeaders"
                                 :show-file-list="false"
                                 accept=".xls,.xlsx,.pdf,image/*"
                                 :before-upload="
@@ -2010,6 +2012,7 @@
                             <span>模具图档</span>
                             <el-upload
                               :action="getAttachmentAction('drawing')"
+                              :headers="uploadAuthHeaders"
                               :show-file-list="false"
                               :multiple="true"
                               accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
@@ -2084,6 +2087,7 @@
                             <span>技术规格表</span>
                             <el-upload
                               :action="getAttachmentAction('technical-spec')"
+                              :headers="uploadAuthHeaders"
                               :show-file-list="false"
                               accept=".xls,.xlsx,.pdf,image/*"
                               :before-upload="
@@ -2221,6 +2225,8 @@ import {
 } from '@/api/production-task'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
+import { useUserStoreWithOut } from '@/store/modules/user'
+import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
@@ -2253,11 +2259,19 @@ interface ProjectGroup {
 }
 
 const appStore = useAppStore()
+const userStore = useUserStoreWithOut()
+const uploadAuthHeaders = useUploadAuthHeaders()
 const route = useRoute()
 const router = useRouter()
 const isMobile = computed(() => appStore.getMobile)
 const externalImportVisible = ref(false)
 const projectManagementFilterCategory = computed(() => appStore.getProjectManagementFilterCategory)
+const hasProductionTaskPermission = computed(() => {
+  const userInfo: any = userStore.getUserInfo || {}
+  if (String(userInfo?.username || '').trim() === 'admin') return true
+  const permissions = Array.isArray(userInfo?.permissions) ? userInfo.permissions : []
+  return permissions.includes('ProductionTasksIndex')
+})
 
 const resolvePcViewModeFromRoute = (): ViewMode => {
   const v = route.query.view
@@ -5241,6 +5255,12 @@ const loadAttachments = async () => {
 
 // 加载生产任务附件列表
 const loadProductionTaskAttachments = async () => {
+  if (!hasProductionTaskPermission.value) {
+    productionTaskPhotoAttachments.value = []
+    productionTaskInspectionAttachments.value = []
+    return
+  }
+
   const projectCode = editForm.项目编号 || currentProjectCode.value
   if (!projectCode) {
     productionTaskPhotoAttachments.value = []

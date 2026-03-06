@@ -16,6 +16,48 @@ const { loadStart, loadDone } = usePageLoading()
 // 生产构建（如 pro 模式）启用严格权限控制。
 const isDev = import.meta.env.DEV
 
+const HOME_ROUTE_CANDIDATES = [
+  'SalesOrdersIndex',
+  'ProjectManagementIndex',
+  'OutboundDocumentIndex',
+  'ProductionTasksIndex',
+  'BillingDocuments',
+  'ReceivableDocuments',
+  'AttendanceIndex',
+  'CustomerInfoIndex',
+  'SupplierInfoIndex',
+  'EmployeeInfoIndex',
+  'Analysis',
+  'Workplace'
+]
+
+const pickFirstAccessibleRoute = (permissionNames: string[]) => {
+  const normalized = Array.from(
+    new Set(
+      (permissionNames || [])
+        .map((name) => String(name || '').trim())
+        .filter((name) => !!name && name !== 'Dashboard')
+    )
+  )
+  if (!normalized.length) return null
+
+  const candidates = [
+    ...HOME_ROUTE_CANDIDATES.filter((name) => normalized.includes(name)),
+    ...normalized
+  ]
+
+  const routeList = router.getRoutes()
+  for (const routeName of candidates) {
+    const target = routeList.find((route) => String(route.name || '') === routeName)
+    if (!target) continue
+    // 需要路径参数的页面（如打印页）不适合作为登录后的默认落点。
+    if (/\:[^/]+/.test(String(target.path || ''))) continue
+    return { name: routeName }
+  }
+
+  return null
+}
+
 interface AutoLoginResponseData {
   username: string
   displayName: string
@@ -23,6 +65,8 @@ interface AutoLoginResponseData {
   roles: string[]
   role: string
   roleId: string
+  capabilities?: string[]
+  permissions?: string[]
 }
 
 interface AutoLoginResponse {
@@ -106,6 +150,16 @@ router.beforeEach(async (to, from, next) => {
       const userPermissions = (userInfo as any).permissions || []
       const isAdmin = userInfo?.username === 'admin'
 
+      if (!isAdmin && to.name === 'Analysis' && !userPermissions.includes('Analysis')) {
+        const fallback = pickFirstAccessibleRoute(userPermissions)
+        if (fallback) {
+          next({ ...fallback, replace: true })
+          return
+        }
+        next('/403')
+        return
+      }
+
       // 排除不需要权限验证的路由（如 404、403、个人中心、首页重定向等）
       const noAuthRoutes = [
         '404',
@@ -114,10 +168,7 @@ router.beforeEach(async (to, from, next) => {
         'PersonalCenter',
         'Redirect',
         'Root', // 首页路由
-        'RedirectWrap', // 重定向包装路由
-        'Analysis', // 仪表盘分析页（首页默认跳转）
-        'Workplace', // 仪表盘工作台
-        'Dashboard' // 仪表盘父路由
+        'RedirectWrap' // 重定向包装路由
       ]
 
       // admin 拥有所有权限，直接通过；白名单路由直接通过
@@ -211,7 +262,8 @@ router.beforeEach(async (to, from, next) => {
               roleId: res.data.roleId as any,
               password: '',
               roles: res.data.roles || ([] as any),
-              permissions: (res.data as any).permissions || [] // 添加权限列表
+              permissions: (res.data as any).permissions || [], // 添加权限列表
+              capabilities: (res.data as any).capabilities || []
             } as any)
             userStore.setToken(res.token || 'SSO_AUTO_LOGIN')
 
