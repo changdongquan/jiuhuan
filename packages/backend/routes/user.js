@@ -73,8 +73,31 @@ const fetchAdDisplayName = async (username) => {
         (err, res) => {
           if (err) return reject(err)
           res.on('searchEntry', (entry) => {
-            const obj = entry?.object || (typeof entry?.toObject === 'function' ? entry.toObject() : null)
-            if (obj) rows.push(obj)
+            let obj = entry?.object
+            if (!obj || (typeof obj === 'object' && Object.keys(obj).length === 0)) {
+              if (typeof entry?.toObject === 'function') {
+                try {
+                  obj = entry.toObject()
+                } catch (_e) {
+                  obj = null
+                }
+              }
+            }
+            // 兼容某些 ldapjs 返回空 object 的情况，从 attributes 构造
+            if ((!obj || (typeof obj === 'object' && Object.keys(obj).length === 0)) && Array.isArray(entry?.attributes)) {
+              obj = {}
+              for (const attr of entry.attributes) {
+                const key = attr?.type
+                const vals = Array.isArray(attr?.values) ? attr.values : attr?.vals
+                if (!key) continue
+                if (Array.isArray(vals)) {
+                  obj[key] = vals.length === 1 ? vals[0] : vals
+                } else if (typeof vals !== 'undefined') {
+                  obj[key] = vals
+                }
+              }
+            }
+            if (obj && typeof obj === 'object') rows.push(obj)
           })
           res.on('error', reject)
           res.on('end', (result) => {
