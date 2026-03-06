@@ -69,6 +69,44 @@ const parseAnomalyTypes = (raw) => {
   return list.filter((item) => ANOMALY_TYPES.includes(item))
 }
 
+router.get('/customer-options', async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || '').trim()
+    const params = {}
+    const where = ["c.客户名称 IS NOT NULL", "LTRIM(RTRIM(c.客户名称)) <> ''"]
+
+    if (keyword) {
+      where.push('c.客户名称 LIKE @keyword')
+      params.keyword = `%${keyword}%`
+    }
+
+    const rows = await query(
+      `
+        SELECT DISTINCT
+          LTRIM(RTRIM(c.客户名称)) as customerName
+        FROM 项目管理 p
+        LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
+        WHERE ${where.join(' AND ')}
+        ORDER BY LTRIM(RTRIM(c.客户名称)) ASC
+      `,
+      params
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: { list: rows || [] }
+    })
+  } catch (error) {
+    console.error('获取综合查询客户选项失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取综合查询客户选项失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
 const buildListFilters = (inputQuery) => {
   const params = {}
   const sourceWhere = [`(p.状态 IS NULL OR p.状态 <> N'已删除')`]
@@ -78,6 +116,7 @@ const buildListFilters = (inputQuery) => {
   const customerName = String(inputQuery.customerName || '').trim()
   const owner = String(inputQuery.owner || '').trim()
   const category = String(inputQuery.category || '').trim()
+  const settlementStatus = String(inputQuery.settlementStatus || '').trim()
   const startDate = String(inputQuery.startDate || '').trim()
   const endDate = String(inputQuery.endDate || '').trim()
   const projectStatus = String(inputQuery.projectStatus || '').trim()
@@ -150,13 +189,28 @@ const buildListFilters = (inputQuery) => {
     sourceWhere.push(`pt.productionStatus LIKE @productionStatus`)
   }
 
+  if (settlementStatus === '销售已结清') {
+    baseWhere.push('(base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)')
+  } else if (settlementStatus === '开票已结清') {
+    baseWhere.push(`(
+      base.invoiceAmount > 0
+      AND base.receiptAmount + base.discountAmount >= base.invoiceAmount
+      AND NOT (base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)
+    )`)
+  } else if (settlementStatus === '未结清') {
+    baseWhere.push(`(
+      NOT (base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)
+      AND NOT (base.invoiceAmount > 0 AND base.receiptAmount + base.discountAmount >= base.invoiceAmount)
+    )`)
+  }
+
   if (anomalyTypes.length > 0) {
     const checks = []
     if (anomalyTypes.includes('uninvoiced')) {
       checks.push('(base.salesAmount > base.invoiceAmount)')
     }
     if (anomalyTypes.includes('unreceived')) {
-      checks.push('(base.invoiceAmount > base.receiptAmount)')
+      checks.push('(base.invoiceAmount > base.receiptAmount + base.discountAmount)')
     }
     if (anomalyTypes.includes('unshipped')) {
       checks.push('(base.completedQty > base.outboundQty)')
@@ -165,7 +219,7 @@ const buildListFilters = (inputQuery) => {
       checks.push(`(
         base.latestOrderDate IS NOT NULL
         AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
-        AND base.receiptAmount < base.salesAmount
+        AND base.receiptAmount + base.discountAmount < base.salesAmount
       )`)
     }
 
@@ -189,6 +243,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(c.customerName, N'') as customerName,
         ISNULL(g.productName, N'') as productName,
         ISNULL(g.productDrawing, N'') as productDrawing,
+        ISNULL(p.客户模号, N'') as customerModelNo,
         ISNULL(g.category, N'') as category,
         ISNULL(pt.owner, ISNULL(soOwner.owner, N'')) as owner,
         ISNULL(s.orderCount, 0) as salesOrderCount,
@@ -202,6 +257,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(fi.invoiceAmount, 0) as invoiceAmount,
         ISNULL(fr.receiptCount, 0) as receiptCount,
         ISNULL(fr.receiptAmount, 0) as receiptAmount,
+        ISNULL(fr.discountAmount, 0) as discountAmount,
         s.latestOrderDate as latestOrderDate,
         od.latestOutboundDate as latestOutboundDate,
         fi.latestInvoiceDate as latestInvoiceDate,
@@ -212,8 +268,8 @@ const buildBaseCteSql = (sourceWhereSql) => {
           ELSE 0
         END as uninvoicedAmount,
         CASE
-          WHEN ISNULL(fi.invoiceAmount, 0) > ISNULL(fr.receiptAmount, 0)
-          THEN ISNULL(fi.invoiceAmount, 0) - ISNULL(fr.receiptAmount, 0)
+          WHEN ISNULL(fi.invoiceAmount, 0) > ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)
+          THEN ISNULL(fi.invoiceAmount, 0) - ISNULL(fr.receiptAmount, 0) - ISNULL(fr.discountAmount, 0)
           ELSE 0
         END as unreceivedAmount
       FROM 项目管理 p
@@ -283,6 +339,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         SELECT
           COUNT(DISTINCT r.单据编号) as receiptCount,
           ISNULL(SUM(ISNULL(r.实收金额, 0)), 0) as receiptAmount,
+          ISNULL(SUM(ISNULL(r.贴息金额, 0)), 0) as discountAmount,
           MAX(COALESCE(r.回款日期, r.单据日期)) as latestReceiptDate
         FROM 回款单据 r
         WHERE r.项目编号 = p.项目编号
@@ -318,6 +375,8 @@ const buildJourney = ({
   ).size
 
   const receivedAmount = receiptRows.reduce((sum, row) => sum + safeNumber(row.receivedAmount), 0)
+  const discountAmount = receiptRows.reduce((sum, row) => sum + safeNumber(row.discountAmount), 0)
+  const receivedWithDiscountAmount = receivedAmount + discountAmount
   const receiptCount = new Set(
     receiptRows.map((row) => String(row.documentNo || '').trim()).filter(Boolean)
   ).size
@@ -372,7 +431,7 @@ const buildJourney = ({
 
   let receiptStatus = 'pending'
   if (receiptCount > 0) {
-    if (invoiceAmount > 0 && receivedAmount >= invoiceAmount) {
+    if (invoiceAmount > 0 && receivedWithDiscountAmount >= invoiceAmount) {
       receiptStatus = 'completed'
     } else {
       receiptStatus = 'in_progress'
@@ -456,7 +515,8 @@ const buildJourney = ({
       summary: receiptCount > 0 ? `回款 ${receiptCount} 单` : '暂无回款单据',
       metrics: {
         documentCount: receiptCount,
-        amount: receivedAmount
+        amount: receivedAmount,
+        discountAmount
       },
       dates: {
         latestReceiptDate: getMaxDate(receiptRows, 'receiptDate')
@@ -553,11 +613,15 @@ const buildJourney = ({
   })
 
   receiptRows.forEach((row) => {
+    const discount = safeNumber(row.discountAmount)
     pushEvent(events, {
       stage: 'receipt',
       title: `回款单 ${String(row.documentNo || '-').trim() || '-'}`,
       date: toDateString(row.receiptDate),
-      detail: `实收 ¥${safeNumber(row.receivedAmount).toLocaleString()}`
+      detail:
+        discount > 0
+          ? `实收 ¥${safeNumber(row.receivedAmount).toLocaleString()}，贴息 ¥${discount.toLocaleString()}`
+          : `实收 ¥${safeNumber(row.receivedAmount).toLocaleString()}`
     })
   })
 
@@ -575,9 +639,10 @@ const buildJourney = ({
       invoiceAmount,
       invoiceCount,
       receivedAmount,
+      discountAmount,
       receiptCount,
       uninvoicedAmount: Math.max(0, salesAmount - invoiceAmount),
-      unreceivedAmount: Math.max(0, invoiceAmount - receivedAmount)
+      unreceivedAmount: Math.max(0, invoiceAmount - receivedWithDiscountAmount)
     }
   }
 }
@@ -609,6 +674,7 @@ router.get('/list', async (req, res) => {
         base.customerName,
         base.productName,
         base.productDrawing,
+        base.customerModelNo,
         base.category,
         base.owner,
         base.salesOrderCount,
@@ -622,15 +688,25 @@ router.get('/list', async (req, res) => {
         base.invoiceAmount,
         base.receiptCount,
         base.receiptAmount,
+        base.discountAmount,
+        CASE
+          WHEN base.salesAmount > 0
+            AND base.receiptAmount + base.discountAmount >= base.salesAmount
+          THEN N'销售已结清'
+          WHEN base.invoiceAmount > 0
+            AND base.receiptAmount + base.discountAmount >= base.invoiceAmount
+          THEN N'开票已结清'
+          ELSE N'未结清'
+        END as settlementStatus,
         base.uninvoicedAmount,
         base.unreceivedAmount,
         CASE
           WHEN base.salesAmount > base.invoiceAmount THEN 'uninvoiced'
-          WHEN base.invoiceAmount > base.receiptAmount THEN 'unreceived'
+          WHEN base.invoiceAmount > base.receiptAmount + base.discountAmount THEN 'unreceived'
           WHEN base.completedQty > base.outboundQty THEN 'unshipped'
           WHEN base.latestOrderDate IS NOT NULL
             AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
-            AND base.receiptAmount < base.salesAmount
+            AND base.receiptAmount + base.discountAmount < base.salesAmount
           THEN 'overdue'
           ELSE ''
         END as anomalyType,
@@ -677,6 +753,7 @@ router.get('/summary', async (req, res) => {
         ISNULL(SUM(base.salesAmount), 0) as salesAmount,
         ISNULL(SUM(base.invoiceAmount), 0) as invoiceAmount,
         ISNULL(SUM(base.receiptAmount), 0) as receiptAmount,
+        ISNULL(SUM(base.discountAmount), 0) as discountAmount,
         ISNULL(SUM(base.completedQty), 0) as completedQty,
         ISNULL(SUM(base.outboundQty), 0) as outboundQty,
         ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
@@ -696,6 +773,7 @@ router.get('/summary', async (req, res) => {
         salesAmount: safeNumber(summary.salesAmount),
         invoiceAmount: safeNumber(summary.invoiceAmount),
         receiptAmount: safeNumber(summary.receiptAmount),
+        discountAmount: safeNumber(summary.discountAmount),
         completedQty: safeNumber(summary.completedQty),
         outboundQty: safeNumber(summary.outboundQty),
         uninvoicedAmount: safeNumber(summary.uninvoicedAmount),
@@ -808,7 +886,8 @@ router.get('/project-journey', async (req, res) => {
             SELECT
               r.单据编号 as documentNo,
               COALESCE(r.回款日期, r.单据日期) as receiptDate,
-              r.实收金额 as receivedAmount
+              r.实收金额 as receivedAmount,
+              r.贴息金额 as discountAmount
             FROM 回款单据 r
             WHERE r.项目编号 = @projectCode
               AND ISNULL(r.是否删除, 0) = 0

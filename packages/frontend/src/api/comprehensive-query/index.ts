@@ -4,6 +4,7 @@ export interface ComprehensiveQueryListParams {
   keyword?: string
   customerName?: string
   category?: string
+  settlementStatus?: string
   startDate?: string
   endDate?: string
   anomalyType?: string
@@ -18,6 +19,7 @@ export interface ComprehensiveQueryRow {
   customerName: string
   productName: string
   productDrawing: string
+  customerModelNo: string
   category: string
   owner: string
   salesOrderCount: number
@@ -31,6 +33,8 @@ export interface ComprehensiveQueryRow {
   invoiceAmount: number
   receiptCount: number
   receiptAmount: number
+  discountAmount: number
+  settlementStatus: string
   uninvoicedAmount: number
   unreceivedAmount: number
   anomalyType: string
@@ -45,10 +49,15 @@ export interface ComprehensiveQuerySummary {
   salesAmount: number
   invoiceAmount: number
   receiptAmount: number
+  discountAmount: number
   completedQty: number
   outboundQty: number
   uninvoicedAmount: number
   unreceivedAmount: number
+}
+
+export interface ComprehensiveQueryCustomerOption {
+  customerName: string
 }
 
 export interface JourneyStage {
@@ -91,6 +100,13 @@ export const getProjectJourneyApi = (projectCode: string) => {
 export const getComprehensiveQuerySummaryApi = (params?: ComprehensiveQueryListParams) => {
   return request.get({
     url: '/api/comprehensive-query/summary',
+    params
+  })
+}
+
+export const getComprehensiveQueryCustomerOptionsApi = (params?: { keyword?: string }) => {
+  return request.get<{ list: ComprehensiveQueryCustomerOption[] }>({
+    url: '/api/comprehensive-query/customer-options',
     params
   })
 }

@@ -32,7 +32,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="4">
+          <el-col :xs="24" :sm="12" :lg="3">
             <el-form-item label="分类">
               <el-select
                 v-model="queryForm.category"
@@ -51,6 +51,20 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="3">
+            <el-form-item label="状态">
+              <el-select
+                v-model="queryForm.settlementStatus"
+                clearable
+                placeholder="全部"
+                class="filter-control"
+              >
+                <el-option label="销售已结清" value="销售已结清" />
+                <el-option label="开票已结清" value="开票已结清" />
+                <el-option label="未结清" value="未结清" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :lg="3">
             <el-form-item label="异常类型">
               <el-select
                 v-model="queryForm.anomalyType"
@@ -65,7 +79,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="6">
+          <el-col :xs="24" :sm="12" :lg="4">
             <el-form-item label="订单日期">
               <el-date-picker
                 v-model="queryForm.dateRange"
@@ -115,9 +129,11 @@
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--gray">
-          <div class="summary-card__title">回款金额</div>
-          <div class="summary-card__value">{{ formatAmount(summaryCards.receiptAmount) }}</div>
-          <div class="summary-card__meta">筛选范围回款汇总</div>
+          <div class="summary-card__title">回款合计(贴息金额)</div>
+          <div class="summary-card__value">
+            {{ formatAmountPair(summaryCards.receiptAmount, summaryCards.discountAmount) }}
+          </div>
+          <div class="summary-card__meta">筛选范围回款(含贴息)汇总</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
@@ -130,8 +146,8 @@
       <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--gray">
           <div class="summary-card__title">未回款金额</div>
-          <div class="summary-card__value">{{ formatAmount(summaryCards.unreceivedAmount) }}</div>
-          <div class="summary-card__meta">开票金额减回款金额</div>
+          <div class="summary-card__value">{{ formatAmount(summaryUnreceivedAmount) }}</div>
+          <div class="summary-card__meta">销售金额减回款合计</div>
         </el-card>
       </el-col>
     </el-row>
@@ -161,41 +177,95 @@
               label="产品名称"
               min-width="125"
               show-overflow-tooltip
-            />
+            >
+              <template #header>
+                <div class="cq-name-header">
+                  <span>产品名称</span>
+                  <el-tooltip
+                    v-if="!isMobile"
+                    content="展开/折叠图号、模号、负责人列"
+                    placement="top"
+                  >
+                    <span
+                      class="cq-column-toggle"
+                      @click.stop="showExtraColumns = !showExtraColumns"
+                    >
+                      {{ showExtraColumns ? '▾' : '▸' }}
+                    </span>
+                  </el-tooltip>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column
+              v-if="!isMobile && showExtraColumns"
               prop="productDrawing"
               label="产品图号"
               min-width="120"
               show-overflow-tooltip
             />
-            <el-table-column prop="owner" label="负责人" width="88" align="center" />
+            <el-table-column
+              v-if="!isMobile && showExtraColumns"
+              prop="customerModelNo"
+              label="客户模号"
+              min-width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              v-if="!isMobile && showExtraColumns"
+              prop="owner"
+              label="负责人"
+              width="88"
+              align="center"
+            />
+            <el-table-column label="项目状态" width="110" align="center" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-tag
+                  :type="getProjectStatusTagType(row.projectStatus)"
+                  class="cq-production-status-tag cq-status-tag--fixed"
+                >
+                  {{ row.projectStatus || '-' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="生产状态" width="110" align="center" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-tag
+                  :type="getProductionStatusTagType(row.productionStatus)"
+                  class="cq-production-status-tag cq-status-tag--fixed"
+                >
+                  {{ row.productionStatus || '-' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="销售金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.salesAmount) }}</template>
             </el-table-column>
-            <el-table-column label="项目状态" width="100" align="center" show-overflow-tooltip>
-              <template #default="{ row }">
-                <el-tag type="info">{{ row.projectStatus || '-' }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="生产状态" width="100" align="center" show-overflow-tooltip>
-              <template #default="{ row }">
-                <el-tag type="warning">{{ row.productionStatus || '-' }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="开票金额" width="118" align="right">
+            <el-table-column label="开票金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.invoiceAmount) }}</template>
             </el-table-column>
-            <el-table-column label="回款金额" width="118" align="right">
+            <el-table-column label="回款金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.receiptAmount) }}</template>
             </el-table-column>
-            <el-table-column label="未开票金额" width="118" align="right">
+            <el-table-column label="贴息金额" width="108" align="right">
+              <template #default="{ row }">{{ formatAmount(row.discountAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="未开票金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.uninvoicedAmount) }}</template>
             </el-table-column>
-            <el-table-column label="未回款金额" width="118" align="right">
+            <el-table-column label="未回款金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.unreceivedAmount) }}</template>
             </el-table-column>
-            <el-table-column prop="outboundQty" label="出货数量" width="82" align="right" />
-            <el-table-column label="异常类型" width="108" align="center" show-overflow-tooltip>
+            <el-table-column label="状态" width="120" align="center">
+              <template #default="{ row }">
+                <el-tag
+                  :type="getSettlementStatusTagType(row.settlementStatus)"
+                  class="cq-status-tag--fixed"
+                >
+                  {{ row.settlementStatus || '-' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="异常类型" width="120" align="center" show-overflow-tooltip>
               <template #default="{ row }">
                 <el-tag v-if="row.anomalyType" type="danger">
                   {{ anomalyLabelMap[row.anomalyType] || row.anomalyType }}
@@ -206,17 +276,16 @@
             <el-table-column prop="latestOrderDate" label="最近订单" width="110" align="center" />
             <el-table-column prop="latestInvoiceDate" label="最近开票" width="110" align="center" />
             <el-table-column prop="latestReceiptDate" label="最近回款" width="110" align="center" />
+            <el-table-column prop="outboundQty" label="出货数量" width="82" align="right" />
             <el-table-column
               prop="latestOutboundDate"
               label="最近出货"
               width="110"
               align="center"
             />
-            <el-table-column label="操作" width="86" align="center" fixed="right">
+            <el-table-column label="操作" width="66" align="center" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" link @click.stop="handleViewInsight(row)"
-                  >查看洞察</el-button
-                >
+                <el-button type="primary" link @click.stop="handleViewInsight(row)">详情</el-button>
               </template>
             </el-table-column>
             <template #empty>
@@ -374,7 +443,6 @@ import {
 } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { getCustomerListApi } from '@/api/customer'
 import type {
   ComprehensiveQueryListParams,
   ComprehensiveQueryRow,
@@ -382,6 +450,7 @@ import type {
   ProjectJourney
 } from '@/api/comprehensive-query'
 import {
+  getComprehensiveQueryCustomerOptionsApi,
   getComprehensiveQueryListApi,
   getComprehensiveQuerySummaryApi,
   getProjectJourneyApi
@@ -392,6 +461,7 @@ interface QueryForm {
   keyword: string
   customerName: string
   category: string
+  settlementStatus: string
   anomalyType: string
   dateRange: [string, string] | []
 }
@@ -401,6 +471,7 @@ const queryForm = reactive<QueryForm>({
   keyword: '',
   customerName: '',
   category: '',
+  settlementStatus: '',
   anomalyType: '',
   dateRange: []
 })
@@ -421,6 +492,7 @@ const activeView = ref<'table' | 'insights'>('table')
 const selectedProjectCode = ref('')
 const journeyLoading = ref(false)
 const journey = ref<ProjectJourney | null>(null)
+const showExtraColumns = ref(false)
 const customerOptions = ref<string[]>([])
 const categoryOptions = ref<string[]>(['塑胶模具', '修改模具', '零件加工'])
 
@@ -429,11 +501,21 @@ const summaryCards = ref<ComprehensiveQuerySummary>({
   salesAmount: 0,
   invoiceAmount: 0,
   receiptAmount: 0,
+  discountAmount: 0,
   completedQty: 0,
   outboundQty: 0,
   uninvoicedAmount: 0,
   unreceivedAmount: 0
 })
+
+const summaryUnreceivedAmount = computed(() =>
+  Math.max(
+    0,
+    Number(summaryCards.value.salesAmount || 0) -
+      (Number(summaryCards.value.receiptAmount || 0) +
+        Number(summaryCards.value.discountAmount || 0))
+  )
+)
 
 const projectOptions = computed(() =>
   tableData.value.map((item) => ({
@@ -493,6 +575,40 @@ const resolveStageText = (status: string) => {
   return status || '-'
 }
 
+const getProjectStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  const statusTypeMap: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'> = {
+    T0: 'danger',
+    T1: 'warning',
+    T2: 'warning',
+    设计中: 'warning',
+    加工中: 'primary',
+    表面处理: 'info',
+    封样: 'primary',
+    待移模: 'primary',
+    已经移模: 'success'
+  }
+  return statusTypeMap[status] || 'info'
+}
+
+const getProductionStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+    待开始: 'info',
+    进行中: 'warning',
+    已完成: 'success',
+    已暂停: 'danger',
+    已取消: 'danger'
+  }
+  return statusMap[status] || 'info'
+}
+
+const getSettlementStatusTagType = (status?: string) => {
+  if (status === '销售已结清') return 'success'
+  if (status === '开票已结清') return 'primary'
+  return 'warning'
+}
+
 const stageStatusMap = computed(() => {
   const map: Record<string, string> = {}
   ;(journey.value?.stages || []).forEach((stage) => {
@@ -502,10 +618,23 @@ const stageStatusMap = computed(() => {
 })
 
 const formatAmount = (value: number) => {
-  return `¥ ${Number(value || 0).toLocaleString(undefined, {
+  const amount = Number(value || 0)
+  if (!Number.isFinite(amount) || amount === 0) return '-'
+  return amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  })}`
+  })
+}
+
+const formatAmountPair = (left: number, right: number) => {
+  const total = Number(left || 0) + Number(right || 0)
+  const discount = Number(right || 0)
+  const fmt = (value: number) =>
+    value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  return `${fmt(total)}(${fmt(discount)})`
 }
 
 const buildListParams = (): ComprehensiveQueryListParams => {
@@ -513,6 +642,7 @@ const buildListParams = (): ComprehensiveQueryListParams => {
     keyword: queryForm.keyword.trim() || undefined,
     customerName: queryForm.customerName.trim() || undefined,
     category: queryForm.category || undefined,
+    settlementStatus: queryForm.settlementStatus || undefined,
     anomalyType: queryForm.anomalyType || undefined,
     startDate: queryForm.dateRange[0] || undefined,
     endDate: queryForm.dateRange[1] || undefined
@@ -535,6 +665,7 @@ const loadSummary = async () => {
       salesAmount: Number(summary?.salesAmount || 0),
       invoiceAmount: Number(summary?.invoiceAmount || 0),
       receiptAmount: Number(summary?.receiptAmount || 0),
+      discountAmount: Number(summary?.discountAmount || 0),
       completedQty: Number(summary?.completedQty || 0),
       outboundQty: Number(summary?.outboundQty || 0),
       uninvoicedAmount: Number(summary?.uninvoicedAmount || 0),
@@ -547,6 +678,7 @@ const loadSummary = async () => {
       salesAmount: 0,
       invoiceAmount: 0,
       receiptAmount: 0,
+      discountAmount: 0,
       completedQty: 0,
       outboundQty: 0,
       uninvoicedAmount: 0,
@@ -557,7 +689,7 @@ const loadSummary = async () => {
 
 const loadFilterOptions = async () => {
   try {
-    const customersResp = await getCustomerListApi({ status: 'active', page: 1, pageSize: 5000 })
+    const customersResp = await getComprehensiveQueryCustomerOptionsApi()
     const customerData = parseResponseData(customersResp)
     const customers = Array.isArray(customerData?.list) ? customerData.list : []
 
@@ -657,6 +789,7 @@ const handleReset = () => {
   queryForm.keyword = ''
   queryForm.customerName = ''
   queryForm.category = ''
+  queryForm.settlementStatus = ''
   queryForm.anomalyType = ''
   queryForm.dateRange = []
   queryFormRef.value?.clearValidate?.()
@@ -736,8 +869,10 @@ onMounted(() => {
 .filter-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-wrap: nowrap;
+  width: 100%;
 }
 
 .query-section {
@@ -794,6 +929,68 @@ onMounted(() => {
   font-size: 10px;
   line-height: 1.1;
   color: var(--el-text-color-secondary);
+}
+
+:deep(.el-tag.cq-production-status-tag) {
+  height: 22px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 18px;
+}
+
+:deep(.el-tag.cq-production-status-tag.el-tag--success) {
+  color: #52c41a !important;
+  background-color: rgb(82 196 26 / 12%) !important;
+  border-color: rgb(82 196 26 / 45%) !important;
+}
+
+:deep(.el-tag.cq-production-status-tag.el-tag--warning) {
+  color: #faad14 !important;
+  background-color: rgb(250 173 20 / 12%) !important;
+  border-color: rgb(250 173 20 / 45%) !important;
+}
+
+:deep(.el-tag.cq-production-status-tag.el-tag--danger) {
+  color: #f5222d !important;
+  background-color: rgb(245 34 45 / 12%) !important;
+  border-color: rgb(245 34 45 / 45%) !important;
+}
+
+:deep(.el-tag.cq-production-status-tag.el-tag--info) {
+  color: #13c2c2 !important;
+  background-color: rgb(19 194 194 / 12%) !important;
+  border-color: rgb(19 194 194 / 45%) !important;
+}
+
+:deep(.el-tag.cq-status-tag--fixed) {
+  display: inline-flex;
+  width: 80px;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+  justify-content: center;
+}
+
+.cq-name-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cq-column-toggle {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  font-size: 14px;
+  color: var(--el-text-color-placeholder);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.cq-column-toggle:hover {
+  color: var(--el-color-primary);
 }
 
 .insight-toolbar {
