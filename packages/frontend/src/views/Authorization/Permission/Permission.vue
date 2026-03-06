@@ -234,10 +234,10 @@ const toggleUserPermission = (routeName: string, checked: boolean) => {
   }
   userCheckedRouteNames.value = Array.from(current)
   if (checked) {
-    const readKey = getCapabilityKeyByRouteAction(routeName, 'READ')
-    if (readKey) {
+    const routeKeys = getCapabilityKeysByRouteName(routeName)
+    if (routeKeys.length) {
       const capabilitySet = new Set(userCheckedCapabilityKeys.value)
-      capabilitySet.add(readKey)
+      routeKeys.forEach((k) => capabilitySet.add(k))
       userCheckedCapabilityKeys.value = Array.from(capabilitySet)
     }
   }
@@ -1597,7 +1597,7 @@ const handleTabChange = (tab: string) => {
 
 .user-center-layout {
   display: grid;
-  grid-template-columns: 320px 1fr 1fr;
+  grid-template-columns: 320px 0.85fr 1.35fr;
   gap: 12px;
   align-items: stretch;
   min-height: 620px;

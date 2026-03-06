@@ -1,6 +1,6 @@
 const sql = require('mssql')
 const { getPool } = require('../database')
-const { normalizeUsername, isAdmin } = require('./permissionAccess')
+const { normalizeUsername, isAdmin, getEffectivePermissions } = require('./permissionAccess')
 
 let ldap = null
 try {
@@ -76,12 +76,17 @@ const normalizeText = (value) => String(value || '').trim()
 const normalizePrincipal = (value) => normalizeText(value).toLowerCase()
 const normalizeCapabilityKey = (value) => normalizeText(value).toUpperCase()
 
-const routeNamesToReadCapabilityKeys = (routeNames = []) => {
+const routeNamesToCapabilityKeys = (routeNames = [], actionCode = '') => {
+  const targetAction = normalizeText(actionCode).toUpperCase()
+  const actionCodes = targetAction
+    ? DEFAULT_ACTION_DEFS.map((x) => x[0]).filter((x) => x === targetAction)
+    : DEFAULT_ACTION_DEFS.map((x) => x[0])
   const keys = []
   ;(routeNames || []).forEach((name) => {
     const routeName = normalizeText(name)
     const moduleCode = ROUTE_TO_MODULE_CODE[routeName]
-    if (moduleCode) keys.push(`${moduleCode}.READ`)
+    if (!moduleCode) return
+    actionCodes.forEach((code) => keys.push(`${moduleCode}.${code}`))
   })
   return Array.from(new Set(keys.map((x) => normalizeCapabilityKey(x)).filter(Boolean)))
 }
@@ -471,7 +476,10 @@ const getEffectiveCapabilityKeys = async (username) => {
   }
   const directKeys = await getUserCapabilityKeys(pureUsername)
   const groupKeys = await getUserGroupCapabilityKeys(pureUsername)
-  return Array.from(new Set([...directKeys, ...groupKeys]))
+  // 页面权限默认拥有该页面全部能力（读/增/改/删/传/导/审）
+  const effectiveRoutePermissions = await getEffectivePermissions(pureUsername)
+  const defaultPageKeys = routeNamesToCapabilityKeys(effectiveRoutePermissions)
+  return Array.from(new Set([...directKeys, ...groupKeys, ...defaultPageKeys]))
 }
 
 const hasCapability = async (username, capabilityKey) => {
@@ -495,5 +503,5 @@ module.exports = {
   removeGroupCapabilityKeys,
   getEffectiveCapabilityKeys,
   hasCapability,
-  routeNamesToReadCapabilityKeys
+  routeNamesToCapabilityKeys
 }

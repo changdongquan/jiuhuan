@@ -466,6 +466,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import { useUserStoreWithOut } from '@/store/modules/user'
 import {
   ensureBmoSessionApi,
   getBmoMouldProcurementApi,
@@ -487,6 +488,7 @@ import { getMaxSerialApi } from '@/api/goods'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
 const router = useRouter()
+const userStore = useUserStoreWithOut()
 const MOBILE_BREAKPOINT = 900
 
 const openProjectManagementEdit = (projectCode: unknown) => {
@@ -537,9 +539,20 @@ const getInitiationStatusText = (row: Partial<BmoInitiationRequestRow> | null | 
 }
 
 const initiationApplicantName = computed(() => {
-  const fromRequest = String(initiateRequest.value?.created_by || '').trim()
-  if (fromRequest) return fromRequest
-  return '-'
+  const requestRow = (initiateRequest.value || {}) as any
+  const fromDisplayName = String(requestRow.created_by_display_name || '').trim()
+  if (fromDisplayName) return fromDisplayName
+
+  const fromUsername = String(requestRow.created_by || '').trim()
+  if (!fromUsername) return '-'
+
+  const currentUser = (userStore.getUserInfo || {}) as any
+  const currentUsername = String(currentUser.username || '').trim()
+  const currentDisplayName = String(currentUser.realName || currentUser.displayName || '').trim()
+  if (currentDisplayName && currentUsername && fromUsername === currentUsername) {
+    return currentDisplayName
+  }
+  return fromUsername
 })
 
 const canShowInitiateAction = (row: Partial<BmoMouldProcurementRow> | null | undefined) => {

@@ -108,6 +108,7 @@ export interface BmoInitiationRequestRow {
   goods_draft?: BmoInitiationGoodsDraft | null
   sales_order_draft?: BmoInitiationSalesOrderDraft | null
   tech_snapshot?: any
+  created_by_display_name?: string | null
   created_by?: string | null
   confirmed_by?: string | null
   approved_by?: string | null

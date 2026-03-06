@@ -214,7 +214,7 @@ const hoverColor = 'var(--el-color-primary)'
 
 const redirect = ref<string>('')
 
-const DEFAULT_LOGIN_FALLBACK_PATH = '/dashboard/analysis'
+const DEFAULT_LOGIN_FALLBACK_PATH = '/'
 
 watch(
   () => currentRoute.value,

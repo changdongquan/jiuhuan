@@ -10,7 +10,7 @@ const {
   removeUserCapabilityKeys,
   addGroupCapabilityKeys,
   removeGroupCapabilityKeys,
-  routeNamesToReadCapabilityKeys
+  routeNamesToCapabilityKeys
 } = require('../services/capabilityAccess')
 
 // 权限管理接口仅管理员可访问
@@ -308,7 +308,7 @@ router.post('/user/:username/assign', async (req, res) => {
     `,
       Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
     )
-    const capabilityKeys = routeNamesToReadCapabilityKeys(permissionRows.map((p) => p.route_name))
+    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
 
     // 批量插入（忽略重复）
     const insertPromises = permissionIds.map((permissionId) =>
@@ -381,7 +381,7 @@ router.delete('/user/:username/remove', async (req, res) => {
     `,
       Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
     )
-    const capabilityKeys = routeNamesToReadCapabilityKeys(permissionRows.map((p) => p.route_name))
+    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
 
     await query(
       `
@@ -475,7 +475,7 @@ router.post('/group/:groupKey/assign', async (req, res) => {
     `,
       Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
     )
-    const capabilityKeys = routeNamesToReadCapabilityKeys(permissionRows.map((p) => p.route_name))
+    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
 
     // 批量插入（忽略重复）
     const insertPromises = permissionIds.map((permissionId) =>
@@ -557,7 +557,7 @@ router.delete('/group/:groupKey/remove', async (req, res) => {
     `,
       Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
     )
-    const capabilityKeys = routeNamesToReadCapabilityKeys(permissionRows.map((p) => p.route_name))
+    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
 
     await query(
       `

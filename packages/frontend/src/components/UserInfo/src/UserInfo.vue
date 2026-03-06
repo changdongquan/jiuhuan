@@ -47,6 +47,15 @@ onMounted(async () => {
   const info = userStore.getUserInfo as any
   if (!info || !info.username) return
 
+  // /api/permission/ad/users 是管理员接口，普通用户调用会 403
+  const normalizedCurrentUser = String(info.username || '')
+    .split('\\')
+    .pop()
+    ?.split('@')[0]
+    ?.toLowerCase()
+  const isAdminUser = normalizedCurrentUser === 'admin'
+  if (!isAdminUser) return
+
   // 提取纯用户名（去掉域名前缀和 @ 域名）
   const rawUsername = String(info.username || '')
   const shortUsername = rawUsername.split('\\').pop()?.split('@')[0] || rawUsername

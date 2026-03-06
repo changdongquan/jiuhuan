@@ -3,7 +3,6 @@ const { requireAdmin } = require('../middleware/auth')
 const { recordPermissionAudit } = require('../services/permissionAudit')
 const {
   listCapabilities,
-  getUserCapabilityKeys,
   addUserCapabilityKeys,
   removeUserCapabilityKeys,
   getGroupCapabilityKeys,
@@ -36,7 +35,7 @@ router.get('/actions', async (req, res) => {
 router.get('/user/:username', async (req, res) => {
   try {
     const { username } = req.params
-    const data = await getUserCapabilityKeys(username)
+    const data = await getEffectiveCapabilityKeys(username)
     return res.json({ code: 0, success: true, data })
   } catch (error) {
     console.error('获取用户模块能力失败:', error)
@@ -166,4 +165,3 @@ router.get('/effective/:username', async (req, res) => {
 })
 
 module.exports = router
-
