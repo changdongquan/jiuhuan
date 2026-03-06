@@ -90,3 +90,9 @@ export const changePasswordApi = (data: { oldPassword: string; newPassword: stri
     data
   })
 }
+
+export const getCurrentDisplayNameApi = () => {
+  return request.get<{ username: string; displayName: string }>({
+    url: '/api/user/display-name'
+  })
+}

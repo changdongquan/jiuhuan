@@ -8,7 +8,7 @@ import LockPage from './components/LockPage.vue'
 import { useLockStore } from '@/store/modules/lock'
 import { useUserStore } from '@/store/modules/user'
 import { useRouter } from 'vue-router'
-import { getAdUsersApi } from '@/api/permission'
+import { getCurrentDisplayNameApi } from '@/api/login'
 
 const { push } = useRouter()
 
@@ -47,17 +47,6 @@ onMounted(async () => {
   const info = userStore.getUserInfo as any
   if (!info || !info.username) return
 
-  // /api/permission/ad/users 是管理员接口，普通用户调用会 403
-  const isDev = import.meta.env.DEV
-  const normalizedCurrentUser = String(info.username || '')
-    .split('\\')
-    .pop()
-    ?.split('@')[0]
-    ?.toLowerCase()
-  const isAdminUser =
-    normalizedCurrentUser === 'admin' || (isDev && normalizedCurrentUser === 'dev-user')
-  if (!isAdminUser) return
-
   // 提取纯用户名（去掉域名前缀和 @ 域名）
   const rawUsername = String(info.username || '')
   const shortUsername = rawUsername.split('\\').pop()?.split('@')[0] || rawUsername
@@ -68,24 +57,13 @@ onMounted(async () => {
   if (info.realName && String(info.realName).toLowerCase() !== normalizedShort) return
 
   try {
-    const res = await getAdUsersApi({
-      keyword: shortUsername,
-      page: 1,
-      pageSize: 10
-    })
-    const data = (res.data as any) || {}
-    const list = data.list || []
-    const matched = list.find(
-      (u: any) => String(u.username || '').toLowerCase() === normalizedShort
-    )
-    if (
-      matched &&
-      matched.displayName &&
-      String(matched.displayName).toLowerCase() !== normalizedShort
-    ) {
+    const res = await getCurrentDisplayNameApi()
+    const displayName = String((res.data as any)?.displayName || '').trim()
+    if (displayName && displayName.toLowerCase() !== normalizedShort) {
       userStore.setUserInfo({
         ...info,
-        realName: matched.displayName
+        realName: displayName,
+        displayName
       } as any)
     }
   } catch {

@@ -1,6 +1,12 @@
 const express = require('express')
 const fs = require('fs')
 const path = require('path')
+let ldap = null
+try {
+  ldap = require('ldapjs')
+} catch (_e) {
+  ldap = null
+}
 
 const router = express.Router()
 
@@ -9,6 +15,91 @@ const LOCAL_USERS_EXAMPLE_FILE = path.join(__dirname, '..', 'local-users.json.ex
 
 const isDev =
   process.env.NODE_ENV === 'development' || !process.env.NODE_ENV || process.env.NODE_ENV === 'dev'
+
+const LDAP_CONFIG = {
+  url: process.env.LDAP_URL || 'ldap://AD2016-1.jiuhuan.local:389',
+  baseDN: process.env.LDAP_BASE_DN || 'DC=JIUHUAN,DC=LOCAL',
+  bindDN: process.env.LDAP_BIND_DN,
+  bindPassword: process.env.LDAP_BIND_PASSWORD
+}
+
+const escapeLdapFilter = (str) => {
+  if (!str) return ''
+  return String(str)
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\//g, '\\2f')
+    .replace(/\0/g, '\\00')
+}
+
+const normalizeSam = (value) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  return raw.split('\\').pop().split('@')[0].trim()
+}
+
+const fetchAdDisplayName = async (username) => {
+  if (!ldap) return null
+  const sam = normalizeSam(username)
+  if (!sam) return null
+
+  const client = ldap.createClient({ url: LDAP_CONFIG.url })
+  client.on('error', () => {})
+
+  try {
+    if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
+      await new Promise((resolve, reject) => {
+        client.bind(LDAP_CONFIG.bindDN, LDAP_CONFIG.bindPassword, (err) => {
+          if (err) return reject(err)
+          resolve()
+        })
+      })
+    }
+
+    const escapedSam = escapeLdapFilter(sam)
+    const entries = await new Promise((resolve, reject) => {
+      const rows = []
+      client.search(
+        LDAP_CONFIG.baseDN,
+        {
+          filter: `(&(objectClass=user)(!(objectClass=computer))(sAMAccountName=${escapedSam}))`,
+          scope: 'sub',
+          attributes: ['displayName', 'cn'],
+          sizeLimit: 5,
+          timeLimit: 8
+        },
+        (err, res) => {
+          if (err) return reject(err)
+          res.on('searchEntry', (entry) => {
+            const obj = entry?.object || (typeof entry?.toObject === 'function' ? entry.toObject() : null)
+            if (obj) rows.push(obj)
+          })
+          res.on('error', reject)
+          res.on('end', (result) => {
+            if (result?.status && result.status !== 0) {
+              return reject(new Error(`LDAP 搜索失败: ${result.status}`))
+            }
+            resolve(rows)
+          })
+        }
+      )
+    })
+
+    const row = Array.isArray(entries) ? entries[0] : null
+    const displayName = String(row?.displayName || row?.cn || '').trim()
+    return displayName || null
+  } catch (_e) {
+    return null
+  } finally {
+    try {
+      client.unbind(() => {})
+    } catch (_e) {
+      // ignore
+    }
+  }
+}
 
 function readLocalUsers() {
   try {
@@ -87,6 +178,25 @@ router.get('/profile', (req, res) => {
       phoneNumber: user.phoneNumber || '',
       role: user.role || 'user',
       roleId: user.roleId || '3'
+    }
+  })
+})
+
+router.get('/display-name', async (req, res) => {
+  const username = String(req?.auth?.username || req?.headers?.['x-username'] || '').trim()
+  const authDisplayName = String(req?.auth?.displayName || '').trim()
+  if (!username) {
+    return res.status(400).json({ code: 400, success: false, message: '缺少用户信息' })
+  }
+
+  const adDisplayName = await fetchAdDisplayName(username)
+  const displayName = adDisplayName || authDisplayName || normalizeSam(username) || username
+  return res.json({
+    code: 0,
+    success: true,
+    data: {
+      username,
+      displayName
     }
   })
 })

@@ -14,6 +14,11 @@ const resolveAuthorizationHeader = (req) => {
   return header || ''
 }
 
+const resolveDisplayHeader = (value) => {
+  const raw = Array.isArray(value) ? value[0] : value
+  return String(raw || '').trim()
+}
+
 const authenticateRequest = (req, res, next) => {
   try {
     const authHeader = resolveAuthorizationHeader(req)
@@ -23,7 +28,8 @@ const authenticateRequest = (req, res, next) => {
 
     // 兼容历史代码：旧逻辑大量依赖 X-Username / X-Display-Name
     req.headers['x-username'] = auth.username
-    req.headers['x-display-name'] = encodeURIComponent(auth.displayName || auth.username)
+    const incomingDisplay = resolveDisplayHeader(req.headers?.['x-display-name'])
+    req.headers['x-display-name'] = incomingDisplay || encodeURIComponent(auth.displayName || auth.username)
 
     return next()
   } catch (error) {
@@ -49,7 +55,8 @@ const authenticateRequest = (req, res, next) => {
           rawToken: legacyRaw
         }
         req.headers['x-username'] = safeUsername
-        req.headers['x-display-name'] = encodeURIComponent(safeUsername)
+        const incomingDisplay = resolveDisplayHeader(req.headers?.['x-display-name'])
+        req.headers['x-display-name'] = incomingDisplay || encodeURIComponent(safeUsername)
         return next()
       }
     }
