@@ -398,11 +398,13 @@
                 <el-timeline-item
                   v-for="(event, idx) in journey.events"
                   :key="`${event.stage}-${event.date}-${idx}`"
-                  :timestamp="event.date"
                   :type="resolveStageTag(stageStatusMap[event.stage] || 'in_progress')"
                 >
                   <div class="timeline-event-title">{{ event.title }}</div>
-                  <div class="timeline-event-detail">{{ event.detail }}</div>
+                  <div class="timeline-event-meta">
+                    <span class="timeline-event-date">{{ event.date }}</span>
+                    <span class="timeline-event-detail">{{ event.detail }}</span>
+                  </div>
                 </el-timeline-item>
               </el-timeline>
               <el-empty v-else description="暂无阶段事件" :image-size="100" />
@@ -443,6 +445,7 @@ import {
 } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { getSalesOrderCustomerOptionsApi, type SalesOrderCustomerOption } from '@/api/sales-orders'
 import type {
   ComprehensiveQueryListParams,
   ComprehensiveQueryRow,
@@ -450,7 +453,6 @@ import type {
   ProjectJourney
 } from '@/api/comprehensive-query'
 import {
-  getComprehensiveQueryCustomerOptionsApi,
   getComprehensiveQueryListApi,
   getComprehensiveQuerySummaryApi,
   getProjectJourneyApi
@@ -689,12 +691,13 @@ const loadSummary = async () => {
 
 const loadFilterOptions = async () => {
   try {
-    const customersResp = await getComprehensiveQueryCustomerOptionsApi()
+    const customersResp = await getSalesOrderCustomerOptionsApi({ status: 'active' })
     const customerData = parseResponseData(customersResp)
     const customers = Array.isArray(customerData?.list) ? customerData.list : []
 
     customerOptions.value = customers
-      .map((item: any) => String(item?.customerName || '').trim())
+      .filter((item: SalesOrderCustomerOption) => item?.status === 'active')
+      .map((item: SalesOrderCustomerOption) => String(item?.customerName || '').trim())
       .filter(Boolean)
       .filter((item: string, idx: number, arr: string[]) => arr.indexOf(item) === idx)
   } catch (error) {
@@ -1021,9 +1024,9 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 10px;
-  height: calc(100vh - 460px);
-  max-height: calc(100vh - 460px);
-  min-height: calc(100vh - 460px);
+  height: calc(100vh - 440px);
+  max-height: calc(100vh - 440px);
+  min-height: calc(100vh - 440px);
 }
 
 .insight-left,
@@ -1037,7 +1040,7 @@ onMounted(() => {
 
 .stage-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1092,8 +1095,20 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-.timeline-event-detail {
+.timeline-event-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 2px;
+}
+
+.timeline-event-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.timeline-event-detail {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }

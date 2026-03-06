@@ -361,7 +361,6 @@ const buildJourney = ({
 }) => {
   const salesCount = salesRows.length
   const salesAmount = salesRows.reduce((sum, row) => sum + safeNumber(row.totalAmount), 0)
-  const shippedOrderCount = salesRows.filter((row) => Number(row.isShipped) === 1).length
 
   const outboundQty = outboundRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0)
   const outboundDocCount = new Set(
@@ -383,7 +382,7 @@ const buildJourney = ({
 
   let salesStatus = 'pending'
   if (salesCount > 0) {
-    salesStatus = shippedOrderCount >= salesCount ? 'completed' : 'in_progress'
+    salesStatus = outboundDocCount > 0 || outboundQty > 0 ? 'completed' : 'in_progress'
   }
 
   const rawProjectStatus = String(projectRow?.projectStatus || '').trim()
