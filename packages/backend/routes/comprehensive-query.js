@@ -1,5 +1,5 @@
 const express = require('express')
-const XLSX = require('xlsx')
+const ExcelJS = require('exceljs')
 const { query } = require('../database')
 
 const router = express.Router()
@@ -102,6 +102,252 @@ const parseProgressFilters = (raw) => {
       return { type, range }
     })
     .filter(Boolean)
+}
+
+const sanitizeFilenamePart = (value) => {
+  return String(value || '')
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, '')
+    .replace(/-+/g, '-')
+    .trim()
+}
+
+const buildExportQueryMethodLabel = (inputQuery = {}) => {
+  const parts = []
+  const settlementStatus = String(inputQuery.settlementStatus || '').trim()
+  const anomalyType = parseAnomalyTypes(inputQuery.anomalyType)
+  const progressFilters = parseProgressFilters(inputQuery.progressFilters)
+  const progressType = String(inputQuery.progressType || '').trim()
+  const progressRange = String(inputQuery.progressRange || '').trim()
+
+  const progressTypeLabelMap = {
+    production: '生产',
+    invoice: '开票',
+    receipt: '回款对销售',
+    receipt_invoice: '回款对开票',
+    outbound: '出货'
+  }
+  const progressRangeLabelMap = {
+    0: '0%',
+    '0_30': '0-30%',
+    '30_60': '30-60%',
+    '60_90': '60-90%',
+    '90_100': '90-100%',
+    100: '100%'
+  }
+  const anomalyLabelMap = {
+    uninvoiced: '已销售未开票',
+    unreceived: '已开票未回款',
+    unshipped: '生产完成未出货',
+    overdue: '订单超期未回款'
+  }
+
+  if (settlementStatus) parts.push(`状态${settlementStatus}`)
+  if (anomalyType.length > 0) {
+    parts.push(`异常${anomalyType.map((item) => anomalyLabelMap[item] || item).join('+')}`)
+  }
+
+  const progressItems = progressFilters.length
+    ? progressFilters
+    : progressType && progressRange
+      ? [{ type: progressType, range: progressRange }]
+      : []
+
+  if (progressItems.length > 0) {
+    const progressText = progressItems
+      .map(({ type, range }) => `${progressTypeLabelMap[type] || type}${progressRangeLabelMap[range] || range}`)
+      .join('+')
+    parts.push(`进度${progressText}`)
+  }
+
+  if (String(inputQuery.customerName || '').trim()) parts.push('按客户')
+  if (String(inputQuery.keyword || '').trim()) parts.push('按关键词')
+  if (String(inputQuery.startDate || '').trim() || String(inputQuery.endDate || '').trim()) parts.push('按订单日期')
+
+  const raw = parts.length > 0 ? parts.join('_') : '全部'
+  const safe = sanitizeFilenamePart(raw)
+  return safe.length > 48 ? safe.slice(0, 48) : safe
+}
+
+const getCellTextLength = (value) => {
+  if (value === null || value === undefined) return 0
+  const text = String(value)
+  let width = 0
+  for (const ch of Array.from(text)) {
+    width += /[\u4e00-\u9fff\u3400-\u4dbf\uff00-\uffef]/.test(ch) ? 2 : 1
+  }
+  return width
+}
+
+const applyExcelColumnWidth = (worksheet, keys, rows, options = {}) => {
+  const minWidth = Number(options.minWidth || 10)
+  const maxWidth = Number(options.maxWidth || 60)
+  const extraPadding = Number(options.extraPadding || 3)
+  const minWidthMap = options.minWidthMap || {}
+  if (!worksheet || !Array.isArray(keys) || keys.length <= 0) return
+
+  keys.forEach((key, index) => {
+    const headerCell = worksheet.getCell(1, index + 1)
+    const keyMinWidth = Number(minWidthMap[key] || minWidth)
+    let width = Math.max(keyMinWidth, getCellTextLength(headerCell.value))
+    rows.forEach((row) => {
+      const textLength = getCellTextLength(row?.[key])
+      width = Math.max(width, Math.min(maxWidth, textLength + extraPadding))
+    })
+    width = Math.max(width, keyMinWidth)
+    worksheet.getColumn(index + 1).width = Math.min(maxWidth, width)
+  })
+}
+
+const applyExcelDataBorders = (worksheet, rowStart, rowEnd, colStart, colEnd) => {
+  for (let r = rowStart; r <= rowEnd; r += 1) {
+    for (let c = colStart; c <= colEnd; c += 1) {
+      const cell = worksheet.getCell(r, c)
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+        left: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+        bottom: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+        right: { style: 'thin', color: { argb: 'FF9CA3AF' } }
+      }
+    }
+  }
+}
+
+const applyExcelAccountingFormat = (worksheet, key, rowStart = 2) => {
+  const accountingNumFmt = '_-* #,##0.00_-;_-* (#,##0.00)_-;_-* "-"??_-;_-@_-'
+  const col = worksheet.getColumn(key)
+  col.eachCell((cell, rowNumber) => {
+    if (rowNumber < rowStart) return
+    cell.numFmt = accountingNumFmt
+    cell.alignment = { ...(cell.alignment || {}), horizontal: 'right' }
+  })
+}
+
+const applyExcelHeaderStyle = (worksheet, colStart, colEnd) => {
+  for (let c = colStart; c <= colEnd; c += 1) {
+    const cell = worksheet.getCell(1, c)
+    cell.font = { bold: true, color: { argb: 'FF243447' } }
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF4F7FC' }
+    }
+    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+  }
+}
+
+const applyExcelDataAreaStyle = (worksheet, keys, rows) => {
+  const colCount = keys.length
+  if (colCount <= 0) return
+  const rowStart = 1
+  const rowEnd = Math.max(rows.length + 1, 2)
+  applyExcelHeaderStyle(worksheet, 1, colCount)
+  applyExcelDataBorders(worksheet, rowStart, rowEnd, 1, colCount)
+  if (!rows.length) return
+  ;['salesAmount', 'invoiceAmount', 'receiptAmount', 'discountAmount', 'uninvoicedAmount', 'unreceivedAmount'].forEach(
+    (key) => applyExcelAccountingFormat(worksheet, key, 2)
+  )
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }]
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: colCount }
+  }
+}
+
+const buildExportRows = (rows) => {
+  const anomalyLabelMap = {
+    uninvoiced: '已销售未开票',
+    unreceived: '已开票未回款',
+    unshipped: '生产完成未出货',
+    overdue: '订单超期未回款'
+  }
+  const amount = (v) => Number(safeNumber(v).toFixed(2))
+  return (rows || []).map((row) => ({
+    projectCode: row.projectCode || '',
+    customerName: row.customerName || '',
+    productName: row.productName || '',
+    productDrawing: row.productDrawing || '',
+    customerModelNo: row.customerModelNo || '',
+    category: row.category || '',
+    owner: row.owner || '',
+    salesAmount: amount(row.salesAmount),
+    projectStatus: row.projectStatus || '',
+    productionStatus: row.productionStatus || '',
+    invoiceAmount: amount(row.invoiceAmount),
+    receiptAmount: amount(row.receiptAmount),
+    discountAmount: amount(row.discountAmount),
+    uninvoicedAmount: amount(row.uninvoicedAmount),
+    unreceivedAmount: amount(row.unreceivedAmount),
+    settlementStatus: row.settlementStatus || '',
+    settlementSource: row.settlementSource || '',
+    anomalyType: anomalyLabelMap[row.anomalyType] || '',
+    latestOrderDate: row.latestOrderDate || '',
+    latestInvoiceDate: row.latestInvoiceDate || '',
+    latestReceiptDate: row.latestReceiptDate || '',
+    outboundQty: safeNumber(row.outboundQty),
+    latestOutboundDate: row.latestOutboundDate || ''
+  }))
+}
+
+const getExportColumns = () => {
+  return [
+    { header: '项目编号', key: 'projectCode' },
+    { header: '客户名称', key: 'customerName' },
+    { header: '产品名称', key: 'productName' },
+    { header: '产品图号', key: 'productDrawing' },
+    { header: '客户模号', key: 'customerModelNo' },
+    { header: '分类', key: 'category' },
+    { header: '负责人', key: 'owner' },
+    { header: '销售金额', key: 'salesAmount' },
+    { header: '项目状态', key: 'projectStatus' },
+    { header: '生产状态', key: 'productionStatus' },
+    { header: '开票金额', key: 'invoiceAmount' },
+    { header: '回款金额', key: 'receiptAmount' },
+    { header: '贴息金额', key: 'discountAmount' },
+    { header: '未开票金额', key: 'uninvoicedAmount' },
+    { header: '未回款金额', key: 'unreceivedAmount' },
+    { header: '状态', key: 'settlementStatus' },
+    { header: '状态来源', key: 'settlementSource' },
+    { header: '异常', key: 'anomalyType' },
+    { header: '最近订单', key: 'latestOrderDate' },
+    { header: '最近开票', key: 'latestInvoiceDate' },
+    { header: '最近回款', key: 'latestReceiptDate' },
+    { header: '出货数量', key: 'outboundQty' },
+    { header: '最近出货', key: 'latestOutboundDate' }
+  ]
+}
+
+const buildExportWorkbookBuffer = async (rows) => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet('综合查询')
+  const columns = getExportColumns()
+  const exportRows = buildExportRows(rows)
+  worksheet.columns = columns.map((item) => ({ header: item.header, key: item.key }))
+  worksheet.addRows(exportRows)
+  applyExcelColumnWidth(
+    worksheet,
+    columns.map((item) => item.key),
+    exportRows,
+    {
+      minWidth: 12,
+      maxWidth: 72,
+      extraPadding: 4,
+      minWidthMap: {
+        salesAmount: 20,
+        invoiceAmount: 20,
+        receiptAmount: 20,
+        discountAmount: 20,
+        uninvoicedAmount: 20,
+        unreceivedAmount: 20
+      }
+    }
+  )
+  applyExcelDataAreaStyle(
+    worksheet,
+    columns.map((item) => item.key),
+    exportRows
+  )
+  return workbook.xlsx.writeBuffer()
 }
 
 const buildSettlementStatusSql = (alias = 'base') => {
@@ -886,53 +1132,18 @@ router.get('/export', async (req, res) => {
       params
     )
 
-    const anomalyLabelMap = {
-      uninvoiced: '已销售未开票',
-      unreceived: '已开票未回款',
-      unshipped: '生产完成未出货',
-      overdue: '订单超期未回款'
-    }
-    const amount = (v) => Number(safeNumber(v).toFixed(2))
-    const exportRows = (rows || []).map((row) => ({
-      项目编号: row.projectCode || '',
-      客户名称: row.customerName || '',
-      产品名称: row.productName || '',
-      产品图号: row.productDrawing || '',
-      客户模号: row.customerModelNo || '',
-      分类: row.category || '',
-      负责人: row.owner || '',
-      销售金额: amount(row.salesAmount),
-      项目状态: row.projectStatus || '',
-      生产状态: row.productionStatus || '',
-      开票金额: amount(row.invoiceAmount),
-      回款金额: amount(row.receiptAmount),
-      贴息金额: amount(row.discountAmount),
-      未开票金额: amount(row.uninvoicedAmount),
-      未回款金额: amount(row.unreceivedAmount),
-      状态: row.settlementStatus || '',
-      状态来源: row.settlementSource || '',
-      异常: anomalyLabelMap[row.anomalyType] || '',
-      最近订单: row.latestOrderDate || '',
-      最近开票: row.latestInvoiceDate || '',
-      最近回款: row.latestReceiptDate || '',
-      出货数量: safeNumber(row.outboundQty),
-      最近出货: row.latestOutboundDate || ''
-    }))
-
-    const workbook = XLSX.utils.book_new()
-    const worksheet = XLSX.utils.json_to_sheet(exportRows)
-    XLSX.utils.book_append_sheet(workbook, worksheet, '综合查询')
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const buffer = await buildExportWorkbookBuffer(rows || [])
 
     const now = new Date()
     const ts = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_${pad2(
       now.getHours()
     )}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
-    const filename = `综合查询_${ts}.xlsx`
+    const methodLabel = buildExportQueryMethodLabel(req.query)
+    const filename = `综合查询_${methodLabel}_${ts}.xlsx`
     const encodedFilename = encodeURIComponent(filename)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
-    res.send(buffer)
+    res.send(Buffer.from(buffer))
   } catch (error) {
     console.error('导出综合查询失败:', error)
     res.status(500).json({
