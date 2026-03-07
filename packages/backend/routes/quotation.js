@@ -1425,7 +1425,7 @@ router.get('/list', async (req, res) => {
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
     await ensureQuotationProcessingDateNullable()
-    const { keyword, processingDate, page = 1, pageSize = 20 } = req.query
+    const { keyword, processingDate, quotationType, page = 1, pageSize = 20 } = req.query
 
     // 构建查询条件
     const whereConditions = []
@@ -1443,6 +1443,11 @@ router.get('/list', async (req, res) => {
     if (processingDate) {
       whereConditions.push('加工日期 = @processingDate')
       params.processingDate = processingDate
+    }
+
+    if (quotationType === 'mold' || quotationType === 'part') {
+      whereConditions.push('报价类型 = @quotationType')
+      params.quotationType = quotationType
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''

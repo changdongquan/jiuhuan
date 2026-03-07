@@ -121,6 +121,7 @@ export const deleteQuotationApi = (id: number) => {
 export const getQuotationListApi = (params?: {
   keyword?: string
   processingDate?: string
+  quotationType?: 'mold' | 'part' | ''
   page?: number
   pageSize?: number
 }) => {

@@ -44,6 +44,17 @@
           clearable
         />
       </el-form-item>
+      <el-form-item label="报价类型">
+        <el-select
+          v-model="queryForm.quotationType"
+          placeholder="请选择报价类型"
+          clearable
+          :style="{ width: isMobile ? '100%' : '160px' }"
+        >
+          <el-option label="改模报价单" value="mold" />
+          <el-option label="零件报价单" value="part" />
+        </el-select>
+      </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
           <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -1226,6 +1237,7 @@ interface QuotationFormModel {
 interface QueryForm {
   keyword: string
   processingDate: string | ''
+  quotationType: 'mold' | 'part' | ''
 }
 
 const appStore = useAppStore()
@@ -1243,7 +1255,8 @@ const customerLoading = ref(false)
 // 查询表单
 const queryForm = reactive<QueryForm>({
   keyword: '',
-  processingDate: ''
+  processingDate: '',
+  quotationType: ''
 })
 
 // 报价单列表
@@ -1719,6 +1732,7 @@ const loadQuotations = async () => {
     const response = await getQuotationListApi({
       keyword: queryForm.keyword,
       processingDate: queryForm.processingDate,
+      quotationType: queryForm.quotationType,
       page: pagination.page,
       pageSize: pagination.pageSize
     })
@@ -1747,6 +1761,7 @@ const handleSearch = () => {
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.processingDate = ''
+  queryForm.quotationType = ''
   pagination.page = 1
   loadQuotations()
 }
