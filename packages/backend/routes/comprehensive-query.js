@@ -69,6 +69,23 @@ const parseAnomalyTypes = (raw) => {
   return list.filter((item) => ANOMALY_TYPES.includes(item))
 }
 
+const PROGRESS_COLUMN_MAP = {
+  production: 'base.productionProgress',
+  invoice: 'base.invoiceProgress',
+  receipt: 'base.receiptProgress',
+  outbound: 'base.outboundProgress'
+}
+
+const buildProgressRangeSql = (column, rangeKey) => {
+  if (rangeKey === '0') return `${column} <= 0`
+  if (rangeKey === '0_30') return `${column} > 0 AND ${column} < 30`
+  if (rangeKey === '30_60') return `${column} >= 30 AND ${column} < 60`
+  if (rangeKey === '60_90') return `${column} >= 60 AND ${column} < 90`
+  if (rangeKey === '90_100') return `${column} >= 90 AND ${column} < 100`
+  if (rangeKey === '100') return `${column} >= 100`
+  return ''
+}
+
 router.get('/customer-options', async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim()
@@ -121,6 +138,8 @@ const buildListFilters = (inputQuery) => {
   const endDate = String(inputQuery.endDate || '').trim()
   const projectStatus = String(inputQuery.projectStatus || '').trim()
   const productionStatus = String(inputQuery.productionStatus || '').trim()
+  const progressType = String(inputQuery.progressType || '').trim()
+  const progressRange = String(inputQuery.progressRange || '').trim()
   const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
 
   if (keyword) {
@@ -207,7 +226,7 @@ const buildListFilters = (inputQuery) => {
   if (anomalyTypes.length > 0) {
     const checks = []
     if (anomalyTypes.includes('uninvoiced')) {
-      checks.push('(base.salesAmount > base.invoiceAmount)')
+      checks.push('(base.salesAmount > 0 AND base.invoiceAmount <= 0)')
     }
     if (anomalyTypes.includes('unreceived')) {
       checks.push('(base.invoiceAmount > base.receiptAmount + base.discountAmount)')
@@ -225,6 +244,14 @@ const buildListFilters = (inputQuery) => {
 
     if (checks.length > 0) {
       baseWhere.push(`(${checks.join(' OR ')})`)
+    }
+  }
+
+  const progressColumn = PROGRESS_COLUMN_MAP[progressType]
+  if (progressColumn && progressRange) {
+    const progressRangeSql = buildProgressRangeSql(progressColumn, progressRange)
+    if (progressRangeSql) {
+      baseWhere.push(`(${progressRangeSql})`)
     }
   }
 
@@ -250,6 +277,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(s.salesAmount, 0) as salesAmount,
         p.项目状态 as projectStatus,
         pt.productionStatus as productionStatus,
+        ISNULL(pt.plannedQty, 0) as plannedQty,
         ISNULL(pt.completedQty, 0) as completedQty,
         ISNULL(od.outboundDocCount, 0) as outboundDocCount,
         ISNULL(od.outboundQty, 0) as outboundQty,
@@ -271,7 +299,28 @@ const buildBaseCteSql = (sourceWhereSql) => {
           WHEN ISNULL(fi.invoiceAmount, 0) > ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)
           THEN ISNULL(fi.invoiceAmount, 0) - ISNULL(fr.receiptAmount, 0) - ISNULL(fr.discountAmount, 0)
           ELSE 0
-        END as unreceivedAmount
+        END as unreceivedAmount,
+        CASE
+          WHEN ISNULL(pt.plannedQty, 0) <= 0 THEN 0
+          WHEN ISNULL(pt.completedQty, 0) * 100.0 / ISNULL(pt.plannedQty, 0) >= 100 THEN 100
+          ELSE ISNULL(pt.completedQty, 0) * 100.0 / ISNULL(pt.plannedQty, 0)
+        END as productionProgress,
+        CASE
+          WHEN ISNULL(s.salesAmount, 0) <= 0 THEN 0
+          WHEN ISNULL(fi.invoiceAmount, 0) * 100.0 / ISNULL(s.salesAmount, 0) >= 100 THEN 100
+          ELSE ISNULL(fi.invoiceAmount, 0) * 100.0 / ISNULL(s.salesAmount, 0)
+        END as invoiceProgress,
+        CASE
+          WHEN ISNULL(s.salesAmount, 0) <= 0 THEN 0
+          WHEN (ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)) * 100.0 / ISNULL(s.salesAmount, 0) >= 100
+          THEN 100
+          ELSE (ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)) * 100.0 / ISNULL(s.salesAmount, 0)
+        END as receiptProgress,
+        CASE
+          WHEN ISNULL(pt.completedQty, 0) <= 0 THEN 0
+          WHEN ISNULL(od.outboundQty, 0) * 100.0 / ISNULL(pt.completedQty, 0) >= 100 THEN 100
+          ELSE ISNULL(od.outboundQty, 0) * 100.0 / ISNULL(pt.completedQty, 0)
+        END as outboundProgress
       FROM 项目管理 p
       OUTER APPLY (
         SELECT TOP 1
@@ -310,6 +359,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         SELECT TOP 1
           pt1.生产状态 as productionStatus,
           pt1.负责人 as owner,
+          ISNULL(pt1.投产数量, 0) as plannedQty,
           ISNULL(pt1.已完成数量, 0) as completedQty
         FROM 生产任务 pt1
         WHERE pt1.项目编号 = p.项目编号
@@ -703,7 +753,7 @@ router.get('/list', async (req, res) => {
         base.uninvoicedAmount,
         base.unreceivedAmount,
         CASE
-          WHEN base.salesAmount > base.invoiceAmount THEN 'uninvoiced'
+          WHEN base.salesAmount > 0 AND base.invoiceAmount <= 0 THEN 'uninvoiced'
           WHEN base.invoiceAmount > base.receiptAmount + base.discountAmount THEN 'unreceived'
           WHEN base.completedQty > base.outboundQty THEN 'unshipped'
           WHEN base.latestOrderDate IS NOT NULL

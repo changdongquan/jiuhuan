@@ -8,6 +8,8 @@ export interface ComprehensiveQueryListParams {
   startDate?: string
   endDate?: string
   anomalyType?: string
+  progressType?: string
+  progressRange?: string
   projectStatus?: string
   productionStatus?: string
   page?: number

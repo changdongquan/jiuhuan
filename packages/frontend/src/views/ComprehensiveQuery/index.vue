@@ -1,10 +1,10 @@
 <template>
   <div class="comprehensive-query-page space-y-2 p-3">
     <section class="query-section rounded-lg bg-[var(--el-bg-color-overlay)] p-3 shadow-sm">
-      <el-form ref="queryFormRef" :model="queryForm" label-width="74px" class="filter-form">
-        <el-row :gutter="16">
+      <el-form ref="queryFormRef" :model="queryForm" label-width="60px" class="filter-form">
+        <el-row :gutter="10">
           <el-col :xs="24" :sm="12" :lg="3">
-            <el-form-item label="关键词">
+            <el-form-item label="关键词" class="query-item-keyword">
               <el-input
                 v-model="queryForm.keyword"
                 placeholder="项目编号 / 产品名称 / 产品图号"
@@ -14,8 +14,8 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="4">
-            <el-form-item label="客户名称">
+          <el-col :xs="24" :sm="12" :lg="3">
+            <el-form-item label="客户名称" class="query-item-customer">
               <el-select
                 v-model="queryForm.customerName"
                 filterable
@@ -33,7 +33,7 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="3">
-            <el-form-item label="分类">
+            <el-form-item label="分类" class="query-item-expand">
               <el-select
                 v-model="queryForm.category"
                 filterable
@@ -50,8 +50,8 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="3">
-            <el-form-item label="状态">
+          <el-col :xs="24" :sm="12" :lg="2">
+            <el-form-item label="状态" class="query-item-expand">
               <el-select
                 v-model="queryForm.settlementStatus"
                 clearable
@@ -64,7 +64,25 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="3">
+          <el-col :xs="24" :sm="12" :lg="4">
+            <el-form-item label="合并筛选" class="query-item-merged">
+              <el-tree-select
+                v-model="mergedFilterValues"
+                class="filter-control"
+                :data="mergedFilterTree"
+                multiple
+                check-strictly
+                filterable
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                node-key="value"
+                placeholder="请选择进度"
+                @change="handleMergedFilterChange"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :lg="2">
             <el-form-item label="异常类型">
               <el-select
                 v-model="queryForm.anomalyType"
@@ -80,7 +98,7 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="4">
-            <el-form-item label="订单日期">
+            <el-form-item label="订单日期" class="query-item-order-date">
               <el-date-picker
                 v-model="queryForm.dateRange"
                 type="daterange"
@@ -93,7 +111,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="4">
+          <el-col :xs="24" :sm="12" :lg="3">
             <el-form-item label=" " class="filter-actions-item">
               <div class="filter-actions">
                 <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
@@ -107,28 +125,28 @@
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
+        <el-card shadow="hover" class="summary-card summary-card--c1">
           <div class="summary-card__title">项目数</div>
           <div class="summary-card__value">{{ summaryCards.projectCount.toLocaleString() }}</div>
           <div class="summary-card__meta">筛选范围项目总数</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--green">
+        <el-card shadow="hover" class="summary-card summary-card--c2">
           <div class="summary-card__title">销售金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.salesAmount) }}</div>
           <div class="summary-card__meta">筛选范围销售订单汇总</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--orange">
+        <el-card shadow="hover" class="summary-card summary-card--c3">
           <div class="summary-card__title">开票金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.invoiceAmount) }}</div>
           <div class="summary-card__meta">筛选范围开票汇总</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--gray">
+        <el-card shadow="hover" class="summary-card summary-card--c4">
           <div class="summary-card__title">回款合计(贴息金额)</div>
           <div class="summary-card__value">
             {{ formatAmountPair(summaryCards.receiptAmount, summaryCards.discountAmount) }}
@@ -137,14 +155,14 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--blue">
+        <el-card shadow="hover" class="summary-card summary-card--c5">
           <div class="summary-card__title">未开票金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryCards.uninvoicedAmount) }}</div>
           <div class="summary-card__meta">销售金额减开票金额</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="4">
-        <el-card shadow="hover" class="summary-card summary-card--gray">
+        <el-card shadow="hover" class="summary-card summary-card--c6">
           <div class="summary-card__title">未回款金额</div>
           <div class="summary-card__value">{{ formatAmount(summaryUnreceivedAmount) }}</div>
           <div class="summary-card__meta">销售金额减回款合计</div>
@@ -440,6 +458,7 @@ import {
   ElTableColumn,
   ElTabs,
   ElTag,
+  ElTreeSelect,
   ElTimeline,
   ElTimelineItem
 } from 'element-plus'
@@ -465,6 +484,8 @@ interface QueryForm {
   category: string
   settlementStatus: string
   anomalyType: string
+  progressType: string
+  progressRange: string
   dateRange: [string, string] | []
 }
 
@@ -475,6 +496,8 @@ const queryForm = reactive<QueryForm>({
   category: '',
   settlementStatus: '',
   anomalyType: '',
+  progressType: '',
+  progressRange: '',
   dateRange: []
 })
 
@@ -497,6 +520,62 @@ const journey = ref<ProjectJourney | null>(null)
 const showExtraColumns = ref(false)
 const customerOptions = ref<string[]>([])
 const categoryOptions = ref<string[]>(['塑胶模具', '修改模具', '零件加工'])
+const mergedFilterValues = ref<string[]>([])
+
+const mergedFilterTree = computed(() => [
+  {
+    label: '生产进度',
+    value: 'progressType:production',
+    disabled: true,
+    children: [
+      { label: '0%', value: 'progress:production:0' },
+      { label: '0%-30%', value: 'progress:production:0_30' },
+      { label: '30%-60%', value: 'progress:production:30_60' },
+      { label: '60%-90%', value: 'progress:production:60_90' },
+      { label: '90%-100%', value: 'progress:production:90_100' },
+      { label: '100%', value: 'progress:production:100' }
+    ]
+  },
+  {
+    label: '开票进度',
+    value: 'progressType:invoice',
+    disabled: true,
+    children: [
+      { label: '0%', value: 'progress:invoice:0' },
+      { label: '0%-30%', value: 'progress:invoice:0_30' },
+      { label: '30%-60%', value: 'progress:invoice:30_60' },
+      { label: '60%-90%', value: 'progress:invoice:60_90' },
+      { label: '90%-100%', value: 'progress:invoice:90_100' },
+      { label: '100%', value: 'progress:invoice:100' }
+    ]
+  },
+  {
+    label: '回款进度',
+    value: 'progressType:receipt',
+    disabled: true,
+    children: [
+      { label: '0%', value: 'progress:receipt:0' },
+      { label: '0%-30%', value: 'progress:receipt:0_30' },
+      { label: '30%-60%', value: 'progress:receipt:30_60' },
+      { label: '60%-90%', value: 'progress:receipt:60_90' },
+      { label: '90%-100%', value: 'progress:receipt:90_100' },
+      { label: '100%', value: 'progress:receipt:100' }
+    ]
+  },
+  {
+    label: '出货进度',
+    value: 'progressType:outbound',
+    disabled: true,
+    children: [
+      { label: '0%', value: 'progress:outbound:0' },
+      { label: '0%-30%', value: 'progress:outbound:0_30' },
+      { label: '30%-60%', value: 'progress:outbound:30_60' },
+      { label: '60%-90%', value: 'progress:outbound:60_90' },
+      { label: '90%-100%', value: 'progress:outbound:90_100' },
+      { label: '100%', value: 'progress:outbound:100' }
+    ]
+  }
+])
 
 const summaryCards = ref<ComprehensiveQuerySummary>({
   projectCount: 0,
@@ -640,6 +719,20 @@ const formatAmountPair = (left: number, right: number) => {
   return `${fmt(total)}(${fmt(discount)})`
 }
 
+const handleMergedFilterChange = (values: string[] | string | undefined) => {
+  const list = Array.isArray(values) ? values : values ? [values] : []
+  const progressItems = list.filter((item) => item.startsWith('progress:'))
+  const lastProgress = progressItems[progressItems.length - 1]
+  if (!lastProgress) {
+    queryForm.progressType = ''
+    queryForm.progressRange = ''
+    return
+  }
+  const parts = lastProgress.split(':')
+  queryForm.progressType = parts[1] || ''
+  queryForm.progressRange = parts[2] || ''
+}
+
 const buildListParams = (): ComprehensiveQueryListParams => {
   return {
     keyword: queryForm.keyword.trim() || undefined,
@@ -647,6 +740,8 @@ const buildListParams = (): ComprehensiveQueryListParams => {
     category: queryForm.category || undefined,
     settlementStatus: queryForm.settlementStatus || undefined,
     anomalyType: queryForm.anomalyType || undefined,
+    progressType: queryForm.progressType || undefined,
+    progressRange: queryForm.progressRange || undefined,
     startDate: queryForm.dateRange[0] || undefined,
     endDate: queryForm.dateRange[1] || undefined
   }
@@ -795,6 +890,9 @@ const handleReset = () => {
   queryForm.category = ''
   queryForm.settlementStatus = ''
   queryForm.anomalyType = ''
+  queryForm.progressType = ''
+  queryForm.progressRange = ''
+  mergedFilterValues.value = []
   queryForm.dateRange = []
   queryFormRef.value?.clearValidate?.()
   pagination.page = 1
@@ -855,11 +953,25 @@ onMounted(() => {
 }
 
 .filter-form :deep(.el-form-item__label) {
+  padding-right: 6px;
   font-size: 12px;
 }
 
 .filter-control {
   width: 100%;
+}
+
+.query-item-order-date :deep(.el-form-item__content) {
+  justify-content: flex-end;
+}
+
+.query-item-expand :deep(.el-form-item__label) {
+  width: 48px !important;
+}
+
+.query-item-customer :deep(.el-form-item__label) {
+  width: 60px !important;
+  white-space: nowrap;
 }
 
 .filter-form :deep(.filter-control .el-input__wrapper) {
@@ -898,20 +1010,28 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-.summary-card--blue {
-  background: linear-gradient(145deg, rgb(64 158 255 / 12%), rgb(64 158 255 / 6%));
+.summary-card--c1 {
+  background: linear-gradient(145deg, rgb(42 157 143 / 14%), rgb(42 157 143 / 6%));
 }
 
-.summary-card--green {
-  background: linear-gradient(145deg, rgb(103 194 58 / 12%), rgb(103 194 58 / 6%));
+.summary-card--c2 {
+  background: linear-gradient(145deg, rgb(38 70 83 / 14%), rgb(38 70 83 / 6%));
 }
 
-.summary-card--orange {
-  background: linear-gradient(145deg, rgb(230 162 60 / 12%), rgb(230 162 60 / 6%));
+.summary-card--c3 {
+  background: linear-gradient(145deg, rgb(233 196 106 / 16%), rgb(233 196 106 / 7%));
 }
 
-.summary-card--gray {
-  background: linear-gradient(145deg, rgb(144 147 153 / 12%), rgb(144 147 153 / 6%));
+.summary-card--c4 {
+  background: linear-gradient(145deg, rgb(244 162 97 / 14%), rgb(244 162 97 / 6%));
+}
+
+.summary-card--c5 {
+  background: linear-gradient(145deg, rgb(231 111 81 / 14%), rgb(231 111 81 / 6%));
+}
+
+.summary-card--c6 {
+  background: linear-gradient(145deg, rgb(141 153 174 / 16%), rgb(141 153 174 / 7%));
 }
 
 .summary-card__title {
