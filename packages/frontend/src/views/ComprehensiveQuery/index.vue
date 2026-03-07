@@ -32,7 +32,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="3">
+          <el-col :xs="24" :sm="12" :lg="2">
             <el-form-item label="分类" class="query-item-expand">
               <el-select
                 v-model="queryForm.category"
@@ -50,7 +50,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="2">
+          <el-col :xs="24" :sm="12" :lg="3">
             <el-form-item label="状态" class="query-item-expand">
               <el-select
                 v-model="queryForm.settlementStatus"
@@ -64,8 +64,8 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="4">
-            <el-form-item label="合并筛选" class="query-item-merged">
+          <el-col :xs="24" :sm="12" :lg="3">
+            <el-form-item label="进度" class="query-item-merged">
               <el-tree-select
                 v-model="mergedFilterValues"
                 class="filter-control"
@@ -82,8 +82,8 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :lg="2">
-            <el-form-item label="异常类型">
+          <el-col :xs="24" :sm="12" :lg="3">
+            <el-form-item label="异常">
               <el-select
                 v-model="queryForm.anomalyType"
                 placeholder="全部"
