@@ -116,6 +116,7 @@
               <div class="filter-actions">
                 <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
                 <el-button @click="handleReset">重置</el-button>
+                <el-button :loading="exporting" @click="handleExport">导出Excel</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -170,8 +171,21 @@
       </el-col>
     </el-row>
 
-    <section class="rounded-lg bg-[var(--el-bg-color-overlay)] p-3 shadow-sm">
-      <el-tabs v-model="activeView">
+    <section class="result-section rounded-lg bg-[var(--el-bg-color-overlay)] p-3 shadow-sm">
+      <div class="tab-presets">
+        <span class="query-presets__label">常用查询</span>
+        <el-button
+          v-for="preset in queryPresets"
+          :key="preset.key"
+          size="small"
+          text
+          :class="resolvePresetClass(preset.key)"
+          @click="applyQueryPreset(preset)"
+        >
+          {{ preset.label }}
+        </el-button>
+      </div>
+      <el-tabs v-model="activeView" class="query-tabs">
         <el-tab-pane label="表格视图" name="table">
           <el-table
             v-loading="loading"
@@ -462,6 +476,7 @@ import {
   ElTimeline,
   ElTimelineItem
 } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { getSalesOrderCustomerOptionsApi, type SalesOrderCustomerOption } from '@/api/sales-orders'
@@ -472,6 +487,7 @@ import type {
   ProjectJourney
 } from '@/api/comprehensive-query'
 import {
+  exportComprehensiveQueryApi,
   getComprehensiveQueryListApi,
   getComprehensiveQuerySummaryApi,
   getProjectJourneyApi
@@ -489,6 +505,14 @@ interface QueryForm {
   dateRange: [string, string] | []
 }
 
+interface QueryPreset {
+  key: string
+  label: string
+  settlementStatus?: string
+  anomalyType?: string
+  progressSelections?: string[]
+}
+
 const queryFormRef = ref<FormInstance>()
 const queryForm = reactive<QueryForm>({
   keyword: '',
@@ -501,7 +525,45 @@ const queryForm = reactive<QueryForm>({
   dateRange: []
 })
 
+const queryPresets: QueryPreset[] = [
+  {
+    key: 'no-advance',
+    label: '未收预付款',
+    settlementStatus: '未结清',
+    progressSelections: ['progress:receipt:0']
+  },
+  {
+    key: 'new-advance-paid-no-invoice',
+    label: '新模式预付已收未开票',
+    progressSelections: ['progress:invoice:0', 'progress:receipt:0_30']
+  },
+  {
+    key: 'invoice-full-receipt-70',
+    label: '开票100%仅收一验回款',
+    settlementStatus: '未结清',
+    progressSelections: ['progress:invoice:100', 'progress:receipt:60_90']
+  },
+  {
+    key: 'final-10-unreceived',
+    label: '未收最后10%',
+    settlementStatus: '未结清',
+    progressSelections: ['progress:invoice:100', 'progress:receipt:90_100']
+  },
+  {
+    key: 'invoice-covered',
+    label: '开票已覆盖',
+    progressSelections: ['progress:receipt_invoice:100']
+  },
+  {
+    key: 'all-cleared',
+    label: '销售已结清',
+    settlementStatus: '销售已结清',
+    progressSelections: ['progress:receipt:100']
+  }
+]
+
 const loading = ref(false)
+const exporting = ref(false)
 const tableData = ref<ComprehensiveQueryRow[]>([])
 const total = ref(0)
 const appStore = useAppStore()
@@ -550,7 +612,7 @@ const mergedFilterTree = computed(() => [
     ]
   },
   {
-    label: '回款进度',
+    label: '回款进度(对销售)',
     value: 'progressType:receipt',
     disabled: true,
     children: [
@@ -560,6 +622,19 @@ const mergedFilterTree = computed(() => [
       { label: '60%-90%', value: 'progress:receipt:60_90' },
       { label: '90%-100%', value: 'progress:receipt:90_100' },
       { label: '100%', value: 'progress:receipt:100' }
+    ]
+  },
+  {
+    label: '回款覆盖率(对开票)',
+    value: 'progressType:receipt_invoice',
+    disabled: true,
+    children: [
+      { label: '0%', value: 'progress:receipt_invoice:0' },
+      { label: '0%-30%', value: 'progress:receipt_invoice:0_30' },
+      { label: '30%-60%', value: 'progress:receipt_invoice:30_60' },
+      { label: '60%-90%', value: 'progress:receipt_invoice:60_90' },
+      { label: '90%-100%', value: 'progress:receipt_invoice:90_100' },
+      { label: '100%', value: 'progress:receipt_invoice:100' }
     ]
   },
   {
@@ -722,15 +797,36 @@ const formatAmountPair = (left: number, right: number) => {
 const handleMergedFilterChange = (values: string[] | string | undefined) => {
   const list = Array.isArray(values) ? values : values ? [values] : []
   const progressItems = list.filter((item) => item.startsWith('progress:'))
-  const lastProgress = progressItems[progressItems.length - 1]
-  if (!lastProgress) {
+  if (!progressItems.length) {
     queryForm.progressType = ''
     queryForm.progressRange = ''
     return
   }
+  const [lastProgress] = progressItems.slice(-1)
   const parts = lastProgress.split(':')
   queryForm.progressType = parts[1] || ''
   queryForm.progressRange = parts[2] || ''
+}
+
+const applyQueryPreset = (preset: QueryPreset) => {
+  queryForm.settlementStatus = preset.settlementStatus || ''
+  queryForm.anomalyType = preset.anomalyType || ''
+  mergedFilterValues.value = Array.isArray(preset.progressSelections)
+    ? [...preset.progressSelections]
+    : []
+  handleMergedFilterChange(mergedFilterValues.value)
+  pagination.page = 1
+  void loadAll()
+}
+
+const resolvePresetClass = (key: string) => {
+  if (key === 'no-advance') return 'preset-chip preset-chip--warning'
+  if (key === 'new-advance-paid-no-invoice') return 'preset-chip preset-chip--cyan'
+  if (key === 'invoice-full-receipt-70') return 'preset-chip preset-chip--primary'
+  if (key === 'final-10-unreceived') return 'preset-chip preset-chip--danger'
+  if (key === 'invoice-covered') return 'preset-chip preset-chip--indigo'
+  if (key === 'all-cleared') return 'preset-chip preset-chip--success'
+  return 'preset-chip'
 }
 
 const buildListParams = (): ComprehensiveQueryListParams => {
@@ -742,6 +838,15 @@ const buildListParams = (): ComprehensiveQueryListParams => {
     anomalyType: queryForm.anomalyType || undefined,
     progressType: queryForm.progressType || undefined,
     progressRange: queryForm.progressRange || undefined,
+    progressFilters:
+      mergedFilterValues.value
+        .filter((item) => item.startsWith('progress:'))
+        .map((item) => {
+          const parts = item.split(':')
+          return parts.length >= 3 ? `${parts[1]}:${parts[2]}` : ''
+        })
+        .filter(Boolean)
+        .join(',') || undefined,
     startDate: queryForm.dateRange[0] || undefined,
     endDate: queryForm.dateRange[1] || undefined
   }
@@ -884,6 +989,36 @@ const handleSearch = () => {
   void loadAll()
 }
 
+const handleExport = async () => {
+  try {
+    exporting.value = true
+    const resp: any = await exportComprehensiveQueryApi(buildListParams())
+    const blob = (resp?.data ?? resp) as Blob
+    if (!(blob instanceof Blob)) {
+      ElMessage.error('导出失败：未获取到文件')
+      return
+    }
+    const contentDisposition = String(resp?.headers?.['content-disposition'] || '')
+    const matched = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+    const fallback = `综合查询_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.xlsx`
+    const fileName = matched?.[1] ? decodeURIComponent(matched[1]) : fallback
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('[ComprehensiveQuery] export failed:', error)
+    ElMessage.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
 const handleReset = () => {
   queryForm.keyword = ''
   queryForm.customerName = ''
@@ -994,6 +1129,114 @@ onMounted(() => {
 .query-section {
   padding-top: 10px !important;
   padding-bottom: 6px !important;
+}
+
+.query-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.query-presets__label {
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.result-section {
+  position: relative;
+}
+
+.tab-presets {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  max-width: 72%;
+  padding: 4px 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: rgb(255 255 255 / 88%);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  align-items: center;
+}
+
+.tab-presets::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tab-presets::-webkit-scrollbar-thumb {
+  background: rgb(64 158 255 / 35%);
+  border-radius: 999px;
+}
+
+.tab-presets :deep(.el-button) {
+  min-height: 24px;
+  padding: 0 10px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+
+.tab-presets :deep(.el-button:hover) {
+  color: var(--el-color-primary);
+  background: rgb(64 158 255 / 8%);
+  border-color: rgb(64 158 255 / 45%);
+}
+
+.tab-presets :deep(.preset-chip) {
+  color: #3b4a60;
+  background: #f7f9fc;
+  border-color: #d5deea;
+}
+
+.tab-presets :deep(.preset-chip--primary) {
+  color: #245ea8;
+  background: #eaf3ff;
+  border-color: #b8d2f2;
+}
+
+.tab-presets :deep(.preset-chip--success) {
+  color: #2f7d32;
+  background: #ebf8ed;
+  border-color: #b7e2bd;
+}
+
+.tab-presets :deep(.preset-chip--warning) {
+  color: #986801;
+  background: #fff7e8;
+  border-color: #f0d6a0;
+}
+
+.tab-presets :deep(.preset-chip--danger) {
+  color: #a63b3b;
+  background: #fff1f0;
+  border-color: #efc1c1;
+}
+
+.tab-presets :deep(.preset-chip--cyan) {
+  color: #0d6b6b;
+  background: #edfafa;
+  border-color: #b6e0e0;
+}
+
+.tab-presets :deep(.preset-chip--indigo) {
+  color: #3d4ea3;
+  background: #f0f2ff;
+  border-color: #c8ceef;
+}
+
+.query-tabs :deep(.el-tabs__header) {
+  padding-right: 72%;
 }
 
 .summary-card {
@@ -1245,6 +1488,16 @@ onMounted(() => {
 }
 
 @media (width <= 768px) {
+  .tab-presets {
+    position: static;
+    max-width: 100%;
+    margin-bottom: 6px;
+  }
+
+  .query-tabs :deep(.el-tabs__header) {
+    padding-right: 0;
+  }
+
   .stage-grid {
     grid-template-columns: 1fr;
   }

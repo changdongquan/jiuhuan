@@ -10,6 +10,7 @@ export interface ComprehensiveQueryListParams {
   anomalyType?: string
   progressType?: string
   progressRange?: string
+  progressFilters?: string
   projectStatus?: string
   productionStatus?: string
   page?: number
@@ -37,6 +38,7 @@ export interface ComprehensiveQueryRow {
   receiptAmount: number
   discountAmount: number
   settlementStatus: string
+  settlementSource?: string
   uninvoicedAmount: number
   unreceivedAmount: number
   anomalyType: string
@@ -103,6 +105,14 @@ export const getComprehensiveQuerySummaryApi = (params?: ComprehensiveQueryListP
   return request.get({
     url: '/api/comprehensive-query/summary',
     params
+  })
+}
+
+export const exportComprehensiveQueryApi = (params?: ComprehensiveQueryListParams) => {
+  return request.get<Blob>({
+    url: '/api/comprehensive-query/export',
+    params,
+    responseType: 'blob'
   })
 }
 

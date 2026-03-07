@@ -1,4 +1,5 @@
 const express = require('express')
+const XLSX = require('xlsx')
 const { query } = require('../database')
 
 const router = express.Router()
@@ -73,6 +74,7 @@ const PROGRESS_COLUMN_MAP = {
   production: 'base.productionProgress',
   invoice: 'base.invoiceProgress',
   receipt: 'base.receiptProgress',
+  receipt_invoice: 'base.receiptInvoiceProgress',
   outbound: 'base.outboundProgress'
 }
 
@@ -84,6 +86,59 @@ const buildProgressRangeSql = (column, rangeKey) => {
   if (rangeKey === '90_100') return `${column} >= 90 AND ${column} < 100`
   if (rangeKey === '100') return `${column} >= 100`
   return ''
+}
+
+const parseProgressFilters = (raw) => {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const parts = item.split(':')
+      if (parts.length < 2) return null
+      const type = String(parts[0] || '').trim()
+      const range = String(parts[1] || '').trim()
+      if (!type || !range) return null
+      return { type, range }
+    })
+    .filter(Boolean)
+}
+
+const buildSettlementStatusSql = (alias = 'base') => {
+  const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
+  return `CASE
+    WHEN ${manualStatus} IN (N'销售已结清', N'开票已结清', N'未结清') THEN ${manualStatus}
+    WHEN ${alias}.salesAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.salesAmount
+    THEN N'销售已结清'
+    WHEN ${alias}.invoiceAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.invoiceAmount
+    THEN N'开票已结清'
+    ELSE N'未结清'
+  END`
+}
+
+const buildSettlementSourceSql = (alias = 'base') => {
+  const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
+  return `CASE
+    WHEN ${manualStatus} IN (N'销售已结清', N'开票已结清', N'未结清') THEN N'人工认定'
+    ELSE N'系统计算'
+  END`
+}
+
+const buildAnomalyTypeSql = (alias = 'base') => {
+  const settlementStatusSql = buildSettlementStatusSql(alias)
+  return `CASE
+    WHEN (${settlementStatusSql}) IN (N'销售已结清', N'开票已结清') THEN ''
+    WHEN ${alias}.salesAmount > 0 AND ${alias}.invoiceAmount <= 0 THEN 'uninvoiced'
+    WHEN ${alias}.invoiceAmount > ${alias}.receiptAmount + ${alias}.discountAmount THEN 'unreceived'
+    WHEN ${alias}.completedQty > ${alias}.outboundQty THEN 'unshipped'
+    WHEN ${alias}.latestOrderDate IS NOT NULL
+      AND DATEDIFF(day, ${alias}.latestOrderDate, GETDATE()) > 30
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.salesAmount
+    THEN 'overdue'
+    ELSE ''
+  END`
 }
 
 router.get('/customer-options', async (req, res) => {
@@ -140,7 +195,10 @@ const buildListFilters = (inputQuery) => {
   const productionStatus = String(inputQuery.productionStatus || '').trim()
   const progressType = String(inputQuery.progressType || '').trim()
   const progressRange = String(inputQuery.progressRange || '').trim()
+  const progressFilters = parseProgressFilters(inputQuery.progressFilters)
   const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
+  const settlementStatusSql = buildSettlementStatusSql('base')
+  const anomalyTypeSql = buildAnomalyTypeSql('base')
 
   if (keyword) {
     params.keyword = `%${keyword}%`
@@ -209,50 +267,38 @@ const buildListFilters = (inputQuery) => {
   }
 
   if (settlementStatus === '销售已结清') {
-    baseWhere.push('(base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)')
+    baseWhere.push(`(${settlementStatusSql} = N'销售已结清')`)
   } else if (settlementStatus === '开票已结清') {
-    baseWhere.push(`(
-      base.invoiceAmount > 0
-      AND base.receiptAmount + base.discountAmount >= base.invoiceAmount
-      AND NOT (base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)
-    )`)
+    baseWhere.push(`(${settlementStatusSql} = N'开票已结清')`)
   } else if (settlementStatus === '未结清') {
-    baseWhere.push(`(
-      NOT (base.salesAmount > 0 AND base.receiptAmount + base.discountAmount >= base.salesAmount)
-      AND NOT (base.invoiceAmount > 0 AND base.receiptAmount + base.discountAmount >= base.invoiceAmount)
-    )`)
+    baseWhere.push(`(${settlementStatusSql} = N'未结清')`)
   }
 
   if (anomalyTypes.length > 0) {
-    const checks = []
-    if (anomalyTypes.includes('uninvoiced')) {
-      checks.push('(base.salesAmount > 0 AND base.invoiceAmount <= 0)')
-    }
-    if (anomalyTypes.includes('unreceived')) {
-      checks.push('(base.invoiceAmount > base.receiptAmount + base.discountAmount)')
-    }
-    if (anomalyTypes.includes('unshipped')) {
-      checks.push('(base.completedQty > base.outboundQty)')
-    }
-    if (anomalyTypes.includes('overdue')) {
-      checks.push(`(
-        base.latestOrderDate IS NOT NULL
-        AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
-        AND base.receiptAmount + base.discountAmount < base.salesAmount
-      )`)
-    }
+    const checks = anomalyTypes.map((type) => `(${anomalyTypeSql} = '${type}')`)
 
     if (checks.length > 0) {
       baseWhere.push(`(${checks.join(' OR ')})`)
     }
   }
 
-  const progressColumn = PROGRESS_COLUMN_MAP[progressType]
-  if (progressColumn && progressRange) {
-    const progressRangeSql = buildProgressRangeSql(progressColumn, progressRange)
-    if (progressRangeSql) {
-      baseWhere.push(`(${progressRangeSql})`)
+  const progressChecks = []
+  if (progressFilters.length > 0) {
+    progressFilters.forEach(({ type, range }) => {
+      const progressColumn = PROGRESS_COLUMN_MAP[type]
+      if (!progressColumn) return
+      const progressRangeSql = buildProgressRangeSql(progressColumn, range)
+      if (progressRangeSql) progressChecks.push(`(${progressRangeSql})`)
+    })
+  } else {
+    const progressColumn = PROGRESS_COLUMN_MAP[progressType]
+    if (progressColumn && progressRange) {
+      const progressRangeSql = buildProgressRangeSql(progressColumn, progressRange)
+      if (progressRangeSql) progressChecks.push(`(${progressRangeSql})`)
     }
+  }
+  if (progressChecks.length > 0) {
+    baseWhere.push(`(${progressChecks.join(' AND ')})`)
   }
 
   return {
@@ -286,6 +332,7 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(fr.receiptCount, 0) as receiptCount,
         ISNULL(fr.receiptAmount, 0) as receiptAmount,
         ISNULL(fr.discountAmount, 0) as discountAmount,
+        msl.manualSettlementStatus as manualSettlementStatus,
         s.latestOrderDate as latestOrderDate,
         od.latestOutboundDate as latestOutboundDate,
         fi.latestInvoiceDate as latestInvoiceDate,
@@ -316,6 +363,12 @@ const buildBaseCteSql = (sourceWhereSql) => {
           THEN 100
           ELSE (ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)) * 100.0 / ISNULL(s.salesAmount, 0)
         END as receiptProgress,
+        CASE
+          WHEN ISNULL(fi.invoiceAmount, 0) <= 0 THEN 0
+          WHEN (ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)) * 100.0 / ISNULL(fi.invoiceAmount, 0) >= 100
+          THEN 100
+          ELSE (ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)) * 100.0 / ISNULL(fi.invoiceAmount, 0)
+        END as receiptInvoiceProgress,
         CASE
           WHEN ISNULL(pt.completedQty, 0) <= 0 THEN 0
           WHEN ISNULL(od.outboundQty, 0) * 100.0 / ISNULL(pt.completedQty, 0) >= 100 THEN 100
@@ -395,6 +448,14 @@ const buildBaseCteSql = (sourceWhereSql) => {
         WHERE r.项目编号 = p.项目编号
           AND ISNULL(r.是否删除, 0) = 0
       ) fr
+      OUTER APPLY (
+        SELECT TOP 1
+          l.settlement_status as manualSettlementStatus
+        FROM dbo.comprehensive_query_settlement_ledger l
+        WHERE l.project_code = p.项目编号
+          AND ISNULL(l.enabled, 0) = 1
+        ORDER BY l.updated_at DESC, l.id DESC
+      ) msl
       ${sourceWhereSql}
     )
   `
@@ -709,6 +770,9 @@ router.get('/list', async (req, res) => {
 
     const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
+    const settlementStatusSql = buildSettlementStatusSql('base')
+    const settlementSourceSql = buildSettlementSourceSql('base')
+    const anomalyTypeSql = buildAnomalyTypeSql('base')
 
     const countRows = await query(
       `${baseCteSql}
@@ -741,27 +805,11 @@ router.get('/list', async (req, res) => {
         base.receiptCount,
         base.receiptAmount,
         base.discountAmount,
-        CASE
-          WHEN base.salesAmount > 0
-            AND base.receiptAmount + base.discountAmount >= base.salesAmount
-          THEN N'销售已结清'
-          WHEN base.invoiceAmount > 0
-            AND base.receiptAmount + base.discountAmount >= base.invoiceAmount
-          THEN N'开票已结清'
-          ELSE N'未结清'
-        END as settlementStatus,
+        ${settlementStatusSql} as settlementStatus,
+        ${settlementSourceSql} as settlementSource,
         base.uninvoicedAmount,
         base.unreceivedAmount,
-        CASE
-          WHEN base.salesAmount > 0 AND base.invoiceAmount <= 0 THEN 'uninvoiced'
-          WHEN base.invoiceAmount > base.receiptAmount + base.discountAmount THEN 'unreceived'
-          WHEN base.completedQty > base.outboundQty THEN 'unshipped'
-          WHEN base.latestOrderDate IS NOT NULL
-            AND DATEDIFF(day, base.latestOrderDate, GETDATE()) > 30
-            AND base.receiptAmount + base.discountAmount < base.salesAmount
-          THEN 'overdue'
-          ELSE ''
-        END as anomalyType,
+        ${anomalyTypeSql} as anomalyType,
         CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
         CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
         CONVERT(varchar(10), base.latestInvoiceDate, 23) as latestInvoiceDate,
@@ -789,6 +837,108 @@ router.get('/list', async (req, res) => {
       code: 500,
       success: false,
       message: '获取综合查询列表失败'
+    })
+  }
+})
+
+router.get('/export', async (req, res) => {
+  try {
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
+    const baseCteSql = buildBaseCteSql(sourceWhereSql)
+    const settlementStatusSql = buildSettlementStatusSql('base')
+    const settlementSourceSql = buildSettlementSourceSql('base')
+    const anomalyTypeSql = buildAnomalyTypeSql('base')
+
+    const rows = await query(
+      `${baseCteSql}
+      SELECT
+        base.projectCode,
+        base.customerName,
+        base.productName,
+        base.productDrawing,
+        base.customerModelNo,
+        base.category,
+        base.owner,
+        base.salesOrderCount,
+        base.salesAmount,
+        base.projectStatus,
+        base.productionStatus,
+        base.completedQty,
+        base.outboundDocCount,
+        base.outboundQty,
+        base.invoiceCount,
+        base.invoiceAmount,
+        base.receiptCount,
+        base.receiptAmount,
+        base.discountAmount,
+        ${settlementStatusSql} as settlementStatus,
+        ${settlementSourceSql} as settlementSource,
+        base.uninvoicedAmount,
+        base.unreceivedAmount,
+        ${anomalyTypeSql} as anomalyType,
+        CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
+        CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
+        CONVERT(varchar(10), base.latestInvoiceDate, 23) as latestInvoiceDate,
+        CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
+      FROM base
+      ${baseWhereSql}
+      ORDER BY base.projectCode DESC`,
+      params
+    )
+
+    const anomalyLabelMap = {
+      uninvoiced: '已销售未开票',
+      unreceived: '已开票未回款',
+      unshipped: '生产完成未出货',
+      overdue: '订单超期未回款'
+    }
+    const amount = (v) => Number(safeNumber(v).toFixed(2))
+    const exportRows = (rows || []).map((row) => ({
+      项目编号: row.projectCode || '',
+      客户名称: row.customerName || '',
+      产品名称: row.productName || '',
+      产品图号: row.productDrawing || '',
+      客户模号: row.customerModelNo || '',
+      分类: row.category || '',
+      负责人: row.owner || '',
+      销售金额: amount(row.salesAmount),
+      项目状态: row.projectStatus || '',
+      生产状态: row.productionStatus || '',
+      开票金额: amount(row.invoiceAmount),
+      回款金额: amount(row.receiptAmount),
+      贴息金额: amount(row.discountAmount),
+      未开票金额: amount(row.uninvoicedAmount),
+      未回款金额: amount(row.unreceivedAmount),
+      状态: row.settlementStatus || '',
+      状态来源: row.settlementSource || '',
+      异常: anomalyLabelMap[row.anomalyType] || '',
+      最近订单: row.latestOrderDate || '',
+      最近开票: row.latestInvoiceDate || '',
+      最近回款: row.latestReceiptDate || '',
+      出货数量: safeNumber(row.outboundQty),
+      最近出货: row.latestOutboundDate || ''
+    }))
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    XLSX.utils.book_append_sheet(workbook, worksheet, '综合查询')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    const now = new Date()
+    const ts = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_${pad2(
+      now.getHours()
+    )}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
+    const filename = `综合查询_${ts}.xlsx`
+    const encodedFilename = encodeURIComponent(filename)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`)
+    res.send(buffer)
+  } catch (error) {
+    console.error('导出综合查询失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '导出综合查询失败'
     })
   }
 })
