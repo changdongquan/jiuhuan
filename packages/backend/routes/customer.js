@@ -4,7 +4,10 @@ const { getPool } = require('../database')
 const sql = require('mssql')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { assertReviewPermission } = require('../services/reviewAcl')
 const router = express.Router()
+
+const CUSTOMER_CREATE_REVIEW_ACTION = 'CUSTOMER_CREATE.REVIEW'
 
 const ensureCustomerSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
@@ -16,6 +19,115 @@ const ensureCustomerSoftDeleteColumns = async (poolOrTx) => {
     IF COL_LENGTH(N'客户信息', N'删除人') IS NULL
       ALTER TABLE 客户信息 ADD 删除人 NVARCHAR(100) NULL;
   `)
+}
+
+const ensureCustomerCreateReviewTable = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF OBJECT_ID(N'dbo.customer_create_review_requests', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.customer_create_review_requests (
+        id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        customer_name NVARCHAR(200) NOT NULL,
+        status NVARCHAR(30) NOT NULL CONSTRAINT DF_customer_create_review_requests_status DEFAULT (N'PENDING'),
+        request_reason NVARCHAR(500) NULL,
+        review_reason NVARCHAR(500) NULL,
+        created_by NVARCHAR(100) NULL,
+        approved_by NVARCHAR(100) NULL,
+        rejected_by NVARCHAR(100) NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_customer_create_review_requests_created_at DEFAULT (SYSDATETIME()),
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_customer_create_review_requests_updated_at DEFAULT (SYSDATETIME()),
+        approved_at DATETIME2 NULL,
+        rejected_at DATETIME2 NULL
+      );
+
+      CREATE INDEX IX_customer_create_review_requests_status
+        ON dbo.customer_create_review_requests(status, updated_at DESC, id DESC);
+      CREATE INDEX IX_customer_create_review_requests_customer_name
+        ON dbo.customer_create_review_requests(customer_name, updated_at DESC, id DESC);
+    END
+  `)
+}
+
+const normalizeCustomerCreateReviewStatus = (value) => {
+  const status = String(value || '')
+    .trim()
+    .toUpperCase()
+  if (status === 'APPROVED') return 'APPROVED'
+  if (status === 'REJECTED') return 'REJECTED'
+  return 'PENDING'
+}
+
+const getCustomerCreateReviewStatusText = (value) => {
+  const status = normalizeCustomerCreateReviewStatus(value)
+  if (status === 'APPROVED') return '已通过'
+  if (status === 'REJECTED') return '已驳回'
+  return '审核中'
+}
+
+const toCustomerCreateReviewRow = (row) => {
+  if (!row) return null
+  return {
+    ...row,
+    status: normalizeCustomerCreateReviewStatus(row.status),
+    status_text: getCustomerCreateReviewStatusText(row.status)
+  }
+}
+
+const getNextCustomerSeqNumber = async (tx) => {
+  const req = new sql.Request(tx)
+  const result = await req.query(`
+    SELECT ISNULL(MAX(ISNULL(SeqNumber, 0)), 0) + 1 AS nextSeqNumber
+    FROM 客户信息
+    WHERE ISNULL(是否删除, 0) = 0
+  `)
+  return Number(result.recordset?.[0]?.nextSeqNumber || 1) || 1
+}
+
+const syncQuotationInitiationByCustomerReview = async ({
+  tx,
+  customerName,
+  nextStatus,
+  customerReviewRejectedReason
+}) => {
+  const normalizedName = String(customerName || '').trim()
+  if (!normalizedName) return
+  try {
+    const req = new sql.Request(tx)
+    req.input('customerName', sql.NVarChar(200), normalizedName)
+    req.input('nextStatus', sql.NVarChar(30), nextStatus)
+    req.input('customerReviewRejectedReason', sql.NVarChar(500), customerReviewRejectedReason || null)
+    await req.query(`
+      IF OBJECT_ID(N'dbo.quotation_initiation_requests', N'U') IS NOT NULL
+      BEGIN
+        UPDATE dbo.quotation_initiation_requests
+        SET
+          status = @nextStatus,
+          customer_review_rejected_reason = CASE
+            WHEN @nextStatus = N'REJECTED' THEN @customerReviewRejectedReason
+            ELSE NULL
+          END,
+          updated_at = SYSDATETIME(),
+          rejected_at = CASE
+            WHEN @nextStatus = N'REJECTED' THEN SYSDATETIME()
+            ELSE rejected_at
+          END
+        WHERE customer_name = @customerName
+          AND status = N'WAIT_CUSTOMER_REVIEW'
+      END
+    `)
+  } catch (e) {
+    console.warn('同步报价单立项客户审核状态失败（忽略）:', e?.message || e)
+  }
+}
+
+const assertCustomerCreateReviewPermission = async (req) => {
+  await assertReviewPermission({
+    req,
+    actionKey: CUSTOMER_CREATE_REVIEW_ACTION,
+    resolveActorFromReq,
+    legacyAllowWhenEmpty: true
+  })
 }
 
 // 获取客户信息列表
@@ -136,6 +248,87 @@ router.get('/statistics', async (req, res) => {
   }
 })
 
+router.get('/review-tasks', async (req, res) => {
+  try {
+    await assertCustomerCreateReviewPermission(req)
+    const pool = await getPool()
+    await ensureCustomerCreateReviewTable(pool)
+    await ensureCustomerSoftDeleteColumns(pool)
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1)
+    const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || '20'), 10) || 20))
+    const status = normalizeCustomerCreateReviewStatus(req.query.status)
+    const keyword = String(req.query.keyword || '').trim()
+    const offset = (page - 1) * pageSize
+
+    const whereParts = ['1=1']
+    const params = { offset, pageSize }
+    if (String(req.query.status || '').trim()) {
+      whereParts.push('r.status = @status')
+      params.status = status
+    }
+    if (keyword) {
+      whereParts.push('(r.customer_name LIKE @keyword OR r.created_by LIKE @keyword OR r.review_reason LIKE @keyword)')
+      params.keyword = `%${keyword}%`
+    }
+    const whereSql = whereParts.join(' AND ')
+
+    const rows = await query(
+      `
+        WITH ordered AS (
+          SELECT
+            r.*,
+            ROW_NUMBER() OVER (
+              ORDER BY
+                CASE r.status
+                  WHEN N'PENDING' THEN 0
+                  WHEN N'REJECTED' THEN 1
+                  WHEN N'APPROVED' THEN 2
+                  ELSE 9
+                END ASC,
+                r.updated_at DESC,
+                r.id DESC
+            ) AS rn
+          FROM dbo.customer_create_review_requests r
+          WHERE ${whereSql}
+        )
+        SELECT *
+        FROM ordered
+        WHERE rn > @offset AND rn <= (@offset + @pageSize)
+        ORDER BY rn ASC
+      `,
+      params
+    )
+    const totalRows = await query(
+      `
+        SELECT COUNT(1) AS total
+        FROM dbo.customer_create_review_requests r
+        WHERE ${whereSql}
+      `,
+      params
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        page,
+        pageSize,
+        total: Number(totalRows?.[0]?.total || 0) || 0,
+        list: (rows || []).map((row) => toCustomerCreateReviewRow(row))
+      }
+    })
+  } catch (error) {
+    console.error('读取客户新增审核任务失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '读取客户新增审核任务失败'
+    })
+  }
+})
+
 // 获取单个客户信息
 router.get('/:id', async (req, res) => {
   try {
@@ -227,6 +420,246 @@ router.post('/', async (req, res) => {
       success: false,
       message: '新增客户信息失败',
       error: error.message
+    })
+  }
+})
+
+router.post('/review-request', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureCustomerCreateReviewTable(pool)
+    await ensureCustomerSoftDeleteColumns(pool)
+
+    const actor = resolveActorFromReq(req)
+    const customerName = String(req.body?.customerName || '').trim()
+    const requestReason = String(req.body?.requestReason || '').trim()
+    if (!customerName) {
+      return res.status(400).json({ code: 400, success: false, message: '客户名称不能为空' })
+    }
+
+    const existingCustomers = await query(
+      `SELECT TOP 1 客户ID as id FROM 客户信息 WHERE 客户名称 = @customerName AND ISNULL(是否删除, 0) = 0`,
+      { customerName }
+    )
+    if (existingCustomers?.[0]?.id) {
+      return res.status(400).json({ code: 400, success: false, message: '客户已存在，无需发起审核' })
+    }
+
+    const pendingRows = await query(
+      `
+        SELECT TOP 1 *
+        FROM dbo.customer_create_review_requests
+        WHERE customer_name = @customerName
+          AND status = N'PENDING'
+        ORDER BY updated_at DESC, id DESC
+      `,
+      { customerName }
+    )
+    if (pendingRows?.[0]) {
+      return res.json({ code: 0, success: true, data: toCustomerCreateReviewRow(pendingRows[0]) })
+    }
+
+    const result = await query(
+      `
+        INSERT INTO dbo.customer_create_review_requests (
+          customer_name, status, request_reason, created_by, created_at, updated_at
+        ) VALUES (
+          @customerName, N'PENDING', @requestReason, @actor, SYSDATETIME(), SYSDATETIME()
+        );
+        SELECT SCOPE_IDENTITY() AS id;
+      `,
+      { customerName, requestReason: requestReason || null, actor }
+    )
+    const rows = await query(
+      `SELECT TOP 1 * FROM dbo.customer_create_review_requests WHERE id = @id`,
+      { id: Number(result?.[0]?.id || 0) || 0 }
+    )
+    return res.json({
+      code: 0,
+      success: true,
+      data: toCustomerCreateReviewRow(rows?.[0] || null),
+      message: '客户新增审核申请已提交'
+    })
+  } catch (error) {
+    console.error('提交客户新增审核申请失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '提交客户新增审核申请失败'
+    })
+  }
+})
+
+router.post('/review/approve', async (req, res) => {
+  try {
+    await assertCustomerCreateReviewPermission(req)
+    const requestId = Number(req.body?.requestId || 0)
+    if (!requestId) {
+      return res.status(400).json({ code: 400, success: false, message: '审核申请ID不能为空' })
+    }
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await ensureCustomerCreateReviewTable(tx)
+      await ensureCustomerSoftDeleteColumns(tx)
+
+      const lockReq = new sql.Request(tx)
+      lockReq.input('id', sql.Int, requestId)
+      const lockRows = await lockReq.query(`
+        SELECT TOP 1 *
+        FROM dbo.customer_create_review_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE id = @id
+      `)
+      const row = lockRows.recordset?.[0] || null
+      if (!row) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '审核申请不存在' })
+      }
+      if (normalizeCustomerCreateReviewStatus(row.status) === 'APPROVED') {
+        await tx.commit()
+        return res.json({ code: 0, success: true, message: '已通过（跳过）' })
+      }
+      if (normalizeCustomerCreateReviewStatus(row.status) !== 'PENDING') {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可通过' })
+      }
+
+      const customerName = String(row.customer_name || '').trim()
+      const existingReq = new sql.Request(tx)
+      existingReq.input('customerName', sql.NVarChar(200), customerName)
+      const existingRows = await existingReq.query(`
+        SELECT TOP 1 客户ID as id
+        FROM 客户信息
+        WHERE 客户名称 = @customerName AND ISNULL(是否删除, 0) = 0
+      `)
+      let customerId = existingRows.recordset?.[0]?.id || null
+      if (!customerId) {
+        const nextSeqNumber = await getNextCustomerSeqNumber(tx)
+        const insertCustomerReq = new sql.Request(tx)
+        insertCustomerReq.input('customerName', sql.NVarChar(200), customerName)
+        insertCustomerReq.input('seqNumber', sql.Int, nextSeqNumber)
+        const insertResult = await insertCustomerReq.query(`
+          INSERT INTO 客户信息 (客户名称, 是否停用, SeqNumber)
+          VALUES (@customerName, 0, @seqNumber);
+          SELECT SCOPE_IDENTITY() AS id;
+        `)
+        customerId = Number(insertResult.recordset?.[0]?.id || 0) || null
+      }
+
+      const updateReq = new sql.Request(tx)
+      updateReq.input('id', sql.Int, requestId)
+      updateReq.input('actor', sql.NVarChar(100), actor || null)
+      await updateReq.query(`
+        UPDATE dbo.customer_create_review_requests
+        SET status = N'APPROVED',
+            approved_by = @actor,
+            approved_at = SYSDATETIME(),
+            updated_at = SYSDATETIME(),
+            review_reason = NULL
+        WHERE id = @id
+      `)
+
+      await syncQuotationInitiationByCustomerReview({
+        tx,
+        customerName,
+        nextStatus: 'DRAFT'
+      })
+
+      await tx.commit()
+      return res.json({
+        code: 0,
+        success: true,
+        data: { customerId, customerName },
+        message: '客户新增审核已通过'
+      })
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
+  } catch (error) {
+    console.error('客户新增审核通过失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '客户新增审核通过失败'
+    })
+  }
+})
+
+router.post('/review/reject', async (req, res) => {
+  try {
+    await assertCustomerCreateReviewPermission(req)
+    const requestId = Number(req.body?.requestId || 0)
+    const reason = String(req.body?.reason || '').trim()
+    if (!requestId) {
+      return res.status(400).json({ code: 400, success: false, message: '审核申请ID不能为空' })
+    }
+    if (!reason) {
+      return res.status(400).json({ code: 400, success: false, message: '驳回原因不能为空' })
+    }
+    const actor = resolveActorFromReq(req)
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+    try {
+      await ensureCustomerCreateReviewTable(tx)
+      const lockReq = new sql.Request(tx)
+      lockReq.input('id', sql.Int, requestId)
+      const lockRows = await lockReq.query(`
+        SELECT TOP 1 *
+        FROM dbo.customer_create_review_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE id = @id
+      `)
+      const row = lockRows.recordset?.[0] || null
+      if (!row) {
+        await tx.rollback()
+        return res.status(404).json({ code: 404, success: false, message: '审核申请不存在' })
+      }
+      if (normalizeCustomerCreateReviewStatus(row.status) !== 'PENDING') {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
+      }
+      const updateReq = new sql.Request(tx)
+      updateReq.input('id', sql.Int, requestId)
+      updateReq.input('actor', sql.NVarChar(100), actor || null)
+      updateReq.input('reason', sql.NVarChar(500), reason)
+      await updateReq.query(`
+        UPDATE dbo.customer_create_review_requests
+        SET status = N'REJECTED',
+            review_reason = @reason,
+            rejected_by = @actor,
+            rejected_at = SYSDATETIME(),
+            updated_at = SYSDATETIME()
+        WHERE id = @id
+      `)
+
+      await syncQuotationInitiationByCustomerReview({
+        tx,
+        customerName: String(row.customer_name || ''),
+        nextStatus: 'REJECTED',
+        customerReviewRejectedReason: reason
+      })
+
+      await tx.commit()
+      return res.json({ code: 0, success: true, message: '已驳回' })
+    } catch (e) {
+      try {
+        await tx.rollback()
+      } catch {}
+      throw e
+    }
+  } catch (error) {
+    console.error('客户新增审核驳回失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '客户新增审核驳回失败'
     })
   }
 })

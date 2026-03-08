@@ -67,6 +67,24 @@ export interface CustomerStatistics {
   withContact: number
 }
 
+export type CustomerCreateReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface CustomerCreateReviewTask {
+  id: number
+  customer_name: string
+  status: CustomerCreateReviewStatus
+  status_text?: string | null
+  request_reason?: string | null
+  review_reason?: string | null
+  created_by?: string | null
+  approved_by?: string | null
+  rejected_by?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  approved_at?: string | null
+  rejected_at?: string | null
+}
+
 // 获取客户信息列表
 export const getCustomerListApi = (params?: CustomerQueryParams) => {
   return request.get({
@@ -93,6 +111,51 @@ export const updateCustomerApi = (id: number, data: Partial<CustomerInfo>) => {
 // 删除客户信息
 export const deleteCustomerApi = (id: number) => {
   return request.delete({ url: `/api/customer/${id}` })
+}
+
+export const createCustomerReviewRequestApi = (data: {
+  customerName: string
+  requestReason?: string
+}) => {
+  return request.post<{ code: number; success: boolean; data: CustomerCreateReviewTask | null }>({
+    url: '/api/customer/review-request',
+    data
+  })
+}
+
+export const getCustomerReviewTasksApi = (params: {
+  page?: number
+  pageSize?: number
+  status?: '' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  keyword?: string
+}) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: {
+      page: number
+      pageSize: number
+      total: number
+      list: CustomerCreateReviewTask[]
+    }
+  }>({
+    url: '/api/customer/review-tasks',
+    params
+  })
+}
+
+export const approveCustomerReviewApi = (data: { requestId: number }) => {
+  return request.post<{ code: number; success: boolean; message?: string }>({
+    url: '/api/customer/review/approve',
+    data
+  })
+}
+
+export const rejectCustomerReviewApi = (data: { requestId: number; reason: string }) => {
+  return request.post<{ code: number; success: boolean; message?: string }>({
+    url: '/api/customer/review/reject',
+    data
+  })
 }
 
 // 获取客户统计信息

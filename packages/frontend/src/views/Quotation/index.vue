@@ -53,7 +53,43 @@
         >
           <el-option label="改模报价单" value="mold" />
           <el-option label="零件报价单" value="part" />
+          <el-option label="塑胶模具" value="塑胶模具" />
+          <el-option label="修改模具" value="修改模具" />
+          <el-option label="零件加工" value="零件加工" />
         </el-select>
+      </el-form-item>
+      <el-form-item label="立项状态">
+        <el-select
+          v-model="queryForm.initiationStatus"
+          placeholder="请选择立项状态"
+          clearable
+          :style="{ width: isMobile ? '100%' : '160px' }"
+        >
+          <el-option
+            v-for="status in initiationStatusOptions"
+            :key="status"
+            :label="status"
+            :value="status"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="最终项目编号">
+        <el-input
+          v-model="queryForm.finalProjectCode"
+          placeholder="请输入最终项目编号"
+          clearable
+          :style="{ width: isMobile ? '100%' : '180px' }"
+          @keyup.enter="handleSearch"
+        />
+      </el-form-item>
+      <el-form-item label="销售订单号">
+        <el-input
+          v-model="queryForm.salesOrderNo"
+          placeholder="请输入销售订单号"
+          clearable
+          :style="{ width: isMobile ? '100%' : '180px' }"
+          @keyup.enter="handleSearch"
+        />
       </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
@@ -92,6 +128,18 @@
               <span class="value">{{ row.changeOrderNo || '-' }}</span>
             </div>
             <div>
+              <span class="label">立项状态</span>
+              <span class="value">{{ row.initiationStatus || '未发起' }}</span>
+            </div>
+            <div>
+              <span class="label">最终项目编号</span>
+              <span class="value">{{ row.finalProjectCode || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">销售订单号</span>
+              <span class="value">{{ row.salesOrderNo || '-' }}</span>
+            </div>
+            <div>
               <span class="label">模具编号</span>
               <span class="value">{{ row.moldNo || '-' }}</span>
             </div>
@@ -115,9 +163,58 @@
             </div>
           </div>
           <div class="qt-mobile-card__actions">
-            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button
+              v-if="canShowInitiateAction(row)"
+              type="warning"
+              size="small"
+              @click="handleInitiate(row)"
+              >立项</el-button
+            >
+            <el-button
+              v-if="canShowViewInitiationAction(row)"
+              type="warning"
+              plain
+              size="small"
+              @click="handleViewInitiation(row)"
+              >查看立项</el-button
+            >
+            <el-button
+              v-if="canShowEditInitiationAction(row)"
+              type="primary"
+              plain
+              size="small"
+              @click="handleEditInitiation(row)"
+              >编辑立项</el-button
+            >
+            <el-button
+              v-if="canShowRestartInitiationAction(row)"
+              type="primary"
+              plain
+              size="small"
+              @click="handleRestartInitiation(row)"
+              >重新发起</el-button
+            >
+            <el-button
+              v-if="canShowWithdrawInitiationAction(row)"
+              type="danger"
+              plain
+              size="small"
+              @click="handleWithdrawInitiation(row)"
+              >撤回申请</el-button
+            >
+            <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
+            <el-tooltip v-if="isQuotationEditLocked(row)" :content="editDisabledReason(row)">
+              <span class="inline-flex">
+                <el-button type="primary" size="small" disabled>编辑</el-button>
+              </span>
+            </el-tooltip>
+            <el-button v-else type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-tooltip v-if="isQuotationDeleteDisabled(row)" :content="deleteDisabledReason(row)">
+              <span class="inline-flex">
+                <el-button type="danger" size="small" disabled>删除</el-button>
+              </span>
+            </el-tooltip>
+            <el-button v-else type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </div>
         </el-card>
       </template>
@@ -172,6 +269,36 @@
           show-overflow-tooltip
           sortable="custom"
         />
+        <el-table-column prop="initiationStatus" label="立项状态" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              :type="
+                row.initiationStatus === '已通过'
+                  ? 'success'
+                  : row.initiationStatus === '审核中'
+                    ? 'warning'
+                    : row.initiationStatus === '已驳回'
+                      ? 'danger'
+                      : 'info'
+              "
+            >
+              {{ row.initiationStatus || '未发起' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="finalProjectCode"
+          label="最终项目编号"
+          min-width="150"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="salesOrderNo"
+          label="销售订单号"
+          min-width="150"
+          show-overflow-tooltip
+        />
         <el-table-column
           prop="changeOrderNo"
           label="更改通知单号"
@@ -197,12 +324,68 @@
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="操作" width="320" fixed="right" align="center">
           <template #default="{ row }">
             <div class="operation-buttons">
-              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button
+                v-if="canShowInitiateAction(row)"
+                type="warning"
+                size="small"
+                @click="handleInitiate(row)"
+                >立项</el-button
+              >
+              <el-button
+                v-if="canShowViewInitiationAction(row)"
+                type="warning"
+                plain
+                size="small"
+                @click="handleViewInitiation(row)"
+                >查看立项</el-button
+              >
+              <el-button
+                v-if="canShowEditInitiationAction(row)"
+                type="primary"
+                plain
+                size="small"
+                @click="handleEditInitiation(row)"
+                >编辑立项</el-button
+              >
+              <el-button
+                v-if="canShowRestartInitiationAction(row)"
+                type="primary"
+                plain
+                size="small"
+                @click="handleRestartInitiation(row)"
+                >重新发起</el-button
+              >
+              <el-button
+                v-if="canShowWithdrawInitiationAction(row)"
+                type="danger"
+                plain
+                size="small"
+                @click="handleWithdrawInitiation(row)"
+                >撤回申请</el-button
+              >
+              <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
+              <el-tooltip v-if="isQuotationEditLocked(row)" :content="editDisabledReason(row)">
+                <span class="inline-flex">
+                  <el-button type="primary" size="small" disabled>编辑</el-button>
+                </span>
+              </el-tooltip>
+              <el-button v-else type="primary" size="small" @click="handleEdit(row)"
+                >编辑</el-button
+              >
+              <el-tooltip
+                v-if="isQuotationDeleteDisabled(row)"
+                :content="deleteDisabledReason(row)"
+              >
+                <span class="inline-flex">
+                  <el-button type="danger" size="small" disabled>删除</el-button>
+                </span>
+              </el-tooltip>
+              <el-button v-else type="danger" size="small" @click="handleDelete(row)"
+                >删除</el-button
+              >
             </div>
           </template>
         </el-table-column>
@@ -235,6 +418,345 @@
       class="rounded-lg bg-[var(--el-bg-color-overlay)] py-16"
       :image-size="180"
     />
+
+    <el-dialog
+      v-model="initiationDialogVisible"
+      :title="isInitiationViewMode ? '查看立项' : '报价单立项'"
+      :width="isMobile ? '98%' : '1180px'"
+      :fullscreen="isMobile"
+      destroy-on-close
+    >
+      <div v-loading="initiationDialogLoading" class="space-y-4">
+        <el-descriptions :column="isMobile ? 1 : 4" border size="small" title="基础信息">
+          <el-descriptions-item label="报价单号">{{
+            initiationSourceQuotation?.quotationNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="报价类型">{{
+            formatQuotationType(initiationSourceQuotation?.quotationType)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="立项状态">{{
+            initiationRequestRow?.status_text ||
+            initiationSourceQuotation?.initiationStatus ||
+            '未发起'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="最终项目编号">{{
+            initiationRequestRow?.project_code_final ||
+            initiationSourceQuotation?.finalProjectCode ||
+            '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="销售订单号">{{
+            initiationRequestRow?.sales_order_no || initiationSourceQuotation?.salesOrderNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请人">{{
+            initiationRequestRow?.created_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{
+            initiationRequestRow?.approved_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="立项审核驳回原因" :span="isMobile ? 1 : 2">{{
+            initiationRequestRow?.initiation_rejected_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户审核驳回原因" :span="isMobile ? 1 : 2">{{
+            initiationRequestRow?.customer_review_rejected_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="撤回原因" :span="isMobile ? 1 : 4">{{
+            initiationRequestRow?.withdraw_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="草稿保存时间">{{
+            formatDate(initiationRequestRow?.draft_saved_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="提交审核时间">{{
+            formatDate(initiationRequestRow?.submitted_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核通过时间">{{
+            formatDate(initiationRequestRow?.approved_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="驳回时间">{{
+            formatDate(initiationRequestRow?.rejected_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="撤回时间">{{
+            formatDate(initiationRequestRow?.withdrawn_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{
+            formatDate(initiationRequestRow?.created_at)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{
+            formatDate(initiationRequestRow?.updated_at)
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-card shadow="never">
+          <template #header>
+            <div class="flex items-center justify-between gap-3">
+              <span>项目信息</span>
+              <el-button
+                v-if="!isInitiationViewMode"
+                type="primary"
+                link
+                :loading="initiationRecommendingCode"
+                @click="recommendInitiationProjectCode"
+              >
+                推荐项目编号
+              </el-button>
+            </div>
+          </template>
+          <el-form :inline="false" label-width="100px">
+            <el-row :gutter="12">
+              <el-col :xs="24" :md="12">
+                <el-form-item label="项目编号" required>
+                  <el-input
+                    v-model="initiationForm.projectCode"
+                    :disabled="isInitiationViewMode"
+                    placeholder="请输入项目编号"
+                    @blur="handleInitiationProjectCodeBlur"
+                  />
+                  <div
+                    v-if="initiationProjectCodeError"
+                    class="mt-1 text-xs text-[var(--el-color-danger)]"
+                  >
+                    {{ initiationProjectCodeError }}
+                  </div>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="项目分类">
+                  <el-input
+                    v-model="initiationForm.category"
+                    readonly
+                    placeholder="根据项目编号自动识别"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="客户名称" required>
+                  <el-input
+                    v-model="initiationForm.customerName"
+                    :disabled="isInitiationViewMode || initiationCustomerLocked"
+                    placeholder="请输入客户名称"
+                    @blur="handleInitiationCustomerBlur"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="客户状态">
+                  <el-tag :type="initiationCustomerMatched ? 'success' : 'warning'">
+                    {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
+                  </el-tag>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="产品名称">
+                  <el-input
+                    v-model="initiationForm.productName"
+                    :disabled="isInitiationViewMode"
+                    placeholder="可为空"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="产品图号">
+                  <el-input
+                    v-model="initiationForm.productDrawing"
+                    :disabled="isInitiationViewMode"
+                    placeholder="可为空"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item label="客户模号">
+                  <el-input
+                    v-model="initiationForm.customerModelNo"
+                    :disabled="isInitiationViewMode"
+                    placeholder="可为空"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </el-card>
+
+        <el-card shadow="never">
+          <template #header>
+            <div class="flex items-center justify-between gap-3">
+              <span>销售订单</span>
+              <el-button
+                v-if="!isInitiationViewMode"
+                type="primary"
+                plain
+                size="small"
+                @click="addInitiationDetail"
+                >新增明细</el-button
+              >
+            </div>
+          </template>
+          <el-form label-width="100px">
+            <el-row :gutter="12">
+              <el-col :xs="24" :md="8">
+                <el-form-item label="订单日期" required>
+                  <el-date-picker
+                    v-model="initiationSalesForm.orderDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    :disabled="isInitiationViewMode"
+                    placeholder="请选择订单日期"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item label="签订日期">
+                  <el-date-picker
+                    v-model="initiationSalesForm.signDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    :disabled="isInitiationViewMode"
+                    placeholder="可为空"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item label="合同号">
+                  <el-input
+                    v-model="initiationSalesForm.contractNo"
+                    :disabled="isInitiationViewMode"
+                    placeholder="可为空"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+
+          <el-table :data="initiationSalesForm.details" border size="small" class="mt-2">
+            <el-table-column type="index" label="#" width="48" />
+            <el-table-column label="项目编号" min-width="150">
+              <template #default>
+                <span>{{ initiationForm.projectCode || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="名称" min-width="160">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.name"
+                  :disabled="isInitiationViewMode"
+                  placeholder="请输入名称"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="客户料号" min-width="140">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.customerPartNo"
+                  :disabled="isInitiationViewMode"
+                  placeholder="选填"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="数量" width="110">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.quantity"
+                  :disabled="isInitiationViewMode"
+                  :min="0"
+                  :precision="0"
+                  controls-position="right"
+                  style="width: 100%"
+                  @change="recalcInitiationDetailTotal(row)"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="单价" width="130">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.unitPrice"
+                  :disabled="isInitiationViewMode"
+                  :min="0"
+                  :precision="2"
+                  controls-position="right"
+                  style="width: 100%"
+                  @change="recalcInitiationDetailTotal(row)"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="总金额" width="130">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.totalAmount"
+                  :disabled="isInitiationViewMode"
+                  :min="0"
+                  :precision="2"
+                  controls-position="right"
+                  style="width: 100%"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="140">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.remark"
+                  :disabled="isInitiationViewMode"
+                  placeholder="选填"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="经办人" min-width="120">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.handler"
+                  :disabled="isInitiationViewMode"
+                  placeholder="选填"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="费用出处" min-width="120">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.costSource"
+                  :disabled="isInitiationViewMode"
+                  placeholder="选填"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column v-if="!isInitiationViewMode" label="操作" width="90" fixed="right">
+              <template #default="{ $index }">
+                <el-button type="danger" link @click="removeInitiationDetail($index)"
+                  >删除</el-button
+                >
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </div>
+
+      <template #footer>
+        <el-button @click="initiationDialogVisible = false">关闭</el-button>
+        <el-button
+          v-if="canShowCustomerReviewAction"
+          type="warning"
+          :loading="initiationRequestingCustomerReview"
+          @click="requestCustomerReview"
+        >
+          发起新增客户名称审核申请
+        </el-button>
+        <el-button
+          v-if="!isInitiationViewMode"
+          type="primary"
+          plain
+          :loading="initiationDialogSaving"
+          @click="saveInitiationDraft"
+        >
+          保存草稿
+        </el-button>
+        <el-button
+          v-if="!isInitiationViewMode"
+          type="primary"
+          :loading="initiationDialogSubmitting"
+          @click="submitInitiationReview"
+        >
+          提交审核
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 新增报价单：选择弹窗（报价单号 / 报价日期 / 客户名称） -->
     <el-dialog
@@ -1136,6 +1658,8 @@ import {
   ElCard,
   ElDatePicker,
   ElDialog,
+  ElDescriptions,
+  ElDescriptionsItem,
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
@@ -1154,7 +1678,9 @@ import {
   ElSelect,
   ElSwitch,
   ElTable,
-  ElTableColumn
+  ElTableColumn,
+  ElTag,
+  ElTooltip
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
@@ -1164,20 +1690,31 @@ import { useUserStore } from '@/store/modules/user'
 const userStore = useUserStore()
 import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
 import {
+  checkQuotationInitiationProjectCodeApi,
   generateQuotationNoApi,
   createQuotationApi,
   updateQuotationApi,
   deleteQuotationApi,
   getQuotationListApi,
   getQuotationCustomerOptionsApi,
+  getQuotationInitiationRequestApi,
+  requestQuotationInitiationCustomerReviewApi,
+  saveQuotationInitiationDraftApi,
+  submitQuotationInitiationApi,
+  withdrawQuotationInitiationApi,
   downloadQuotationPdfApi,
   downloadQuotationCompletionPdfApi,
   uploadQuotationPartItemImageApi,
   deleteQuotationTempPartItemImageApi,
   type QuotationFormData,
-  type QuotationCustomerOption
+  type QuotationCustomerOption,
+  type QuotationInitiationProjectDraft,
+  type QuotationInitiationRequestRow,
+  type QuotationInitiationSalesOrderDetailDraft,
+  type QuotationInitiationSalesOrderDraft
 } from '@/api/quotation'
 import type { QuotationRecord } from '@/api/quotation'
+import { getMaxSerialApi } from '@/api/goods'
 
 interface QuotationMaterialItem {
   name: string
@@ -1198,7 +1735,7 @@ interface QuotationFormModel {
   quotationNo: string
   quotationDate: string | ''
   customerName: string
-  quotationType: 'mold' | 'part'
+  quotationType: 'mold' | 'part' | '塑胶模具' | '修改模具' | '零件加工'
   enableImage: boolean
   processingDate: string | ''
   changeOrderNo: string
@@ -1237,7 +1774,37 @@ interface QuotationFormModel {
 interface QueryForm {
   keyword: string
   processingDate: string | ''
-  quotationType: 'mold' | 'part' | ''
+  quotationType: 'mold' | 'part' | '塑胶模具' | '修改模具' | '零件加工' | ''
+  initiationStatus:
+    | ''
+    | '未发起'
+    | '待客户审核'
+    | '草稿'
+    | '审核中'
+    | '已通过'
+    | '已驳回'
+    | '已撤回'
+  finalProjectCode: string
+  salesOrderNo: string
+}
+
+type InitiationDialogMode = 'create' | 'edit' | 'view' | 'restart'
+
+interface InitiationFormModel {
+  projectCode: string
+  category: string
+  customerName: string
+  productName: string
+  productDrawing: string
+  customerModelNo: string
+  customerId: number | null
+}
+
+interface InitiationSalesFormModel {
+  orderDate: string
+  signDate: string
+  contractNo: string
+  details: QuotationInitiationSalesOrderDetailDraft[]
 }
 
 const appStore = useAppStore()
@@ -1256,7 +1823,10 @@ const customerLoading = ref(false)
 const queryForm = reactive<QueryForm>({
   keyword: '',
   processingDate: '',
-  quotationType: ''
+  quotationType: '',
+  initiationStatus: '',
+  finalProjectCode: '',
+  salesOrderNo: ''
 })
 
 // 报价单列表
@@ -1302,9 +1872,15 @@ const pagedQuotations = computed(() => {
 
       // 报价类型特殊处理：part < mold（零件报价单 < 改模报价单）
       if (sortConfig.prop === 'quotationType') {
-        const typeOrder = { part: 0, mold: 1 }
-        aVal = typeOrder[aVal as 'part' | 'mold'] ?? 2
-        bVal = typeOrder[bVal as 'part' | 'mold'] ?? 2
+        const typeOrder: Record<string, number> = {
+          part: 0,
+          零件加工: 0,
+          mold: 1,
+          修改模具: 1,
+          塑胶模具: 2
+        }
+        aVal = typeOrder[String(aVal)] ?? 9
+        bVal = typeOrder[String(bVal)] ?? 9
       }
 
       // 字符串比较
@@ -1335,6 +1911,47 @@ const isViewMode = computed(() => dialogMode.value === 'view')
 const formRef = ref<FormInstance>()
 const downloading = ref(false)
 const importingProject = ref(false)
+
+const initiationStatusOptions = [
+  '未发起',
+  '待客户审核',
+  '草稿',
+  '审核中',
+  '已通过',
+  '已驳回',
+  '已撤回'
+] as const
+
+const initiationDialogVisible = ref(false)
+const initiationDialogLoading = ref(false)
+const initiationDialogSaving = ref(false)
+const initiationDialogSubmitting = ref(false)
+const initiationRequestingCustomerReview = ref(false)
+const initiationRecommendingCode = ref(false)
+const initiationDialogMode = ref<InitiationDialogMode>('create')
+const initiationSourceQuotation = ref<QuotationRecord | null>(null)
+const initiationRequestRow = ref<QuotationInitiationRequestRow | null>(null)
+const initiationProjectCodeChecking = ref(false)
+const initiationProjectCodeError = ref('')
+const initiationCustomerMatched = ref(false)
+const initiationCustomerLocked = ref(false)
+
+const initiationForm = reactive<InitiationFormModel>({
+  projectCode: '',
+  category: '',
+  customerName: '',
+  productName: '',
+  productDrawing: '',
+  customerModelNo: '',
+  customerId: null
+})
+
+const initiationSalesForm = reactive<InitiationSalesFormModel>({
+  orderDate: '',
+  signDate: '',
+  contractNo: '',
+  details: []
+})
 
 // 项目代入对话框 & 查询状态
 const projectImportDialogVisible = ref(false)
@@ -1701,9 +2318,233 @@ const formatDate = (dateStr: string | null | undefined) => {
 
 // 格式化报价类型
 const formatQuotationType = (type: string | null | undefined) => {
+  if (type === '塑胶模具') return '塑胶模具'
+  if (type === '修改模具') return '修改模具'
+  if (type === '零件加工') return '零件加工'
   if (type === 'part') return '零件报价单'
   if (type === 'mold') return '改模报价单'
   return type || '-'
+}
+
+const resolveBusinessCategory = (
+  quotationType: QuotationRecord['quotationType'] | string | null | undefined
+) => {
+  if (quotationType === '塑胶模具') return '塑胶模具'
+  if (quotationType === '零件加工' || quotationType === 'part') return '零件加工'
+  return '修改模具'
+}
+
+const getCategoryCodeFromQuotationType = (
+  quotationType: QuotationRecord['quotationType'] | string | null | undefined
+) => {
+  const category = resolveBusinessCategory(quotationType)
+  if (category === '塑胶模具') return '01'
+  if (category === '零件加工') return '03'
+  return '05'
+}
+
+const getCategoryFromProjectCode = (projectCode: string) => {
+  const code = String(projectCode || '')
+    .trim()
+    .toUpperCase()
+  if (/^JH01-\d{2}-\d{3}(\/\d{2})?$/.test(code)) return '塑胶模具'
+  if (/^JH03-\d{2}-\d{3}(\/\d{2})?$/.test(code)) return '零件加工'
+  if (/^JH05-\d{2}-\d{3}(\/\d{2})?$/.test(code)) return '修改模具'
+  return ''
+}
+
+const normalizeInitiationStatus = (value: unknown) => String(value || '').trim() || '未发起'
+
+const isQuotationEditLocked = (row: QuotationRecord) => {
+  const status = normalizeInitiationStatus(row.initiationStatus)
+  return status === '审核中' || status === '已通过'
+}
+
+const isQuotationDeleteDisabled = (row: QuotationRecord) => {
+  const status = normalizeInitiationStatus(row.initiationStatus)
+  return !['未发起', '草稿'].includes(status)
+}
+
+const editDisabledReason = (row: QuotationRecord) =>
+  isQuotationEditLocked(row)
+    ? `当前立项状态导致不可编辑：${normalizeInitiationStatus(row.initiationStatus)}`
+    : ''
+
+const deleteDisabledReason = (row: QuotationRecord) =>
+  isQuotationDeleteDisabled(row)
+    ? `当前立项状态不允许删除：${normalizeInitiationStatus(row.initiationStatus)}`
+    : ''
+
+const canShowInitiateAction = (row: QuotationRecord) =>
+  normalizeInitiationStatus(row.initiationStatus) === '未发起'
+
+const canShowViewInitiationAction = (row: QuotationRecord) =>
+  normalizeInitiationStatus(row.initiationStatus) !== '未发起'
+
+const canShowEditInitiationAction = (row: QuotationRecord) =>
+  ['草稿', '待客户审核', '已驳回'].includes(normalizeInitiationStatus(row.initiationStatus))
+
+const canShowWithdrawInitiationAction = (row: QuotationRecord) =>
+  ['草稿', '待客户审核', '审核中'].includes(normalizeInitiationStatus(row.initiationStatus))
+
+const canShowRestartInitiationAction = (row: QuotationRecord) =>
+  normalizeInitiationStatus(row.initiationStatus) === '已撤回'
+
+const todayText = () => {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+const buildDefaultInitiationDetails = (
+  row: QuotationRecord,
+  projectCode = ''
+): QuotationInitiationSalesOrderDetailDraft[] => {
+  const defaultRemark = String(row.remark || '').trim() || null
+  const defaultHandler = String(row.operator || '').trim() || null
+  const addFeesToFirstDetail = (details: QuotationInitiationSalesOrderDetailDraft[]) => {
+    if (!details.length) return details
+    const first = details[0]
+    const qty = Number(first.quantity || 0)
+    if (!(qty > 0)) return details
+    const extra = Number(row.otherFee || 0) + Number(row.transportFee || 0)
+    if (!extra) return details
+    const totalAmount = Number(first.totalAmount || 0) + extra
+    first.totalAmount = Number(totalAmount.toFixed(2))
+    first.unitPrice = Number((totalAmount / qty).toFixed(2))
+    return details
+  }
+
+  if (resolveBusinessCategory(row.quotationType) === '零件加工') {
+    const details = (row.partItems || []).map((item, index) => {
+      const quantity = Number(item.quantity || 0)
+      const unitPrice = Number(item.unitPrice || 0)
+      return {
+        key: `detail-${index + 1}`,
+        name: String(row.partName || '').trim() || String(item.partName || '').trim() || '',
+        itemCode: projectCode || '',
+        customerPartNo: String(item.drawingNo || '').trim() || null,
+        deliveryDate: null,
+        quantity: quantity > 0 ? quantity : null,
+        unitPrice: Number.isFinite(unitPrice) ? unitPrice : null,
+        totalAmount:
+          quantity > 0 && Number.isFinite(unitPrice)
+            ? Number((quantity * unitPrice).toFixed(2))
+            : null,
+        remark: defaultRemark,
+        costSource: null,
+        handler: defaultHandler,
+        isInStock: false,
+        isShipped: false,
+        shippingDate: null
+      } as QuotationInitiationSalesOrderDetailDraft
+    })
+    return addFeesToFirstDetail(details)
+  }
+
+  const quantity = Number(row.quantity || 0)
+  const totalAmount = calcTaxIncludedPrice(row)
+  const details = [
+    {
+      key: 'summary-1',
+      name: String(row.partName || '').trim() || '',
+      itemCode: projectCode || '',
+      customerPartNo: String(row.moldNo || '').trim() || null,
+      deliveryDate: null,
+      quantity: quantity > 0 ? quantity : null,
+      unitPrice: quantity > 0 ? Number((totalAmount / quantity).toFixed(2)) : null,
+      totalAmount: Number.isFinite(totalAmount) ? totalAmount : null,
+      remark: defaultRemark,
+      costSource: null,
+      handler: defaultHandler,
+      isInStock: false,
+      isShipped: false,
+      shippingDate: null
+    } as QuotationInitiationSalesOrderDetailDraft
+  ]
+  return details
+}
+
+const createEmptyInitiationDetail = (): QuotationInitiationSalesOrderDetailDraft => ({
+  key: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  name: '',
+  itemCode: initiationForm.projectCode || '',
+  customerPartNo: null,
+  deliveryDate: null,
+  quantity: null,
+  unitPrice: null,
+  totalAmount: null,
+  remark: String(initiationSourceQuotation.value?.remark || '').trim() || null,
+  costSource: null,
+  handler: String(initiationSourceQuotation.value?.operator || '').trim() || null,
+  isInStock: false,
+  isShipped: false,
+  shippingDate: null
+})
+
+const buildInitiationFormsFromRow = (
+  row: QuotationRecord,
+  requestRow?: QuotationInitiationRequestRow | null
+) => {
+  const projectDraft = (requestRow?.project_draft || {}) as QuotationInitiationProjectDraft
+  const salesDraft = (requestRow?.sales_order_draft || {}) as QuotationInitiationSalesOrderDraft
+  const projectCode = String(projectDraft.projectCode || '').trim()
+  const category =
+    getCategoryFromProjectCode(projectCode) || String(projectDraft.category || '').trim()
+  initiationForm.projectCode = projectCode
+  initiationForm.category = category
+  initiationForm.customerName = String(projectDraft.customerName || row.customerName || '').trim()
+  initiationForm.productName = String(projectDraft.productName || row.partName || '').trim()
+  initiationForm.productDrawing = String(projectDraft.productDrawing || '').trim()
+  initiationForm.customerModelNo = String(projectDraft.customerModelNo || row.moldNo || '').trim()
+  initiationForm.customerId = Number(salesDraft.customerId || 0) || null
+  initiationSalesForm.orderDate = String(salesDraft.orderDate || todayText()).trim() || todayText()
+  initiationSalesForm.signDate = String(salesDraft.signDate || '').trim()
+  initiationSalesForm.contractNo = String(salesDraft.contractNo || '').trim()
+  const details =
+    Array.isArray(salesDraft.details) && salesDraft.details.length
+      ? salesDraft.details.map((detail, index) => ({
+          key: String(detail.key || `detail-${index + 1}`),
+          name: detail.name || '',
+          itemCode: initiationForm.projectCode || '',
+          customerPartNo: detail.customerPartNo || null,
+          deliveryDate: detail.deliveryDate || null,
+          quantity: detail.quantity ?? null,
+          unitPrice: detail.unitPrice ?? null,
+          totalAmount: detail.totalAmount ?? null,
+          remark: detail.remark || null,
+          costSource: detail.costSource || null,
+          handler: detail.handler || null,
+          isInStock: !!detail.isInStock,
+          isShipped: !!detail.isShipped,
+          shippingDate: detail.shippingDate || null
+        }))
+      : buildDefaultInitiationDetails(row, initiationForm.projectCode)
+  initiationSalesForm.details = details
+}
+
+const buildInitiationPayload = () => {
+  const projectDraft: QuotationInitiationProjectDraft = {
+    projectCode: String(initiationForm.projectCode || '').trim(),
+    category: initiationForm.category || null,
+    customerName: String(initiationForm.customerName || '').trim() || null,
+    productName: String(initiationForm.productName || '').trim() || null,
+    productDrawing: String(initiationForm.productDrawing || '').trim() || null,
+    customerModelNo: String(initiationForm.customerModelNo || '').trim() || null
+  }
+  const salesOrderDraft: QuotationInitiationSalesOrderDraft = {
+    orderDate: String(initiationSalesForm.orderDate || '').trim() || null,
+    signDate: String(initiationSalesForm.signDate || '').trim() || null,
+    contractNo: String(initiationSalesForm.contractNo || '').trim() || null,
+    customerId: initiationForm.customerId,
+    details: initiationSalesForm.details.map((detail) => ({
+      ...detail,
+      itemCode: String(initiationForm.projectCode || '').trim() || null
+    }))
+  }
+  return { projectDraft, salesOrderDraft }
 }
 
 // 获取客户列表
@@ -1733,6 +2574,9 @@ const loadQuotations = async () => {
       keyword: queryForm.keyword,
       processingDate: queryForm.processingDate,
       quotationType: queryForm.quotationType,
+      initiationStatus: queryForm.initiationStatus,
+      finalProjectCode: queryForm.finalProjectCode,
+      salesOrderNo: queryForm.salesOrderNo,
       page: pagination.page,
       pageSize: pagination.pageSize
     })
@@ -1762,6 +2606,9 @@ const handleReset = () => {
   queryForm.keyword = ''
   queryForm.processingDate = ''
   queryForm.quotationType = ''
+  queryForm.initiationStatus = ''
+  queryForm.finalProjectCode = ''
+  queryForm.salesOrderNo = ''
   pagination.page = 1
   loadQuotations()
 }
@@ -1845,6 +2692,10 @@ const handleConfirmPreCreate = async () => {
 
 // 编辑
 const handleEdit = async (row: QuotationRecord) => {
+  if (isQuotationEditLocked(row)) {
+    ElMessage.warning(editDisabledReason(row))
+    return
+  }
   dialogMode.value = 'edit'
   dialogTitle.value = '编辑报价单'
   const normalizedType = row.quotationType === 'part' ? 'part' : 'mold'
@@ -1935,6 +2786,397 @@ const handleView = async (row: QuotationRecord) => {
   })
   await fetchCustomerList()
   dialogVisible.value = true
+}
+
+const buildQuotationUpdatePayloadFromRow = (row: QuotationRecord): QuotationFormData => ({
+  quotationNo: String(row.quotationNo || '').trim(),
+  quotationDate: String(row.quotationDate || '').trim(),
+  customerName: String(row.customerName || '').trim(),
+  quotationType: (row.quotationType || 'mold') as QuotationFormData['quotationType'],
+  enableImage: Boolean((row as any).enableImage),
+  processingDate: String(row.processingDate || '').trim(),
+  changeOrderNo: String(row.changeOrderNo || '').trim(),
+  partName: String(row.partName || '').trim(),
+  moldNo: String(row.moldNo || '').trim(),
+  department: String(row.department || '').trim(),
+  applicant: String(row.applicant || '').trim(),
+  contactName: String((row as any).contactName || '').trim(),
+  contactPhone: String((row as any).contactPhone || '').trim(),
+  operator: String((row as any).operator || '').trim(),
+  remark: String((row as any).remark || '').trim(),
+  deliveryTerms: String((row as any).deliveryTerms || '').trim(),
+  paymentTerms: String((row as any).paymentTerms || '').trim(),
+  validityDays: (row as any).validityDays ?? null,
+  materials: Array.isArray(row.materials) ? row.materials.map((item) => ({ ...item })) : [],
+  processes: Array.isArray(row.processes) ? row.processes.map((item) => ({ ...item })) : [],
+  partItems: Array.isArray(row.partItems)
+    ? row.partItems.map((item) => ({
+        partName: item.partName,
+        drawingNo: item.drawingNo,
+        material: item.material,
+        process: (item as any).process || '',
+        imageUrl: (item as any).imageUrl || '',
+        imageScale: normalizeImageScale((item as any).imageScale),
+        quantity: Number(item.quantity || 0),
+        unitPrice: Number(item.unitPrice || 0)
+      }))
+    : [],
+  otherFee: Number(row.otherFee || 0),
+  transportFee: Number(row.transportFee || 0),
+  quantity: Number(row.quantity || 1) || 1
+})
+
+const syncLocalQuotationRow = (nextRow: Partial<QuotationRecord> & { id: number }) => {
+  const index = quotations.value.findIndex((item) => item.id === nextRow.id)
+  if (index >= 0) {
+    quotations.value[index] = {
+      ...quotations.value[index],
+      ...nextRow
+    }
+  }
+  if (initiationSourceQuotation.value?.id === nextRow.id) {
+    initiationSourceQuotation.value = {
+      ...initiationSourceQuotation.value,
+      ...nextRow
+    }
+  }
+}
+
+const syncQuotationCustomerNameImmediately = async (row: QuotationRecord, customerName: string) => {
+  const nextCustomerName = String(customerName || '').trim()
+  if (!nextCustomerName || nextCustomerName === String(row.customerName || '').trim()) return
+  const payload = buildQuotationUpdatePayloadFromRow({
+    ...row,
+    customerName: nextCustomerName
+  } as QuotationRecord)
+  await updateQuotationApi(row.id, payload)
+  syncLocalQuotationRow({ id: row.id, customerName: nextCustomerName })
+}
+
+const validateInitiationProjectCode = async () => {
+  const row = initiationSourceQuotation.value
+  const projectCode = String(initiationForm.projectCode || '').trim()
+  initiationProjectCodeError.value = ''
+  initiationForm.category = getCategoryFromProjectCode(projectCode)
+  initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
+    ...detail,
+    itemCode: projectCode
+  }))
+  if (!row || !projectCode) return false
+  initiationProjectCodeChecking.value = true
+  try {
+    const res = await checkQuotationInitiationProjectCodeApi({
+      quotationId: row.id,
+      projectCode,
+      quotationType: row.quotationType || 'mold'
+    })
+    initiationForm.category = String(res.data?.data?.category || '').trim()
+    return true
+  } catch (error: any) {
+    initiationProjectCodeError.value = error?.message || '项目编号校验失败'
+    initiationForm.category = ''
+    return false
+  } finally {
+    initiationProjectCodeChecking.value = false
+  }
+}
+
+const handleInitiationProjectCodeBlur = async () => {
+  if (!String(initiationForm.projectCode || '').trim()) return
+  await validateInitiationProjectCode()
+}
+
+const handleInitiationCustomerBlur = async () => {
+  const row = initiationSourceQuotation.value
+  const customerName = String(initiationForm.customerName || '').trim()
+  initiationCustomerMatched.value = false
+  initiationCustomerLocked.value = false
+  initiationForm.customerId = null
+  if (!row || !customerName) return
+
+  try {
+    await syncQuotationCustomerNameImmediately(row, customerName)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '同步客户名称到报价单失败')
+    return
+  }
+
+  const match = customerList.value.find(
+    (item) => String(item.customerName || '').trim() === customerName
+  )
+  if (match) {
+    initiationCustomerMatched.value = true
+    initiationCustomerLocked.value = true
+    initiationForm.customerId = Number(match.id || 0) || null
+    return
+  }
+
+  initiationCustomerMatched.value = false
+  initiationCustomerLocked.value = false
+  initiationForm.customerId = null
+  ElMessage.warning('当前客户未匹配到客户档案，可发起新增客户名称审核申请')
+}
+
+const recommendInitiationProjectCode = async () => {
+  const row = initiationSourceQuotation.value
+  if (!row) return
+  initiationRecommendingCode.value = true
+  try {
+    const categoryCode = getCategoryCodeFromQuotationType(row.quotationType)
+    const yy = String(new Date().getFullYear()).slice(-2)
+    const res: any = await getMaxSerialApi(categoryCode)
+    let serial = Number(res?.data?.nextSerial ?? (res?.data?.maxSerial || 0) + 1)
+    if (!(serial > 0)) serial = 1
+    let pickedCode = ''
+    for (let i = 0; i < 200; i += 1) {
+      const candidate = `JH${categoryCode}-${yy}-${String(serial + i).padStart(3, '0')}`
+      try {
+        await checkQuotationInitiationProjectCodeApi({
+          quotationId: row.id,
+          projectCode: candidate,
+          quotationType: row.quotationType || 'mold'
+        })
+        pickedCode = candidate
+        break
+      } catch (e) {
+        // Try next serial when the current project code is occupied or invalid.
+      }
+    }
+    if (!pickedCode) {
+      ElMessage.error('推荐项目编号失败，请手工填写')
+      return
+    }
+    initiationForm.projectCode = pickedCode
+    initiationForm.category = getCategoryFromProjectCode(pickedCode)
+    initiationProjectCodeError.value = ''
+    initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
+      ...detail,
+      itemCode: pickedCode
+    }))
+  } catch (error: any) {
+    ElMessage.error(error?.message || '推荐项目编号失败')
+  } finally {
+    initiationRecommendingCode.value = false
+  }
+}
+
+const openInitiationDialog = async (row: QuotationRecord, mode: InitiationDialogMode) => {
+  initiationDialogMode.value = mode
+  initiationSourceQuotation.value = { ...row }
+  initiationDialogVisible.value = true
+  initiationDialogLoading.value = true
+  initiationRequestRow.value = null
+  initiationProjectCodeError.value = ''
+  initiationCustomerMatched.value = false
+  initiationCustomerLocked.value = false
+  try {
+    await fetchCustomerList()
+    const res = await getQuotationInitiationRequestApi({ quotationId: row.id })
+    initiationRequestRow.value = res.data?.data || null
+    buildInitiationFormsFromRow(row, initiationRequestRow.value)
+    if (!initiationForm.projectCode && mode !== 'view') {
+      await recommendInitiationProjectCode()
+    }
+    const match = customerList.value.find(
+      (item) =>
+        String(item.customerName || '').trim() === String(initiationForm.customerName || '').trim()
+    )
+    if (match) {
+      initiationCustomerMatched.value = true
+      initiationCustomerLocked.value = true
+      initiationForm.customerId = Number(match.id || 0) || null
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '读取立项信息失败')
+    initiationDialogVisible.value = false
+  } finally {
+    initiationDialogLoading.value = false
+  }
+}
+
+const handleInitiate = async (row: QuotationRecord) => {
+  await openInitiationDialog(row, 'create')
+}
+
+const handleViewInitiation = async (row: QuotationRecord) => {
+  await openInitiationDialog(row, 'view')
+}
+
+const handleEditInitiation = async (row: QuotationRecord) => {
+  await openInitiationDialog(row, 'edit')
+}
+
+const handleRestartInitiation = async (row: QuotationRecord) => {
+  await openInitiationDialog(row, 'restart')
+}
+
+const handleWithdrawInitiation = async (row: QuotationRecord) => {
+  const status = normalizeInitiationStatus(row.initiationStatus)
+  let reason = ''
+  try {
+    if (status === '审核中') {
+      const promptRes = await ElMessageBox.prompt('请输入撤回原因', '撤回申请', {
+        confirmButtonText: '确认撤回',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputValidator: (value) => (String(value || '').trim() ? true : '请输入撤回原因')
+      })
+      reason = String(promptRes.value || '').trim()
+    } else {
+      await ElMessageBox.confirm('确认撤回当前立项申请？', '撤回申请', {
+        confirmButtonText: '确认撤回',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+    }
+    await withdrawQuotationInitiationApi({ quotationId: row.id, reason })
+    ElMessage.success('已撤回')
+    await loadQuotations()
+  } catch (error: any) {
+    if (error === 'cancel' || error?.action === 'cancel' || error?.action === 'close') return
+    ElMessage.error(error?.message || '撤回立项申请失败')
+  }
+}
+
+const addInitiationDetail = () => {
+  initiationSalesForm.details.push(createEmptyInitiationDetail())
+}
+
+const removeInitiationDetail = (index: number) => {
+  initiationSalesForm.details.splice(index, 1)
+}
+
+const recalcInitiationDetailTotal = (detail: QuotationInitiationSalesOrderDetailDraft) => {
+  const quantity = Number(detail.quantity || 0)
+  const unitPrice = Number(detail.unitPrice || 0)
+  if (!(quantity > 0) || !Number.isFinite(unitPrice)) {
+    detail.totalAmount = null
+    return
+  }
+  detail.totalAmount = Number((quantity * unitPrice).toFixed(2))
+}
+
+const isInitiationViewMode = computed(() => initiationDialogMode.value === 'view')
+const canShowCustomerReviewAction = computed(() => {
+  if (isInitiationViewMode.value) return false
+  return !initiationCustomerMatched.value && !!String(initiationForm.customerName || '').trim()
+})
+
+const saveInitiationDraft = async () => {
+  const row = initiationSourceQuotation.value
+  if (!row) return
+  if (!String(initiationForm.projectCode || '').trim()) {
+    ElMessage.error('项目编号不能为空')
+    return
+  }
+  const projectCodeOk = await validateInitiationProjectCode()
+  if (!projectCodeOk) {
+    ElMessage.error(initiationProjectCodeError.value || '项目编号校验失败')
+    return
+  }
+  if (!String(initiationForm.customerName || '').trim()) {
+    ElMessage.error('客户名称不能为空')
+    return
+  }
+  initiationDialogSaving.value = true
+  try {
+    const payload = buildInitiationPayload()
+    const res = await saveQuotationInitiationDraftApi({
+      quotationId: row.id,
+      ...payload
+    })
+    initiationRequestRow.value = res.data?.data || null
+    buildInitiationFormsFromRow(
+      { ...(initiationSourceQuotation.value as QuotationRecord) },
+      initiationRequestRow.value
+    )
+    ElMessage.success('草稿已保存')
+    await loadQuotations()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '保存立项草稿失败')
+  } finally {
+    initiationDialogSaving.value = false
+  }
+}
+
+const submitInitiationReview = async () => {
+  const row = initiationSourceQuotation.value
+  if (!row) return
+  if (!String(initiationForm.projectCode || '').trim()) {
+    ElMessage.error('项目编号不能为空')
+    return
+  }
+  const projectCodeOk = await validateInitiationProjectCode()
+  if (!projectCodeOk) {
+    ElMessage.error(initiationProjectCodeError.value || '项目编号校验失败')
+    return
+  }
+  if (!String(initiationForm.customerName || '').trim()) {
+    ElMessage.error('客户名称不能为空')
+    return
+  }
+  if (!initiationCustomerMatched.value || !initiationForm.customerId) {
+    ElMessage.error('客户未匹配，请先发起客户新增审核申请')
+    return
+  }
+  if (!String(initiationSalesForm.orderDate || '').trim()) {
+    ElMessage.error('订单日期不能为空')
+    return
+  }
+  if (!initiationSalesForm.details.length) {
+    ElMessage.error('订单明细不能为空')
+    return
+  }
+  const invalidDetail = initiationSalesForm.details.find(
+    (detail) =>
+      !(Number(detail.quantity || 0) > 0) ||
+      !Number.isFinite(Number(detail.unitPrice)) ||
+      !Number.isFinite(Number(detail.totalAmount))
+  )
+  if (invalidDetail) {
+    ElMessage.error('订单明细数量/单价/总金额不能为空')
+    return
+  }
+  initiationDialogSubmitting.value = true
+  try {
+    const payload = buildInitiationPayload()
+    const res = await submitQuotationInitiationApi({
+      quotationId: row.id,
+      ...payload
+    })
+    initiationRequestRow.value = res.data?.data || null
+    ElMessage.success('已提交审核')
+    initiationDialogVisible.value = false
+    await loadQuotations()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '提交审核失败')
+  } finally {
+    initiationDialogSubmitting.value = false
+  }
+}
+
+const requestCustomerReview = async () => {
+  const row = initiationSourceQuotation.value
+  const customerName = String(initiationForm.customerName || '').trim()
+  if (!row || !customerName) {
+    ElMessage.error('客户名称不能为空')
+    return
+  }
+  initiationRequestingCustomerReview.value = true
+  try {
+    await requestQuotationInitiationCustomerReviewApi({
+      quotationId: row.id,
+      customerName
+    })
+    ElMessage.success('客户新增审核申请已提交')
+    await loadQuotations()
+    const res = await getQuotationInitiationRequestApi({ quotationId: row.id })
+    initiationRequestRow.value = res.data?.data || null
+  } catch (error: any) {
+    ElMessage.error(error?.message || '提交客户新增审核申请失败')
+  } finally {
+    initiationRequestingCustomerReview.value = false
+  }
 }
 
 // 下载当前报价单的 报价 PDF 文件
@@ -2163,6 +3405,10 @@ const handleSelectProjectForImport = async (row: any) => {
 
 // 删除
 const handleDelete = async (row: QuotationRecord) => {
+  if (isQuotationDeleteDisabled(row)) {
+    ElMessage.warning(deleteDisabledReason(row))
+    return
+  }
   try {
     const message = `确定要删除报价单【${row.quotationNo}】吗？\n请输入 Y 确认删除：`
     const { value } = await ElMessageBox.prompt(message, '警告', {
@@ -2403,6 +3649,17 @@ watch(isMobile, (mobile) => {
     viewMode.value = 'table'
   }
 })
+
+watch(
+  () => initiationForm.projectCode,
+  (next) => {
+    initiationForm.category = getCategoryFromProjectCode(String(next || '').trim())
+    initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
+      ...detail,
+      itemCode: String(next || '').trim()
+    }))
+  }
+)
 
 // 监听项目编号关键字，输入后自动触发（防抖）查询，仅在分类为「塑胶模具」的项目中模糊搜索
 watch(

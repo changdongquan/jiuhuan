@@ -16,6 +16,8 @@
           <el-option label="全部" value="ALL" />
           <el-option label="硬删除审核" value="HARD_DELETE" />
           <el-option label="BMO立项审核" value="BMO_INITIATION" />
+          <el-option label="报价单立项审核" value="QUOTATION_INITIATION" />
+          <el-option label="客户新增审核" value="CUSTOMER_CREATE" />
         </el-select>
       </el-form-item>
       <el-form-item label="状态">
@@ -86,6 +88,22 @@
             >
               查看立项
             </el-button>
+            <el-button
+              v-if="row.category === 'QUOTATION_INITIATION'"
+              link
+              type="primary"
+              @click="openQuotationViewDialog(row)"
+            >
+              查看立项
+            </el-button>
+            <el-button
+              v-if="row.category === 'CUSTOMER_CREATE'"
+              link
+              type="primary"
+              @click="openCustomerCreateViewDialog(row)"
+            >
+              查看详情
+            </el-button>
             <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
               驳回
             </el-button>
@@ -134,6 +152,22 @@
               @click="openBmoViewDialog(row)"
             >
               查看立项
+            </el-button>
+            <el-button
+              v-if="row.category === 'QUOTATION_INITIATION'"
+              link
+              type="primary"
+              @click="openQuotationViewDialog(row)"
+            >
+              查看立项
+            </el-button>
+            <el-button
+              v-if="row.category === 'CUSTOMER_CREATE'"
+              link
+              type="primary"
+              @click="openCustomerCreateViewDialog(row)"
+            >
+              查看详情
             </el-button>
             <el-button v-if="canReview(row)" link type="danger" @click="handleReject(row)">
               驳回
@@ -221,6 +255,92 @@
     </el-dialog>
 
     <el-dialog
+      v-model="quotationViewDialogVisible"
+      title="报价单立项"
+      :width="isMobile ? '95vw' : '980px'"
+      destroy-on-close
+    >
+      <el-descriptions v-if="quotationViewRequest" :column="descColumn" border size="small">
+        <el-descriptions-item label="报价单号">{{
+          quotationViewRequest.quotation_no || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="客户名称">{{
+          quotationViewRequest.quotation_customer_name || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="立项状态">{{
+          quotationViewRequest.status_text || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="项目编号候选">{{
+          quotationViewRequest.project_code_candidate || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="最终项目编号">{{
+          quotationViewRequest.project_code_final || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="销售订单号">{{
+          quotationViewRequest.sales_order_no || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="产品名称">{{
+          quotationViewRequest.project_draft?.productName || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="产品图号">{{
+          quotationViewRequest.project_draft?.productDrawing || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="客户模号">{{
+          quotationViewRequest.project_draft?.customerModelNo || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="申请人">{{
+          quotationApplicantName(quotationViewRequest)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{
+          quotationApproverName(quotationViewRequest)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="立项审核驳回原因" :span="descColumn">{{
+          quotationViewRequest.initiation_rejected_reason || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="客户审核驳回原因" :span="descColumn">{{
+          quotationViewRequest.customer_review_rejected_reason || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="撤回原因" :span="descColumn">{{
+          quotationViewRequest.withdraw_reason || '-'
+        }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="quotationViewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="customerCreateViewDialogVisible"
+      title="客户新增审核"
+      :width="isMobile ? '95vw' : '760px'"
+      destroy-on-close
+    >
+      <el-descriptions v-if="customerCreateViewRow" :column="descColumn" border size="small">
+        <el-descriptions-item label="客户名称">{{
+          customerCreateViewRow.customer_name || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{
+          customerCreateViewRow.status_text || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="申请人">{{
+          customerCreateViewRow.created_by || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="审核意见" :span="descColumn">{{
+          customerCreateViewRow.review_reason || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{
+          formatTime(customerCreateViewRow.created_at || null)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{
+          formatTime(customerCreateViewRow.updated_at || null)
+        }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="customerCreateViewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="hardDeleteViewDialogVisible"
       title="硬删除审核详情"
       :width="isMobile ? '95vw' : '980px'"
@@ -293,14 +413,31 @@ import {
   type BmoInitiationReviewTask
 } from '@/api/bmo'
 import {
+  approveAndApplyQuotationInitiationApi,
+  getQuotationInitiationReviewTasksApi,
+  rejectQuotationInitiationReviewApi,
+  type QuotationInitiationRequestRow
+} from '@/api/quotation'
+import {
   approveHardDeleteReviewApi,
   getHardDeleteReviewTasksApi,
   rejectHardDeleteReviewApi,
   type HardDeleteReviewTask
 } from '@/api/goods'
+import {
+  approveCustomerCreateReviewForReviewCenterApi,
+  type CustomerCreateReviewTask,
+  getCustomerCreateReviewTasksForReviewCenterApi,
+  rejectCustomerCreateReviewForReviewCenterApi
+} from '@/api/review-center'
 import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 
-type ReviewCategory = 'ALL' | 'HARD_DELETE' | 'BMO_INITIATION'
+type ReviewCategory =
+  | 'ALL'
+  | 'HARD_DELETE'
+  | 'BMO_INITIATION'
+  | 'QUOTATION_INITIATION'
+  | 'CUSTOMER_CREATE'
 type StandardStatus = 'ALL' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
 
 type UnifiedReviewRow = {
@@ -316,7 +453,16 @@ type UnifiedReviewRow = {
   reviewer: string
   reason: string
   updatedAt: string | null
-  raw: BmoInitiationReviewTask | HardDeleteReviewTask
+  raw:
+    | BmoInitiationReviewTask
+    | HardDeleteReviewTask
+    | (QuotationInitiationRequestRow & {
+        quotation_no?: string | null
+        quotation_customer_name?: string | null
+        quotation_part_name?: string | null
+        quotation_mold_no?: string | null
+      })
+    | CustomerCreateReviewTask
 }
 
 const route = useRoute()
@@ -330,6 +476,18 @@ const viewDialogVisible = ref(false)
 const viewDialogLoading = ref(false)
 const viewRow = ref<BmoInitiationReviewTask | null>(null)
 const viewRequest = ref<BmoInitiationRequestRow | null>(null)
+const quotationViewDialogVisible = ref(false)
+const quotationViewRequest = ref<
+  | (QuotationInitiationRequestRow & {
+      quotation_no?: string | null
+      quotation_customer_name?: string | null
+      quotation_part_name?: string | null
+      quotation_mold_no?: string | null
+    })
+  | null
+>(null)
+const customerCreateViewDialogVisible = ref(false)
+const customerCreateViewRow = ref<CustomerCreateReviewTask | null>(null)
 const hardDeleteViewDialogVisible = ref(false)
 const hardDeleteViewRow = ref<HardDeleteReviewTask | null>(null)
 const isMobile = ref(false)
@@ -390,6 +548,26 @@ const mapStatusForBmoApi = (
   if (status === 'REJECTED') return 'REJECTED'
   if (status === 'CANCELED') return null
   return 'ALL'
+}
+
+const mapStatusForQuotationApi = (
+  status: StandardStatus
+): '' | 'DRAFT' | 'WAIT_CUSTOMER_REVIEW' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' => {
+  if (status === 'DRAFT') return 'DRAFT'
+  if (status === 'PENDING') return 'PENDING'
+  if (status === 'APPROVED') return 'APPROVED'
+  if (status === 'REJECTED') return 'REJECTED'
+  if (status === 'CANCELED') return 'WITHDRAWN'
+  return ''
+}
+
+const mapStatusForCustomerApi = (
+  status: StandardStatus
+): '' | 'PENDING' | 'APPROVED' | 'REJECTED' => {
+  if (status === 'PENDING') return 'PENDING'
+  if (status === 'APPROVED') return 'APPROVED'
+  if (status === 'REJECTED') return 'REJECTED'
+  return ''
 }
 
 const mapStatusForHardDeleteApi = (
@@ -484,13 +662,87 @@ const mapBmoRows = (bmoRows: BmoInitiationReviewTask[]): UnifiedReviewRow[] => {
   })
 }
 
+const normalizeQuotationStatus = (status: unknown): Exclude<StandardStatus, 'ALL'> => {
+  const s = String(status || '')
+    .trim()
+    .toUpperCase()
+  if (s === 'DRAFT' || s === 'WAIT_CUSTOMER_REVIEW') return 'DRAFT'
+  if (s === 'PENDING') return 'PENDING'
+  if (s === 'APPROVED') return 'APPROVED'
+  if (s === 'REJECTED') return 'REJECTED'
+  if (s === 'WITHDRAWN') return 'CANCELED'
+  return 'CANCELED'
+}
+
+const mapQuotationRows = (
+  rows: Array<
+    QuotationInitiationRequestRow & {
+      quotation_no?: string | null
+      quotation_customer_name?: string | null
+      quotation_part_name?: string | null
+      quotation_mold_no?: string | null
+    }
+  >
+): UnifiedReviewRow[] => {
+  return rows.map((row) => {
+    const status = normalizeQuotationStatus(row.status)
+    return {
+      id: `quotation-${row.quotation_id}`,
+      category: 'QUOTATION_INITIATION',
+      categoryText: '报价单立项审核',
+      sourceText: '报价单立项审核',
+      status,
+      statusText: normalizeStatusText(status),
+      projectCode: String(row.project_code_candidate || row.project_code_final || ''),
+      subject: [row.quotation_part_name, row.quotation_no].filter(Boolean).join(' / ') || '-',
+      applicant: String(row.created_by || ''),
+      reviewer: String(row.approved_by || ''),
+      reason:
+        String(
+          row.initiation_rejected_reason ||
+            row.customer_review_rejected_reason ||
+            row.withdraw_reason ||
+            ''
+        ) || '',
+      updatedAt: row.updated_at || row.created_at || null,
+      raw: row
+    }
+  })
+}
+
+const mapCustomerRows = (rows: CustomerCreateReviewTask[]): UnifiedReviewRow[] => {
+  return rows.map((row) => {
+    const status =
+      row.status === 'APPROVED' ? 'APPROVED' : row.status === 'REJECTED' ? 'REJECTED' : 'PENDING'
+    return {
+      id: `customer-${row.id}`,
+      category: 'CUSTOMER_CREATE',
+      categoryText: '客户新增审核',
+      sourceText: '客户信息审核',
+      status,
+      statusText: normalizeStatusText(status),
+      projectCode: '',
+      subject: String(row.customer_name || '-') || '-',
+      applicant: String(row.created_by || ''),
+      reviewer: String(row.approved_by || row.rejected_by || ''),
+      reason: String(row.review_reason || row.request_reason || ''),
+      updatedAt: row.updated_at || row.created_at || null,
+      raw: row
+    }
+  })
+}
+
 const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   const bmoStatus = mapStatusForBmoApi(query.status)
+  const quotationStatus = mapStatusForQuotationApi(query.status)
+  const customerStatus = mapStatusForCustomerApi(query.status)
   const hardDeleteStatus = mapStatusForHardDeleteApi(query.status)
   const includeHardDelete =
     (query.category === 'ALL' || query.category === 'HARD_DELETE') && hardDeleteStatus !== null
   const includeBmo =
     (query.category === 'ALL' || query.category === 'BMO_INITIATION') && bmoStatus !== null
+  const includeQuotation = query.category === 'ALL' || query.category === 'QUOTATION_INITIATION'
+  const includeCustomer = query.category === 'ALL' || query.category === 'CUSTOMER_CREATE'
 
   // 单分类：直接使用后端分页，避免前端截断
   if (query.category === 'HARD_DELETE') {
@@ -521,6 +773,28 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     })
     total.value = Number(res.data?.total || 0) || 0
     return mapBmoRows((res.data?.list || []) as BmoInitiationReviewTask[])
+  }
+
+  if (query.category === 'QUOTATION_INITIATION') {
+    const res = await getQuotationInitiationReviewTasksApi({
+      status: quotationStatus || undefined,
+      keyword: normalizedKeyword.value || undefined,
+      page: query.page,
+      pageSize: query.pageSize
+    })
+    total.value = Number(res.data?.data?.total || 0) || 0
+    return mapQuotationRows((res.data?.data?.list || []) as any)
+  }
+
+  if (query.category === 'CUSTOMER_CREATE') {
+    const res = await getCustomerCreateReviewTasksForReviewCenterApi({
+      status: customerStatus || undefined,
+      keyword: normalizedKeyword.value || undefined,
+      page: query.page,
+      pageSize: query.pageSize
+    })
+    total.value = Number(res.data?.data?.total || 0) || 0
+    return mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
   }
 
   if (query.status === 'ALL') {
@@ -568,8 +842,57 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       return rows
     }
 
-    const [hardRows, bmoRows] = await Promise.all([fetchAllHardDelete(), fetchAllBmo()])
-    const mergedRows = [...hardRows, ...bmoRows].sort((a, b) => {
+    const fetchAllQuotation = async () => {
+      if (!includeQuotation) return [] as UnifiedReviewRow[]
+      const rows: UnifiedReviewRow[] = []
+      const pageSize = 200
+      let page = 1
+      let totalRows = Number.POSITIVE_INFINITY
+      while ((page - 1) * pageSize < totalRows) {
+        const res = await getQuotationInitiationReviewTasksApi({
+          status: quotationStatus || undefined,
+          keyword: normalizedKeyword.value || undefined,
+          page,
+          pageSize
+        })
+        const part = mapQuotationRows((res.data?.data?.list || []) as any)
+        totalRows = Number(res.data?.data?.total || 0) || 0
+        rows.push(...part)
+        if (!part.length) break
+        page += 1
+      }
+      return rows
+    }
+
+    const fetchAllCustomer = async () => {
+      if (!includeCustomer) return [] as UnifiedReviewRow[]
+      const rows: UnifiedReviewRow[] = []
+      const pageSize = 200
+      let page = 1
+      let totalRows = Number.POSITIVE_INFINITY
+      while ((page - 1) * pageSize < totalRows) {
+        const res = await getCustomerCreateReviewTasksForReviewCenterApi({
+          status: customerStatus || undefined,
+          keyword: normalizedKeyword.value || undefined,
+          page,
+          pageSize
+        })
+        const part = mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
+        totalRows = Number(res.data?.data?.total || 0) || 0
+        rows.push(...part)
+        if (!part.length) break
+        page += 1
+      }
+      return rows
+    }
+
+    const [hardRows, bmoRows, quotationRows, customerRows] = await Promise.all([
+      fetchAllHardDelete(),
+      fetchAllBmo(),
+      fetchAllQuotation(),
+      fetchAllCustomer()
+    ])
+    const mergedRows = [...hardRows, ...bmoRows, ...quotationRows, ...customerRows].sort((a, b) => {
       const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
       const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
       return tb - ta
@@ -596,6 +919,18 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   let bmoLoaded = 0
   let bmoBuffer: UnifiedReviewRow[] = []
   let bmoCursor = 0
+
+  let quotationPage = 1
+  let quotationTotal = 0
+  let quotationLoaded = 0
+  let quotationBuffer: UnifiedReviewRow[] = []
+  let quotationCursor = 0
+
+  let customerPage = 1
+  let customerTotal = 0
+  let customerLoaded = 0
+  let customerBuffer: UnifiedReviewRow[] = []
+  let customerCursor = 0
 
   const fetchHardNext = async () => {
     if (!includeHardDelete) return
@@ -631,29 +966,89 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     bmoCursor = 0
   }
 
+  const fetchQuotationNext = async () => {
+    if (!includeQuotation) return
+    if (quotationLoaded >= quotationTotal && quotationPage > 1) return
+    const res = await getQuotationInitiationReviewTasksApi({
+      status: quotationStatus || undefined,
+      keyword: normalizedKeyword.value || undefined,
+      page: quotationPage,
+      pageSize: mergePageSize
+    })
+    const part = mapQuotationRows((res.data?.data?.list || []) as any)
+    quotationTotal = Number(res.data?.data?.total || 0) || 0
+    quotationLoaded += part.length
+    quotationPage += 1
+    quotationBuffer = part
+    quotationCursor = 0
+  }
+
+  const fetchCustomerNext = async () => {
+    if (!includeCustomer) return
+    if (customerLoaded >= customerTotal && customerPage > 1) return
+    const res = await getCustomerCreateReviewTasksForReviewCenterApi({
+      status: customerStatus || undefined,
+      keyword: normalizedKeyword.value || undefined,
+      page: customerPage,
+      pageSize: mergePageSize
+    })
+    const part = mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
+    customerTotal = Number(res.data?.data?.total || 0) || 0
+    customerLoaded += part.length
+    customerPage += 1
+    customerBuffer = part
+    customerCursor = 0
+  }
+
   while (merged.length < targetCount) {
     const shouldFetchHard = includeHardDelete && hardCursor >= hardBuffer.length
     const shouldFetchBmo = includeBmo && bmoCursor >= bmoBuffer.length
+    const shouldFetchQuotation = includeQuotation && quotationCursor >= quotationBuffer.length
+    const shouldFetchCustomer = includeCustomer && customerCursor >= customerBuffer.length
 
     await Promise.all([
       shouldFetchHard ? fetchHardNext() : Promise.resolve(),
-      shouldFetchBmo ? fetchBmoNext() : Promise.resolve()
+      shouldFetchBmo ? fetchBmoNext() : Promise.resolve(),
+      shouldFetchQuotation ? fetchQuotationNext() : Promise.resolve(),
+      shouldFetchCustomer ? fetchCustomerNext() : Promise.resolve()
     ])
 
     const hardHead = hardCursor < hardBuffer.length ? hardBuffer[hardCursor] : null
     const bmoHead = bmoCursor < bmoBuffer.length ? bmoBuffer[bmoCursor] : null
-    if (!hardHead && !bmoHead) break
+    const quotationHead =
+      quotationCursor < quotationBuffer.length ? quotationBuffer[quotationCursor] : null
+    const customerHead =
+      customerCursor < customerBuffer.length ? customerBuffer[customerCursor] : null
+    const heads = [hardHead, bmoHead, quotationHead, customerHead].filter(
+      Boolean
+    ) as UnifiedReviewRow[]
+    if (!heads.length) break
 
-    if (!bmoHead || (hardHead && readTimestamp(hardHead) >= readTimestamp(bmoHead))) {
+    const pick = heads.sort((a, b) => readTimestamp(b) - readTimestamp(a))[0]
+    if (pick === hardHead) {
       merged.push(hardHead as UnifiedReviewRow)
       hardCursor += 1
       continue
     }
-    merged.push(bmoHead)
-    bmoCursor += 1
+    if (pick === bmoHead) {
+      merged.push(bmoHead as UnifiedReviewRow)
+      bmoCursor += 1
+      continue
+    }
+    if (pick === quotationHead) {
+      merged.push(quotationHead as UnifiedReviewRow)
+      quotationCursor += 1
+      continue
+    }
+    merged.push(customerHead as UnifiedReviewRow)
+    customerCursor += 1
   }
 
-  total.value = (includeHardDelete ? hardTotal : 0) + (includeBmo ? bmoTotal : 0)
+  total.value =
+    (includeHardDelete ? hardTotal : 0) +
+    (includeBmo ? bmoTotal : 0) +
+    (includeQuotation ? quotationTotal : 0) +
+    (includeCustomer ? customerTotal : 0)
   return merged.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
 }
 
@@ -712,6 +1107,24 @@ const openBmoViewDialog = async (row: UnifiedReviewRow) => {
   }
 }
 
+const quotationApplicantName = (row: QuotationInitiationRequestRow | null | undefined) =>
+  String(row?.created_by || '').trim() || '-'
+
+const quotationApproverName = (row: QuotationInitiationRequestRow | null | undefined) =>
+  String(row?.approved_by || '').trim() || '-'
+
+const openQuotationViewDialog = (row: UnifiedReviewRow) => {
+  if (row.category !== 'QUOTATION_INITIATION') return
+  quotationViewRequest.value = row.raw as any
+  quotationViewDialogVisible.value = true
+}
+
+const openCustomerCreateViewDialog = (row: UnifiedReviewRow) => {
+  if (row.category !== 'CUSTOMER_CREATE') return
+  customerCreateViewRow.value = row.raw as CustomerCreateReviewTask
+  customerCreateViewDialogVisible.value = true
+}
+
 const openHardDeleteViewDialog = (row: UnifiedReviewRow) => {
   if (row.category !== 'HARD_DELETE') return
   hardDeleteViewRow.value = row.raw as HardDeleteReviewTask
@@ -734,12 +1147,21 @@ const handleReject = async (row: UnifiedReviewRow) => {
     if (row.category === 'HARD_DELETE') {
       const data = row.raw as HardDeleteReviewTask
       await rejectHardDeleteReviewApi({ requestId: Number(data.id), reason })
-    } else {
+    } else if (row.category === 'BMO_INITIATION') {
       const data = row.raw as BmoInitiationReviewTask
       await rejectBmoInitiationReviewApi({
         bmo_record_id: String(data.bmo_record_id || ''),
         reason
       })
+    } else if (row.category === 'QUOTATION_INITIATION') {
+      const data = row.raw as QuotationInitiationRequestRow
+      await rejectQuotationInitiationReviewApi({
+        quotationId: Number(data.quotation_id || 0),
+        reason
+      })
+    } else {
+      const data = row.raw as CustomerCreateReviewTask
+      await rejectCustomerCreateReviewForReviewCenterApi({ requestId: Number(data.id), reason })
     }
 
     await refreshBmoMenuBadges()
@@ -759,12 +1181,24 @@ const handleApprove = async (row: UnifiedReviewRow) => {
       const data = row.raw as HardDeleteReviewTask
       await approveHardDeleteReviewApi({ requestId: Number(data.id) })
       ElMessage.success('审核通过，已执行硬删除')
-    } else {
+    } else if (row.category === 'BMO_INITIATION') {
       const data = row.raw as BmoInitiationReviewTask
       const res = await approveAndApplyBmoInitiationReviewApi({
         bmo_record_id: String(data.bmo_record_id || '')
       })
       ElMessage.success(`审核通过：${res.data?.projectCode || '-'} / ${res.data?.orderNo || '-'}`)
+    } else if (row.category === 'QUOTATION_INITIATION') {
+      const data = row.raw as QuotationInitiationRequestRow
+      const res = await approveAndApplyQuotationInitiationApi({
+        quotationId: Number(data.quotation_id || 0)
+      })
+      ElMessage.success(
+        `审核通过：${res.data?.data?.projectCode || '-'} / ${res.data?.data?.orderNo || '-'}`
+      )
+    } else {
+      const data = row.raw as CustomerCreateReviewTask
+      await approveCustomerCreateReviewForReviewCenterApi({ requestId: Number(data.id) })
+      ElMessage.success('客户新增审核已通过')
     }
 
     await refreshBmoMenuBadges()

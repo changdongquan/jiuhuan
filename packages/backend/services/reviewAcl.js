@@ -23,6 +23,16 @@ const TABLES = {
 
 const DEFAULT_REVIEW_ACTIONS = [
   {
+    actionKey: 'QUOTATION_INITIATION.REVIEW',
+    actionName: '报价单立项审核',
+    moduleCode: 'QUOTATION_INITIATION'
+  },
+  {
+    actionKey: 'CUSTOMER_CREATE.REVIEW',
+    actionName: '客户新增审核',
+    moduleCode: 'CUSTOMER'
+  },
+  {
     actionKey: 'BMO_INITIATION.REVIEW',
     actionName: 'BMO立项审核',
     moduleCode: 'BMO_INITIATION'

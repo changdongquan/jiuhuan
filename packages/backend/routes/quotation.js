@@ -8,6 +8,21 @@ const ExcelJS = require('exceljs')
 const multer = require('multer')
 const { query, getPool } = require('../database')
 const sql = require('mssql')
+const { resolveActorFromReq } = require('../utils/actor')
+const { assertReviewPermission } = require('../services/reviewAcl')
+const {
+  STATUS: INITIATION_STATUS,
+  normalizeStatus: normalizeInitiationStatus,
+  getStatusText: getInitiationStatusText,
+  normalizeQuotationBusinessType,
+  ensureQuotationInitiationTable,
+  loadRequestByQuotationId,
+  checkProjectCodeAvailability,
+  upsertDraft: upsertQuotationInitiationDraft,
+  syncDraftFromQuotation,
+  approveAndApply: approveAndApplyQuotationInitiation,
+  listReviewTasks: listQuotationInitiationReviewTasks
+} = require('../services/quotationInitiation')
 
 const execFileAsync = promisify(execFile)
 const router = express.Router()
@@ -260,6 +275,35 @@ const ensureQuotationProcessingDateNullable = async () => {
   }
 
   quotationProcessingDateNullableEnsured = true
+}
+
+let customerCreateReviewTableEnsured = false
+const ensureCustomerCreateReviewTable = async () => {
+  if (customerCreateReviewTableEnsured) return
+  await query(`
+    IF OBJECT_ID(N'dbo.customer_create_review_requests', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.customer_create_review_requests (
+        id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        customer_name NVARCHAR(200) NOT NULL,
+        status NVARCHAR(30) NOT NULL CONSTRAINT DF_customer_create_review_requests_status DEFAULT (N'PENDING'),
+        request_reason NVARCHAR(500) NULL,
+        review_reason NVARCHAR(500) NULL,
+        created_by NVARCHAR(100) NULL,
+        approved_by NVARCHAR(100) NULL,
+        rejected_by NVARCHAR(100) NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_customer_create_review_requests_created_at DEFAULT (SYSDATETIME()),
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_customer_create_review_requests_updated_at DEFAULT (SYSDATETIME()),
+        approved_at DATETIME2 NULL,
+        rejected_at DATETIME2 NULL
+      );
+      CREATE INDEX IX_customer_create_review_requests_status
+        ON dbo.customer_create_review_requests(status, updated_at DESC, id DESC);
+      CREATE INDEX IX_customer_create_review_requests_customer_name
+        ON dbo.customer_create_review_requests(customer_name, updated_at DESC, id DESC);
+    END
+  `)
+  customerCreateReviewTableEnsured = true
 }
 
 const toDateString = (value) => {
@@ -1425,7 +1469,17 @@ router.get('/list', async (req, res) => {
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
     await ensureQuotationProcessingDateNullable()
-    const { keyword, processingDate, quotationType, page = 1, pageSize = 20 } = req.query
+    await ensureQuotationInitiationTable(await getPool())
+    const {
+      keyword,
+      processingDate,
+      quotationType,
+      initiationStatus,
+      finalProjectCode,
+      salesOrderNo,
+      page = 1,
+      pageSize = 20
+    } = req.query
 
     // 构建查询条件
     const whereConditions = []
@@ -1434,20 +1488,47 @@ router.get('/list', async (req, res) => {
     // 关键词搜索：报价单号、客户名称、更改通知单号、模具编号、加工零件名称
     if (keyword) {
       whereConditions.push(
-        `(报价单号 LIKE @keyword OR 客户名称 LIKE @keyword OR 更改通知单号 LIKE @keyword OR 模具编号 LIKE @keyword OR 加工零件名称 LIKE @keyword)`
+        `(q.报价单号 LIKE @keyword OR q.客户名称 LIKE @keyword OR q.更改通知单号 LIKE @keyword OR q.模具编号 LIKE @keyword OR q.加工零件名称 LIKE @keyword OR ir.project_code_final LIKE @keyword OR ir.sales_order_no LIKE @keyword)`
       )
       params.keyword = `%${keyword}%`
     }
 
     // 加工日期筛选
     if (processingDate) {
-      whereConditions.push('加工日期 = @processingDate')
+      whereConditions.push('q.加工日期 = @processingDate')
       params.processingDate = processingDate
     }
 
     if (quotationType === 'mold' || quotationType === 'part') {
-      whereConditions.push('报价类型 = @quotationType')
+      whereConditions.push('q.报价类型 = @quotationType')
       params.quotationType = quotationType
+    }
+
+    const initiationStatusMap = {
+      未发起: 'UNSTARTED',
+      待客户审核: 'WAIT_CUSTOMER_REVIEW',
+      草稿: 'DRAFT',
+      审核中: 'PENDING',
+      已通过: 'APPROVED',
+      已驳回: 'REJECTED',
+      已撤回: 'WITHDRAWN'
+    }
+    const normalizedInitiationStatus = initiationStatusMap[String(initiationStatus || '').trim()]
+    if (normalizedInitiationStatus === 'UNSTARTED') {
+      whereConditions.push('ir.id IS NULL')
+    } else if (normalizedInitiationStatus) {
+      whereConditions.push('ir.status = @initiationStatus')
+      params.initiationStatus = normalizedInitiationStatus
+    }
+
+    if (String(finalProjectCode || '').trim()) {
+      whereConditions.push('ir.project_code_final LIKE @finalProjectCode')
+      params.finalProjectCode = `%${String(finalProjectCode).trim()}%`
+    }
+
+    if (String(salesOrderNo || '').trim()) {
+      whereConditions.push('ir.sales_order_no LIKE @salesOrderNo')
+      params.salesOrderNo = `%${String(salesOrderNo).trim()}%`
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -1455,7 +1536,9 @@ router.get('/list', async (req, res) => {
     // 计算总数
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM 报价单
+      FROM 报价单 q
+      LEFT JOIN dbo.quotation_initiation_requests ir
+        ON ir.quotation_id = q.报价单ID
       ${whereClause}
     `
     const countResult = await query(countQuery, params)
@@ -1469,37 +1552,42 @@ router.get('/list', async (req, res) => {
     // 查询数据
     const dataQuery = `
       SELECT 
-        报价单ID as id,
-        报价单号 as quotationNo,
-        报价日期 as quotationDate,
-        客户名称 as customerName,
-        报价类型 as quotationType,
-        加工日期 as processingDate,
-        更改通知单号 as changeOrderNo,
-        加工零件名称 as partName,
-        模具编号 as moldNo,
-        申请更改部门 as department,
-        申请更改人 as applicant,
-	        联系人 as contactName,
-	        联系电话 as contactPhone,
-	        经办人 as operator,
-	        交货方式 as deliveryTerms,
-	        付款方式 as paymentTerms,
-	        报价有效期天数 as validityDays,
-	        备注 as remark,
-	        启用图示 as enableImage,
-	        材料明细 as materialsJson,
-	        加工费用明细 as processesJson,
-	        零件明细 as partItemsJson,
-	        其他费用 as otherFee,
-        运输费用 as transportFee,
-        加工数量 as quantity,
-        含税价格 as taxIncludedPrice,
-        创建时间 as createTime,
-        更新时间 as updateTime
-      FROM 报价单
+        q.报价单ID as id,
+        q.报价单号 as quotationNo,
+        q.报价日期 as quotationDate,
+        q.客户名称 as customerName,
+        q.报价类型 as quotationType,
+        q.加工日期 as processingDate,
+        q.更改通知单号 as changeOrderNo,
+        q.加工零件名称 as partName,
+        q.模具编号 as moldNo,
+        q.申请更改部门 as department,
+        q.申请更改人 as applicant,
+	        q.联系人 as contactName,
+	        q.联系电话 as contactPhone,
+	        q.经办人 as operator,
+	        q.交货方式 as deliveryTerms,
+	        q.付款方式 as paymentTerms,
+	        q.报价有效期天数 as validityDays,
+	        q.备注 as remark,
+	        q.启用图示 as enableImage,
+	        q.材料明细 as materialsJson,
+	        q.加工费用明细 as processesJson,
+	        q.零件明细 as partItemsJson,
+	        q.其他费用 as otherFee,
+        q.运输费用 as transportFee,
+        q.加工数量 as quantity,
+        q.含税价格 as taxIncludedPrice,
+        q.创建时间 as createTime,
+        q.更新时间 as updateTime,
+        ir.status as initiationStatusRaw,
+        ir.project_code_final as finalProjectCode,
+        ir.sales_order_no as salesOrderNo
+      FROM 报价单 q
+      LEFT JOIN dbo.quotation_initiation_requests ir
+        ON ir.quotation_id = q.报价单ID
       ${whereClause}
-      ORDER BY 创建时间 DESC, 报价单ID DESC
+      ORDER BY q.创建时间 DESC, q.报价单ID DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSizeNum} ROWS ONLY
     `
@@ -1532,6 +1620,9 @@ router.get('/list', async (req, res) => {
 
       return {
         ...row,
+        initiationStatus: row.initiationStatusRaw
+          ? getInitiationStatusText(normalizeInitiationStatus(row.initiationStatusRaw))
+          : '未发起',
         materials,
         processes,
         partItems
@@ -1853,6 +1944,7 @@ router.post('/create', async (req, res) => {
     const newId = result.recordset[0]?.id || result.rowsAffected[0]
 
     console.log('报价单创建成功，ID:', newId)
+    await syncDraftFromQuotation(Number(newId) || 0)
 
     res.json({
       code: 0,
@@ -2073,6 +2165,7 @@ router.put('/:id', async (req, res) => {
     `
 
     await request.query(updateQuery)
+    await syncDraftFromQuotation(parseInt(id, 10))
 
     res.json({
       code: 0,
@@ -2981,6 +3074,340 @@ router.get('/:id/export-completion-pdf', async (req, res) => {
       success: false,
       message: '导出完工单 PDF 失败',
       error: error.message
+    })
+  }
+})
+
+router.get('/initiation-request', async (req, res) => {
+  try {
+    await ensureQuotationInitiationTable(await getPool())
+    const quotationId = Number(req.query.quotationId || req.query.quotation_id || 0)
+    if (!quotationId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 quotationId' })
+    }
+    const row = await loadRequestByQuotationId(quotationId)
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('读取报价单立项申请单失败:', error)
+    return res.status(500).json({ code: 500, success: false, message: '读取报价单立项申请单失败' })
+  }
+})
+
+router.get('/initiation-request/project-code-check', async (req, res) => {
+  try {
+    const quotationId = Number(req.query.quotationId || req.query.quotation_id || 0)
+    const projectCode = String(req.query.projectCode || req.query.project_code || '').trim()
+    const quotationType = String(req.query.quotationType || req.query.quotation_type || '').trim()
+    if (!quotationId || !projectCode || !quotationType) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少报价单、项目编号或报价类型' })
+    }
+    const data = await checkProjectCodeAvailability({ quotationId, projectCode, quotationType })
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    const message = error?.message || '校验项目编号失败'
+    const statusCode =
+      message.includes('不存在') || message.includes('不能为空') || message.includes('格式') || message.includes('一致') || message.includes('占用') || message.includes('已存在')
+        ? 400
+        : 500
+    return res.status(statusCode).json({ code: statusCode, success: false, message })
+  }
+})
+
+router.post('/initiation-request/draft', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    if (!quotationId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 quotationId' })
+    }
+    const row = await upsertQuotationInitiationDraft({
+      quotationId,
+      actor,
+      projectDraftInput: req.body?.projectDraft || req.body?.project_draft || {},
+      salesOrderDraftInput: req.body?.salesOrderDraft || req.body?.sales_order_draft || {}
+    })
+    return res.json({ code: 0, success: true, data: row })
+  } catch (error) {
+    console.error('保存报价单立项草稿失败:', error)
+    const message = error?.message || '保存报价单立项草稿失败'
+    const statusCode =
+      message.includes('不存在') || message.includes('不能为空') || message.includes('格式') || message.includes('一致') || message.includes('占用') || message.includes('已存在')
+        ? 400
+        : message.includes('不可修改')
+          ? 409
+          : 500
+    return res.status(statusCode).json({ code: statusCode, success: false, message })
+  }
+})
+
+router.post('/initiation-request/customer-review', async (req, res) => {
+  try {
+    await ensureQuotationInitiationTable(await getPool())
+    await ensureCustomerCreateReviewTable()
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    const customerName = String(req.body?.customerName || '').trim()
+    if (!quotationId || !customerName) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少报价单或客户名称' })
+    }
+    const actor = resolveActorFromReq(req)
+    const customerRows = await query(
+      `SELECT TOP 1 客户ID as id FROM 客户信息 WHERE 客户名称 = @customerName AND ISNULL(是否删除, 0) = 0`,
+      { customerName }
+    )
+    if (customerRows?.[0]?.id) {
+      return res.status(400).json({ code: 400, success: false, message: '客户已存在，无需发起审核' })
+    }
+    const pendingRows = await query(
+      `
+        SELECT TOP 1 *
+        FROM dbo.customer_create_review_requests
+        WHERE customer_name = @customerName
+          AND status = N'PENDING'
+        ORDER BY updated_at DESC, id DESC
+      `,
+      { customerName }
+    )
+    const reviewRow =
+      pendingRows?.[0] ||
+      (
+        await query(
+          `
+            INSERT INTO dbo.customer_create_review_requests (
+              customer_name, status, created_by, created_at, updated_at
+            ) VALUES (
+              @customerName, N'PENDING', @actor, SYSDATETIME(), SYSDATETIME()
+            );
+            SELECT TOP 1 *
+            FROM dbo.customer_create_review_requests
+            WHERE customer_name = @customerName
+            ORDER BY id DESC
+          `,
+          { customerName, actor }
+        )
+      )?.[0]
+
+    const existing = await loadRequestByQuotationId(quotationId)
+    if (!existing) {
+      await upsertQuotationInitiationDraft({
+        quotationId,
+        actor,
+        projectDraftInput: {},
+        salesOrderDraftInput: {}
+      })
+    }
+    await query(
+      `
+        UPDATE dbo.quotation_initiation_requests
+        SET status = N'WAIT_CUSTOMER_REVIEW',
+            customer_name = @customerName,
+            updated_at = SYSDATETIME()
+        WHERE quotation_id = @quotationId
+      `,
+      { quotationId, customerName }
+    )
+    const row = await loadRequestByQuotationId(quotationId)
+    return res.json({
+      code: 0,
+      success: true,
+      data: { request: row, customerReview: reviewRow || null },
+      message: '客户新增审核申请已提交'
+    })
+  } catch (error) {
+    console.error('提交客户新增审核申请失败:', error)
+    return res.status(500).json({ code: 500, success: false, message: '提交客户新增审核申请失败' })
+  }
+})
+
+router.post('/initiation-request/confirm', async (req, res) => {
+  try {
+    const actor = resolveActorFromReq(req)
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    if (!quotationId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 quotationId' })
+    }
+    const draft = await upsertQuotationInitiationDraft({
+      quotationId,
+      actor,
+      projectDraftInput: req.body?.projectDraft || req.body?.project_draft || {},
+      salesOrderDraftInput: req.body?.salesOrderDraft || req.body?.sales_order_draft || {}
+    })
+    if (normalizeInitiationStatus(draft?.status) === INITIATION_STATUS.WAIT_CUSTOMER_REVIEW) {
+      return res.status(400).json({ code: 400, success: false, message: '客户未匹配，请先发起客户新增审核申请' })
+    }
+    const salesOrderDraft = draft?.sales_order_draft || {}
+    if (!salesOrderDraft?.orderDate) {
+      return res.status(400).json({ code: 400, success: false, message: '订单日期不能为空' })
+    }
+    const details = Array.isArray(salesOrderDraft?.details) ? salesOrderDraft.details : []
+    if (!details.length) {
+      return res.status(400).json({ code: 400, success: false, message: '订单明细不能为空' })
+    }
+    const badLine = details.find(
+      (item) =>
+        !(Number(item?.quantity || 0) > 0) ||
+        !Number.isFinite(Number(item?.unitPrice)) ||
+        !Number.isFinite(Number(item?.totalAmount))
+    )
+    if (badLine) {
+      return res.status(400).json({ code: 400, success: false, message: '订单明细数量/单价/总金额不能为空' })
+    }
+    await query(
+      `
+        UPDATE dbo.quotation_initiation_requests
+        SET status = N'PENDING',
+            submitted_at = SYSDATETIME(),
+            updated_at = SYSDATETIME(),
+            initiation_rejected_reason = NULL,
+            customer_review_rejected_reason = NULL,
+            withdraw_reason = NULL
+        WHERE quotation_id = @quotationId
+      `,
+      { quotationId }
+    )
+    const row = await loadRequestByQuotationId(quotationId)
+    return res.json({ code: 0, success: true, data: row, message: '已提交审核' })
+  } catch (error) {
+    console.error('提交报价单立项审核失败:', error)
+    const message = error?.message || '提交报价单立项审核失败'
+    const statusCode = message.includes('不可修改') ? 409 : 400
+    return res.status(statusCode).json({ code: statusCode, success: false, message })
+  }
+})
+
+router.post('/initiation-request/withdraw', async (req, res) => {
+  try {
+    await ensureQuotationInitiationTable(await getPool())
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    const reason = String(req.body?.reason || '').trim()
+    if (!quotationId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 quotationId' })
+    }
+    const row = await loadRequestByQuotationId(quotationId)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+    }
+    const status = normalizeInitiationStatus(row.status)
+    if (![INITIATION_STATUS.DRAFT, INITIATION_STATUS.WAIT_CUSTOMER_REVIEW, INITIATION_STATUS.PENDING].includes(status)) {
+      return res.status(400).json({ code: 400, success: false, message: '当前状态不可撤回' })
+    }
+    if (status === INITIATION_STATUS.PENDING && !reason) {
+      return res.status(400).json({ code: 400, success: false, message: '撤回原因不能为空' })
+    }
+    await query(
+      `
+        UPDATE dbo.quotation_initiation_requests
+        SET status = N'WITHDRAWN',
+            withdraw_reason = @reason,
+            withdrawn_at = SYSDATETIME(),
+            updated_at = SYSDATETIME()
+        WHERE quotation_id = @quotationId
+      `,
+      { quotationId, reason: reason || null }
+    )
+    const nextRow = await loadRequestByQuotationId(quotationId)
+    return res.json({ code: 0, success: true, data: nextRow, message: '已撤回' })
+  } catch (error) {
+    console.error('撤回报价单立项失败:', error)
+    return res.status(500).json({ code: 500, success: false, message: '撤回报价单立项失败' })
+  }
+})
+
+router.get('/initiation-review/tasks', async (req, res) => {
+  try {
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1)
+    const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(req.query.pageSize || '20'), 10) || 20))
+    const status = String(req.query.status || '').trim().toUpperCase()
+    const keyword = String(req.query.keyword || '').trim()
+    const data = await listQuotationInitiationReviewTasks({
+      page,
+      pageSize,
+      status,
+      keyword,
+      req,
+      resolveActorFromReq
+    })
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    console.error('读取报价单立项审核任务失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '读取报价单立项审核任务失败'
+    })
+  }
+})
+
+router.post('/initiation-review/reject', async (req, res) => {
+  try {
+    await assertReviewPermission({
+      req,
+      actionKey: 'QUOTATION_INITIATION.REVIEW',
+      resolveActorFromReq,
+      legacyAllowWhenEmpty: true
+    })
+    await ensureQuotationInitiationTable(await getPool())
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    const reason = String(req.body?.reason || '').trim()
+    if (!quotationId || !reason) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少报价单或驳回原因' })
+    }
+    const row = await loadRequestByQuotationId(quotationId)
+    if (!row) {
+      return res.status(404).json({ code: 404, success: false, message: '立项申请单不存在' })
+    }
+    if (normalizeInitiationStatus(row.status) !== INITIATION_STATUS.PENDING) {
+      return res.status(400).json({ code: 400, success: false, message: '仅审核中状态可驳回' })
+    }
+    await query(
+      `
+        UPDATE dbo.quotation_initiation_requests
+        SET status = N'REJECTED',
+            initiation_rejected_reason = @reason,
+            customer_review_rejected_reason = NULL,
+            rejected_at = SYSDATETIME(),
+            updated_at = SYSDATETIME()
+        WHERE quotation_id = @quotationId
+      `,
+      { quotationId, reason }
+    )
+    const nextRow = await loadRequestByQuotationId(quotationId)
+    return res.json({ code: 0, success: true, data: nextRow, message: '已驳回' })
+  } catch (error) {
+    console.error('驳回报价单立项审核失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '驳回报价单立项审核失败'
+    })
+  }
+})
+
+router.post('/initiation-review/approve-and-apply', async (req, res) => {
+  try {
+    const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
+    if (!quotationId) {
+      return res.status(400).json({ code: 400, success: false, message: '缺少 quotationId' })
+    }
+    const data = await approveAndApplyQuotationInitiation({
+      req,
+      quotationId,
+      resolveActorFromReq
+    })
+    return res.json({
+      code: 0,
+      success: true,
+      data,
+      message: '审核通过，已自动入库'
+    })
+  } catch (error) {
+    console.error('审核并入库报价单立项失败:', error)
+    const statusCode = Number(error?.statusCode || 0) || 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: error?.message || '审核并入库报价单立项失败'
     })
   }
 })
