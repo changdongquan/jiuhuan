@@ -171,7 +171,18 @@ def _probe_auth(cookie: str, token: str) -> Dict[str, Any]:
     ok = resp.status_code < 400
     msg = ""
     if not ok:
-        msg = resp.text[:220]
+        body_text = resp.text[:400]
+        parsed = json_or_text(body_text)
+        if isinstance(parsed, dict):
+            msg = str(
+                parsed.get("msg")
+                or parsed.get("message")
+                or parsed.get("error")
+                or parsed.get("detail")
+                or body_text
+            )[:220]
+        else:
+            msg = str(parsed or body_text)[:220]
     return {"ok": ok, "status": resp.status_code, "message": msg}
 
 

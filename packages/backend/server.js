@@ -52,6 +52,7 @@ const bmoRoutes = require('./routes/bmo')
 const financeRoutes = require('./routes/finance')
 const comprehensiveQueryRoutes = require('./routes/comprehensive-query')
 const { startBmoAutoSyncLoop } = require('./services/bmoAutoSync')
+const { startBmoRelayAuthSyncLoop } = require('./services/bmoRelayAuthSync')
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -288,6 +289,7 @@ const startServer = async () => {
     // BMO auto sync is disabled by default (BMO responsibility moved to jiuhuan-hub).
     // Enable explicitly only for emergency fallback.
     startBmoAutoSyncLoop()
+    startBmoRelayAuthSyncLoop()
 
     // 启动HTTP服务器
     app.listen(PORT, () => {

@@ -1530,5 +1530,6 @@ module.exports = {
   checkBmoAttachmentDownload,
   downloadBmoAttachmentByBrowser,
   downloadBmoAttachment,
-  upsertBmoRecords
+  upsertBmoRecords,
+  readAuthFromEnvFile
 }

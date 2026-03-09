@@ -11,7 +11,8 @@ const {
   checkBmoAttachmentDownload,
   downloadBmoAttachmentByBrowser,
   downloadBmoAttachment,
-  upsertBmoRecords
+  upsertBmoRecords,
+  readAuthFromEnvFile
 } = require('../services/bmoSync')
 const { runOnce: runBmoSessionKeeperOnce } = require('../services/bmoSessionKeeper')
 const {
@@ -111,6 +112,23 @@ router.get('/status', (req, res) => {
 router.post('/session/ensure', async (req, res) => {
   if (isRelayEnabled()) {
     try {
+      const pushLocalAuthToRelay = async () => {
+        const authFilePath = String(process.env.BMO_AUTH_FILE || '').trim()
+        const authFromFile = authFilePath ? readAuthFromEnvFile(authFilePath) : null
+        const cookie = String(authFromFile?.BMO_COOKIE || process.env.BMO_COOKIE || '').trim()
+        const token = String(authFromFile?.BMO_X_AUTH_TOKEN || process.env.BMO_X_AUTH_TOKEN || '').trim()
+        if (!cookie && !token) return false
+        await relayRequestJson('/auth/set', {
+          method: 'POST',
+          timeoutMs: 15000,
+          body: {
+            ...(cookie ? { cookie } : {}),
+            ...(token ? { token } : {})
+          }
+        })
+        return true
+      }
+
       const health = await relayRequestJson('/health', { method: 'GET', timeoutMs: 5000 })
       const healthData = health?.data && typeof health.data === 'object' ? health.data : health
       const serviceOk = Boolean(healthData?.ok || healthData?.ready)
@@ -126,31 +144,72 @@ router.post('/session/ensure', async (req, res) => {
         })
       }
 
-      const authStatusResp = await relayRequestJson('/auth/status?probe=1', {
-        method: 'GET',
-        timeoutMs: 15000
-      })
-      const authStatus =
-        authStatusResp?.data && typeof authStatusResp.data === 'object'
-          ? authStatusResp.data
-          : authStatusResp
-      const probe =
-        authStatus?.probe && typeof authStatus.probe === 'object' ? authStatus.probe : null
-      const probeOk = probe?.ok === true
-      const probeStatus = Number(probe?.status || 0)
-      const probeMessage = String(probe?.message || '').trim()
+      const readRelayProbe = async () => {
+        const authStatusResp = await relayRequestJson('/auth/status?probe=1', {
+          method: 'GET',
+          timeoutMs: 15000
+        })
+        const authStatus =
+          authStatusResp?.data && typeof authStatusResp.data === 'object'
+            ? authStatusResp.data
+            : authStatusResp
+        const probe =
+          authStatus?.probe && typeof authStatus.probe === 'object' ? authStatus.probe : null
+        return {
+          ok: probe?.ok === true,
+          status: Number(probe?.status || 0),
+          message: String(probe?.message || '').trim()
+        }
+      }
+
+      let probe = await readRelayProbe()
+      let relayLoginMessage = ''
+      let pushedLocalAuth = false
+
+      if (!probe.ok && (probe.status === 401 || probe.status === 403)) {
+        try {
+          pushedLocalAuth = await pushLocalAuthToRelay()
+          if (pushedLocalAuth) {
+            probe = await readRelayProbe()
+          }
+        } catch (syncError) {
+          const syncMessage = String(syncError?.message || '').trim()
+          return res.json({
+            code: 0,
+            success: true,
+            data: {
+              state: 'expired',
+              source: 'db',
+              message: syncMessage || relayLoginMessage || '同步本机会话到 relay 失败'
+            }
+          })
+        }
+      }
+
+      if (!probe.ok && (probe.status === 401 || probe.status === 403) && !pushedLocalAuth) {
+        try {
+          await relayRequestJson('/auth/login', {
+            method: 'POST',
+            timeoutMs: 30000,
+            body: {}
+          })
+          probe = await readRelayProbe()
+        } catch (loginError) {
+          relayLoginMessage = String(loginError?.message || '').trim()
+        }
+      }
 
       return res.json({
         code: 0,
         success: true,
-        data: probeOk
+        data: probe.ok
           ? { state: 'connected', source: 'live' }
           : {
-              state: probeStatus === 401 || probeStatus === 403 ? 'expired' : 'error',
+              state: probe.status === 401 || probe.status === 403 ? 'expired' : 'error',
               source: 'db',
               message:
-                probeMessage ||
-                (probeStatus ? `BMO 会话探活失败（HTTP ${probeStatus}）` : 'BMO 会话不可用')
+                probe.message ||
+                (probe.status ? `BMO 会话探活失败（HTTP ${probe.status}）` : 'BMO 会话不可用')
             }
       })
     } catch (e) {
@@ -336,7 +395,7 @@ const relayRequestJson = async (pathname, input = {}) => {
     }
     if (!resp.ok) {
       const errMsg =
-        (json && (json.message || json.detail || json.error)) ||
+        (json && (json.msg || json.message || json.detail || json.error)) ||
         text ||
         `relay HTTP ${resp.status}`
       throw new Error(String(errMsg).slice(0, 500))
