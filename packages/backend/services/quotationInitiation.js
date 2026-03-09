@@ -591,19 +591,10 @@ const createSalesOrderRecords = async ({ tx, customerId, orderNo, salesOrderDraf
     const itemCode = String(detail?.itemCode || '').trim()
     if (!itemCode) throw new Error('订单明细项目编号不能为空')
     if (!(Number(detail?.quantity || 0) > 0)) throw new Error('订单明细数量不能为空')
-    const productName =
-      String(detail?.productName || '').trim() ||
-      String(detail?.name || '').trim() ||
-      null
-    const productDrawingNo = String(detail?.productDrawingNo || '').trim() || null
-    const customerPartNo = String(detail?.customerPartNo || '').trim() || null
     const insertReq = new sql.Request(tx)
     insertReq.input('orderNo', sql.NVarChar(50), orderNo)
     insertReq.input('customerId', sql.Int, customerId)
     insertReq.input('itemCode', sql.NVarChar(50), itemCode)
-    insertReq.input('productName', sql.NVarChar(100), productName)
-    insertReq.input('productDrawingNo', sql.NVarChar(100), productDrawingNo)
-    insertReq.input('customerPartNo', sql.NVarChar(100), customerPartNo)
     insertReq.input('orderDate', sql.NVarChar(20), salesOrderDraft?.orderDate || null)
     insertReq.input('deliveryDate', sql.NVarChar(20), detail?.deliveryDate || null)
     insertReq.input('signDate', sql.NVarChar(20), salesOrderDraft?.signDate || null)
@@ -619,10 +610,10 @@ const createSalesOrderRecords = async ({ tx, customerId, orderNo, salesOrderDraf
     insertReq.input('shippingDate', sql.NVarChar(20), detail?.shippingDate || null)
     await insertReq.query(`
       INSERT INTO 销售订单 (
-        订单编号, 客户ID, 项目编号, 产品名称, 产品图号, 客户模号, 订单日期, 交货日期, 签订日期, 合同号,
+        订单编号, 客户ID, 项目编号, 订单日期, 交货日期, 签订日期, 合同号,
         总金额, 单价, 数量, 备注, 费用出处, 经办人, 是否入库, 是否出运, 出运日期
       ) VALUES (
-        @orderNo, @customerId, @itemCode, @productName, @productDrawingNo, @customerPartNo,
+        @orderNo, @customerId, @itemCode,
         @orderDate, @deliveryDate, @signDate, @contractNo,
         @totalAmount, @unitPrice, @quantity, @remark, @costSource, @handler, @isInStock, @isShipped, @shippingDate
       )

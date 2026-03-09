@@ -33,6 +33,13 @@ export const getCustomerCreateReviewTasksForReviewCenterApi = (params: {
   })
 }
 
+export const getCustomerCreateReviewPendingCountApi = (params: { timeout?: number } = {}) => {
+  return request.get<{ pendingCount: number }>({
+    url: '/api/customer/review-pending-count',
+    timeout: params.timeout
+  })
+}
+
 export const approveCustomerCreateReviewForReviewCenterApi = (data: { requestId: number }) => {
   return request.post<{ code: number; success: boolean; message?: string }>({
     url: '/api/customer/review/approve',

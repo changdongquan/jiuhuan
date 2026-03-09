@@ -386,6 +386,13 @@ export const getQuotationInitiationReviewTasksApi = (params: {
   })
 }
 
+export const getQuotationInitiationPendingCountApi = (params: { timeout?: number } = {}) => {
+  return request.get<{ pendingCount: number }>({
+    url: '/api/quotation/initiation-review/pending-count',
+    timeout: params.timeout
+  })
+}
+
 export const approveAndApplyQuotationInitiationApi = (data: { quotationId: number }) => {
   return request.post<{
     code: number

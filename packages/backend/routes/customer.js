@@ -329,6 +329,35 @@ router.get('/review-tasks', async (req, res) => {
   }
 })
 
+router.get('/review-pending-count', async (req, res) => {
+  try {
+    await assertCustomerCreateReviewPermission(req)
+    const pool = await getPool()
+    await ensureCustomerCreateReviewTable(pool)
+    await ensureCustomerSoftDeleteColumns(pool)
+    const rows = await query(
+      `
+        SELECT COUNT(1) AS pendingCount
+        FROM dbo.customer_create_review_requests
+        WHERE status = N'PENDING'
+      `
+    )
+    return res.json({
+      code: 0,
+      success: true,
+      data: { pendingCount: Number(rows?.[0]?.pendingCount || 0) || 0 }
+    })
+  } catch (error) {
+    console.error('读取客户新增审核待办数量失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '读取客户新增审核待办数量失败'
+    })
+  }
+})
+
 // 获取单个客户信息
 router.get('/:id', async (req, res) => {
   try {

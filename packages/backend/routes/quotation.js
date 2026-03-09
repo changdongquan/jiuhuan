@@ -3361,6 +3361,38 @@ router.get('/initiation-review/tasks', async (req, res) => {
   }
 })
 
+router.get('/initiation-review/pending-count', async (req, res) => {
+  try {
+    await assertReviewPermission({
+      req,
+      actionKey: 'QUOTATION_INITIATION.REVIEW',
+      resolveActorFromReq,
+      legacyAllowWhenEmpty: true
+    })
+    await ensureQuotationInitiationTable(await getPool())
+    const rows = await query(
+      `
+        SELECT COUNT(1) AS pendingCount
+        FROM dbo.quotation_initiation_requests
+        WHERE status = N'PENDING'
+      `
+    )
+    return res.json({
+      code: 0,
+      success: true,
+      data: { pendingCount: Number(rows?.[0]?.pendingCount || 0) || 0 }
+    })
+  } catch (error) {
+    console.error('读取报价单立项审核待办数量失败:', error)
+    const statusCode = Number(error?.statusCode || 0) === 403 ? 403 : 500
+    return res.status(statusCode).json({
+      code: statusCode,
+      success: false,
+      message: statusCode === 403 ? error.message || '无权限' : '读取报价单立项审核待办数量失败'
+    })
+  }
+})
+
 router.post('/initiation-review/reject', async (req, res) => {
   try {
     await assertReviewPermission({
