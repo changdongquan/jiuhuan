@@ -252,6 +252,20 @@ const ensureQuotationOperatorColumn = async () => {
   quotationOperatorColumnEnsured = true
 }
 
+let quotationSourceProjectCodeColumnEnsured = false
+const ensureQuotationSourceProjectCodeColumn = async () => {
+  if (quotationSourceProjectCodeColumnEnsured) return
+
+  const rows = await query(`SELECT COL_LENGTH(N'报价单', N'来源项目编号') as len`)
+  const exists = rows?.[0]?.len !== null && rows?.[0]?.len !== undefined
+
+  if (!exists) {
+    await query(`ALTER TABLE 报价单 ADD 来源项目编号 NVARCHAR(50) NULL`)
+  }
+
+  quotationSourceProjectCodeColumnEnsured = true
+}
+
 let quotationProcessingDateNullableEnsured = false
 const ensureQuotationProcessingDateNullable = async () => {
   if (quotationProcessingDateNullableEnsured) return
@@ -1468,6 +1482,7 @@ router.get('/list', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationSourceProjectCodeColumn()
     await ensureQuotationProcessingDateNullable()
     await ensureQuotationInitiationTable(await getPool())
     const {
@@ -1559,6 +1574,7 @@ router.get('/list', async (req, res) => {
         q.报价类型 as quotationType,
         q.加工日期 as processingDate,
         q.更改通知单号 as changeOrderNo,
+        q.来源项目编号 as sourceProjectCode,
         q.加工零件名称 as partName,
         q.模具编号 as moldNo,
         q.申请更改部门 as department,
@@ -1734,6 +1750,7 @@ router.post('/create', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationSourceProjectCodeColumn()
     await ensureQuotationProcessingDateNullable()
     console.log('收到创建报价单请求，请求体:', JSON.stringify(req.body, null, 2))
 
@@ -1745,6 +1762,7 @@ router.post('/create', async (req, res) => {
       enableImage,
       processingDate,
       changeOrderNo,
+      sourceProjectCode,
       partName,
       moldNo,
       department,
@@ -1897,6 +1915,7 @@ router.post('/create', async (req, res) => {
     request.input('quotationType', sql.NVarChar(20), normalizedType)
     request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
+    request.input('sourceProjectCode', sql.NVarChar(50), sourceProjectCode || null)
     request.input('partName', sql.NVarChar(200), partName || null)
     request.input('moldNo', sql.NVarChar(100), moldNo || null)
     request.input('department', sql.NVarChar(100), department || null)
@@ -1921,7 +1940,7 @@ router.post('/create', async (req, res) => {
     const insertQuery = `
 	      INSERT INTO 报价单 (
 	        报价单号, 报价日期, 客户名称, 报价类型,
-	        加工日期, 更改通知单号,
+	        加工日期, 更改通知单号, 来源项目编号,
 	        加工零件名称, 模具编号, 申请更改部门, 申请更改人,
 	        联系人, 联系电话, 经办人, 备注, 交货方式, 付款方式, 报价有效期天数,
 	        启用图示,
@@ -1929,7 +1948,7 @@ router.post('/create', async (req, res) => {
 	        其他费用, 运输费用, 加工数量, 含税价格
 	      ) VALUES (
 	        @quotationNo, @quotationDate, @customerName, @quotationType,
-	        @processingDate, @changeOrderNo,
+	        @processingDate, @changeOrderNo, @sourceProjectCode,
 	        @partName, @moldNo, @department, @applicant,
 	        @contactName, @contactPhone, @operator, @remark, @deliveryTerms, @paymentTerms, @validityDays,
 	        @enableImage,
@@ -1973,6 +1992,7 @@ router.put('/:id', async (req, res) => {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
     await ensureQuotationOperatorColumn()
+    await ensureQuotationSourceProjectCodeColumn()
     await ensureQuotationProcessingDateNullable()
     const { id } = req.params
     const {
@@ -1983,6 +2003,7 @@ router.put('/:id', async (req, res) => {
       enableImage,
       processingDate,
       changeOrderNo,
+      sourceProjectCode,
       partName,
       moldNo,
       department,
@@ -2112,6 +2133,7 @@ router.put('/:id', async (req, res) => {
     request.input('quotationType', sql.NVarChar(20), normalizedType)
     request.input('processingDate', sql.Date, effectiveProcessingDate)
     request.input('changeOrderNo', sql.NVarChar(50), changeOrderNo || null)
+    request.input('sourceProjectCode', sql.NVarChar(50), sourceProjectCode || null)
     request.input('partName', sql.NVarChar(200), partName || null)
     request.input('moldNo', sql.NVarChar(100), moldNo || null)
     request.input('department', sql.NVarChar(100), department || null)
@@ -2141,6 +2163,7 @@ router.put('/:id', async (req, res) => {
 	        报价类型 = @quotationType,
 	        加工日期 = @processingDate,
 	        更改通知单号 = @changeOrderNo,
+	        来源项目编号 = @sourceProjectCode,
 	        加工零件名称 = @partName,
 	        模具编号 = @moldNo,
 	        申请更改部门 = @department,

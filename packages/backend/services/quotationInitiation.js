@@ -138,6 +138,7 @@ const getQuotationRow = async (poolOrTx, quotationId) => {
       报价日期 as quotationDate,
       客户名称 as customerName,
       报价类型 as quotationType,
+      来源项目编号 as sourceProjectCode,
       加工零件名称 as partName,
       模具编号 as moldNo,
       经办人 as operator,
@@ -178,7 +179,19 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
         String(item?.partName || '').trim() ||
         null,
       itemCode: projectCode || null,
-      customerPartNo: String(quotationRow?.moldNo || '').trim() || null,
+      productName:
+        String((existingDetails[index] || {}).productName || '').trim() ||
+        String(item?.productName || '').trim() ||
+        String(item?.partName || '').trim() ||
+        null,
+      productDrawingNo:
+        String((existingDetails[index] || {}).productDrawingNo || '').trim() ||
+        String(item?.drawingNo || '').trim() ||
+        null,
+      customerPartNo:
+        String((existingDetails[index] || {}).customerPartNo || '').trim() ||
+        String(quotationRow?.moldNo || '').trim() ||
+        null,
       deliveryDate: null,
       quantity: Number(item?.quantity || 0) || 0,
       unitPrice: Number(item?.unitPrice || 0) || 0,
@@ -216,6 +229,11 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
     key: 'summary-1',
     name,
     itemCode: projectCode || null,
+    productName:
+      String((existingDetails[0] || {}).productName || '').trim() ||
+      String(quotationRow?.partName || '').trim() ||
+      null,
+    productDrawingNo: String((existingDetails[0] || {}).productDrawingNo || '').trim() || null,
     customerPartNo: String(quotationRow?.moldNo || '').trim() || null,
     deliveryDate: null,
     quantity,
@@ -236,6 +254,10 @@ const buildDraftsFromQuotation = (quotationRow, existingProjectDraft = {}, exist
   const inferredCategory = projectCode ? getCategoryFromProjectCode(projectCode) : ''
   const projectDraft = {
     projectCode,
+    sourceProjectCode:
+      String(existingProjectDraft?.sourceProjectCode || '').trim() ||
+      String(quotationRow?.sourceProjectCode || '').trim() ||
+      null,
     category: inferredCategory || normalizeQuotationBusinessType(quotationRow?.quotationType) || null,
     customerName: String(quotationRow?.customerName || '').trim() || null,
     productName:
@@ -568,10 +590,19 @@ const createSalesOrderRecords = async ({ tx, customerId, orderNo, salesOrderDraf
     const itemCode = String(detail?.itemCode || '').trim()
     if (!itemCode) throw new Error('订单明细项目编号不能为空')
     if (!(Number(detail?.quantity || 0) > 0)) throw new Error('订单明细数量不能为空')
+    const productName =
+      String(detail?.productName || '').trim() ||
+      String(detail?.name || '').trim() ||
+      null
+    const productDrawingNo = String(detail?.productDrawingNo || '').trim() || null
+    const customerPartNo = String(detail?.customerPartNo || '').trim() || null
     const insertReq = new sql.Request(tx)
     insertReq.input('orderNo', sql.NVarChar(50), orderNo)
     insertReq.input('customerId', sql.Int, customerId)
     insertReq.input('itemCode', sql.NVarChar(50), itemCode)
+    insertReq.input('productName', sql.NVarChar(100), productName)
+    insertReq.input('productDrawingNo', sql.NVarChar(100), productDrawingNo)
+    insertReq.input('customerPartNo', sql.NVarChar(100), customerPartNo)
     insertReq.input('orderDate', sql.NVarChar(20), salesOrderDraft?.orderDate || null)
     insertReq.input('deliveryDate', sql.NVarChar(20), detail?.deliveryDate || null)
     insertReq.input('signDate', sql.NVarChar(20), salesOrderDraft?.signDate || null)
@@ -587,10 +618,11 @@ const createSalesOrderRecords = async ({ tx, customerId, orderNo, salesOrderDraf
     insertReq.input('shippingDate', sql.NVarChar(20), detail?.shippingDate || null)
     await insertReq.query(`
       INSERT INTO 销售订单 (
-        订单编号, 客户ID, 项目编号, 订单日期, 交货日期, 签订日期, 合同号,
+        订单编号, 客户ID, 项目编号, 产品名称, 产品图号, 客户模号, 订单日期, 交货日期, 签订日期, 合同号,
         总金额, 单价, 数量, 备注, 费用出处, 经办人, 是否入库, 是否出运, 出运日期
       ) VALUES (
-        @orderNo, @customerId, @itemCode, @orderDate, @deliveryDate, @signDate, @contractNo,
+        @orderNo, @customerId, @itemCode, @productName, @productDrawingNo, @customerPartNo,
+        @orderDate, @deliveryDate, @signDate, @contractNo,
         @totalAmount, @unitPrice, @quantity, @remark, @costSource, @handler, @isInStock, @isShipped, @shippingDate
       )
     `)

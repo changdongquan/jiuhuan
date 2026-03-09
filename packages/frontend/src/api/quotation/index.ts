@@ -16,6 +16,7 @@ export type QuotationInitiationStatus =
 
 export interface QuotationInitiationProjectDraft {
   projectCode: string
+  sourceProjectCode?: string | null
   category?: string | null
   customerName?: string | null
   productName?: string | null
@@ -27,6 +28,8 @@ export interface QuotationInitiationSalesOrderDetailDraft {
   key?: string
   name?: string | null
   itemCode?: string | null
+  productName?: string | null
+  productDrawingNo?: string | null
   customerPartNo?: string | null
   deliveryDate?: string | null
   quantity?: number | null
@@ -119,6 +122,7 @@ export interface QuotationFormData {
   enableImage?: boolean
   processingDate: string
   changeOrderNo: string
+  sourceProjectCode?: string
   partName: string
   moldNo: string
   department: string

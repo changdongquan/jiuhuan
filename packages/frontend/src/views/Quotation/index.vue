@@ -422,12 +422,18 @@
     <el-dialog
       v-model="initiationDialogVisible"
       :title="isInitiationViewMode ? '查看立项' : '报价单立项'"
-      :width="isMobile ? '98%' : '1180px'"
+      :width="isMobile ? '98%' : '1330px'"
       :fullscreen="isMobile"
       destroy-on-close
     >
       <div v-loading="initiationDialogLoading" class="space-y-4">
-        <el-descriptions :column="isMobile ? 1 : 4" border size="small" title="基础信息">
+        <el-descriptions
+          :column="isMobile ? 1 : 5"
+          border
+          size="small"
+          title="基础信息"
+          class="initiation-basic-descriptions"
+        >
           <el-descriptions-item label="报价单号">{{
             initiationSourceQuotation?.quotationNo || '-'
           }}</el-descriptions-item>
@@ -502,7 +508,7 @@
           </template>
           <el-form :inline="false" label-width="100px">
             <el-row :gutter="12">
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="项目编号" required>
                   <el-input
                     v-model="initiationForm.projectCode"
@@ -518,16 +524,7 @@
                   </div>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
-                <el-form-item label="项目分类">
-                  <el-input
-                    v-model="initiationForm.category"
-                    readonly
-                    placeholder="根据项目编号自动识别"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="客户名称" required>
                   <el-input
                     v-model="initiationForm.customerName"
@@ -537,14 +534,14 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="客户状态">
                   <el-tag :type="initiationCustomerMatched ? 'success' : 'warning'">
                     {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
                   </el-tag>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="产品名称">
                   <el-input
                     v-model="initiationForm.productName"
@@ -553,7 +550,7 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="产品图号">
                   <el-input
                     v-model="initiationForm.productDrawing"
@@ -562,7 +559,7 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="8">
                 <el-form-item label="客户模号">
                   <el-input
                     v-model="initiationForm.customerModelNo"
@@ -628,27 +625,40 @@
           </el-form>
 
           <el-table :data="initiationSalesForm.details" border size="small" class="mt-2">
-            <el-table-column type="index" label="#" width="48" />
-            <el-table-column label="项目编号" min-width="150">
-              <template #default>
-                <span>{{ initiationForm.projectCode || '-' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="名称" min-width="160">
+            <el-table-column type="index" label="序号" width="60" align="center" />
+            <el-table-column label="项目编号" min-width="140">
               <template #default="{ row }">
                 <el-input
-                  v-model="row.name"
+                  v-model="row.itemCode"
                   :disabled="isInitiationViewMode"
-                  placeholder="请输入名称"
+                  placeholder="请输入项目编号"
                 />
               </template>
             </el-table-column>
-            <el-table-column label="客户料号" min-width="140">
+            <el-table-column label="产品名称" min-width="140">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.productName"
+                  :disabled="isInitiationViewMode"
+                  placeholder="请输入产品名称"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="产品图号" min-width="120">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.productDrawingNo"
+                  :disabled="isInitiationViewMode"
+                  placeholder="请输入产品图号"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="客户模号" min-width="120">
               <template #default="{ row }">
                 <el-input
                   v-model="row.customerPartNo"
                   :disabled="isInitiationViewMode"
-                  placeholder="选填"
+                  placeholder="请输入客户模号"
                 />
               </template>
             </el-table-column>
@@ -659,33 +669,38 @@
                   :disabled="isInitiationViewMode"
                   :min="0"
                   :precision="0"
-                  controls-position="right"
+                  :controls="false"
                   style="width: 100%"
                   @change="recalcInitiationDetailTotal(row)"
                 />
               </template>
             </el-table-column>
-            <el-table-column label="单价" width="130">
+            <el-table-column label="单价(元)" width="120">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.unitPrice"
                   :disabled="isInitiationViewMode"
                   :min="0"
                   :precision="2"
-                  controls-position="right"
+                  :controls="false"
                   style="width: 100%"
                   @change="recalcInitiationDetailTotal(row)"
                 />
               </template>
             </el-table-column>
-            <el-table-column label="总金额" width="130">
+            <el-table-column label="金额(元)" width="100">
               <template #default="{ row }">
-                <el-input-number
-                  v-model="row.totalAmount"
+                <span>{{ formatAmount(row.totalAmount) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="交付日期" width="150">
+              <template #default="{ row }">
+                <el-date-picker
+                  v-model="row.deliveryDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
                   :disabled="isInitiationViewMode"
-                  :min="0"
-                  :precision="2"
-                  controls-position="right"
+                  placeholder="请选择交付日期"
                   style="width: 100%"
                 />
               </template>
@@ -694,15 +709,6 @@
               <template #default="{ row }">
                 <el-input
                   v-model="row.remark"
-                  :disabled="isInitiationViewMode"
-                  placeholder="选填"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="经办人" min-width="120">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.handler"
                   :disabled="isInitiationViewMode"
                   placeholder="选填"
                 />
@@ -878,6 +884,16 @@
                     />
                   </el-select>
                 </el-form-item>
+
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">来源项目编号：</span>
+                  <el-input
+                    v-model="quotationForm.sourceProjectCode"
+                    :disabled="isViewMode"
+                    placeholder="来源项目编号"
+                    class="field-input-inline field-input-contact"
+                  />
+                </el-form-item>
               </div>
 
               <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
@@ -980,6 +996,16 @@
                       :value="customer.customerName"
                     />
                   </el-select>
+                </el-form-item>
+
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">来源项目编号：</span>
+                  <el-input
+                    v-model="quotationForm.sourceProjectCode"
+                    :disabled="isViewMode"
+                    placeholder="来源项目编号"
+                    class="field-input-inline field-input-contact"
+                  />
                 </el-form-item>
               </div>
 
@@ -1739,6 +1765,7 @@ interface QuotationFormModel {
   enableImage: boolean
   processingDate: string | ''
   changeOrderNo: string
+  sourceProjectCode: string
   partName: string
   moldNo: string
   department: string
@@ -1792,6 +1819,7 @@ type InitiationDialogMode = 'create' | 'edit' | 'view' | 'restart'
 
 interface InitiationFormModel {
   projectCode: string
+  sourceProjectCode: string
   category: string
   customerName: string
   productName: string
@@ -1935,9 +1963,11 @@ const initiationProjectCodeChecking = ref(false)
 const initiationProjectCodeError = ref('')
 const initiationCustomerMatched = ref(false)
 const initiationCustomerLocked = ref(false)
+const initiationProjectGoodsSyncToken = ref(0)
 
 const initiationForm = reactive<InitiationFormModel>({
   projectCode: '',
+  sourceProjectCode: '',
   category: '',
   customerName: '',
   productName: '',
@@ -1972,6 +2002,7 @@ const createEmptyForm = (): QuotationFormModel => ({
   enableImage: false,
   processingDate: '',
   changeOrderNo: '',
+  sourceProjectCode: '',
   partName: '',
   moldNo: '',
   department: '',
@@ -2398,6 +2429,18 @@ const todayText = () => {
   return `${yyyy}-${mm}-${dd}`
 }
 
+const formatCustomerPartNoWithSourceProjectCode = (
+  customerPartNoInput: string | null | undefined,
+  sourceProjectCodeInput: string | null | undefined
+) => {
+  const customerPartNo = String(customerPartNoInput || '').trim()
+  const sourceProjectCode = String(sourceProjectCodeInput || '').trim()
+  if (!customerPartNo) return null
+  if (!sourceProjectCode) return customerPartNo
+  const suffix = `（${sourceProjectCode}）`
+  return customerPartNo.endsWith(suffix) ? customerPartNo : `${customerPartNo}${suffix}`
+}
+
 const buildDefaultInitiationDetails = (
   row: QuotationRecord,
   projectCode = ''
@@ -2425,7 +2468,14 @@ const buildDefaultInitiationDetails = (
         key: `detail-${index + 1}`,
         name: String(row.partName || '').trim() || String(item.partName || '').trim() || '',
         itemCode: projectCode || '',
-        customerPartNo: String(item.drawingNo || '').trim() || null,
+        productName: String(item.partName || '').trim() || String(row.partName || '').trim() || '',
+        productDrawingNo: String(item.drawingNo || '').trim() || null,
+        customerPartNo: formatCustomerPartNoWithSourceProjectCode(
+          String(initiationForm.customerModelNo || '').trim() ||
+            String(row.moldNo || '').trim() ||
+            null,
+          initiationForm.sourceProjectCode
+        ),
         deliveryDate: null,
         quantity: quantity > 0 ? quantity : null,
         unitPrice: Number.isFinite(unitPrice) ? unitPrice : null,
@@ -2451,7 +2501,15 @@ const buildDefaultInitiationDetails = (
       key: 'summary-1',
       name: String(row.partName || '').trim() || '',
       itemCode: projectCode || '',
-      customerPartNo: String(row.moldNo || '').trim() || null,
+      productName:
+        String(initiationForm.productName || '').trim() || String(row.partName || '').trim() || '',
+      productDrawingNo: String(initiationForm.productDrawing || '').trim() || null,
+      customerPartNo: formatCustomerPartNoWithSourceProjectCode(
+        String(initiationForm.customerModelNo || '').trim() ||
+          String(row.moldNo || '').trim() ||
+          null,
+        initiationForm.sourceProjectCode
+      ),
       deliveryDate: null,
       quantity: quantity > 0 ? quantity : null,
       unitPrice: quantity > 0 ? Number((totalAmount / quantity).toFixed(2)) : null,
@@ -2471,6 +2529,8 @@ const createEmptyInitiationDetail = (): QuotationInitiationSalesOrderDetailDraft
   key: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   name: '',
   itemCode: initiationForm.projectCode || '',
+  productName: '',
+  productDrawingNo: null,
   customerPartNo: null,
   deliveryDate: null,
   quantity: null,
@@ -2494,11 +2554,18 @@ const buildInitiationFormsFromRow = (
   const category =
     getCategoryFromProjectCode(projectCode) || String(projectDraft.category || '').trim()
   initiationForm.projectCode = projectCode
+  initiationForm.sourceProjectCode = String(
+    projectDraft.sourceProjectCode || (row as any).sourceProjectCode || ''
+  ).trim()
   initiationForm.category = category
   initiationForm.customerName = String(projectDraft.customerName || row.customerName || '').trim()
   initiationForm.productName = String(projectDraft.productName || row.partName || '').trim()
   initiationForm.productDrawing = String(projectDraft.productDrawing || '').trim()
-  initiationForm.customerModelNo = String(projectDraft.customerModelNo || row.moldNo || '').trim()
+  initiationForm.customerModelNo =
+    formatCustomerPartNoWithSourceProjectCode(
+      String(projectDraft.customerModelNo || row.moldNo || '').trim(),
+      initiationForm.sourceProjectCode
+    ) || ''
   initiationForm.customerId = Number(salesDraft.customerId || 0) || null
   initiationSalesForm.orderDate = String(salesDraft.orderDate || todayText()).trim() || todayText()
   initiationSalesForm.signDate = String(salesDraft.signDate || '').trim()
@@ -2508,8 +2575,14 @@ const buildInitiationFormsFromRow = (
       ? salesDraft.details.map((detail, index) => ({
           key: String(detail.key || `detail-${index + 1}`),
           name: detail.name || '',
-          itemCode: initiationForm.projectCode || '',
-          customerPartNo: detail.customerPartNo || null,
+          itemCode: String(detail.itemCode || initiationForm.projectCode || '').trim(),
+          productName:
+            String(detail.productName || '').trim() || String(detail.name || '').trim() || '',
+          productDrawingNo: String(detail.productDrawingNo || '').trim() || null,
+          customerPartNo: formatCustomerPartNoWithSourceProjectCode(
+            detail.customerPartNo || null,
+            initiationForm.sourceProjectCode
+          ),
           deliveryDate: detail.deliveryDate || null,
           quantity: detail.quantity ?? null,
           unitPrice: detail.unitPrice ?? null,
@@ -2528,6 +2601,7 @@ const buildInitiationFormsFromRow = (
 const buildInitiationPayload = () => {
   const projectDraft: QuotationInitiationProjectDraft = {
     projectCode: String(initiationForm.projectCode || '').trim(),
+    sourceProjectCode: String(initiationForm.sourceProjectCode || '').trim() || null,
     category: initiationForm.category || null,
     customerName: String(initiationForm.customerName || '').trim() || null,
     productName: String(initiationForm.productName || '').trim() || null,
@@ -2541,10 +2615,86 @@ const buildInitiationPayload = () => {
     customerId: initiationForm.customerId,
     details: initiationSalesForm.details.map((detail) => ({
       ...detail,
-      itemCode: String(initiationForm.projectCode || '').trim() || null
+      itemCode:
+        String(detail.itemCode || '').trim() ||
+        String(initiationForm.projectCode || '').trim() ||
+        null,
+      productName:
+        String(detail.productName || '').trim() || String(detail.name || '').trim() || null,
+      productDrawingNo: String(detail.productDrawingNo || '').trim() || null
     }))
   }
   return { projectDraft, salesOrderDraft }
+}
+
+const syncInitiationRawFieldsFromProject = async (
+  projectCodeInput: string,
+  options: { force?: boolean } = {}
+) => {
+  const sourceProjectCode = String(projectCodeInput || '').trim()
+  if (!sourceProjectCode) return
+
+  const token = ++initiationProjectGoodsSyncToken.value
+
+  try {
+    const response: any = await getProjectGoodsApi(sourceProjectCode)
+    if (token !== initiationProjectGoodsSyncToken.value) return
+
+    let data: any = null
+    if (response?.data?.data) {
+      data = response.data.data
+    } else if (response?.data) {
+      data = response.data
+    } else {
+      data = response
+    }
+
+    if (!data) return
+
+    const productDrawing = String(data.productDrawing || '').trim()
+    const productName = String(data.productName || '').trim()
+    const customerModelNo = String(data.customerModelNo || '').trim()
+    const shouldOverwrite = !!options.force
+
+    if (shouldOverwrite || !String(initiationForm.productName || '').trim()) {
+      initiationForm.productName = productName
+    }
+    if (shouldOverwrite || !String(initiationForm.productDrawing || '').trim()) {
+      initiationForm.productDrawing = productDrawing
+    }
+    if (shouldOverwrite || !String(initiationForm.customerModelNo || '').trim()) {
+      initiationForm.customerModelNo =
+        formatCustomerPartNoWithSourceProjectCode(
+          customerModelNo,
+          initiationForm.sourceProjectCode
+        ) || ''
+    }
+
+    initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
+      ...detail,
+      itemCode:
+        String(detail.itemCode || '').trim() ||
+        String(initiationForm.projectCode || '').trim() ||
+        '',
+      productName:
+        (shouldOverwrite ? '' : String(detail.productName || '').trim()) ||
+        productName ||
+        String(detail.name || '').trim() ||
+        '',
+      productDrawingNo:
+        (shouldOverwrite ? '' : String(detail.productDrawingNo || '').trim()) ||
+        productDrawing ||
+        null,
+      customerPartNo: formatCustomerPartNoWithSourceProjectCode(
+        (shouldOverwrite ? '' : String(detail.customerPartNo || '').trim()) ||
+          customerModelNo ||
+          null,
+        initiationForm.sourceProjectCode
+      )
+    }))
+  } catch (error) {
+    console.error('同步立项原始字段失败:', error)
+  }
 }
 
 // 获取客户列表
@@ -2712,6 +2862,7 @@ const handleEdit = async (row: QuotationRecord) => {
     enableImage: effectiveEnableImage,
     processingDate: row.processingDate || '',
     changeOrderNo: row.changeOrderNo || '',
+    sourceProjectCode: String((row as any).sourceProjectCode || '').trim(),
     partName: row.partName || '',
     moldNo: row.moldNo || '',
     department: row.department || '',
@@ -2759,6 +2910,7 @@ const handleView = async (row: QuotationRecord) => {
     enableImage: effectiveEnableImage,
     processingDate: row.processingDate || '',
     changeOrderNo: row.changeOrderNo || '',
+    sourceProjectCode: String((row as any).sourceProjectCode || '').trim(),
     partName: row.partName || '',
     moldNo: row.moldNo || '',
     department: row.department || '',
@@ -2796,6 +2948,7 @@ const buildQuotationUpdatePayloadFromRow = (row: QuotationRecord): QuotationForm
   enableImage: Boolean((row as any).enableImage),
   processingDate: String(row.processingDate || '').trim(),
   changeOrderNo: String(row.changeOrderNo || '').trim(),
+  sourceProjectCode: String((row as any).sourceProjectCode || '').trim(),
   partName: String(row.partName || '').trim(),
   moldNo: String(row.moldNo || '').trim(),
   department: String(row.department || '').trim(),
@@ -2977,6 +3130,7 @@ const openInitiationDialog = async (row: QuotationRecord, mode: InitiationDialog
     if (!initiationForm.projectCode && mode !== 'view') {
       await recommendInitiationProjectCode()
     }
+    await syncInitiationRawFieldsFromProject(initiationForm.sourceProjectCode, { force: true })
     const match = customerList.value.find(
       (item) =>
         String(item.customerName || '').trim() === String(initiationForm.customerName || '').trim()
@@ -3391,7 +3545,16 @@ const handleSelectProjectForImport = async (row: any) => {
 
     // 直接覆盖当前表单中的值
     quotationForm.partName = partNameValue
+    quotationForm.sourceProjectCode = projectCode
     quotationForm.moldNo = customerModelNo
+    initiationForm.sourceProjectCode = projectCode
+    initiationForm.productName = productName
+    initiationForm.productDrawing = productDrawing
+    initiationForm.customerModelNo =
+      formatCustomerPartNoWithSourceProjectCode(
+        customerModelNo,
+        initiationForm.sourceProjectCode
+      ) || ''
 
     ElMessage.success('已根据项目编号代入：加工零件名称、模具编号')
     projectImportDialogVisible.value = false
@@ -3538,6 +3701,7 @@ const handleSubmit = async () => {
       enableImage: quotationForm.quotationType === 'part' ? quotationForm.enableImage : false,
       processingDate: quotationForm.processingDate || '',
       changeOrderNo: quotationForm.changeOrderNo?.trim() || '',
+      sourceProjectCode: quotationForm.sourceProjectCode?.trim() || '',
       partName: quotationForm.partName?.trim() || '',
       moldNo: quotationForm.moldNo?.trim() || '',
       department: quotationForm.department?.trim() || '',
@@ -3653,11 +3817,22 @@ watch(isMobile, (mobile) => {
 watch(
   () => initiationForm.projectCode,
   (next) => {
-    initiationForm.category = getCategoryFromProjectCode(String(next || '').trim())
+    const nextCode = String(next || '').trim()
+    initiationForm.category = getCategoryFromProjectCode(nextCode)
     initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
       ...detail,
-      itemCode: String(next || '').trim()
+      itemCode: nextCode
     }))
+  }
+)
+
+watch(
+  () => initiationForm.sourceProjectCode,
+  async (next, prev) => {
+    const nextCode = String(next || '').trim()
+    const prevCode = String(prev || '').trim()
+    if (!nextCode) return
+    await syncInitiationRawFieldsFromProject(nextCode, { force: nextCode !== prevCode })
   }
 )
 
@@ -4607,5 +4782,23 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 12px;
   color: #888;
+}
+
+.initiation-basic-descriptions
+  :deep(.el-descriptions__label.el-descriptions__cell.is-bordered-label) {
+  width: 110px;
+  min-width: 110px;
+  padding: 8px 6px;
+  font-size: 12px;
+}
+
+.initiation-basic-descriptions :deep(.el-descriptions__table) {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.initiation-basic-descriptions
+  :deep(.el-descriptions__content.el-descriptions__cell.is-bordered-content) {
+  padding: 8px 10px;
 }
 </style>
