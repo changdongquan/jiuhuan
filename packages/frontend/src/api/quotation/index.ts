@@ -284,11 +284,7 @@ export interface QuotationRecord extends QuotationFormData {
 }
 
 export const getQuotationInitiationRequestApi = (params: { quotationId: number }) => {
-  return request.get<{
-    code: number
-    success: boolean
-    data: QuotationInitiationRequestRow | null
-  }>({
+  return request.get<QuotationInitiationRequestRow | null>({
     url: '/api/quotation/initiation-request',
     params
   })

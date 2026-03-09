@@ -3125,7 +3125,7 @@ const openInitiationDialog = async (row: QuotationRecord, mode: InitiationDialog
   try {
     await fetchCustomerList()
     const res = await getQuotationInitiationRequestApi({ quotationId: row.id })
-    initiationRequestRow.value = res.data?.data || null
+    initiationRequestRow.value = res.data || null
     buildInitiationFormsFromRow(row, initiationRequestRow.value)
     if (!initiationForm.projectCode && mode !== 'view') {
       await recommendInitiationProjectCode()
@@ -3325,7 +3325,7 @@ const requestCustomerReview = async () => {
     ElMessage.success('客户新增审核申请已提交')
     await loadQuotations()
     const res = await getQuotationInitiationRequestApi({ quotationId: row.id })
-    initiationRequestRow.value = res.data?.data || null
+    initiationRequestRow.value = res.data || null
   } catch (error: any) {
     ElMessage.error(error?.message || '提交客户新增审核申请失败')
   } finally {
