@@ -445,6 +445,20 @@ const ensureProjectCodeAvailable = async ({ tx, projectCode, quotationId }) => {
   const { code, familyBase } = splitProjectCodeFamily(projectCode)
   if (!code) throw new Error('项目编号不能为空')
 
+  const projectReq = new sql.Request(tx)
+  projectReq.input('projectCode', sql.NVarChar(50), code)
+  projectReq.input('familyBase', sql.NVarChar(50), familyBase)
+  const existingProjectManageRows = await projectReq.query(`
+    SELECT TOP 1 项目编号 as projectCode
+    FROM 项目管理
+    WHERE 项目编号 = @projectCode
+       OR (@projectCode <> @familyBase AND 项目编号 = @familyBase)
+       OR (@projectCode = @familyBase AND 项目编号 LIKE @familyBase + N'/%')
+  `)
+  if (existingProjectManageRows.recordset?.[0]?.projectCode) {
+    throw new Error(`项目编号 "${code}" 已存在`)
+  }
+
   const goodsReq = new sql.Request(tx)
   goodsReq.input('projectCode', sql.NVarChar(50), code)
   goodsReq.input('familyBase', sql.NVarChar(50), familyBase)
@@ -455,7 +469,7 @@ const ensureProjectCodeAvailable = async ({ tx, projectCode, quotationId }) => {
        OR (@projectCode <> @familyBase AND 项目编号 = @familyBase)
        OR (@projectCode = @familyBase AND 项目编号 LIKE @familyBase + N'/%')
   `)
-  if (existingProjectRows?.[0]?.projectCode) {
+  if (existingProjectRows.recordset?.[0]?.projectCode) {
     throw new Error(`项目编号 "${code}" 已存在`)
   }
 
@@ -691,6 +705,7 @@ const createGoodsAndScaffold = async ({ tx, projectCode, customerName, customerM
   projectReq.input('projectCode', sql.NVarChar(50), projectCode)
   const projectRows = await projectReq.query(`SELECT COUNT(*) as cnt FROM 项目管理 WHERE 项目编号 = @projectCode`)
   const projectExists = (projectRows.recordset?.[0]?.cnt || 0) > 0
+  if (projectExists) throw new Error(`项目编号 "${projectCode}" 已存在`)
   if (!projectExists) {
     const ins = new sql.Request(tx)
     ins.input('projectCode', sql.NVarChar(50), projectCode)

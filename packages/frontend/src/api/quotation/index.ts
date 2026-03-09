@@ -290,6 +290,7 @@ export interface QuotationRecord extends QuotationFormData {
   initiationStatus?: string
   finalProjectCode?: string | null
   salesOrderNo?: string | null
+  initiationProjectCount?: number
 }
 
 export const getQuotationInitiationRequestApi = (params: { quotationId: number }) => {
@@ -304,11 +305,7 @@ export const checkQuotationInitiationProjectCodeApi = (params: {
   projectCode: string
   quotationType: 'mold' | 'part' | '塑胶模具' | '修改模具' | '零件加工'
 }) => {
-  return request.get<{
-    code: number
-    success: boolean
-    data: { category: string }
-  }>({
+  return request.get<{ category: string }>({
     url: '/api/quotation/initiation-request/project-code-check',
     params
   })
@@ -319,11 +316,7 @@ export const saveQuotationInitiationDraftApi = (data: {
   projectDraft?: QuotationInitiationProjectDraft
   salesOrderDraft?: QuotationInitiationSalesOrderDraft
 }) => {
-  return request.post<{
-    code: number
-    success: boolean
-    data: QuotationInitiationRequestRow | null
-  }>({
+  return request.post<QuotationInitiationRequestRow | null>({
     url: '/api/quotation/initiation-request/draft',
     data
   })
@@ -334,22 +327,14 @@ export const submitQuotationInitiationApi = (data: {
   projectDraft?: QuotationInitiationProjectDraft
   salesOrderDraft?: QuotationInitiationSalesOrderDraft
 }) => {
-  return request.post<{
-    code: number
-    success: boolean
-    data: QuotationInitiationRequestRow | null
-  }>({
+  return request.post<QuotationInitiationRequestRow | null>({
     url: '/api/quotation/initiation-request/confirm',
     data
   })
 }
 
 export const withdrawQuotationInitiationApi = (data: { quotationId: number; reason?: string }) => {
-  return request.post<{
-    code: number
-    success: boolean
-    data: QuotationInitiationRequestRow | null
-  }>({
+  return request.post<QuotationInitiationRequestRow | null>({
     url: '/api/quotation/initiation-request/withdraw',
     data
   })

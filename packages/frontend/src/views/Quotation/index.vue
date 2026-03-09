@@ -133,7 +133,7 @@
             </div>
             <div>
               <span class="label">最终项目编号</span>
-              <span class="value">{{ row.finalProjectCode || '-' }}</span>
+              <span class="value">{{ getFinalProjectCodeDisplay(row) }}</span>
             </div>
             <div>
               <span class="label">销售订单号</span>
@@ -203,18 +203,20 @@
               >撤回申请</el-button
             >
             <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
-            <el-tooltip v-if="isQuotationEditLocked(row)" :content="editDisabledReason(row)">
-              <span class="inline-flex">
-                <el-button type="primary" size="small" disabled>编辑</el-button>
-              </span>
-            </el-tooltip>
-            <el-button v-else type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-tooltip v-if="isQuotationDeleteDisabled(row)" :content="deleteDisabledReason(row)">
-              <span class="inline-flex">
-                <el-button type="danger" size="small" disabled>删除</el-button>
-              </span>
-            </el-tooltip>
-            <el-button v-else type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button
+              v-if="canShowQuotationEditAction(row)"
+              type="primary"
+              size="small"
+              @click="handleEdit(row)"
+              >编辑</el-button
+            >
+            <el-button
+              v-if="canShowQuotationDeleteAction(row)"
+              type="danger"
+              size="small"
+              @click="handleDelete(row)"
+              >删除</el-button
+            >
           </div>
         </el-card>
       </template>
@@ -292,7 +294,11 @@
           label="最终项目编号"
           min-width="150"
           show-overflow-tooltip
-        />
+        >
+          <template #default="{ row }">
+            {{ getFinalProjectCodeDisplay(row) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="salesOrderNo"
           label="销售订单号"
@@ -367,23 +373,18 @@
                 >撤回申请</el-button
               >
               <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
-              <el-tooltip v-if="isQuotationEditLocked(row)" :content="editDisabledReason(row)">
-                <span class="inline-flex">
-                  <el-button type="primary" size="small" disabled>编辑</el-button>
-                </span>
-              </el-tooltip>
-              <el-button v-else type="primary" size="small" @click="handleEdit(row)"
+              <el-button
+                v-if="canShowQuotationEditAction(row)"
+                type="primary"
+                size="small"
+                @click="handleEdit(row)"
                 >编辑</el-button
               >
-              <el-tooltip
-                v-if="isQuotationDeleteDisabled(row)"
-                :content="deleteDisabledReason(row)"
-              >
-                <span class="inline-flex">
-                  <el-button type="danger" size="small" disabled>删除</el-button>
-                </span>
-              </el-tooltip>
-              <el-button v-else type="danger" size="small" @click="handleDelete(row)"
+              <el-button
+                v-if="canShowQuotationDeleteAction(row)"
+                type="danger"
+                size="small"
+                @click="handleDelete(row)"
                 >删除</el-button
               >
             </div>
@@ -446,9 +447,7 @@
             '未发起'
           }}</el-descriptions-item>
           <el-descriptions-item label="最终项目编号">{{
-            initiationRequestRow?.project_code_final ||
-            initiationSourceQuotation?.finalProjectCode ||
-            '-'
+            getInitiationFinalProjectCodeDisplay()
           }}</el-descriptions-item>
           <el-descriptions-item label="销售订单号">{{
             initiationRequestRow?.sales_order_no || initiationSourceQuotation?.salesOrderNo || '-'
@@ -1795,8 +1794,7 @@ import {
   ElSwitch,
   ElTable,
   ElTableColumn,
-  ElTag,
-  ElTooltip
+  ElTag
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
@@ -2478,25 +2476,48 @@ const getCategoryFromProjectCode = (projectCode: string) => {
 
 const normalizeInitiationStatus = (value: unknown) => String(value || '').trim() || '未发起'
 
-const isQuotationEditLocked = (row: QuotationRecord) => {
-  const status = normalizeInitiationStatus(row.initiationStatus)
-  return status === '审核中' || status === '已通过'
+const formatFinalProjectCodeDisplay = (
+  quotationType: QuotationRecord['quotationType'] | string | null | undefined,
+  finalProjectCodeInput: string | null | undefined,
+  totalCount = 0
+) => {
+  const finalProjectCode = String(finalProjectCodeInput || '').trim()
+  if (!finalProjectCode) return '-'
+  const normalizedType = resolveBusinessCategory(quotationType)
+  if (normalizedType !== '零件加工' || totalCount <= 1) return finalProjectCode
+
+  const match = finalProjectCode.match(/^(.*)\/\d{2}$/)
+  if (!match) return finalProjectCode
+  return `${match[1]}（${totalCount}项）`
 }
 
-const isQuotationDeleteDisabled = (row: QuotationRecord) => {
-  const status = normalizeInitiationStatus(row.initiationStatus)
-  return !['未发起', '草稿'].includes(status)
+const getFinalProjectCodeDisplay = (row: QuotationRecord) => {
+  const projectCount = Number(row.initiationProjectCount || 0)
+  const fallbackCount = Array.isArray(row.partItems) ? row.partItems.length : 0
+  return formatFinalProjectCodeDisplay(
+    row.quotationType,
+    row.finalProjectCode,
+    projectCount > 0 ? projectCount : fallbackCount
+  )
 }
 
-const editDisabledReason = (row: QuotationRecord) =>
-  isQuotationEditLocked(row)
-    ? `当前立项状态导致不可编辑：${normalizeInitiationStatus(row.initiationStatus)}`
-    : ''
+const getInitiationFinalProjectCodeDisplay = () => {
+  const projectDetails = Array.isArray(initiationRequestRow.value?.project_draft?.projectDetails)
+    ? initiationRequestRow.value?.project_draft?.projectDetails || []
+    : []
+  return formatFinalProjectCodeDisplay(
+    initiationSourceQuotation.value?.quotationType,
+    initiationRequestRow.value?.project_code_final ||
+      initiationSourceQuotation.value?.finalProjectCode,
+    projectDetails.length
+  )
+}
 
-const deleteDisabledReason = (row: QuotationRecord) =>
-  isQuotationDeleteDisabled(row)
-    ? `当前立项状态不允许删除：${normalizeInitiationStatus(row.initiationStatus)}`
-    : ''
+const canShowQuotationEditAction = (row: QuotationRecord) =>
+  ['未发起', '草稿', '已驳回', '已撤回'].includes(normalizeInitiationStatus(row.initiationStatus))
+
+const canShowQuotationDeleteAction = (row: QuotationRecord) =>
+  ['未发起', '草稿', '已驳回', '已撤回'].includes(normalizeInitiationStatus(row.initiationStatus))
 
 const canShowInitiateAction = (row: QuotationRecord) =>
   normalizeInitiationStatus(row.initiationStatus) === '未发起'
@@ -3063,8 +3084,8 @@ const handleConfirmPreCreate = async () => {
 
 // 编辑
 const handleEdit = async (row: QuotationRecord) => {
-  if (isQuotationEditLocked(row)) {
-    ElMessage.warning(editDisabledReason(row))
+  if (!canShowQuotationEditAction(row)) {
+    ElMessage.warning(`当前立项状态不允许编辑：${normalizeInitiationStatus(row.initiationStatus)}`)
     return
   }
   dialogMode.value = 'edit'
@@ -3272,7 +3293,7 @@ const validateInitiationProjectCode = async () => {
         projectCode,
         quotationType: row.quotationType || 'mold'
       })
-      initiationForm.category = String(res.data?.data?.category || '').trim()
+      initiationForm.category = String(res.data?.category || '').trim()
     }
     initiationForm.projectCode = getInitiationPrimaryProjectCode()
     return true
@@ -3568,7 +3589,7 @@ const saveInitiationDraft = async () => {
       quotationId: row.id,
       ...payload
     })
-    initiationRequestRow.value = res.data?.data || null
+    initiationRequestRow.value = res.data || null
     buildInitiationFormsFromRow(
       { ...(initiationSourceQuotation.value as QuotationRecord) },
       initiationRequestRow.value
@@ -3639,7 +3660,7 @@ const submitInitiationReview = async () => {
       quotationId: row.id,
       ...payload
     })
-    initiationRequestRow.value = res.data?.data || null
+    initiationRequestRow.value = res.data || null
     ElMessage.success('已提交审核')
     initiationDialogVisible.value = false
     await loadQuotations()
@@ -3909,8 +3930,8 @@ const handleSelectProjectForImport = async (row: any) => {
 
 // 删除
 const handleDelete = async (row: QuotationRecord) => {
-  if (isQuotationDeleteDisabled(row)) {
-    ElMessage.warning(deleteDisabledReason(row))
+  if (!canShowQuotationDeleteAction(row)) {
+    ElMessage.warning(`当前立项状态不允许删除：${normalizeInitiationStatus(row.initiationStatus)}`)
     return
   }
   try {

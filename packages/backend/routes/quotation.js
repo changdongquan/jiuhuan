@@ -1500,12 +1500,20 @@ router.get('/list', async (req, res) => {
     const whereConditions = []
     const params = {}
 
+    const normalizedKeyword = String(keyword || '')
+      .trim()
+      .replace(/（\d+项）$/u, '')
+    const normalizedFinalProjectCode = String(finalProjectCode || '')
+      .trim()
+      .replace(/（\d+项）$/u, '')
+
     // 关键词搜索：报价单号、客户名称、更改通知单号、模具编号、加工零件名称
     if (keyword) {
       whereConditions.push(
-        `(q.报价单号 LIKE @keyword OR q.客户名称 LIKE @keyword OR q.更改通知单号 LIKE @keyword OR q.模具编号 LIKE @keyword OR q.加工零件名称 LIKE @keyword OR ir.project_code_final LIKE @keyword OR ir.sales_order_no LIKE @keyword)`
+        `(q.报价单号 LIKE @keyword OR q.客户名称 LIKE @keyword OR q.更改通知单号 LIKE @keyword OR q.模具编号 LIKE @keyword OR q.加工零件名称 LIKE @keyword OR ir.project_code_final LIKE @keyword OR ir.sales_order_no LIKE @keyword OR ISNULL(ir.project_draft_json, N'') LIKE @keywordProjectCodeJson)`
       )
       params.keyword = `%${keyword}%`
+      params.keywordProjectCodeJson = `%\"projectCode\":\"%${normalizedKeyword || String(keyword).trim()}%`
     }
 
     // 加工日期筛选
@@ -1537,8 +1545,11 @@ router.get('/list', async (req, res) => {
     }
 
     if (String(finalProjectCode || '').trim()) {
-      whereConditions.push('ir.project_code_final LIKE @finalProjectCode')
-      params.finalProjectCode = `%${String(finalProjectCode).trim()}%`
+      whereConditions.push(
+        '(ir.project_code_final LIKE @finalProjectCode OR ISNULL(ir.project_draft_json, N\'\') LIKE @finalProjectCodeJson)'
+      )
+      params.finalProjectCode = `%${normalizedFinalProjectCode || String(finalProjectCode).trim()}%`
+      params.finalProjectCodeJson = `%\"projectCode\":\"%${normalizedFinalProjectCode || String(finalProjectCode).trim()}%`
     }
 
     if (String(salesOrderNo || '').trim()) {
@@ -1598,7 +1609,8 @@ router.get('/list', async (req, res) => {
         q.更新时间 as updateTime,
         ir.status as initiationStatusRaw,
         ir.project_code_final as finalProjectCode,
-        ir.sales_order_no as salesOrderNo
+        ir.sales_order_no as salesOrderNo,
+        ir.project_draft_json as projectDraftJson
       FROM 报价单 q
       LEFT JOIN dbo.quotation_initiation_requests ir
         ON ir.quotation_id = q.报价单ID
@@ -1615,6 +1627,7 @@ router.get('/list', async (req, res) => {
       let materials = []
       let processes = []
       let partItems = []
+      let initiationProjectCount = 0
       try {
         materials = JSON.parse(row.materialsJson || '[]')
       } catch (e) {
@@ -1633,12 +1646,22 @@ router.get('/list', async (req, res) => {
         console.error('解析零件明细JSON失败:', e)
         partItems = []
       }
+      try {
+        const projectDraft = JSON.parse(row.projectDraftJson || '{}')
+        const projectDetails = Array.isArray(projectDraft?.projectDetails)
+          ? projectDraft.projectDetails
+          : []
+        initiationProjectCount = projectDetails.length
+      } catch (e) {
+        initiationProjectCount = 0
+      }
 
       return {
         ...row,
         initiationStatus: row.initiationStatusRaw
           ? getInitiationStatusText(normalizeInitiationStatus(row.initiationStatusRaw))
           : '未发起',
+        initiationProjectCount,
         materials,
         processes,
         partItems
