@@ -209,7 +209,7 @@
       destroy-on-close
     >
       <div v-loading="viewDialogLoading" class="space-y-3">
-        <el-descriptions :column="descColumn" border size="small" title="表头信息">
+        <el-descriptions :column="descColumn" border size="small" title="来源信息">
           <el-descriptions-item label="零部件图号">{{
             viewRow?.part_no || '-'
           }}</el-descriptions-item>
@@ -228,7 +228,7 @@
           }}</el-descriptions-item>
         </el-descriptions>
 
-        <el-descriptions :column="descColumn" border size="small" title="立项状态">
+        <el-descriptions :column="descColumn" border size="small" title="审核信息">
           <el-descriptions-item label="当前状态">
             <el-tag :type="statusTagType(normalizeBmoStatus(viewRequest?.status))">
               {{ normalizeStatusText(normalizeBmoStatus(viewRequest?.status)) }}
@@ -243,8 +243,118 @@
           <el-descriptions-item label="申请人">{{
             viewRequest?.created_by || '-'
           }}</el-descriptions-item>
+          <el-descriptions-item label="确认人">{{
+            viewRequest?.confirmed_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{
+            viewRequest?.approved_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{
+            formatTime(viewRequest?.created_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="提交审核时间">{{
+            formatTime(viewRequest?.confirmed_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核通过时间">{{
+            formatTime(viewRequest?.approved_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{
+            formatTime(viewRequest?.updated_at || null)
+          }}</el-descriptions-item>
           <el-descriptions-item label="驳回原因" :span="4">{{
             viewRequest?.rejected_reason || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="descColumn" border size="small" title="项目信息">
+          <el-descriptions-item label="项目编号">{{
+            viewRequest?.goods_draft?.projectCode || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="项目分类">{{
+            viewRequest?.goods_draft?.category || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称">{{
+            viewRequest?.goods_draft?.customerName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户模号">{{
+            viewRequest?.goods_draft?.customerModelNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品名称">{{
+            viewRequest?.goods_draft?.productName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品图号">{{
+            viewRequest?.goods_draft?.productDrawing || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="descColumn">{{
+            viewRequest?.goods_draft?.remarks || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="descColumn" border size="small" title="销售订单表头">
+          <el-descriptions-item label="订单日期">{{
+            viewRequest?.sales_order_draft?.orderDate || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="签订日期">{{
+            viewRequest?.sales_order_draft?.signDate || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="合同号">{{
+            viewRequest?.sales_order_draft?.contractNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户ID">{{
+            viewRequest?.sales_order_draft?.customerId ?? '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div>
+          <div class="mb-2 text-sm font-medium text-[var(--el-text-color-primary)]"
+            >销售订单明细</div
+          >
+          <el-table
+            :data="viewRequest?.sales_order_draft?.details || []"
+            border
+            size="small"
+            max-height="320"
+          >
+            <el-table-column type="index" label="#" width="50" />
+            <el-table-column
+              prop="itemCode"
+              label="项目编号"
+              min-width="130"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerPartNo"
+              label="客户料号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="deliveryDate"
+              label="交货日期"
+              width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="quantity" label="数量" width="90" />
+            <el-table-column prop="unitPrice" label="单价" width="110" />
+            <el-table-column prop="totalAmount" label="总金额" width="110" />
+            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="handler" label="经办人" width="120" show-overflow-tooltip />
+            <el-table-column prop="costSource" label="费用出处" width="120" show-overflow-tooltip />
+          </el-table>
+        </div>
+
+        <el-descriptions :column="descColumn" border size="small" title="技术快照">
+          <el-descriptions-item label="FD ID">{{
+            viewRequest?.tech_snapshot?.fdId || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="提需类型">{{
+            viewRequest?.tech_snapshot?.demandType || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="设计师">{{
+            viewRequest?.tech_snapshot?.designer || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="技术表">{{
+            viewRequest?.tech_snapshot?.tech?.tableName || '-'
           }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -260,50 +370,146 @@
       :width="isMobile ? '95vw' : '980px'"
       destroy-on-close
     >
-      <el-descriptions v-if="quotationViewRequest" :column="descColumn" border size="small">
-        <el-descriptions-item label="报价单号">{{
-          quotationViewRequest.quotation_no || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="客户名称">{{
-          quotationViewRequest.quotation_customer_name || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="立项状态">{{
-          quotationViewRequest.status_text || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="项目编号候选">{{
-          quotationViewRequest.project_code_candidate || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="最终项目编号">{{
-          quotationViewRequest.project_code_final || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="销售订单号">{{
-          quotationViewRequest.sales_order_no || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="产品名称">{{
-          quotationViewRequest.project_draft?.productName || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="产品图号">{{
-          quotationViewRequest.project_draft?.productDrawing || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="客户模号">{{
-          quotationViewRequest.project_draft?.customerModelNo || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="申请人">{{
-          quotationApplicantName(quotationViewRequest)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="审核人">{{
-          quotationApproverName(quotationViewRequest)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="立项审核驳回原因" :span="descColumn">{{
-          quotationViewRequest.initiation_rejected_reason || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="客户审核驳回原因" :span="descColumn">{{
-          quotationViewRequest.customer_review_rejected_reason || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="撤回原因" :span="descColumn">{{
-          quotationViewRequest.withdraw_reason || '-'
-        }}</el-descriptions-item>
-      </el-descriptions>
+      <div v-if="quotationViewRequest" class="space-y-3">
+        <el-descriptions :column="descColumn" border size="small" title="基础信息">
+          <el-descriptions-item label="报价单号">{{
+            quotationViewRequest.quotation_no || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称">{{
+            quotationViewRequest.quotation_customer_name || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="立项状态">{{
+            quotationViewRequest.status_text || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="项目编号候选">{{
+            quotationViewRequest.project_code_candidate || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="最终项目编号">{{
+            quotationViewRequest.project_code_final || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="销售订单号">{{
+            quotationViewRequest.sales_order_no || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请人">{{
+            quotationApplicantName(quotationViewRequest)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{
+            quotationApproverName(quotationViewRequest)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="草稿保存时间">{{
+            formatTime(quotationViewRequest.draft_saved_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="提交审核时间">{{
+            formatTime(quotationViewRequest.submitted_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核通过时间">{{
+            formatTime(quotationViewRequest.approved_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="驳回时间">{{
+            formatTime(quotationViewRequest.rejected_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="撤回时间">{{
+            formatTime(quotationViewRequest.withdrawn_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{
+            formatTime(quotationViewRequest.updated_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="立项审核驳回原因" :span="descColumn">{{
+            quotationViewRequest.initiation_rejected_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户审核驳回原因" :span="descColumn">{{
+            quotationViewRequest.customer_review_rejected_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="撤回原因" :span="descColumn">{{
+            quotationViewRequest.withdraw_reason || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="descColumn" border size="small" title="项目信息">
+          <el-descriptions-item label="项目编号">{{
+            quotationViewRequest.project_draft?.projectCode ||
+            quotationViewRequest.project_code_candidate ||
+            '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="项目分类">{{
+            quotationViewRequest.project_draft?.category || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称">{{
+            quotationViewRequest.project_draft?.customerName ||
+            quotationViewRequest.quotation_customer_name ||
+            '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户模号">{{
+            quotationViewRequest.project_draft?.customerModelNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品名称">{{
+            quotationViewRequest.project_draft?.productName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品图号">{{
+            quotationViewRequest.project_draft?.productDrawing || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="descColumn" border size="small" title="销售订单表头">
+          <el-descriptions-item label="订单日期">{{
+            quotationViewRequest.sales_order_draft?.orderDate || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="签订日期">{{
+            quotationViewRequest.sales_order_draft?.signDate || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="合同号">{{
+            quotationViewRequest.sales_order_draft?.contractNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户ID">{{
+            quotationViewRequest.sales_order_draft?.customerId ?? '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div>
+          <div class="mb-2 text-sm font-medium text-[var(--el-text-color-primary)]"
+            >销售订单明细</div
+          >
+          <el-table
+            :data="quotationViewRequest.sales_order_draft?.details || []"
+            border
+            size="small"
+            max-height="320"
+          >
+            <el-table-column type="index" label="#" width="50" />
+            <el-table-column
+              prop="itemCode"
+              label="项目编号"
+              min-width="130"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
+            <el-table-column
+              prop="productDrawingNo"
+              label="产品图号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerPartNo"
+              label="客户料号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="quantity" label="数量" width="90" />
+            <el-table-column prop="unitPrice" label="单价" width="110" />
+            <el-table-column prop="totalAmount" label="总金额" width="110" />
+            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="handler" label="经办人" width="120" show-overflow-tooltip />
+            <el-table-column prop="costSource" label="费用出处" width="120" show-overflow-tooltip />
+            <el-table-column
+              prop="deliveryDate"
+              label="交货日期"
+              width="120"
+              show-overflow-tooltip
+            />
+          </el-table>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="quotationViewDialogVisible = false">关闭</el-button>
       </template>
@@ -315,26 +521,43 @@
       :width="isMobile ? '95vw' : '760px'"
       destroy-on-close
     >
-      <el-descriptions v-if="customerCreateViewRow" :column="descColumn" border size="small">
-        <el-descriptions-item label="客户名称">{{
-          customerCreateViewRow.customer_name || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{
-          customerCreateViewRow.status_text || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="申请人">{{
-          customerCreateViewRow.created_by || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="审核意见" :span="descColumn">{{
-          customerCreateViewRow.review_reason || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{
-          formatTime(customerCreateViewRow.created_at || null)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="更新时间">{{
-          formatTime(customerCreateViewRow.updated_at || null)
-        }}</el-descriptions-item>
-      </el-descriptions>
+      <div v-if="customerCreateViewRow" class="space-y-3">
+        <el-descriptions :column="descColumn" border size="small" title="申请内容">
+          <el-descriptions-item label="客户名称">{{
+            customerCreateViewRow.customer_name || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{
+            customerCreateViewRow.status_text || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请人">{{
+            customerCreateViewRow.created_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核通过人">{{
+            customerCreateViewRow.approved_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核驳回人">{{
+            customerCreateViewRow.rejected_by || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请原因" :span="descColumn">{{
+            customerCreateViewRow.request_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核意见" :span="descColumn">{{
+            customerCreateViewRow.review_reason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{
+            formatTime(customerCreateViewRow.created_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核通过时间">{{
+            formatTime(customerCreateViewRow.approved_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核驳回时间">{{
+            formatTime(customerCreateViewRow.rejected_at || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{
+            formatTime(customerCreateViewRow.updated_at || null)
+          }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
       <template #footer>
         <el-button @click="customerCreateViewDialogVisible = false">关闭</el-button>
       </template>
@@ -346,53 +569,76 @@
       :width="isMobile ? '95vw' : '980px'"
       destroy-on-close
     >
-      <el-descriptions v-if="hardDeleteViewRow" :column="descColumn" border size="small">
-        <el-descriptions-item label="内容来源">{{
-          resolveHardDeleteSourceText(hardDeleteViewRow.moduleCode)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="审核状态">{{
-          normalizeStatusText(normalizeHardDeleteStatus(hardDeleteViewRow.status))
-        }}</el-descriptions-item>
-        <el-descriptions-item label="实体标识">{{
-          hardDeleteViewRow.entityKey || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="项目编号">{{
-          hardDeleteViewRow.projectCode || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="显示编码">{{
-          hardDeleteViewRow.displayCode || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="显示名称">{{
-          hardDeleteViewRow.displayName || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="申请人">{{
-          hardDeleteViewRow.requesterName || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="审核人">{{
-          hardDeleteViewRow.reviewerName || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="申请来源">{{
-          hardDeleteViewRow.requestSource || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="申请说明" :span="descColumn">{{
-          hardDeleteViewRow.requestReason || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="审核意见" :span="descColumn">{{
-          hardDeleteViewRow.reviewComment || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{
-          formatTime(hardDeleteViewRow.createdAt || null)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="更新时间">{{
-          formatTime(hardDeleteViewRow.updatedAt || null)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="通过时间">{{
-          formatTime(hardDeleteViewRow.approvedAt || null)
-        }}</el-descriptions-item>
-        <el-descriptions-item label="驳回时间">{{
-          formatTime(hardDeleteViewRow.rejectedAt || null)
-        }}</el-descriptions-item>
-      </el-descriptions>
+      <div v-if="hardDeleteViewRow" class="space-y-3">
+        <el-descriptions :column="descColumn" border size="small" title="待删内容">
+          <el-descriptions-item label="内容来源">{{
+            resolveHardDeleteSourceText(hardDeleteViewRow.moduleCode)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核状态">{{
+            normalizeStatusText(normalizeHardDeleteStatus(hardDeleteViewRow.status))
+          }}</el-descriptions-item>
+          <el-descriptions-item label="实体标识">{{
+            hardDeleteViewRow.entityKey || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="项目编号">{{
+            hardDeleteViewRow.projectCode || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="显示编码">{{
+            hardDeleteViewRow.displayCode || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="显示名称">{{
+            hardDeleteViewRow.displayName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品名称">{{
+            hardDeleteViewRow.productName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="产品图号">{{
+            hardDeleteViewRow.productDrawing || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="分类">{{
+            hardDeleteViewRow.category || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请来源">{{
+            hardDeleteViewRow.requestSource || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions :column="descColumn" border size="small" title="审核信息">
+          <el-descriptions-item label="申请人">{{
+            hardDeleteViewRow.requesterName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{
+            hardDeleteViewRow.reviewerName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{
+            formatTime(hardDeleteViewRow.createdAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{
+            formatTime(hardDeleteViewRow.updatedAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="通过时间">{{
+            formatTime(hardDeleteViewRow.approvedAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="驳回时间">{{
+            formatTime(hardDeleteViewRow.rejectedAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="取消时间">{{
+            formatTime(hardDeleteViewRow.canceledAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="执行时间">{{
+            formatTime(hardDeleteViewRow.executedAt || null)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请说明" :span="descColumn">{{
+            hardDeleteViewRow.requestReason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核意见" :span="descColumn">{{
+            hardDeleteViewRow.reviewComment || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="执行错误" :span="descColumn">{{
+            hardDeleteViewRow.executionError || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
       <template #footer>
         <el-button @click="hardDeleteViewDialogVisible = false">关闭</el-button>
       </template>
