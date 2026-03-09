@@ -324,7 +324,7 @@
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right" align="center">
+        <el-table-column label="操作" width="400" fixed="right" align="center">
           <template #default="{ row }">
             <div class="operation-buttons">
               <el-button

@@ -454,12 +454,13 @@ const upsertDraft = async ({ quotationId, actor, projectDraftInput, salesOrderDr
         );
     `)
 
-    const finalRows = await query(
-      `SELECT TOP 1 * FROM dbo.quotation_initiation_requests WHERE quotation_id = @quotationId`,
-      { quotationId: Number(quotationId) || 0 }
+    const finalReq = new sql.Request(tx)
+    finalReq.input('quotationId', sql.Int, Number(quotationId) || 0)
+    const finalRowsResult = await finalReq.query(
+      `SELECT TOP 1 * FROM dbo.quotation_initiation_requests WHERE quotation_id = @quotationId`
     )
     await tx.commit()
-    return toResponseRow(finalRows?.[0] || null)
+    return toResponseRow(finalRowsResult.recordset?.[0] || null)
   } catch (e) {
     try {
       await tx.rollback()

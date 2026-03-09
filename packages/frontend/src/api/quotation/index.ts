@@ -373,21 +373,17 @@ export const getQuotationInitiationReviewTasksApi = (params: {
   keyword?: string
 }) => {
   return request.get<{
-    code: number
-    success: boolean
-    data: {
-      page: number
-      pageSize: number
-      total: number
-      list: Array<
-        QuotationInitiationRequestRow & {
-          quotation_no?: string | null
-          quotation_customer_name?: string | null
-          quotation_part_name?: string | null
-          quotation_mold_no?: string | null
-        }
-      >
-    }
+    page: number
+    pageSize: number
+    total: number
+    list: Array<
+      QuotationInitiationRequestRow & {
+        quotation_no?: string | null
+        quotation_customer_name?: string | null
+        quotation_part_name?: string | null
+        quotation_mold_no?: string | null
+      }
+    >
   }>({
     url: '/api/quotation/initiation-review/tasks',
     params

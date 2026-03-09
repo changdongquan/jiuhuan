@@ -23,14 +23,10 @@ export const getCustomerCreateReviewTasksForReviewCenterApi = (params: {
   keyword?: string
 }) => {
   return request.get<{
-    code: number
-    success: boolean
-    data: {
-      page: number
-      pageSize: number
-      total: number
-      list: CustomerCreateReviewTask[]
-    }
+    page: number
+    pageSize: number
+    total: number
+    list: CustomerCreateReviewTask[]
   }>({
     url: '/api/customer/review-tasks',
     params

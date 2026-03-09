@@ -537,6 +537,19 @@ router.get('/auto-login', async (req, res) => {
     console.log('[DEV] 模拟自动登录，返回测试用户')
     const username = 'dev-user'
     const displayName = '开发测试用户'
+    let permissions = []
+    try {
+      permissions = await resolveUserPermissions({
+        username,
+        isDomainUser: false
+      })
+      if (!permissions.length) {
+        permissions = await getAllPermissionNames()
+      }
+    } catch (error) {
+      console.warn('[DEV] 查询页面权限失败，回退到全页面权限:', error?.message || error)
+      permissions = await getAllPermissionNames().catch(() => [])
+    }
     let capabilities = []
     try {
       capabilities = await getEffectiveCapabilityKeys(username)
@@ -554,7 +567,7 @@ router.get('/auto-login', async (req, res) => {
         roles: [],
         role: 'test',
         roleId: '2',
-        permissions: [],
+        permissions,
         capabilities
       },
       token: issueAuthToken({

@@ -732,6 +732,19 @@ const mapCustomerRows = (rows: CustomerCreateReviewTask[]): UnifiedReviewRow[] =
   })
 }
 
+async function safeLoadReviewRows<T>(
+  loader: () => Promise<T>,
+  categoryText: string,
+  fallback: T
+): Promise<T> {
+  try {
+    return await loader()
+  } catch (error) {
+    console.error(`加载${categoryText}失败:`, error)
+    return fallback
+  }
+}
+
 const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   const bmoStatus = mapStatusForBmoApi(query.status)
   const quotationStatus = mapStatusForQuotationApi(query.status)
@@ -782,8 +795,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       page: query.page,
       pageSize: query.pageSize
     })
-    total.value = Number(res.data?.data?.total || 0) || 0
-    return mapQuotationRows((res.data?.data?.list || []) as any)
+    total.value = Number(res.data?.total || 0) || 0
+    return mapQuotationRows((res.data?.list || []) as any)
   }
 
   if (query.category === 'CUSTOMER_CREATE') {
@@ -793,8 +806,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       page: query.page,
       pageSize: query.pageSize
     })
-    total.value = Number(res.data?.data?.total || 0) || 0
-    return mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
+    total.value = Number(res.data?.total || 0) || 0
+    return mapCustomerRows((res.data?.list || []) as CustomerCreateReviewTask[])
   }
 
   if (query.status === 'ALL') {
@@ -855,8 +868,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
           page,
           pageSize
         })
-        const part = mapQuotationRows((res.data?.data?.list || []) as any)
-        totalRows = Number(res.data?.data?.total || 0) || 0
+        const part = mapQuotationRows((res.data?.list || []) as any)
+        totalRows = Number(res.data?.total || 0) || 0
         rows.push(...part)
         if (!part.length) break
         page += 1
@@ -877,8 +890,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
           page,
           pageSize
         })
-        const part = mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
-        totalRows = Number(res.data?.data?.total || 0) || 0
+        const part = mapCustomerRows((res.data?.list || []) as CustomerCreateReviewTask[])
+        totalRows = Number(res.data?.total || 0) || 0
         rows.push(...part)
         if (!part.length) break
         page += 1
@@ -887,10 +900,10 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     }
 
     const [hardRows, bmoRows, quotationRows, customerRows] = await Promise.all([
-      fetchAllHardDelete(),
-      fetchAllBmo(),
-      fetchAllQuotation(),
-      fetchAllCustomer()
+      safeLoadReviewRows(fetchAllHardDelete, '硬删除审核任务', [] as UnifiedReviewRow[]),
+      safeLoadReviewRows(fetchAllBmo, 'BMO立项审核任务', [] as UnifiedReviewRow[]),
+      safeLoadReviewRows(fetchAllQuotation, '报价单立项审核任务', [] as UnifiedReviewRow[]),
+      safeLoadReviewRows(fetchAllCustomer, '客户新增审核任务', [] as UnifiedReviewRow[])
     ])
     const mergedRows = [...hardRows, ...bmoRows, ...quotationRows, ...customerRows].sort((a, b) => {
       const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
@@ -975,8 +988,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       page: quotationPage,
       pageSize: mergePageSize
     })
-    const part = mapQuotationRows((res.data?.data?.list || []) as any)
-    quotationTotal = Number(res.data?.data?.total || 0) || 0
+    const part = mapQuotationRows((res.data?.list || []) as any)
+    quotationTotal = Number(res.data?.total || 0) || 0
     quotationLoaded += part.length
     quotationPage += 1
     quotationBuffer = part
@@ -992,8 +1005,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       page: customerPage,
       pageSize: mergePageSize
     })
-    const part = mapCustomerRows((res.data?.data?.list || []) as CustomerCreateReviewTask[])
-    customerTotal = Number(res.data?.data?.total || 0) || 0
+    const part = mapCustomerRows((res.data?.list || []) as CustomerCreateReviewTask[])
+    customerTotal = Number(res.data?.total || 0) || 0
     customerLoaded += part.length
     customerPage += 1
     customerBuffer = part
@@ -1007,10 +1020,46 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     const shouldFetchCustomer = includeCustomer && customerCursor >= customerBuffer.length
 
     await Promise.all([
-      shouldFetchHard ? fetchHardNext() : Promise.resolve(),
-      shouldFetchBmo ? fetchBmoNext() : Promise.resolve(),
-      shouldFetchQuotation ? fetchQuotationNext() : Promise.resolve(),
-      shouldFetchCustomer ? fetchCustomerNext() : Promise.resolve()
+      shouldFetchHard
+        ? safeLoadReviewRows(
+            async () => {
+              await fetchHardNext()
+              return null
+            },
+            '硬删除审核任务',
+            null
+          )
+        : Promise.resolve(null),
+      shouldFetchBmo
+        ? safeLoadReviewRows(
+            async () => {
+              await fetchBmoNext()
+              return null
+            },
+            'BMO立项审核任务',
+            null
+          )
+        : Promise.resolve(null),
+      shouldFetchQuotation
+        ? safeLoadReviewRows(
+            async () => {
+              await fetchQuotationNext()
+              return null
+            },
+            '报价单立项审核任务',
+            null
+          )
+        : Promise.resolve(null),
+      shouldFetchCustomer
+        ? safeLoadReviewRows(
+            async () => {
+              await fetchCustomerNext()
+              return null
+            },
+            '客户新增审核任务',
+            null
+          )
+        : Promise.resolve(null)
     ])
 
     const hardHead = hardCursor < hardBuffer.length ? hardBuffer[hardCursor] : null
