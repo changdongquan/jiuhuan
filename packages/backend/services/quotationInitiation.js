@@ -185,7 +185,8 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
         String(item?.productName || '').trim() ||
         String(item?.partName || '').trim() ||
         null,
-      itemCode: formatItemCode(index, items.length),
+      itemCode:
+        String((existingDetails[index] || {}).itemCode || '').trim() || formatItemCode(index, items.length),
       productName:
         String((existingDetails[index] || {}).productName || '').trim() ||
         String(item?.productName || '').trim() ||
@@ -210,16 +211,6 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
       isShipped: false,
       shippingDate: null
     }))
-    if (details.length) {
-      const extraFee = Number(quotationRow?.otherFee || 0) + Number(quotationRow?.transportFee || 0)
-      if (extraFee > 0) {
-        const first = details[0]
-        if (Number(first.quantity || 0) > 0) {
-          first.totalAmount = Number(first.totalAmount || 0) + extraFee
-          first.unitPrice = Number((first.totalAmount / first.quantity).toFixed(2))
-        }
-      }
-    }
     return details
   }
 
@@ -228,10 +219,7 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
     String(quotationRow?.partName || '').trim() ||
     null
   const quantity = Number(quotationRow?.quantity || 0) || 0
-  const totalAmount =
-    Number(quotationRow?.taxIncludedPrice || 0) +
-    Number(quotationRow?.otherFee || 0) +
-    Number(quotationRow?.transportFee || 0)
+  const totalAmount = Number(quotationRow?.taxIncludedPrice || 0)
   const detail = {
     key: 'summary-1',
     name,
@@ -256,8 +244,55 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
   return [detail]
 }
 
+const buildDefaultProjectDetails = (quotationRow, projectCode, existingProjectDetails = []) => {
+  const normalizedType = normalizeQuotationBusinessType(quotationRow?.quotationType)
+  if (normalizedType === '零件加工') {
+    const items = Array.isArray(quotationRow?.partItems) ? quotationRow.partItems : []
+    return items.map((item, index) => ({
+      key: String((existingProjectDetails[index] || {}).key || `project-${index + 1}`),
+      projectCode:
+        String((existingProjectDetails[index] || {}).projectCode || '').trim() ||
+        `${String(projectCode || '').trim()}${items.length > 1 ? `/${String(index + 1).padStart(2, '0')}` : ''}`,
+      productName:
+        String((existingProjectDetails[index] || {}).productName || '').trim() ||
+        String(item?.partName || '').trim() ||
+        String(quotationRow?.partName || '').trim() ||
+        null,
+      productDrawing:
+        String((existingProjectDetails[index] || {}).productDrawing || '').trim() ||
+        String(item?.drawingNo || '').trim() ||
+        null,
+      customerModelNo:
+        String((existingProjectDetails[index] || {}).customerModelNo || '').trim() ||
+        String(quotationRow?.moldNo || '').trim() ||
+        null
+    }))
+  }
+  return [
+    {
+      key: 'project-1',
+      projectCode: String(projectCode || '').trim(),
+      productName:
+        String((existingProjectDetails[0] || {}).productName || '').trim() ||
+        String(quotationRow?.partName || '').trim() ||
+        null,
+      productDrawing: String((existingProjectDetails[0] || {}).productDrawing || '').trim() || null,
+      customerModelNo:
+        String((existingProjectDetails[0] || {}).customerModelNo || '').trim() ||
+        String(quotationRow?.moldNo || '').trim() ||
+        null
+    }
+  ]
+}
+
 const buildDraftsFromQuotation = (quotationRow, existingProjectDraft = {}, existingSalesOrderDraft = {}) => {
-  const projectCode = String(existingProjectDraft?.projectCode || '').trim()
+  const existingDetails = Array.isArray(existingSalesOrderDraft?.details) ? existingSalesOrderDraft.details : []
+  const existingProjectDetails = Array.isArray(existingProjectDraft?.projectDetails)
+    ? existingProjectDraft.projectDetails
+    : []
+  const projectCode =
+    String(existingProjectDraft?.projectCode || '').trim() ||
+    String(existingProjectDetails[0]?.projectCode || existingDetails[0]?.itemCode || '').trim()
   const inferredCategory = projectCode ? getCategoryFromProjectCode(projectCode) : ''
   const projectDraft = {
     projectCode,
@@ -275,7 +310,8 @@ const buildDraftsFromQuotation = (quotationRow, existingProjectDraft = {}, exist
     customerModelNo:
       String(existingProjectDraft?.customerModelNo || '').trim() ||
       String(quotationRow?.moldNo || '').trim() ||
-      null
+      null,
+    projectDetails: buildDefaultProjectDetails(quotationRow, projectCode, existingProjectDetails)
   }
 
   const salesOrderDraft = {
@@ -283,14 +319,44 @@ const buildDraftsFromQuotation = (quotationRow, existingProjectDraft = {}, exist
     signDate: existingSalesOrderDraft?.signDate || null,
     contractNo: existingSalesOrderDraft?.contractNo || null,
     customerId: existingSalesOrderDraft?.customerId ?? null,
-    details: buildDefaultSalesOrderDetails(
-      quotationRow,
-      projectDraft.projectCode,
-      Array.isArray(existingSalesOrderDraft?.details) ? existingSalesOrderDraft.details : []
-    )
+    details: buildDefaultSalesOrderDetails(quotationRow, projectDraft.projectCode, existingDetails)
   }
 
   return { projectDraft, salesOrderDraft }
+}
+
+const getProjectEntriesFromDrafts = ({ quotationType, projectDraft, salesOrderDraft }) => {
+  const normalizedType = normalizeQuotationBusinessType(quotationType)
+  const projectDetails = Array.isArray(projectDraft?.projectDetails) ? projectDraft.projectDetails : []
+  if (normalizedType !== '零件加工') {
+    return [
+      {
+        projectCode: String(projectDraft?.projectCode || '').trim(),
+        customerModelNo: projectDraft?.customerModelNo || null,
+        productDrawing: projectDraft?.productDrawing || null,
+        productName: projectDraft?.productName || null
+      }
+    ].filter((item) => item.projectCode)
+  }
+  if (projectDetails.length) {
+    return projectDetails
+      .map((detail) => ({
+        projectCode: String(detail?.projectCode || '').trim(),
+        customerModelNo: detail?.customerModelNo || null,
+        productDrawing: detail?.productDrawing || null,
+        productName: detail?.productName || null
+      }))
+      .filter((item) => item.projectCode)
+  }
+  const details = Array.isArray(salesOrderDraft?.details) ? salesOrderDraft.details : []
+  return details
+    .map((detail) => ({
+      projectCode: String(detail?.itemCode || '').trim(),
+      customerModelNo: detail?.customerPartNo || null,
+      productDrawing: detail?.productDrawingNo || null,
+      productName: detail?.productName || detail?.name || null
+    }))
+    .filter((item) => item.projectCode)
 }
 
 const toResponseRow = (row) => {
@@ -358,6 +424,16 @@ const checkProjectCodeAvailability = async ({ quotationId, projectCode, quotatio
   return { category }
 }
 
+const splitProjectCodeFamily = (projectCode) => {
+  const code = String(projectCode || '').trim().toUpperCase()
+  const match = code.match(/^(.*?)(\/\d{2})$/)
+  return {
+    code,
+    familyBase: match ? match[1] : code,
+    hasSuffix: !!match
+  }
+}
+
 const assertEditableStatus = (status) => {
   const normalized = normalizeStatus(status)
   if (normalized === STATUS.PENDING || normalized === STATUS.APPROVED) {
@@ -366,27 +442,64 @@ const assertEditableStatus = (status) => {
 }
 
 const ensureProjectCodeAvailable = async ({ tx, projectCode, quotationId }) => {
-  const code = String(projectCode || '').trim()
+  const { code, familyBase } = splitProjectCodeFamily(projectCode)
   if (!code) throw new Error('项目编号不能为空')
 
-  const existingProjectRows = await query(
-    `SELECT TOP 1 项目编号 as projectCode FROM 货物信息 WHERE 项目编号 = @projectCode`,
-    { projectCode: code }
-  )
+  const goodsReq = new sql.Request(tx)
+  goodsReq.input('projectCode', sql.NVarChar(50), code)
+  goodsReq.input('familyBase', sql.NVarChar(50), familyBase)
+  const existingProjectRows = await goodsReq.query(`
+    SELECT TOP 1 项目编号 as projectCode
+    FROM 货物信息
+    WHERE 项目编号 = @projectCode
+       OR (@projectCode <> @familyBase AND 项目编号 = @familyBase)
+       OR (@projectCode = @familyBase AND 项目编号 LIKE @familyBase + N'/%')
+  `)
   if (existingProjectRows?.[0]?.projectCode) {
     throw new Error(`项目编号 "${code}" 已存在`)
   }
 
   const req = new sql.Request(tx)
   req.input('projectCode', sql.NVarChar(50), code)
+  req.input('familyBase', sql.NVarChar(50), familyBase)
+  req.input('projectCodeDraftToken', sql.NVarChar(100), `"projectCode":"${code}"`)
+  req.input('familyBaseDraftToken', sql.NVarChar(100), `"projectCode":"${familyBase}"`)
+  req.input('familyPrefixDraftToken', sql.NVarChar(100), `"projectCode":"${familyBase}/`)
+  req.input('projectCodeJsonToken', sql.NVarChar(100), `"itemCode":"${code}"`)
+  req.input('familyBaseJsonToken', sql.NVarChar(100), `"itemCode":"${familyBase}"`)
+  req.input('familyPrefixJsonToken', sql.NVarChar(100), `"itemCode":"${familyBase}/`)
   req.input('quotationId', sql.Int, Number(quotationId) || 0)
   const rows = await req.query(`
     SELECT TOP 1 id
     FROM dbo.quotation_initiation_requests
     WHERE (
       project_code_candidate = @projectCode
+      OR (@projectCode <> @familyBase AND project_code_candidate = @familyBase)
+      OR (@projectCode = @familyBase AND project_code_candidate LIKE @familyBase + N'/%')
       OR project_code_final = @projectCode
+      OR (@projectCode <> @familyBase AND project_code_final = @familyBase)
+      OR (@projectCode = @familyBase AND project_code_final LIKE @familyBase + N'/%')
       OR JSON_VALUE(project_draft_json, '$.projectCode') = @projectCode
+      OR (@projectCode <> @familyBase AND JSON_VALUE(project_draft_json, '$.projectCode') = @familyBase)
+      OR (@projectCode = @familyBase AND JSON_VALUE(project_draft_json, '$.projectCode') LIKE @familyBase + N'/%')
+      OR CHARINDEX(@projectCodeDraftToken, ISNULL(project_draft_json, N'')) > 0
+      OR (
+        @projectCode <> @familyBase
+        AND CHARINDEX(@familyBaseDraftToken, ISNULL(project_draft_json, N'')) > 0
+      )
+      OR (
+        @projectCode = @familyBase
+        AND CHARINDEX(@familyPrefixDraftToken, ISNULL(project_draft_json, N'')) > 0
+      )
+      OR CHARINDEX(@projectCodeJsonToken, ISNULL(sales_order_draft_json, N'')) > 0
+      OR (
+        @projectCode <> @familyBase
+        AND CHARINDEX(@familyBaseJsonToken, ISNULL(sales_order_draft_json, N'')) > 0
+      )
+      OR (
+        @projectCode = @familyBase
+        AND CHARINDEX(@familyPrefixJsonToken, ISNULL(sales_order_draft_json, N'')) > 0
+      )
     )
       AND quotation_id <> @quotationId
       AND status <> N'WITHDRAWN'
@@ -421,9 +534,27 @@ const upsertDraft = async ({ quotationId, actor, projectDraftInput, salesOrderDr
     const mergedSalesOrderDraft = { ...currentSalesDraft, ...(salesOrderDraftInput || {}) }
     const syncedDrafts = buildDraftsFromQuotation(quotationRow, mergedProjectDraft, mergedSalesOrderDraft)
 
-    const projectCode = String(syncedDrafts.projectDraft.projectCode || '').trim()
-    assertProjectCodeValid({ projectCode, quotationType: quotationRow.quotationType })
-    await ensureProjectCodeAvailable({ tx, projectCode, quotationId })
+    const projectEntries = getProjectEntriesFromDrafts({
+      quotationType: quotationRow.quotationType,
+      projectDraft: syncedDrafts.projectDraft,
+      salesOrderDraft: syncedDrafts.salesOrderDraft
+    })
+    if (!projectEntries.length) throw new Error('项目信息不能为空')
+    if (new Set(projectEntries.map((item) => item.projectCode)).size !== projectEntries.length) {
+      throw new Error('项目信息中的项目编号不能重复')
+    }
+    for (const entry of projectEntries) {
+      assertProjectCodeValid({ projectCode: entry.projectCode, quotationType: quotationRow.quotationType })
+      await ensureProjectCodeAvailable({ tx, projectCode: entry.projectCode, quotationId })
+    }
+    const projectCodeSet = new Set(projectEntries.map((item) => item.projectCode))
+    const salesDetails = Array.isArray(syncedDrafts.salesOrderDraft?.details) ? syncedDrafts.salesOrderDraft.details : []
+    const missingReferencedCode = salesDetails.find(
+      (detail) => !projectCodeSet.has(String(detail?.itemCode || '').trim())
+    )
+    if (missingReferencedCode) {
+      throw new Error(`销售订单项目编号未在项目信息中创建：${String(missingReferencedCode.itemCode || '').trim()}`)
+    }
 
     const customerName = String(quotationRow.customerName || '').trim()
     const customerId = customerName ? await customerExistsByName(tx, customerName) : null
@@ -433,7 +564,12 @@ const upsertDraft = async ({ quotationId, actor, projectDraftInput, salesOrderDr
     req.input('quotationId', sql.Int, Number(quotationId) || 0)
     req.input('status', sql.NVarChar(40), nextStatus)
     req.input('customerName', sql.NVarChar(200), customerName || null)
-    req.input('projectCodeCandidate', sql.NVarChar(50), projectCode || null)
+    req.input(
+      'projectCodeCandidate',
+      sql.NVarChar(50),
+      String(projectEntries[0]?.projectCode || syncedDrafts.projectDraft.projectCode || '').trim() ||
+        null
+    )
     req.input('projectDraftJson', sql.NVarChar(sql.MAX), JSON.stringify(syncedDrafts.projectDraft))
     req.input('salesOrderDraftJson', sql.NVarChar(sql.MAX), JSON.stringify(syncedDrafts.salesOrderDraft))
     req.input('actor', sql.NVarChar(100), actor || null)
@@ -668,10 +804,41 @@ const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
       throw err
     }
 
+    const projectEntries = getProjectEntriesFromDrafts({
+      quotationType: quotationRow.quotationType,
+      projectDraft,
+      salesOrderDraft
+    })
+    if (!projectEntries.length) {
+      const err = new Error('项目信息不能为空')
+      err.statusCode = 400
+      throw err
+    }
+    if (new Set(projectEntries.map((item) => item.projectCode)).size !== projectEntries.length) {
+      const err = new Error('项目信息中的项目编号不能重复')
+      err.statusCode = 400
+      throw err
+    }
+    const projectCodeSet = new Set(projectEntries.map((item) => item.projectCode))
+    const salesDetails = Array.isArray(salesOrderDraft?.details) ? salesOrderDraft.details : []
+    const missingReferencedCode = salesDetails.find(
+      (detail) => !projectCodeSet.has(String(detail?.itemCode || '').trim())
+    )
+    if (missingReferencedCode) {
+      const err = new Error(`销售订单项目编号未在项目信息中创建：${String(missingReferencedCode.itemCode || '').trim()}`)
+      err.statusCode = 400
+      throw err
+    }
     const category = assertProjectCodeValid({
-      projectCode: projectDraft.projectCode,
+      projectCode: projectEntries[0].projectCode,
       quotationType: quotationRow.quotationType
     })
+    for (const entry of projectEntries) {
+      assertProjectCodeValid({
+        projectCode: entry.projectCode,
+        quotationType: quotationRow.quotationType
+      })
+    }
     const customerName = String(projectDraft.customerName || quotationRow.customerName || '').trim()
     const customerId = customerName ? await customerExistsByName(tx, customerName) : null
     if (!customerId) {
@@ -681,16 +848,18 @@ const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
     }
 
     const orderNo = await generateSalesOrderNo(tx)
-    await createGoodsAndScaffold({
-      tx,
-      projectCode: String(projectDraft.projectCode || '').trim(),
-      customerName,
-      customerModelNo: projectDraft.customerModelNo,
-      productDrawing: projectDraft.productDrawing,
-      productName: projectDraft.productName,
-      category,
-      remarks: quotationRow.remark
-    })
+    for (const entry of projectEntries) {
+      await createGoodsAndScaffold({
+        tx,
+        projectCode: entry.projectCode,
+        customerName,
+        customerModelNo: entry.customerModelNo,
+        productDrawing: entry.productDrawing,
+        productName: entry.productName,
+        category,
+        remarks: quotationRow.remark
+      })
+    }
     await createSalesOrderRecords({
       tx,
       customerId,
@@ -700,7 +869,7 @@ const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
 
     const updateReq = new sql.Request(tx)
     updateReq.input('quotationId', sql.Int, Number(quotationId) || 0)
-    updateReq.input('projectCode', sql.NVarChar(50), String(projectDraft.projectCode || '').trim())
+    updateReq.input('projectCode', sql.NVarChar(50), String(projectEntries[0]?.projectCode || '').trim())
     updateReq.input('orderNo', sql.NVarChar(50), orderNo)
     updateReq.input('actor', sql.NVarChar(100), actor || null)
     await updateReq.query(`
@@ -718,7 +887,7 @@ const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
     `)
 
     await tx.commit()
-    return { projectCode: String(projectDraft.projectCode || '').trim(), orderNo }
+    return { projectCode: String(projectEntries[0]?.projectCode || '').trim(), orderNo }
   } catch (e) {
     try {
       await tx.rollback()

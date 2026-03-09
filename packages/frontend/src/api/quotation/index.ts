@@ -22,6 +22,15 @@ export interface QuotationInitiationProjectDraft {
   productName?: string | null
   productDrawing?: string | null
   customerModelNo?: string | null
+  projectDetails?: QuotationInitiationProjectDetailDraft[]
+}
+
+export interface QuotationInitiationProjectDetailDraft {
+  key?: string
+  projectCode: string
+  productName?: string | null
+  productDrawing?: string | null
+  customerModelNo?: string | null
 }
 
 export interface QuotationInitiationSalesOrderDetailDraft {

@@ -508,26 +508,25 @@
           </template>
           <el-form :inline="false" label-width="100px">
             <el-row :gutter="12">
-              <el-col :xs="24" :md="8">
-                <el-form-item label="项目编号" required>
+              <el-col
+                v-if="
+                  resolveBusinessCategory(initiationSourceQuotation?.quotationType) !== '零件加工'
+                "
+                :xs="24"
+                :md="8"
+              >
+                <el-form-item
+                  label="项目编号"
+                  :required="
+                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) !== '零件加工'
+                  "
+                >
                   <el-input
                     v-model="initiationForm.projectCode"
                     :disabled="isInitiationViewMode"
                     placeholder="请输入项目编号"
                     @blur="handleInitiationProjectCodeBlur"
                   />
-                  <div
-                    v-if="initiationProjectCodeDisplayList.length"
-                    class="mt-1 flex flex-wrap gap-1 text-xs text-[var(--el-text-color-secondary)]"
-                  >
-                    <span
-                      v-for="code in initiationProjectCodeDisplayList"
-                      :key="code"
-                      class="rounded border border-[var(--el-border-color)] px-2 py-0.5"
-                    >
-                      {{ code }}
-                    </span>
-                  </div>
                   <div
                     v-if="initiationProjectCodeError"
                     class="mt-1 text-xs text-[var(--el-color-danger)]"
@@ -553,33 +552,100 @@
                   </el-tag>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="产品名称">
-                  <el-input
-                    v-model="initiationForm.productName"
-                    :disabled="isInitiationViewMode"
-                    placeholder="可为空"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="产品图号">
-                  <el-input
-                    v-model="initiationForm.productDrawing"
-                    :disabled="isInitiationViewMode"
-                    placeholder="可为空"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="客户模号">
-                  <el-input
-                    v-model="initiationForm.customerModelNo"
-                    :disabled="isInitiationViewMode"
-                    placeholder="可为空"
-                  />
-                </el-form-item>
-              </el-col>
+              <template
+                v-if="
+                  resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
+                "
+              >
+                <el-col :xs="24">
+                  <div
+                    v-if="initiationDuplicateProjectCodeError"
+                    class="mb-2 text-xs text-[var(--el-color-danger)]"
+                  >
+                    {{ initiationDuplicateProjectCodeError }}
+                  </div>
+                  <div
+                    v-if="initiationProjectCodeFormatError"
+                    class="mb-2 text-xs text-[var(--el-color-danger)]"
+                  >
+                    {{ initiationProjectCodeFormatError }}
+                  </div>
+                  <el-table
+                    :data="initiationProjectDetails"
+                    border
+                    size="small"
+                    class="mt-1"
+                    empty-text="暂无项目信息"
+                  >
+                    <el-table-column label="序号" type="index" width="70" align="center" />
+                    <el-table-column label="项目编号" min-width="180">
+                      <template #default="{ row }">
+                        <el-input
+                          v-model="row.projectCode"
+                          :disabled="isInitiationViewMode"
+                          placeholder="请输入项目编号"
+                        />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="产品名称" min-width="180">
+                      <template #default="{ row }">
+                        <el-input
+                          v-model="row.productName"
+                          :disabled="isInitiationViewMode"
+                          placeholder="请输入产品名称"
+                        />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="产品图号" min-width="160">
+                      <template #default="{ row }">
+                        <el-input
+                          v-model="row.productDrawing"
+                          :disabled="isInitiationViewMode"
+                          placeholder="请输入产品图号"
+                        />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="客户模号" min-width="180">
+                      <template #default="{ row }">
+                        <el-input
+                          v-model="row.customerModelNo"
+                          :disabled="isInitiationViewMode"
+                          placeholder="请输入客户模号"
+                        />
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-col>
+              </template>
+              <template v-else>
+                <el-col :xs="24" :md="8">
+                  <el-form-item label="产品名称">
+                    <el-input
+                      v-model="initiationForm.productName"
+                      :disabled="isInitiationViewMode"
+                      placeholder="可为空"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :md="8">
+                  <el-form-item label="产品图号">
+                    <el-input
+                      v-model="initiationForm.productDrawing"
+                      :disabled="isInitiationViewMode"
+                      placeholder="可为空"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :md="8">
+                  <el-form-item label="客户模号">
+                    <el-input
+                      v-model="initiationForm.customerModelNo"
+                      :disabled="isInitiationViewMode"
+                      placeholder="可为空"
+                    />
+                  </el-form-item>
+                </el-col>
+              </template>
             </el-row>
           </el-form>
         </el-card>
@@ -642,7 +708,10 @@
               <template #default="{ row }">
                 <el-input
                   v-model="row.itemCode"
-                  :disabled="isInitiationViewMode"
+                  :disabled="
+                    isInitiationViewMode ||
+                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
+                  "
                   placeholder="请输入项目编号"
                 />
               </template>
@@ -651,7 +720,10 @@
               <template #default="{ row }">
                 <el-input
                   v-model="row.productName"
-                  :disabled="isInitiationViewMode"
+                  :disabled="
+                    isInitiationViewMode ||
+                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
+                  "
                   placeholder="请输入产品名称"
                 />
               </template>
@@ -660,7 +732,10 @@
               <template #default="{ row }">
                 <el-input
                   v-model="row.productDrawingNo"
-                  :disabled="isInitiationViewMode"
+                  :disabled="
+                    isInitiationViewMode ||
+                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
+                  "
                   placeholder="请输入产品图号"
                 />
               </template>
@@ -669,7 +744,10 @@
               <template #default="{ row }">
                 <el-input
                   v-model="row.customerPartNo"
-                  :disabled="isInitiationViewMode"
+                  :disabled="
+                    isInitiationViewMode ||
+                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
+                  "
                   placeholder="请输入客户模号"
                 />
               </template>
@@ -1746,6 +1824,7 @@ import {
   deleteQuotationTempPartItemImageApi,
   type QuotationFormData,
   type QuotationCustomerOption,
+  type QuotationInitiationProjectDetailDraft,
   type QuotationInitiationProjectDraft,
   type QuotationInitiationRequestRow,
   type QuotationInitiationSalesOrderDetailDraft,
@@ -1994,6 +2073,7 @@ const initiationSalesForm = reactive<InitiationSalesFormModel>({
   contractNo: '',
   details: []
 })
+const initiationProjectDetails = ref<QuotationInitiationProjectDetailDraft[]>([])
 
 // 项目代入对话框 & 查询状态
 const projectImportDialogVisible = ref(false)
@@ -2422,10 +2502,12 @@ const canShowInitiateAction = (row: QuotationRecord) =>
   normalizeInitiationStatus(row.initiationStatus) === '未发起'
 
 const canShowViewInitiationAction = (row: QuotationRecord) =>
-  normalizeInitiationStatus(row.initiationStatus) !== '未发起'
+  !['未发起', '草稿', '待客户审核', '已驳回', '已撤回'].includes(
+    normalizeInitiationStatus(row.initiationStatus)
+  )
 
 const canShowEditInitiationAction = (row: QuotationRecord) =>
-  ['草稿', '待客户审核', '已驳回'].includes(normalizeInitiationStatus(row.initiationStatus))
+  normalizeInitiationStatus(row.initiationStatus) === '已驳回'
 
 const canShowWithdrawInitiationAction = (row: QuotationRecord) =>
   ['草稿', '待客户审核', '审核中'].includes(normalizeInitiationStatus(row.initiationStatus))
@@ -2459,18 +2541,6 @@ const buildDefaultInitiationDetails = (
 ): QuotationInitiationSalesOrderDetailDraft[] => {
   const defaultRemark = String(row.remark || '').trim() || null
   const defaultHandler = String(row.operator || '').trim() || null
-  const addFeesToFirstDetail = (details: QuotationInitiationSalesOrderDetailDraft[]) => {
-    if (!details.length) return details
-    const first = details[0]
-    const qty = Number(first.quantity || 0)
-    if (!(qty > 0)) return details
-    const extra = Number(row.otherFee || 0) + Number(row.transportFee || 0)
-    if (!extra) return details
-    const totalAmount = Number(first.totalAmount || 0) + extra
-    first.totalAmount = Number(totalAmount.toFixed(2))
-    first.unitPrice = Number((totalAmount / qty).toFixed(2))
-    return details
-  }
 
   if (resolveBusinessCategory(row.quotationType) === '零件加工') {
     const details = (row.partItems || []).map((item, index) => {
@@ -2503,7 +2573,7 @@ const buildDefaultInitiationDetails = (
         shippingDate: null
       } as QuotationInitiationSalesOrderDetailDraft
     })
-    return addFeesToFirstDetail(details)
+    return details
   }
 
   const quantity = Number(row.quantity || 0)
@@ -2537,6 +2607,63 @@ const buildDefaultInitiationDetails = (
   return details
 }
 
+const buildDefaultInitiationProjectDetails = (
+  row: QuotationRecord,
+  projectCode = ''
+): QuotationInitiationProjectDetailDraft[] => {
+  if (resolveBusinessCategory(row.quotationType) === '零件加工') {
+    const partItems = Array.isArray(row.partItems) ? row.partItems : []
+    return partItems.map((item, index) => ({
+      key: `project-${index + 1}`,
+      projectCode: formatInitiationItemCode(
+        row.quotationType,
+        projectCode,
+        index,
+        partItems.length
+      ),
+      productName: String(item.partName || row.partName || '').trim() || '',
+      productDrawing: String(item.drawingNo || '').trim() || null,
+      customerModelNo:
+        formatCustomerPartNoWithSourceProjectCode(
+          String(initiationForm.customerModelNo || '').trim() ||
+            String(row.moldNo || '').trim() ||
+            null,
+          initiationForm.sourceProjectCode
+        ) || null
+    }))
+  }
+  return [
+    {
+      key: 'project-1',
+      projectCode: String(projectCode || '').trim(),
+      productName: String(initiationForm.productName || row.partName || '').trim() || '',
+      productDrawing: String(initiationForm.productDrawing || '').trim() || null,
+      customerModelNo:
+        formatCustomerPartNoWithSourceProjectCode(
+          String(initiationForm.customerModelNo || '').trim() ||
+            String(row.moldNo || '').trim() ||
+            null,
+          initiationForm.sourceProjectCode
+        ) || null
+    }
+  ]
+}
+
+const syncProjectDetailsToSalesDetails = () => {
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) !== '零件加工') return
+  initiationSalesForm.details = initiationSalesForm.details.map((detail, index) => {
+    const projectDetail = initiationProjectDetails.value[index]
+    if (!projectDetail) return detail
+    return {
+      ...detail,
+      itemCode: String(projectDetail.projectCode || '').trim(),
+      productName: String(projectDetail.productName || '').trim() || '',
+      productDrawingNo: String(projectDetail.productDrawing || '').trim() || null,
+      customerPartNo: String(projectDetail.customerModelNo || '').trim() || null
+    }
+  })
+}
+
 const formatInitiationItemCode = (
   quotationType: QuotationRecord['quotationType'] | string | null | undefined,
   projectCode: string,
@@ -2550,10 +2677,20 @@ const formatInitiationItemCode = (
   return `${baseCode}/${String(index + 1).padStart(2, '0')}`
 }
 
+const getInitiationPrimaryProjectCode = () => {
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) !== '零件加工') {
+    return String(initiationForm.projectCode || '').trim()
+  }
+  return String(
+    initiationProjectDetails.value[0]?.projectCode || initiationSalesForm.details[0]?.itemCode || ''
+  ).trim()
+}
+
 const syncInitiationDetailItemCodes = (
   quotationType: QuotationRecord['quotationType'] | string | null | undefined,
   projectCode: string
 ) => {
+  if (resolveBusinessCategory(quotationType) === '零件加工') return
   const total = initiationSalesForm.details.length
   initiationSalesForm.details = initiationSalesForm.details.map((detail, index) => ({
     ...detail,
@@ -2587,7 +2724,15 @@ const buildInitiationFormsFromRow = (
   const projectDraft = (requestRow?.project_draft || {}) as QuotationInitiationProjectDraft
   const salesDraft = (requestRow?.sales_order_draft || {}) as QuotationInitiationSalesOrderDraft
   const salesDraftDetails = Array.isArray(salesDraft.details) ? salesDraft.details : []
-  const projectCode = String(projectDraft.projectCode || '').trim()
+  const projectDraftDetails = Array.isArray(projectDraft.projectDetails)
+    ? projectDraft.projectDetails
+    : []
+  const projectCode = String(
+    projectDraft.projectCode ||
+      projectDraftDetails[0]?.projectCode ||
+      salesDraftDetails[0]?.itemCode ||
+      ''
+  ).trim()
   const category =
     getCategoryFromProjectCode(projectCode) || String(projectDraft.category || '').trim()
   initiationForm.projectCode = projectCode
@@ -2607,24 +2752,37 @@ const buildInitiationFormsFromRow = (
   initiationSalesForm.orderDate = String(salesDraft.orderDate || todayText()).trim() || todayText()
   initiationSalesForm.signDate = String(salesDraft.signDate || '').trim()
   initiationSalesForm.contractNo = String(salesDraft.contractNo || '').trim()
+  initiationProjectDetails.value = projectDraftDetails.length
+    ? projectDraftDetails.map((detail, index) => ({
+        key: String(detail.key || `project-${index + 1}`),
+        projectCode: String(detail.projectCode || '').trim(),
+        productName: String(detail.productName || '').trim() || '',
+        productDrawing: String(detail.productDrawing || '').trim() || null,
+        customerModelNo:
+          formatCustomerPartNoWithSourceProjectCode(
+            String(detail.customerModelNo || '').trim() || null,
+            initiationForm.sourceProjectCode
+          ) || null
+      }))
+    : buildDefaultInitiationProjectDetails(row, initiationForm.projectCode)
   const details = salesDraftDetails.length
     ? salesDraftDetails.map((detail, index) => {
+        const projectDetail = initiationProjectDetails.value[index]
         return {
           key: String(detail.key || `detail-${index + 1}`),
           name: detail.name || '',
-          itemCode: formatInitiationItemCode(
-            row.quotationType,
-            initiationForm.projectCode,
-            index,
-            salesDraftDetails.length
-          ),
+          itemCode: String(detail.itemCode || projectDetail?.projectCode || '').trim(),
           productName:
-            String(detail.productName || '').trim() || String(detail.name || '').trim() || '',
-          productDrawingNo: String(detail.productDrawingNo || '').trim() || null,
-          customerPartNo: formatCustomerPartNoWithSourceProjectCode(
-            detail.customerPartNo || null,
-            initiationForm.sourceProjectCode
-          ),
+            String(detail.productName || projectDetail?.productName || '').trim() ||
+            String(detail.name || '').trim() ||
+            '',
+          productDrawingNo:
+            String(detail.productDrawingNo || projectDetail?.productDrawing || '').trim() || null,
+          customerPartNo:
+            formatCustomerPartNoWithSourceProjectCode(
+              String(detail.customerPartNo || projectDetail?.customerModelNo || '').trim() || null,
+              initiationForm.sourceProjectCode
+            ) || null,
           deliveryDate: detail.deliveryDate || null,
           quantity: detail.quantity ?? null,
           unitPrice: detail.unitPrice ?? null,
@@ -2640,33 +2798,52 @@ const buildInitiationFormsFromRow = (
     : buildDefaultInitiationDetails(row, initiationForm.projectCode)
   initiationSalesForm.details = details
   syncInitiationDetailItemCodes(row.quotationType, initiationForm.projectCode)
+  syncProjectDetailsToSalesDetails()
+  initiationForm.projectCode = getInitiationPrimaryProjectCode()
 }
 
 const buildInitiationPayload = () => {
+  const primaryProjectCode = getInitiationPrimaryProjectCode()
   const projectDraft: QuotationInitiationProjectDraft = {
-    projectCode: String(initiationForm.projectCode || '').trim(),
+    projectCode: primaryProjectCode || '',
     sourceProjectCode: String(initiationForm.sourceProjectCode || '').trim() || null,
     category: initiationForm.category || null,
     customerName: String(initiationForm.customerName || '').trim() || null,
     productName: String(initiationForm.productName || '').trim() || null,
     productDrawing: String(initiationForm.productDrawing || '').trim() || null,
-    customerModelNo: String(initiationForm.customerModelNo || '').trim() || null
+    customerModelNo: String(initiationForm.customerModelNo || '').trim() || null,
+    projectDetails: initiationProjectDetails.value.map((detail) => ({
+      key: detail.key,
+      projectCode: String(detail.projectCode || '').trim(),
+      productName: String(detail.productName || '').trim() || null,
+      productDrawing: String(detail.productDrawing || '').trim() || null,
+      customerModelNo: String(detail.customerModelNo || '').trim() || null
+    }))
   }
   const salesOrderDraft: QuotationInitiationSalesOrderDraft = {
     orderDate: String(initiationSalesForm.orderDate || '').trim() || null,
     signDate: String(initiationSalesForm.signDate || '').trim() || null,
     contractNo: String(initiationSalesForm.contractNo || '').trim() || null,
     customerId: initiationForm.customerId,
-    details: initiationSalesForm.details.map((detail) => ({
-      ...detail,
-      itemCode:
-        String(detail.itemCode || '').trim() ||
-        String(initiationForm.projectCode || '').trim() ||
-        null,
-      productName:
-        String(detail.productName || '').trim() || String(detail.name || '').trim() || null,
-      productDrawingNo: String(detail.productDrawingNo || '').trim() || null
-    }))
+    details: initiationSalesForm.details.map((detail, index) => {
+      const projectDetail = initiationProjectDetails.value[index]
+      const itemCode =
+        String(projectDetail?.projectCode || detail.itemCode || '').trim() ||
+        primaryProjectCode ||
+        null
+      return {
+        ...detail,
+        itemCode,
+        productName:
+          String(projectDetail?.productName || detail.productName || '').trim() ||
+          String(detail.name || '').trim() ||
+          null,
+        productDrawingNo:
+          String(projectDetail?.productDrawing || detail.productDrawingNo || '').trim() || null,
+        customerPartNo:
+          String(projectDetail?.customerModelNo || detail.customerPartNo || '').trim() || null
+      }
+    })
   }
   return { projectDraft, salesOrderDraft }
 }
@@ -3052,23 +3229,52 @@ const syncQuotationCustomerNameImmediately = async (row: QuotationRecord, custom
 
 const validateInitiationProjectCode = async () => {
   const row = initiationSourceQuotation.value
-  const projectCode = String(initiationForm.projectCode || '').trim()
   initiationProjectCodeError.value = ''
-  initiationForm.category = getCategoryFromProjectCode(projectCode)
-  if (!row || !projectCode) return false
+  if (!row) return false
+  const isPart = resolveBusinessCategory(row.quotationType) === '零件加工'
+  const projectCodes = isPart
+    ? initiationProjectDetails.value.map((detail) => String(detail.projectCode || '').trim())
+    : [String(initiationForm.projectCode || '').trim()]
+  if (projectCodes.some((code) => !code)) {
+    initiationProjectCodeError.value = '项目编号不能为空'
+    return false
+  }
+  if (initiationProjectCodeFormatError.value) {
+    initiationProjectCodeError.value = initiationProjectCodeFormatError.value
+    return false
+  }
+  if (new Set(projectCodes).size !== projectCodes.length) {
+    initiationProjectCodeError.value =
+      initiationDuplicateProjectCodeError.value || '项目编号不能重复'
+    return false
+  }
+  initiationForm.category = getCategoryFromProjectCode(projectCodes[0] || '')
   initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
     ...detail,
     itemCode: String(detail.itemCode || '').trim()
   }))
-  syncInitiationDetailItemCodes(row.quotationType, projectCode)
+  if (isPart) {
+    const projectCodeSet = new Set(projectCodes)
+    const missingReferencedCode = initiationSalesForm.details.find(
+      (detail) => !projectCodeSet.has(String(detail.itemCode || '').trim())
+    )
+    if (missingReferencedCode) {
+      initiationProjectCodeError.value = `销售订单项目编号未在项目信息中创建：${String(missingReferencedCode.itemCode || '').trim()}`
+      return false
+    }
+  }
+  syncInitiationDetailItemCodes(row.quotationType, projectCodes[0] || '')
   initiationProjectCodeChecking.value = true
   try {
-    const res = await checkQuotationInitiationProjectCodeApi({
-      quotationId: row.id,
-      projectCode,
-      quotationType: row.quotationType || 'mold'
-    })
-    initiationForm.category = String(res.data?.data?.category || '').trim()
+    for (const projectCode of projectCodes) {
+      const res = await checkQuotationInitiationProjectCodeApi({
+        quotationId: row.id,
+        projectCode,
+        quotationType: row.quotationType || 'mold'
+      })
+      initiationForm.category = String(res.data?.data?.category || '').trim()
+    }
+    initiationForm.projectCode = getInitiationPrimaryProjectCode()
     return true
   } catch (error: any) {
     initiationProjectCodeError.value = error?.message || '项目编号校验失败'
@@ -3080,6 +3286,7 @@ const validateInitiationProjectCode = async () => {
 }
 
 const handleInitiationProjectCodeBlur = async () => {
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工') return
   if (!String(initiationForm.projectCode || '').trim()) return
   await validateInitiationProjectCode()
 }
@@ -3144,10 +3351,20 @@ const recommendInitiationProjectCode = async () => {
       ElMessage.error('推荐项目编号失败，请手工填写')
       return
     }
-    initiationForm.projectCode = pickedCode
     initiationForm.category = getCategoryFromProjectCode(pickedCode)
     initiationProjectCodeError.value = ''
-    syncInitiationDetailItemCodes(row.quotationType, pickedCode)
+    if (resolveBusinessCategory(row.quotationType) === '零件加工') {
+      const total = initiationProjectDetails.value.length
+      initiationProjectDetails.value = initiationProjectDetails.value.map((detail, index) => ({
+        ...detail,
+        projectCode: formatInitiationItemCode(row.quotationType, pickedCode, index, total)
+      }))
+      syncProjectDetailsToSalesDetails()
+      initiationForm.projectCode = getInitiationPrimaryProjectCode()
+    } else {
+      initiationForm.projectCode = pickedCode
+      syncInitiationDetailItemCodes(row.quotationType, pickedCode)
+    }
   } catch (error: any) {
     ElMessage.error(error?.message || '推荐项目编号失败')
   } finally {
@@ -3169,7 +3386,7 @@ const openInitiationDialog = async (row: QuotationRecord, mode: InitiationDialog
     const res = await getQuotationInitiationRequestApi({ quotationId: row.id })
     initiationRequestRow.value = res.data || null
     buildInitiationFormsFromRow(row, initiationRequestRow.value)
-    if (!initiationForm.projectCode && mode !== 'view') {
+    if (!getInitiationPrimaryProjectCode() && mode !== 'view') {
       await recommendInitiationProjectCode()
     }
     await syncInitiationRawFieldsFromProject(initiationForm.sourceProjectCode, { force: true })
@@ -3236,18 +3453,35 @@ const handleWithdrawInitiation = async (row: QuotationRecord) => {
 
 const addInitiationDetail = () => {
   initiationSalesForm.details.push(createEmptyInitiationDetail())
-  syncInitiationDetailItemCodes(
-    initiationSourceQuotation.value?.quotationType,
-    initiationForm.projectCode
-  )
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工') {
+    initiationProjectDetails.value.push({
+      key: `project-manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      projectCode: '',
+      productName: '',
+      productDrawing: null,
+      customerModelNo: null
+    })
+    syncProjectDetailsToSalesDetails()
+  } else {
+    syncInitiationDetailItemCodes(
+      initiationSourceQuotation.value?.quotationType,
+      initiationForm.projectCode
+    )
+  }
 }
 
 const removeInitiationDetail = (index: number) => {
   initiationSalesForm.details.splice(index, 1)
-  syncInitiationDetailItemCodes(
-    initiationSourceQuotation.value?.quotationType,
-    initiationForm.projectCode
-  )
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工') {
+    initiationProjectDetails.value.splice(index, 1)
+    syncProjectDetailsToSalesDetails()
+  } else {
+    syncInitiationDetailItemCodes(
+      initiationSourceQuotation.value?.quotationType,
+      initiationForm.projectCode
+    )
+  }
+  initiationForm.projectCode = getInitiationPrimaryProjectCode()
 }
 
 const recalcInitiationDetailTotal = (detail: QuotationInitiationSalesOrderDetailDraft) => {
@@ -3265,22 +3499,57 @@ const canShowCustomerReviewAction = computed(() => {
   if (isInitiationViewMode.value) return false
   return !initiationCustomerMatched.value && !!String(initiationForm.customerName || '').trim()
 })
-const initiationProjectCodeDisplayList = computed(() => {
+const initiationProjectCodeFormatError = computed(() => {
   const row = initiationSourceQuotation.value
-  const projectCode = String(initiationForm.projectCode || '').trim()
-  if (!row || !projectCode) return []
-  return initiationSalesForm.details
-    .map((_, index, details) =>
-      formatInitiationItemCode(row.quotationType, projectCode, index, details.length)
-    )
-    .filter((code, index, arr) => !!code && arr.indexOf(code) === index)
+  if (!row) return ''
+  const expectedCategory = resolveBusinessCategory(row.quotationType)
+  const projectCodes =
+    expectedCategory === '零件加工'
+      ? initiationProjectDetails.value.map((detail) => String(detail.projectCode || '').trim())
+      : [String(initiationForm.projectCode || '').trim()]
+  for (const code of projectCodes) {
+    if (!code) continue
+    if (!/^JH(01|03|05)-\d{2}-\d{3}(\/\d{2})?$/.test(code)) {
+      return `项目编号格式不合法：${code}`
+    }
+    const category = getCategoryFromProjectCode(code)
+    if (!category || category !== expectedCategory) {
+      return `项目编号与报价单分类不一致：${code}`
+    }
+  }
+  return ''
+})
+const initiationDuplicateProjectCodeError = computed(() => {
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) !== '零件加工') {
+    return ''
+  }
+  const counter = new Map<string, number>()
+  initiationProjectDetails.value.forEach((detail) => {
+    const code = String(detail.projectCode || '').trim()
+    if (!code) return
+    counter.set(code, (counter.get(code) || 0) + 1)
+  })
+  const duplicatedCode = Array.from(counter.entries()).find(([, count]) => count > 1)?.[0]
+  return duplicatedCode ? `项目编号重复：${duplicatedCode}` : ''
 })
 
 const saveInitiationDraft = async () => {
   const row = initiationSourceQuotation.value
   if (!row) return
-  if (!String(initiationForm.projectCode || '').trim()) {
+  const isPart = resolveBusinessCategory(row.quotationType) === '零件加工'
+  const hasProjectCode = isPart
+    ? initiationProjectDetails.value.every((detail) => !!String(detail.projectCode || '').trim())
+    : !!String(initiationForm.projectCode || '').trim()
+  if (!hasProjectCode) {
     ElMessage.error('项目编号不能为空')
+    return
+  }
+  if (initiationProjectCodeFormatError.value) {
+    ElMessage.error(initiationProjectCodeFormatError.value)
+    return
+  }
+  if (initiationDuplicateProjectCodeError.value) {
+    ElMessage.error(initiationDuplicateProjectCodeError.value)
     return
   }
   const projectCodeOk = await validateInitiationProjectCode()
@@ -3316,8 +3585,20 @@ const saveInitiationDraft = async () => {
 const submitInitiationReview = async () => {
   const row = initiationSourceQuotation.value
   if (!row) return
-  if (!String(initiationForm.projectCode || '').trim()) {
+  const isPart = resolveBusinessCategory(row.quotationType) === '零件加工'
+  const hasProjectCode = isPart
+    ? initiationProjectDetails.value.every((detail) => !!String(detail.projectCode || '').trim())
+    : !!String(initiationForm.projectCode || '').trim()
+  if (!hasProjectCode) {
     ElMessage.error('项目编号不能为空')
+    return
+  }
+  if (initiationProjectCodeFormatError.value) {
+    ElMessage.error(initiationProjectCodeFormatError.value)
+    return
+  }
+  if (initiationDuplicateProjectCodeError.value) {
+    ElMessage.error(initiationDuplicateProjectCodeError.value)
     return
   }
   const projectCodeOk = await validateInitiationProjectCode()
@@ -3879,8 +4160,22 @@ watch(
   (next) => {
     const nextCode = String(next || '').trim()
     initiationForm.category = getCategoryFromProjectCode(nextCode)
+    if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工')
+      return
     syncInitiationDetailItemCodes(initiationSourceQuotation.value?.quotationType, nextCode)
   }
+)
+
+watch(
+  initiationProjectDetails,
+  () => {
+    if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) !== '零件加工') {
+      return
+    }
+    syncProjectDetailsToSalesDetails()
+    initiationForm.projectCode = getInitiationPrimaryProjectCode()
+  },
+  { deep: true }
 )
 
 watch(
