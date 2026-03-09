@@ -517,6 +517,18 @@
                     @blur="handleInitiationProjectCodeBlur"
                   />
                   <div
+                    v-if="initiationProjectCodeDisplayList.length"
+                    class="mt-1 flex flex-wrap gap-1 text-xs text-[var(--el-text-color-secondary)]"
+                  >
+                    <span
+                      v-for="code in initiationProjectCodeDisplayList"
+                      :key="code"
+                      class="rounded border border-[var(--el-border-color)] px-2 py-0.5"
+                    >
+                      {{ code }}
+                    </span>
+                  </div>
+                  <div
                     v-if="initiationProjectCodeError"
                     class="mt-1 text-xs text-[var(--el-color-danger)]"
                   >
@@ -2525,10 +2537,34 @@ const buildDefaultInitiationDetails = (
   return details
 }
 
+const formatInitiationItemCode = (
+  quotationType: QuotationRecord['quotationType'] | string | null | undefined,
+  projectCode: string,
+  index: number,
+  total: number
+) => {
+  const baseCode = String(projectCode || '').trim()
+  if (!baseCode) return ''
+  if (resolveBusinessCategory(quotationType) !== '零件加工') return baseCode
+  if (total <= 1) return baseCode
+  return `${baseCode}/${String(index + 1).padStart(2, '0')}`
+}
+
+const syncInitiationDetailItemCodes = (
+  quotationType: QuotationRecord['quotationType'] | string | null | undefined,
+  projectCode: string
+) => {
+  const total = initiationSalesForm.details.length
+  initiationSalesForm.details = initiationSalesForm.details.map((detail, index) => ({
+    ...detail,
+    itemCode: formatInitiationItemCode(quotationType, projectCode, index, total)
+  }))
+}
+
 const createEmptyInitiationDetail = (): QuotationInitiationSalesOrderDetailDraft => ({
   key: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   name: '',
-  itemCode: initiationForm.projectCode || '',
+  itemCode: '',
   productName: '',
   productDrawingNo: null,
   customerPartNo: null,
@@ -2550,6 +2586,7 @@ const buildInitiationFormsFromRow = (
 ) => {
   const projectDraft = (requestRow?.project_draft || {}) as QuotationInitiationProjectDraft
   const salesDraft = (requestRow?.sales_order_draft || {}) as QuotationInitiationSalesOrderDraft
+  const salesDraftDetails = Array.isArray(salesDraft.details) ? salesDraft.details : []
   const projectCode = String(projectDraft.projectCode || '').trim()
   const category =
     getCategoryFromProjectCode(projectCode) || String(projectDraft.category || '').trim()
@@ -2570,12 +2607,17 @@ const buildInitiationFormsFromRow = (
   initiationSalesForm.orderDate = String(salesDraft.orderDate || todayText()).trim() || todayText()
   initiationSalesForm.signDate = String(salesDraft.signDate || '').trim()
   initiationSalesForm.contractNo = String(salesDraft.contractNo || '').trim()
-  const details =
-    Array.isArray(salesDraft.details) && salesDraft.details.length
-      ? salesDraft.details.map((detail, index) => ({
+  const details = salesDraftDetails.length
+    ? salesDraftDetails.map((detail, index) => {
+        return {
           key: String(detail.key || `detail-${index + 1}`),
           name: detail.name || '',
-          itemCode: String(detail.itemCode || initiationForm.projectCode || '').trim(),
+          itemCode: formatInitiationItemCode(
+            row.quotationType,
+            initiationForm.projectCode,
+            index,
+            salesDraftDetails.length
+          ),
           productName:
             String(detail.productName || '').trim() || String(detail.name || '').trim() || '',
           productDrawingNo: String(detail.productDrawingNo || '').trim() || null,
@@ -2593,9 +2635,11 @@ const buildInitiationFormsFromRow = (
           isInStock: !!detail.isInStock,
           isShipped: !!detail.isShipped,
           shippingDate: detail.shippingDate || null
-        }))
-      : buildDefaultInitiationDetails(row, initiationForm.projectCode)
+        }
+      })
+    : buildDefaultInitiationDetails(row, initiationForm.projectCode)
   initiationSalesForm.details = details
+  syncInitiationDetailItemCodes(row.quotationType, initiationForm.projectCode)
 }
 
 const buildInitiationPayload = () => {
@@ -3011,11 +3055,12 @@ const validateInitiationProjectCode = async () => {
   const projectCode = String(initiationForm.projectCode || '').trim()
   initiationProjectCodeError.value = ''
   initiationForm.category = getCategoryFromProjectCode(projectCode)
+  if (!row || !projectCode) return false
   initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
     ...detail,
-    itemCode: projectCode
+    itemCode: String(detail.itemCode || '').trim()
   }))
-  if (!row || !projectCode) return false
+  syncInitiationDetailItemCodes(row.quotationType, projectCode)
   initiationProjectCodeChecking.value = true
   try {
     const res = await checkQuotationInitiationProjectCodeApi({
@@ -3102,10 +3147,7 @@ const recommendInitiationProjectCode = async () => {
     initiationForm.projectCode = pickedCode
     initiationForm.category = getCategoryFromProjectCode(pickedCode)
     initiationProjectCodeError.value = ''
-    initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
-      ...detail,
-      itemCode: pickedCode
-    }))
+    syncInitiationDetailItemCodes(row.quotationType, pickedCode)
   } catch (error: any) {
     ElMessage.error(error?.message || '推荐项目编号失败')
   } finally {
@@ -3194,10 +3236,18 @@ const handleWithdrawInitiation = async (row: QuotationRecord) => {
 
 const addInitiationDetail = () => {
   initiationSalesForm.details.push(createEmptyInitiationDetail())
+  syncInitiationDetailItemCodes(
+    initiationSourceQuotation.value?.quotationType,
+    initiationForm.projectCode
+  )
 }
 
 const removeInitiationDetail = (index: number) => {
   initiationSalesForm.details.splice(index, 1)
+  syncInitiationDetailItemCodes(
+    initiationSourceQuotation.value?.quotationType,
+    initiationForm.projectCode
+  )
 }
 
 const recalcInitiationDetailTotal = (detail: QuotationInitiationSalesOrderDetailDraft) => {
@@ -3214,6 +3264,16 @@ const isInitiationViewMode = computed(() => initiationDialogMode.value === 'view
 const canShowCustomerReviewAction = computed(() => {
   if (isInitiationViewMode.value) return false
   return !initiationCustomerMatched.value && !!String(initiationForm.customerName || '').trim()
+})
+const initiationProjectCodeDisplayList = computed(() => {
+  const row = initiationSourceQuotation.value
+  const projectCode = String(initiationForm.projectCode || '').trim()
+  if (!row || !projectCode) return []
+  return initiationSalesForm.details
+    .map((_, index, details) =>
+      formatInitiationItemCode(row.quotationType, projectCode, index, details.length)
+    )
+    .filter((code, index, arr) => !!code && arr.indexOf(code) === index)
 })
 
 const saveInitiationDraft = async () => {
@@ -3819,10 +3879,7 @@ watch(
   (next) => {
     const nextCode = String(next || '').trim()
     initiationForm.category = getCategoryFromProjectCode(nextCode)
-    initiationSalesForm.details = initiationSalesForm.details.map((detail) => ({
-      ...detail,
-      itemCode: nextCode
-    }))
+    syncInitiationDetailItemCodes(initiationSourceQuotation.value?.quotationType, nextCode)
   }
 )
 

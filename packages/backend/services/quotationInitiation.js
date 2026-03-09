@@ -168,6 +168,13 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
   const normalizedType = normalizeQuotationBusinessType(quotationRow?.quotationType)
   const defaultRemark = String(quotationRow?.remark || '').trim() || null
   const defaultHandler = String(quotationRow?.operator || '').trim() || null
+  const formatItemCode = (index, total) => {
+    const baseCode = String(projectCode || '').trim() || null
+    if (!baseCode) return null
+    if (normalizedType !== '零件加工') return baseCode
+    if (total <= 1) return baseCode
+    return `${baseCode}/${String(index + 1).padStart(2, '0')}`
+  }
 
   if (normalizedType === '零件加工') {
     const items = Array.isArray(quotationRow?.partItems) ? quotationRow.partItems : []
@@ -178,7 +185,7 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
         String(item?.productName || '').trim() ||
         String(item?.partName || '').trim() ||
         null,
-      itemCode: projectCode || null,
+      itemCode: formatItemCode(index, items.length),
       productName:
         String((existingDetails[index] || {}).productName || '').trim() ||
         String(item?.productName || '').trim() ||
@@ -228,7 +235,7 @@ const buildDefaultSalesOrderDetails = (quotationRow, projectCode, existingDetail
   const detail = {
     key: 'summary-1',
     name,
-    itemCode: projectCode || null,
+    itemCode: formatItemCode(0, 1),
     productName:
       String((existingDetails[0] || {}).productName || '').trim() ||
       String(quotationRow?.partName || '').trim() ||
