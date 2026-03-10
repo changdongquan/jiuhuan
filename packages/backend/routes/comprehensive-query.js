@@ -456,8 +456,8 @@ const buildListFilters = (inputQuery) => {
   }
 
   if (customerName) {
-    params.customerName = `%${customerName}%`
-    sourceWhere.push(`c.customerName LIKE @customerName`)
+    params.customerName = customerName
+    sourceWhere.push(`LTRIM(RTRIM(c.customerName)) = @customerName`)
   }
 
   if (owner) {
