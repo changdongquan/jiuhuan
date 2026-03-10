@@ -197,6 +197,7 @@ export interface BmoMouldProcurementRefreshResult {
   totalSize?: number | null
   traceId?: string | null
   fetchedAt?: string
+  latestUpdatedAt?: string | null
 }
 
 export const ensureBmoSessionApi = (
@@ -213,7 +214,11 @@ export const ensureBmoSessionApi = (
 }
 
 export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: number } = {}) => {
-  return request.get<{ list: BmoMouldProcurementRow[]; count: number }>({
+  return request.get<{
+    list: BmoMouldProcurementRow[]
+    count: number
+    latestUpdatedAt?: string | null
+  }>({
     url: '/api/bmo/mould-procurement',
     params: { limit: params.limit },
     timeout: params.timeout

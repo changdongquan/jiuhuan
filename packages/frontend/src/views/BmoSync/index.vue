@@ -10,6 +10,9 @@
               <span v-if="lastRefreshSource" class="bmo-conn-meta"
                 >来源：{{ lastRefreshSource }}</span
               >
+              <span v-if="lastUpdatedAtText" class="bmo-conn-meta"
+                >最后更新时间：{{ lastUpdatedAtText }}</span
+              >
             </div>
           </div>
           <p class="bmo-subtitle">通过 BMO 中转结果进行查看与立项</p>
@@ -622,11 +625,13 @@ const manualRefreshing = ref(false)
 const autoRefresh = ref(true)
 const pollingTimer = ref<number | null>(null)
 const isMobile = ref(false)
+const SHANGHAI_TIME_ZONE = 'Asia/Shanghai'
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
 const lastRefreshSource = ref<'live' | 'db' | null>(null)
 const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
+const lastUpdatedAt = ref<string | null>(null)
 
 const initiateDialogVisible = ref(false)
 const dialogMode = ref<'view' | 'initiate'>('initiate')
@@ -693,6 +698,9 @@ const connShortLabel = computed(() => {
   if (lastConnectionState.value === 'error') return '连接异常'
   return '未知状态'
 })
+const lastUpdatedAtText = computed(() =>
+  lastUpdatedAt.value ? formatTime(lastUpdatedAt.value) : ''
+)
 const descriptionColumns = computed(() => (isMobile.value ? 1 : 3))
 const techDescriptionColumns = computed(() => (isMobile.value ? 1 : 4))
 
@@ -704,7 +712,17 @@ const updateViewport = () => {
 const formatTime = (value: string | null | undefined) => {
   if (!value) return '-'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString()
+  if (Number.isNaN(date.getTime())) return '-'
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: SHANGHAI_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(date)
 }
 
 const formatAmount = (value: number | null | undefined) => {
@@ -1072,6 +1090,7 @@ const loadLatest = async () => {
     const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
     latestList.value = res.data?.list || []
     lastRefreshSource.value = 'db'
+    lastUpdatedAt.value = res.data?.latestUpdatedAt || null
   } finally {
     loadingLatest.value = false
   }
@@ -1090,6 +1109,7 @@ const refreshAll = async () => {
     lastRefreshSource.value = res.data?.source || null
     lastConnectionState.value = res.data?.connection?.state || null
     lastConnectionMessage.value = res.data?.connection?.message || null
+    lastUpdatedAt.value = res.data?.fetchedAt || res.data?.latestUpdatedAt || null
     ElMessage.success('已刷新 BMO 数据')
   } catch (e: any) {
     ElMessage.error(e?.message || '刷新 BMO 数据失败')

@@ -143,7 +143,7 @@ const startBmoRelayAuthSyncLoop = () => {
   if (started) return
   started = true
 
-  if (String(process.env.BMO_RELAY_AUTH_SYNC_ENABLED || '1') === '0') {
+  if (String(process.env.BMO_RELAY_AUTH_SYNC_ENABLED || '0') !== '1') {
     console.log('[bmo-relay-auth-sync] disabled by BMO_RELAY_AUTH_SYNC_ENABLED=0')
     return
   }

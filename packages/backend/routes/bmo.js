@@ -952,7 +952,8 @@ const fetchMouldProcurementFromDb = async (limit) => {
           pm.project_status,
           ir.initiation_status,
           bid_price_tax_incl,
-          bid_time
+          bid_time,
+          bmo_mould_procurement.updated_at
         FROM bmo_mould_procurement
         OUTER APPLY (
           SELECT TOP 1 项目编号 as project_code, 项目状态 as project_status
@@ -988,7 +989,8 @@ const fetchMouldProcurementFromDb = async (limit) => {
             pm.project_code,
             pm.project_status,
             bid_price_tax_incl,
-            bid_time
+            bid_time,
+            bmo_mould_procurement.updated_at
           FROM bmo_mould_procurement
           OUTER APPLY (
             SELECT TOP 1 项目编号 as project_code, 项目状态 as project_status
@@ -1008,6 +1010,13 @@ const fetchMouldProcurementFromDb = async (limit) => {
     }
     throw e
   }
+}
+
+const resolveLatestUpdatedAt = (rows) => {
+  const value = rows?.[0]?.updated_at
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 const createTaskLog = async (requestJson, triggeredBy) => {
@@ -1281,7 +1290,8 @@ router.get('/mould-procurement', async (req, res) => {
       success: true,
       data: {
         list: rows,
-        count: rows.length
+        count: rows.length,
+        latestUpdatedAt: resolveLatestUpdatedAt(rows)
       }
     })
   } catch (error) {
@@ -1432,7 +1442,8 @@ router.get('/mould-procurement/refresh', async (req, res) => {
             message: 'BMO_HUB_ONLY=1 且未配置 BMO_RELAY_BASE_URL，已返回库内数据'
           },
           list: rows,
-          count: rows.length
+          count: rows.length,
+          latestUpdatedAt: resolveLatestUpdatedAt(rows)
         }
       })
     } catch (dbError) {
@@ -1547,7 +1558,8 @@ router.get('/mould-procurement/refresh', async (req, res) => {
               : 'BMO 中转未返回实时数据，已回退库内数据'
           },
           list: rows,
-          count: rows.length
+          count: rows.length,
+          latestUpdatedAt: resolveLatestUpdatedAt(rows)
         }
       })
     } catch (dbError) {
@@ -1626,7 +1638,8 @@ router.get('/mould-procurement/refresh', async (req, res) => {
           source: 'db',
           connection: { state, message: message || 'live failed' },
           list: rows,
-          count: rows.length
+          count: rows.length,
+          latestUpdatedAt: resolveLatestUpdatedAt(rows)
         }
       })
     } catch (dbError) {
