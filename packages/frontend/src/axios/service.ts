@@ -45,8 +45,10 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError) => {
     const url = error.config?.url || ''
 
+    const silentError = !!(error.config as any)?.silentError
+
     // 对 Windows 域自动登录接口的 401 做静默处理（不弹错误），交由上层逻辑处理
-    if (url.includes('/api/auth/auto-login') && error.response?.status === 401) {
+    if ((url.includes('/api/auth/auto-login') && error.response?.status === 401) || silentError) {
       return Promise.reject(error)
     }
 

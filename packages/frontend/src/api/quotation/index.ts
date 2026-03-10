@@ -380,10 +380,13 @@ export const getQuotationInitiationReviewTasksApi = (params: {
   })
 }
 
-export const getQuotationInitiationPendingCountApi = (params: { timeout?: number } = {}) => {
+export const getQuotationInitiationPendingCountApi = (
+  params: { timeout?: number; silentError?: boolean } = {}
+) => {
   return request.get<{ pendingCount: number }>({
     url: '/api/quotation/initiation-review/pending-count',
-    timeout: params.timeout
+    timeout: params.timeout,
+    silentError: params.silentError
   })
 }
 

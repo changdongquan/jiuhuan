@@ -46,6 +46,7 @@ declare global {
     responseType?: AxiosResponseType
     timeout?: number
     withCredentials?: boolean // 支持携带凭据（用于 Kerberos SSO）
+    silentError?: boolean
   }
 
   declare interface IResponse<T = any> {

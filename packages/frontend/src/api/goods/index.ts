@@ -123,10 +123,13 @@ export interface HardDeleteReviewTask {
   updatedAt: string | null
 }
 
-export const getHardDeleteReviewPendingCountApi = (params: { timeout?: number } = {}) => {
+export const getHardDeleteReviewPendingCountApi = (
+  params: { timeout?: number; silentError?: boolean } = {}
+) => {
   return request.get<{ pendingCount: number }>({
     url: '/api/goods/hard-delete-review/pending-count',
-    timeout: params.timeout
+    timeout: params.timeout,
+    silentError: params.silentError
   })
 }
 

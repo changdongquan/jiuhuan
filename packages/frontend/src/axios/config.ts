@@ -52,9 +52,10 @@ const defaultResponseInterceptors = (response: AxiosResponse) => {
   } else if (response.data.code === SUCCESS_CODE || response.data.code === 200) {
     return response.data
   } else {
+    const silentError = !!(response?.config as any)?.silentError
     // 对于 SSO 自动登录接口的 401 错误，不显示错误提示（因为不在域环境中是正常情况）
     const isAutoLoginApi = response.config.url?.includes('/api/auth/auto-login')
-    if (!isAutoLoginApi || response?.data?.code !== 401) {
+    if ((!isAutoLoginApi || response?.data?.code !== 401) && !silentError) {
       ElMessage.error(response?.data?.message)
     }
     if (response?.data?.code === 401) {

@@ -18,6 +18,7 @@ interface RequestInterceptors<T> {
 
 interface RequestConfig<T = AxiosResponse> extends AxiosRequestConfig {
   interceptors?: RequestInterceptors<T>
+  silentError?: boolean
 }
 
 export {

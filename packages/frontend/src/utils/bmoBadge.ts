@@ -21,15 +21,15 @@ export const refreshBmoMenuBadges = async () => {
     capabilityKeys.includes('CUSTOMER_INFO.READ') || routePermissions.includes('CustomerInfoIndex')
   try {
     const customerReviewPromise = canReadCustomerReview
-      ? getCustomerCreateReviewPendingCountApi({ timeout: 8000 })
+      ? getCustomerCreateReviewPendingCountApi({ timeout: 8000, silentError: true })
       : Promise.resolve({ data: { pendingCount: 0 } })
 
     const [initiationRes, reviewRes, hardDeleteRes, quotationReviewRes, customerReviewRes] =
       await Promise.all([
-        getBmoPendingInitiationCountApi({ timeout: 8000 }),
-        getBmoPendingReviewCountApi({ timeout: 8000 }),
-        getHardDeleteReviewPendingCountApi({ timeout: 8000 }),
-        getQuotationInitiationPendingCountApi({ timeout: 8000 }),
+        getBmoPendingInitiationCountApi({ timeout: 8000, silentError: true }),
+        getBmoPendingReviewCountApi({ timeout: 8000, silentError: true }),
+        getHardDeleteReviewPendingCountApi({ timeout: 8000, silentError: true }),
+        getQuotationInitiationPendingCountApi({ timeout: 8000, silentError: true }),
         customerReviewPromise
       ])
     const pendingInitiationCount = Number(initiationRes?.data?.pendingCount || 0) || 0

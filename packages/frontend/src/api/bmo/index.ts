@@ -225,17 +225,23 @@ export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: nu
   })
 }
 
-export const getBmoPendingInitiationCountApi = (params: { timeout?: number } = {}) => {
+export const getBmoPendingInitiationCountApi = (
+  params: { timeout?: number; silentError?: boolean } = {}
+) => {
   return request.get<{ pendingCount: number }>({
     url: '/api/bmo/mould-procurement/pending-count',
-    timeout: params.timeout
+    timeout: params.timeout,
+    silentError: params.silentError
   })
 }
 
-export const getBmoPendingReviewCountApi = (params: { timeout?: number } = {}) => {
+export const getBmoPendingReviewCountApi = (
+  params: { timeout?: number; silentError?: boolean } = {}
+) => {
   return request.get<{ pendingCount: number }>({
     url: '/api/bmo/initiation-review/pending-count',
-    timeout: params.timeout
+    timeout: params.timeout,
+    silentError: params.silentError
   })
 }
 

@@ -33,10 +33,13 @@ export const getCustomerCreateReviewTasksForReviewCenterApi = (params: {
   })
 }
 
-export const getCustomerCreateReviewPendingCountApi = (params: { timeout?: number } = {}) => {
+export const getCustomerCreateReviewPendingCountApi = (
+  params: { timeout?: number; silentError?: boolean } = {}
+) => {
   return request.get<{ pendingCount: number }>({
     url: '/api/customer/review-pending-count',
-    timeout: params.timeout
+    timeout: params.timeout,
+    silentError: params.silentError
   })
 }
 

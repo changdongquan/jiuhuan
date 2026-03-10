@@ -3,7 +3,17 @@ import { CONTENT_TYPE } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 
 const request = (option: AxiosConfig) => {
-  const { url, method, params, data, headers, responseType, withCredentials, timeout } = option
+  const {
+    url,
+    method,
+    params,
+    data,
+    headers,
+    responseType,
+    withCredentials,
+    timeout,
+    silentError
+  } = option
 
   const userStore = useUserStoreWithOut()
   const userInfo: any = userStore.getUserInfo || {}
@@ -34,6 +44,7 @@ const request = (option: AxiosConfig) => {
     data: data,
     responseType: responseType,
     timeout,
+    silentError,
     withCredentials: withCredentials, // 支持携带凭据（用于 Kerberos SSO）
     headers: mergedHeaders
   })
