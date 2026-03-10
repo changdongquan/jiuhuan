@@ -116,6 +116,26 @@ const safeJsonParse = (value, fallback = null) => {
   }
 }
 
+const getProjectManagementProductListColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  const rows = await req.query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = N'项目管理'
+      AND COLUMN_NAME IN (N'产品列表', N'产品名称列表')
+  `)
+  const cols = new Set((rows.recordset || []).map((row) => String(row.COLUMN_NAME || '').trim()))
+  return {
+    hasProductList: cols.has('产品列表'),
+    hasProductNameList: cols.has('产品名称列表')
+  }
+}
+
+const toSingleItemJsonList = (value) => {
+  const text = String(value || '').trim()
+  return text ? JSON.stringify([text]) : null
+}
+
 const customerExistsByName = async (poolOrTx, customerName) => {
   const req = new sql.Request(poolOrTx)
   req.input('customerName', sql.NVarChar(200), String(customerName || '').trim())
@@ -708,17 +728,34 @@ const createGoodsAndScaffold = async ({ tx, projectCode, customerName, customerM
   if (projectExists) throw new Error(`项目编号 "${projectCode}" 已存在`)
   if (!projectExists) {
     const ins = new sql.Request(tx)
+    const columns = ['项目编号']
+    const values = ['@projectCode']
     ins.input('projectCode', sql.NVarChar(50), projectCode)
-    if (customerId) ins.input('customerId', sql.Int, customerId)
-    ins.input('customerModelNo', sql.NVarChar(100), customerModelNo || null)
     if (customerId) {
-      await ins.query(`
-        INSERT INTO 项目管理 (项目编号, 客户ID, 客户模号)
-        VALUES (@projectCode, @customerId, @customerModelNo)
-      `)
-    } else {
-      await ins.query(`INSERT INTO 项目管理 (项目编号) VALUES (@projectCode)`)
+      columns.push('客户ID', '客户模号')
+      values.push('@customerId', '@customerModelNo')
+      ins.input('customerId', sql.Int, customerId)
+      ins.input('customerModelNo', sql.NVarChar(100), customerModelNo || null)
     }
+
+    const productListColumns = await getProjectManagementProductListColumns(tx)
+    const productListJson = toSingleItemJsonList(productDrawing)
+    const productNameListJson = toSingleItemJsonList(productName)
+    if (productListColumns.hasProductList && productListJson) {
+      columns.push('产品列表')
+      values.push('@productListJson')
+      ins.input('productListJson', sql.NVarChar(sql.MAX), productListJson)
+    }
+    if (productListColumns.hasProductNameList && productNameListJson) {
+      columns.push('产品名称列表')
+      values.push('@productNameListJson')
+      ins.input('productNameListJson', sql.NVarChar(sql.MAX), productNameListJson)
+    }
+
+    await ins.query(`
+      INSERT INTO 项目管理 (${columns.join(', ')})
+      VALUES (${values.join(', ')})
+    `)
   }
 
   const goodsReq = new sql.Request(tx)
