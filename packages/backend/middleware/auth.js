@@ -8,6 +8,12 @@ const LEGACY_DEV_TOKENS = new Set([
   'DEV_AUTO_LOGIN'
 ])
 
+const INTERNAL_TOKEN_ALLOWLIST = new Set([
+  '/api/bmo/relay/persist-mould',
+  '/api/bmo/relay/sync-status',
+  '/api/bmo/relay/sync/run'
+])
+
 const resolveAuthorizationHeader = (req) => {
   const header = req.headers?.authorization
   if (Array.isArray(header)) return header[0]
@@ -19,7 +25,36 @@ const resolveDisplayHeader = (value) => {
   return String(raw || '').trim()
 }
 
+const resolveInternalTokenHeader = (req) => {
+  const header = req.headers?.['x-internal-token']
+  if (Array.isArray(header)) return header[0]
+  return header || ''
+}
+
+const shouldAllowInternalToken = (req) => {
+  const expected = String(process.env.BMO_RELAY_SYNC_TOKEN || '').trim()
+  if (!expected) return false
+  const requestPath = String(req.originalUrl || req.path || '').trim()
+  if (!INTERNAL_TOKEN_ALLOWLIST.has(requestPath)) return false
+  const incoming = String(resolveInternalTokenHeader(req) || '').trim()
+  return Boolean(incoming) && incoming === expected
+}
+
 const authenticateRequest = (req, res, next) => {
+  if (shouldAllowInternalToken(req)) {
+    req.auth = {
+      username: 'relay-sync',
+      displayName: 'relay-sync',
+      role: 'system',
+      roleId: 'relay-sync',
+      domain: 'INTERNAL',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      iat: Math.floor(Date.now() / 1000)
+    }
+    req.headers['x-username'] = 'relay-sync'
+    req.headers['x-display-name'] = 'relay-sync'
+    return next()
+  }
   try {
     const authHeader = resolveAuthorizationHeader(req)
     const auth = verifyAuthToken(authHeader)

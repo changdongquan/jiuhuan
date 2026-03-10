@@ -1927,6 +1927,94 @@ router.get('/relay/jobs/:jobId', async (req, res) => {
   }
 })
 
+router.get('/relay/sync-status', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const raw = await relayRequestJson('/sync/status', {
+      method: 'GET',
+      timeoutMs: 15000
+    })
+    return res.json({ code: 0, success: true, data: raw?.data || raw || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 relay 同步状态失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/relay/sync/run', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const raw = await relayRequestJson('/sync/run', {
+      method: 'POST',
+      timeoutMs: 20000,
+      body: req.body || {}
+    })
+    return res.json({ code: 0, success: true, data: raw?.data || raw || null })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '触发 relay 同步失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.post('/relay/persist-mould', async (req, res) => {
+  const requestBody = req.body && typeof req.body === 'object' ? req.body : {}
+  const list = Array.isArray(requestBody.list) ? requestBody.list : []
+  const traceId = String(requestBody.traceId || '').trim() || null
+  const source = String(requestBody.source || 'relay').trim() || 'relay'
+  const fetched = toSafeInt(requestBody.fetched, list.length)
+  let taskId = null
+
+  try {
+    taskId = await createTaskLog(
+      {
+        source,
+        traceId,
+        fetched,
+        total: toSafeInt(requestBody.total, fetched),
+        fetchedAt: requestBody.fetchedAt || null
+      },
+      `${req.headers['x-username'] || 'relay-sync'}:${source}`
+    )
+    const upserted = await upsertBmoRecords(list, traceId)
+    const summary = {
+      source,
+      fetched,
+      upserted,
+      total: toSafeInt(requestBody.total, fetched),
+      traceId,
+      fetchedAt: requestBody.fetchedAt || null,
+      persistedAt: new Date().toISOString()
+    }
+    await updateTaskLogSuccess(taskId, summary)
+    return res.json({ code: 0, success: true, data: summary })
+  } catch (error) {
+    await updateTaskLogFailed(taskId, error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: 'relay BMO 入库失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
 router.post('/relay/jobs/:jobId/retry', async (req, res) => {
   try {
     if (!isRelayEnabled()) {

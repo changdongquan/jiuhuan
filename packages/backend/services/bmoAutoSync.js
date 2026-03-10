@@ -557,13 +557,9 @@ let timer = null
 const startBmoAutoSyncLoop = () => {
   if (started) return
   started = true
-  // craftsys keeps the local DB fresh by pulling through relay unless explicitly disabled.
+  // craftsys local auto-sync is emergency fallback only; relay scheduler is the primary path.
   const enabledFlag = String(process.env.BMO_AUTO_SYNC_ENABLED || '').trim().toLowerCase()
-  const enabled =
-    enabledFlag === '1' ||
-    enabledFlag === 'true' ||
-    enabledFlag === 'yes' ||
-    (!enabledFlag && isRelayEnabled())
+  const enabled = enabledFlag === '1' || enabledFlag === 'true' || enabledFlag === 'yes'
   if (!enabled) {
     console.log('[bmo-auto-sync] disabled', {
       env: process.env.BMO_AUTO_SYNC_ENABLED ?? null,
