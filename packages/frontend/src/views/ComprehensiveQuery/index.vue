@@ -59,8 +59,9 @@
                 class="filter-control"
               >
                 <el-option label="销售已结清" value="销售已结清" />
+                <el-option label="销售未结清" value="销售未结清" />
                 <el-option label="开票已结清" value="开票已结清" />
-                <el-option label="未结清" value="未结清" />
+                <el-option label="开票未结清" value="开票未结清" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -269,6 +270,25 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="数量" width="90" align="right">
+              <template #default="{ row }">{{ formatNumber(row.orderQuantity) }}</template>
+            </el-table-column>
+            <el-table-column label="单价" width="108" align="right">
+              <template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template>
+            </el-table-column>
+            <el-table-column
+              prop="contractNo"
+              label="合同号"
+              min-width="130"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+            <el-table-column
+              prop="costSource"
+              label="费用出处"
+              min-width="130"
+              show-overflow-tooltip
+            />
             <el-table-column label="销售金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.salesAmount) }}</template>
             </el-table-column>
@@ -284,8 +304,11 @@
             <el-table-column label="未开票金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.uninvoicedAmount) }}</template>
             </el-table-column>
-            <el-table-column label="未回款金额" width="108" align="right">
+            <el-table-column label="开票欠款" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.unreceivedAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="订单欠款" width="108" align="right">
+              <template #default="{ row }">{{ formatAmount(row.orderArrearsAmount) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="120" align="center">
               <template #default="{ row }">
@@ -529,7 +552,7 @@ const queryPresets: QueryPreset[] = [
   {
     key: 'no-advance',
     label: '未收预付款',
-    settlementStatus: '未结清',
+    settlementStatus: '销售未结清',
     progressSelections: ['progress:receipt:0']
   },
   {
@@ -540,13 +563,13 @@ const queryPresets: QueryPreset[] = [
   {
     key: 'invoice-full-receipt-70',
     label: '开票100%仅收一验回款',
-    settlementStatus: '未结清',
+    settlementStatus: '开票未结清',
     progressSelections: ['progress:invoice:100', 'progress:receipt:60_90']
   },
   {
     key: 'final-10-unreceived',
     label: '未收最后10%',
-    settlementStatus: '未结清',
+    settlementStatus: '开票未结清',
     progressSelections: ['progress:invoice:100', 'progress:receipt:90_100']
   },
   {
@@ -761,6 +784,7 @@ const getProductionStatusTagType = (status?: string) => {
 }
 
 const getSettlementStatusTagType = (status?: string) => {
+  if (!status) return 'info'
   if (status === '销售已结清') return 'success'
   if (status === '开票已结清') return 'primary'
   return 'warning'
@@ -781,6 +805,12 @@ const formatAmount = (value: number) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })
+}
+
+const formatNumber = (value: number) => {
+  const amount = Number(value || 0)
+  if (!Number.isFinite(amount) || amount === 0) return '-'
+  return amount.toLocaleString()
 }
 
 const formatAmountPair = (left: number, right: number) => {

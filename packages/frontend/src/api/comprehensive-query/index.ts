@@ -29,6 +29,11 @@ export interface ComprehensiveQueryRow {
   salesAmount: number
   projectStatus: string
   productionStatus: string
+  orderQuantity: number
+  unitPrice: number
+  contractNo: string
+  remark: string
+  costSource: string
   completedQty: number
   outboundDocCount: number
   outboundQty: number
@@ -41,6 +46,7 @@ export interface ComprehensiveQueryRow {
   settlementSource?: string
   uninvoicedAmount: number
   unreceivedAmount: number
+  orderArrearsAmount: number
   anomalyType: string
   latestOrderDate: string
   latestOutboundDate: string

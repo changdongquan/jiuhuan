@@ -244,9 +244,16 @@ const applyExcelDataAreaStyle = (worksheet, keys, rows) => {
   applyExcelHeaderStyle(worksheet, 1, colCount)
   applyExcelDataBorders(worksheet, rowStart, rowEnd, 1, colCount)
   if (!rows.length) return
-  ;['salesAmount', 'invoiceAmount', 'receiptAmount', 'discountAmount', 'uninvoicedAmount', 'unreceivedAmount'].forEach(
-    (key) => applyExcelAccountingFormat(worksheet, key, 2)
-  )
+  ;[
+    'salesAmount',
+    'unitPrice',
+    'invoiceAmount',
+    'receiptAmount',
+    'discountAmount',
+    'uninvoicedAmount',
+    'unreceivedAmount',
+    'orderArrearsAmount'
+  ].forEach((key) => applyExcelAccountingFormat(worksheet, key, 2))
   worksheet.views = [{ state: 'frozen', ySplit: 1 }]
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },
@@ -273,11 +280,17 @@ const buildExportRows = (rows) => {
     salesAmount: amount(row.salesAmount),
     projectStatus: row.projectStatus || '',
     productionStatus: row.productionStatus || '',
+    orderQuantity: safeNumber(row.orderQuantity),
+    unitPrice: amount(row.unitPrice),
+    contractNo: row.contractNo || '',
+    remark: row.remark || '',
+    costSource: row.costSource || '',
     invoiceAmount: amount(row.invoiceAmount),
     receiptAmount: amount(row.receiptAmount),
     discountAmount: amount(row.discountAmount),
     uninvoicedAmount: amount(row.uninvoicedAmount),
     unreceivedAmount: amount(row.unreceivedAmount),
+    orderArrearsAmount: amount(row.orderArrearsAmount),
     settlementStatus: row.settlementStatus || '',
     settlementSource: row.settlementSource || '',
     anomalyType: anomalyLabelMap[row.anomalyType] || '',
@@ -301,11 +314,17 @@ const getExportColumns = () => {
     { header: '销售金额', key: 'salesAmount' },
     { header: '项目状态', key: 'projectStatus' },
     { header: '生产状态', key: 'productionStatus' },
+    { header: '数量', key: 'orderQuantity' },
+    { header: '单价', key: 'unitPrice' },
+    { header: '合同号', key: 'contractNo' },
+    { header: '备注', key: 'remark' },
+    { header: '费用出处', key: 'costSource' },
     { header: '开票金额', key: 'invoiceAmount' },
     { header: '回款金额', key: 'receiptAmount' },
     { header: '贴息金额', key: 'discountAmount' },
     { header: '未开票金额', key: 'uninvoicedAmount' },
-    { header: '未回款金额', key: 'unreceivedAmount' },
+    { header: '开票欠款', key: 'unreceivedAmount' },
+    { header: '订单欠款', key: 'orderArrearsAmount' },
     { header: '状态', key: 'settlementStatus' },
     { header: '状态来源', key: 'settlementSource' },
     { header: '异常', key: 'anomalyType' },
@@ -333,12 +352,18 @@ const buildExportWorkbookBuffer = async (rows) => {
       maxWidth: 72,
       extraPadding: 4,
       minWidthMap: {
+        orderQuantity: 12,
         salesAmount: 20,
+        unitPrice: 18,
+        contractNo: 16,
+        remark: 20,
+        costSource: 16,
         invoiceAmount: 20,
         receiptAmount: 20,
         discountAmount: 20,
         uninvoicedAmount: 20,
-        unreceivedAmount: 20
+        unreceivedAmount: 20,
+        orderArrearsAmount: 20
       }
     }
   )
@@ -353,21 +378,37 @@ const buildExportWorkbookBuffer = async (rows) => {
 const buildSettlementStatusSql = (alias = 'base') => {
   const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
   return `CASE
-    WHEN ${manualStatus} IN (N'销售已结清', N'开票已结清', N'未结清') THEN ${manualStatus}
+    WHEN ${manualStatus} IN (N'销售已结清', N'销售未结清', N'开票已结清', N'开票未结清') THEN ${manualStatus}
+    WHEN ${manualStatus} = N'未结清'
+      AND ${alias}.invoiceAmount > 0
+    THEN N'开票未结清'
+    WHEN ${manualStatus} = N'未结清'
+      AND ${alias}.salesAmount > 0
+    THEN N'销售未结清'
     WHEN ${alias}.salesAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.salesAmount
     THEN N'销售已结清'
+    WHEN ${alias}.salesAmount > 0
+      AND ${alias}.invoiceAmount <= 0
+    THEN N'销售未结清'
     WHEN ${alias}.invoiceAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.invoiceAmount
     THEN N'开票已结清'
-    ELSE N'未结清'
+    WHEN ${alias}.invoiceAmount > 0
+    THEN N'开票未结清'
+    ELSE N''
   END`
 }
 
 const buildSettlementSourceSql = (alias = 'base') => {
   const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
+  const settlementStatusSql = buildSettlementStatusSql(alias)
   return `CASE
-    WHEN ${manualStatus} IN (N'销售已结清', N'开票已结清', N'未结清') THEN N'人工认定'
+    WHEN ${manualStatus} IN (N'销售已结清', N'销售未结清', N'开票已结清', N'开票未结清') THEN N'人工认定'
+    WHEN ${manualStatus} = N'未结清'
+      AND (${alias}.salesAmount > 0 OR ${alias}.invoiceAmount > 0)
+    THEN N'人工认定'
+    WHEN (${settlementStatusSql}) = N'' THEN N''
     ELSE N'系统计算'
   END`
 }
@@ -514,10 +555,14 @@ const buildListFilters = (inputQuery) => {
 
   if (settlementStatus === '销售已结清') {
     baseWhere.push(`(${settlementStatusSql} = N'销售已结清')`)
+  } else if (settlementStatus === '销售未结清') {
+    baseWhere.push(`(${settlementStatusSql} = N'销售未结清')`)
   } else if (settlementStatus === '开票已结清') {
     baseWhere.push(`(${settlementStatusSql} = N'开票已结清')`)
+  } else if (settlementStatus === '开票未结清') {
+    baseWhere.push(`(${settlementStatusSql} = N'开票未结清')`)
   } else if (settlementStatus === '未结清') {
-    baseWhere.push(`(${settlementStatusSql} = N'未结清')`)
+    baseWhere.push(`(${settlementStatusSql} IN (N'销售未结清', N'开票未结清'))`)
   }
 
   if (anomalyTypes.length > 0) {
@@ -569,6 +614,11 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(s.salesAmount, 0) as salesAmount,
         p.项目状态 as projectStatus,
         pt.productionStatus as productionStatus,
+        ISNULL(soLatest.quantity, 0) as orderQuantity,
+        ISNULL(soLatest.unitPrice, 0) as unitPrice,
+        ISNULL(soLatest.contractNo, N'') as contractNo,
+        ISNULL(soLatest.remark, N'') as remark,
+        ISNULL(soLatest.costSource, N'') as costSource,
         ISNULL(pt.plannedQty, 0) as plannedQty,
         ISNULL(pt.completedQty, 0) as completedQty,
         ISNULL(od.outboundDocCount, 0) as outboundDocCount,
@@ -593,6 +643,11 @@ const buildBaseCteSql = (sourceWhereSql) => {
           THEN ISNULL(fi.invoiceAmount, 0) - ISNULL(fr.receiptAmount, 0) - ISNULL(fr.discountAmount, 0)
           ELSE 0
         END as unreceivedAmount,
+        CASE
+          WHEN ISNULL(s.salesAmount, 0) > ISNULL(fr.receiptAmount, 0) + ISNULL(fr.discountAmount, 0)
+          THEN ISNULL(s.salesAmount, 0) - ISNULL(fr.receiptAmount, 0) - ISNULL(fr.discountAmount, 0)
+          ELSE 0
+        END as orderArrearsAmount,
         CASE
           WHEN ISNULL(pt.plannedQty, 0) <= 0 THEN 0
           WHEN ISNULL(pt.completedQty, 0) * 100.0 / ISNULL(pt.plannedQty, 0) >= 100 THEN 100
@@ -654,6 +709,18 @@ const buildBaseCteSql = (sourceWhereSql) => {
           AND (so2.状态 IS NULL OR so2.状态 <> N'已删除')
         ORDER BY so2.订单日期 DESC, so2.订单ID DESC
       ) soOwner
+      OUTER APPLY (
+        SELECT TOP 1
+          so3.数量 as quantity,
+          so3.单价 as unitPrice,
+          so3.合同号 as contractNo,
+          so3.备注 as remark,
+          so3.费用出处 as costSource
+        FROM 销售订单 so3
+        WHERE so3.项目编号 = p.项目编号
+          AND (so3.状态 IS NULL OR so3.状态 <> N'已删除')
+        ORDER BY so3.订单日期 DESC, so3.订单ID DESC
+      ) soLatest
       OUTER APPLY (
         SELECT TOP 1
           pt1.生产状态 as productionStatus,
@@ -1043,6 +1110,11 @@ router.get('/list', async (req, res) => {
         base.salesAmount,
         base.projectStatus,
         base.productionStatus,
+        base.orderQuantity,
+        base.unitPrice,
+        base.contractNo,
+        base.remark,
+        base.costSource,
         base.completedQty,
         base.outboundDocCount,
         base.outboundQty,
@@ -1055,6 +1127,7 @@ router.get('/list', async (req, res) => {
         ${settlementSourceSql} as settlementSource,
         base.uninvoicedAmount,
         base.unreceivedAmount,
+        base.orderArrearsAmount,
         ${anomalyTypeSql} as anomalyType,
         CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
         CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
@@ -1109,6 +1182,11 @@ router.get('/export', async (req, res) => {
         base.salesAmount,
         base.projectStatus,
         base.productionStatus,
+        base.orderQuantity,
+        base.unitPrice,
+        base.contractNo,
+        base.remark,
+        base.costSource,
         base.completedQty,
         base.outboundDocCount,
         base.outboundQty,
@@ -1121,6 +1199,7 @@ router.get('/export', async (req, res) => {
         ${settlementSourceSql} as settlementSource,
         base.uninvoicedAmount,
         base.unreceivedAmount,
+        base.orderArrearsAmount,
         ${anomalyTypeSql} as anomalyType,
         CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
         CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
