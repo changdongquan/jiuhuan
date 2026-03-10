@@ -34,16 +34,6 @@
           @keyup.enter="handleSearch"
         />
       </el-form-item>
-      <el-form-item label="加工日期">
-        <el-date-picker
-          v-model="queryForm.processingDate"
-          type="date"
-          placeholder="请选择加工日期"
-          value-format="YYYY-MM-DD"
-          :style="{ width: isMobile ? '100%' : '180px' }"
-          clearable
-        />
-      </el-form-item>
       <el-form-item label="报价类型">
         <el-select
           v-model="queryForm.quotationType"
@@ -73,19 +63,10 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="最终项目编号">
+      <el-form-item label="最终项目编号" label-width="110px">
         <el-input
           v-model="queryForm.finalProjectCode"
           placeholder="请输入最终项目编号"
-          clearable
-          :style="{ width: isMobile ? '100%' : '180px' }"
-          @keyup.enter="handleSearch"
-        />
-      </el-form-item>
-      <el-form-item label="销售订单号">
-        <el-input
-          v-model="queryForm.salesOrderNo"
-          placeholder="请输入销售订单号"
           clearable
           :style="{ width: isMobile ? '100%' : '180px' }"
           @keyup.enter="handleSearch"
@@ -330,7 +311,7 @@
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="400" fixed="right" align="center">
+        <el-table-column label="操作" width="360" fixed="right" align="center">
           <template #default="{ row }">
             <div class="operation-buttons">
               <el-button
@@ -1889,7 +1870,6 @@ interface QuotationFormModel {
 
 interface QueryForm {
   keyword: string
-  processingDate: string | ''
   quotationType: 'mold' | 'part' | '塑胶模具' | '修改模具' | '零件加工' | ''
   initiationStatus:
     | ''
@@ -1901,7 +1881,6 @@ interface QueryForm {
     | '已驳回'
     | '已撤回'
   finalProjectCode: string
-  salesOrderNo: string
 }
 
 type InitiationDialogMode = 'create' | 'edit' | 'view' | 'restart'
@@ -1939,11 +1918,9 @@ const customerLoading = ref(false)
 // 查询表单
 const queryForm = reactive<QueryForm>({
   keyword: '',
-  processingDate: '',
   quotationType: '',
   initiationStatus: '',
-  finalProjectCode: '',
-  salesOrderNo: ''
+  finalProjectCode: ''
 })
 
 // 报价单列表
@@ -2964,11 +2941,9 @@ const loadQuotations = async () => {
     loading.value = true
     const response = await getQuotationListApi({
       keyword: queryForm.keyword,
-      processingDate: queryForm.processingDate,
       quotationType: queryForm.quotationType,
       initiationStatus: queryForm.initiationStatus,
       finalProjectCode: queryForm.finalProjectCode,
-      salesOrderNo: queryForm.salesOrderNo,
       page: pagination.page,
       pageSize: pagination.pageSize
     })
@@ -2996,11 +2971,9 @@ const handleSearch = () => {
 
 const handleReset = () => {
   queryForm.keyword = ''
-  queryForm.processingDate = ''
   queryForm.quotationType = ''
   queryForm.initiationStatus = ''
   queryForm.finalProjectCode = ''
-  queryForm.salesOrderNo = ''
   pagination.page = 1
   loadQuotations()
 }
