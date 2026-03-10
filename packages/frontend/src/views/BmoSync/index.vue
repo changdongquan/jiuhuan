@@ -470,8 +470,7 @@ import { useUserStoreWithOut } from '@/store/modules/user'
 import {
   ensureBmoSessionApi,
   getBmoMouldProcurementApi,
-  createBmoRelayJobApi,
-  getBmoRelayJobApi,
+  getBmoMouldProcurementRefreshApi,
   getBmoMouldProcurementDetailApi,
   getBmoInitiationCustomersApi,
   getBmoInitiationRequestApi,
@@ -1078,34 +1077,19 @@ const loadLatest = async () => {
   }
 }
 
-const waitRelayCollectJob = async (jobId: string, timeoutMs = 60000) => {
-  const deadline = Date.now() + Math.max(10000, timeoutMs)
-  while (Date.now() < deadline) {
-    const statusRes = await getBmoRelayJobApi(jobId)
-    const job = statusRes.data as any
-    const status = String(job?.status || '').toLowerCase()
-    if (status === 'success') return
-    if (status === 'failed') {
-      throw new Error(String(job?.error || '采集任务失败'))
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-  }
-  throw new Error('采集任务超时，请到 BMO中转管理 查看任务状态')
-}
-
 const refreshAll = async () => {
   manualRefreshing.value = true
   try {
-    const createRes = await createBmoRelayJobApi({
-      type: 'collect',
-      payload: { pageSize: 200, offset: 0 }
+    const res = await getBmoMouldProcurementRefreshApi({
+      pageSize: 200,
+      offset: 0,
+      maxWaitMs: 60000,
+      timeout: 70000
     })
-    const jobId = String(createRes.data?.id || '').trim()
-    if (!jobId) throw new Error('中转任务创建失败（缺少 jobId）')
-
-    await waitRelayCollectJob(jobId, 60000)
-    await ensureSessionOnOpen()
-    await loadLatest()
+    latestList.value = res.data?.list || []
+    lastRefreshSource.value = res.data?.source || null
+    lastConnectionState.value = res.data?.connection?.state || null
+    lastConnectionMessage.value = res.data?.connection?.message || null
     ElMessage.success('已刷新 BMO 数据')
   } catch (e: any) {
     ElMessage.error(e?.message || '刷新 BMO 数据失败')

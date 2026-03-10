@@ -557,14 +557,29 @@ let timer = null
 const startBmoAutoSyncLoop = () => {
   if (started) return
   started = true
-  // After BMO capability is centralized into jiuhuan-hub, craftsys should not auto-sync by default.
-  const enabled = String(process.env.BMO_AUTO_SYNC_ENABLED || '0') !== '0'
+  // craftsys keeps the local DB fresh by pulling through relay unless explicitly disabled.
+  const enabledFlag = String(process.env.BMO_AUTO_SYNC_ENABLED || '').trim().toLowerCase()
+  const enabled =
+    enabledFlag === '1' ||
+    enabledFlag === 'true' ||
+    enabledFlag === 'yes' ||
+    (!enabledFlag && isRelayEnabled())
   if (!enabled) {
-    console.log('[bmo-auto-sync] disabled by BMO_AUTO_SYNC_ENABLED=0')
+    console.log('[bmo-auto-sync] disabled', {
+      env: process.env.BMO_AUTO_SYNC_ENABLED ?? null,
+      relayEnabled: isRelayEnabled()
+    })
     return
   }
   const intervalMs = toPositiveInt(process.env.BMO_AUTO_SYNC_INTERVAL_MS, 60 * 60 * 1000, 60000)
   const startupDelayMs = toPositiveInt(process.env.BMO_AUTO_SYNC_STARTUP_DELAY_MS, 15000, 1000)
+
+  console.log('[bmo-auto-sync] enabled', {
+    env: process.env.BMO_AUTO_SYNC_ENABLED ?? null,
+    relayEnabled: isRelayEnabled(),
+    intervalMs,
+    startupDelayMs
+  })
 
   const runWithLog = async (reason) => {
     try {
