@@ -1016,7 +1016,11 @@ const resolveLatestUpdatedAt = (rows) => {
   const value = rows?.[0]?.updated_at
   if (!value) return null
   const date = value instanceof Date ? value : new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  if (Number.isNaN(date.getTime())) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(
+    date.getUTCHours()
+  )}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
 }
 
 const createTaskLog = async (requestJson, triggeredBy) => {

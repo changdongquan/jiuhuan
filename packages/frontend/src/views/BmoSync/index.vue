@@ -711,6 +711,7 @@ const updateViewport = () => {
 
 const formatTime = (value: string | null | undefined) => {
   if (!value) return '-'
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) return value
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('zh-CN', {
