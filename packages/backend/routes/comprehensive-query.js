@@ -381,21 +381,24 @@ const buildSettlementStatusSql = (alias = 'base') => {
     WHEN ${manualStatus} IN (N'销售已结清', N'销售未结清', N'开票已结清', N'开票未结清') THEN ${manualStatus}
     WHEN ${manualStatus} = N'未结清'
       AND ${alias}.invoiceAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.invoiceAmount
     THEN N'开票未结清'
     WHEN ${manualStatus} = N'未结清'
       AND ${alias}.salesAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.salesAmount
     THEN N'销售未结清'
     WHEN ${alias}.salesAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.salesAmount
     THEN N'销售已结清'
+    WHEN ${alias}.invoiceAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.invoiceAmount
+    THEN N'开票未结清'
     WHEN ${alias}.salesAmount > 0
-      AND ${alias}.invoiceAmount <= 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.salesAmount
     THEN N'销售未结清'
     WHEN ${alias}.invoiceAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.invoiceAmount
     THEN N'开票已结清'
-    WHEN ${alias}.invoiceAmount > 0
-    THEN N'开票未结清'
     ELSE N''
   END`
 }
