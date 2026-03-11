@@ -38,7 +38,7 @@ export interface ProductionTaskAttachment {
   id: number
   projectCode: string
   type: ProductionTaskAttachmentType
-  tag?: 'appearance' | 'nameplate' | null
+  tag?: 'appearance' | 'nameplate' | 'counter' | null
   originalName: string
   storedFileName: string
   relativePath: string

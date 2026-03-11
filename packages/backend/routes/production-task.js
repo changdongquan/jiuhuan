@@ -215,6 +215,8 @@ const generateAttachmentFileName = (customerModelNo, type, tag, originalFileName
       namePrefix = `${safeCustomerModelNo}_模具外观`
     } else if (tag === 'nameplate') {
       namePrefix = `${safeCustomerModelNo}_模具铭牌`
+    } else if (tag === 'counter') {
+      namePrefix = `${safeCustomerModelNo}_计数器照片`
     }
   } else if (type === 'inspection') {
     namePrefix = `${safeCustomerModelNo}_塑胶模具检验记录单`
@@ -929,7 +931,7 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       if (!tag) {
         return res.status(400).json({ code: 400, success: false, message: '照片附件必须指定标签' })
       }
-      if (!['appearance', 'nameplate'].includes(tag)) {
+      if (!['appearance', 'nameplate', 'counter'].includes(tag)) {
         return res.status(400).json({ code: 400, success: false, message: '照片附件标签不合法' })
       }
     }

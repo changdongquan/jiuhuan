@@ -843,6 +843,17 @@
                               >
                                 <el-button type="primary" size="small">上传模具铭牌</el-button>
                               </el-upload>
+                              <el-upload
+                                :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
+                                :data="getAttachmentUploadData('photo', 'counter')"
+                                :show-file-list="false"
+                                accept="image/*"
+                                :on-success="handleAttachmentUploadSuccess"
+                                :on-error="handleAttachmentUploadError"
+                              >
+                                <el-button type="primary" size="small">上传计数器照片</el-button>
+                              </el-upload>
                             </div>
                           </div>
                         </template>
@@ -908,6 +919,64 @@
                         <div style="margin: 4px 0 8px; font-weight: 600">模具铭牌</div>
                         <el-table
                           :data="photoNameplateAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px); margin-bottom: 12px"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="170" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isPdfFile(row) || isDocxFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                              <el-button
+                                v-if="!isViewMode"
+                                type="danger"
+                                link
+                                size="small"
+                                @click="deleteAttachment(row)"
+                              >
+                                删除
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+
+                        <div style="margin: 4px 0 8px; font-weight: 600">计数器照片</div>
+                        <el-table
+                          :data="photoCounterAttachments"
                           border
                           size="small"
                           style="width: calc(100% - 2px)"
@@ -1682,6 +1751,9 @@ const photoAppearanceAttachments = computed(() =>
 )
 const photoNameplateAttachments = computed(() =>
   photoAttachments.value.filter((a) => a.tag === 'nameplate')
+)
+const photoCounterAttachments = computed(() =>
+  photoAttachments.value.filter((a) => a.tag === 'counter')
 )
 
 const getAttachmentAction = (type: ProductionTaskAttachmentType) => {

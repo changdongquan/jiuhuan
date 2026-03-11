@@ -1953,6 +1953,55 @@
                           </el-table-column>
                         </el-table>
 
+                        <div style="margin: 4px 0 8px; font-weight: 600">计数器照片</div>
+                        <el-table
+                          :data="productionTaskPhotoCounterAttachments"
+                          border
+                          size="small"
+                          style="width: calc(100% - 2px); margin-bottom: 12px"
+                        >
+                          <el-table-column type="index" label="序号" width="42" />
+                          <el-table-column prop="storedFileName" label="文件名" min-width="155" />
+                          <el-table-column label="大小" width="70" align="right">
+                            <template #default="{ row }">{{
+                              formatFileSize(row.fileSize)
+                            }}</template>
+                          </el-table-column>
+                          <el-table-column label="上传时间" width="90">
+                            <template #default="{ row }">{{ formatDate(row.uploadedAt) }}</template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="135" align="center">
+                            <template #default="{ row }">
+                              <el-button
+                                v-if="isProductionTaskImageFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                v-if="isProductionTaskPdfFile(row)"
+                                type="primary"
+                                link
+                                size="small"
+                                @click="handleProductionTaskAttachmentPdfPreview(row)"
+                              >
+                                预览
+                              </el-button>
+                              <el-button
+                                type="primary"
+                                link
+                                size="small"
+                                @click="downloadProductionTaskAttachment(row)"
+                              >
+                                下载
+                              </el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+
                         <div style="margin: 4px 0 8px; font-weight: 600">塑胶模具检验记录单</div>
                         <el-table
                           :data="productionTaskInspectionAttachments"
@@ -5221,6 +5270,9 @@ const productionTaskPhotoAppearanceAttachments = computed(() =>
 const productionTaskPhotoNameplateAttachments = computed(() =>
   productionTaskPhotoAttachments.value.filter((a) => a.tag === 'nameplate')
 )
+const productionTaskPhotoCounterAttachments = computed(() =>
+  productionTaskPhotoAttachments.value.filter((a) => a.tag === 'counter')
+)
 
 // 加载附件列表
 const loadAttachments = async () => {
@@ -6965,9 +7017,9 @@ watch(viewMode, (val) => {
 @media (width >= 769px) {
   :deep(.pm-edit-dialog) {
     display: flex;
-    height: 800px;
-    max-height: 800px;
-    min-height: 800px;
+    height: 900px;
+    max-height: 900px;
+    min-height: 900px;
     margin: auto;
     flex-direction: column;
   }
