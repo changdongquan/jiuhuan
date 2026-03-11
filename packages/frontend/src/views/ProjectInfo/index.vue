@@ -529,6 +529,8 @@ const formData = reactive({
 // 表单验证规则
 const rules = {
   projectCode: [{ required: true, message: '请输入项目编号', trigger: 'blur' }],
+  projectName: [{ required: true, message: '请输入产品名称', trigger: 'blur' }],
+  projectManager: [{ required: true, message: '请输入产品图号', trigger: 'blur' }],
   customerName: [{ required: true, message: '请输入客户名称', trigger: 'blur' }]
 }
 

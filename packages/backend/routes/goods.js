@@ -1139,6 +1139,22 @@ router.post('/', async (req, res) => {
       })
     }
 
+    if (!productName || !String(productName).trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '产品名称不能为空'
+      })
+    }
+
+    if (!productDrawing || !String(productDrawing).trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '产品图号不能为空'
+      })
+    }
+
     const pool = await getPool()
 
     // 检查项目编号是否已在货物信息表中存在
@@ -1343,6 +1359,30 @@ router.put('/:id', async (req, res) => {
       customerName,
       customerModelNo
     } = req.body
+
+    if (!projectCode || !String(projectCode).trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
+
+    if (!productName || !String(productName).trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '产品名称不能为空'
+      })
+    }
+
+    if (!productDrawing || !String(productDrawing).trim()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '产品图号不能为空'
+      })
+    }
 
     const pool = await getPool()
 
