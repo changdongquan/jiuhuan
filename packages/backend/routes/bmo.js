@@ -3445,15 +3445,6 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
         await tx.rollback()
         return res.status(400).json({ code: 400, success: false, message: '未确认，不能入库' })
       }
-      if (
-        requestRow.created_by &&
-        actor &&
-        String(requestRow.created_by).trim() === String(actor).trim()
-      ) {
-        await tx.rollback()
-        return res.status(403).json({ code: 403, success: false, message: '不允许申请人与审核人为同一人' })
-      }
-
       const goodsDraft = safeJsonParse(requestRow.goods_draft_json) || {}
       const salesDraft = safeJsonParse(requestRow.sales_order_draft_json) || {}
       const projectCode = String(goodsDraft.projectCode || requestRow.project_code_candidate || '').trim()

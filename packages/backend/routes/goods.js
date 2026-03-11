@@ -912,16 +912,6 @@ router.post('/hard-delete-review/approve', async (req, res) => {
         err.httpStatus = 409
         throw err
       }
-      if (
-        reviewRow.requesterName &&
-        reviewer &&
-        String(reviewRow.requesterName).trim() === String(reviewer).trim()
-      ) {
-        const err = new Error('不允许申请人与审核人为同一人')
-        err.httpStatus = 403
-        throw err
-      }
-
       const updateReq = new sql.Request(lockTx)
       updateReq.input('requestId', sql.BigInt, requestIdValue)
       updateReq.input('statusApproved', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.APPROVED)
@@ -1014,7 +1004,7 @@ router.post('/hard-delete-review/approve', async (req, res) => {
       success: false,
       message:
         status === 403
-          ? '当前用户没有审核权限'
+          ? error?.message || '当前用户没有审核权限'
           : status === 409
             ? '状态冲突，无法审核通过'
             : status === 404
