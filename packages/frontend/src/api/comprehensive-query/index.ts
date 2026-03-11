@@ -64,6 +64,7 @@ export interface ComprehensiveQuerySummary {
   outboundQty: number
   uninvoicedAmount: number
   unreceivedAmount: number
+  orderArrearsAmount: number
 }
 
 export interface ComprehensiveQueryCustomerOption {

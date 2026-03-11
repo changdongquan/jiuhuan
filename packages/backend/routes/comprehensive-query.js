@@ -380,22 +380,22 @@ const buildSettlementStatusSql = (alias = 'base') => {
   return `CASE
     WHEN ${manualStatus} IN (N'销售已结清', N'销售未结清', N'开票已结清', N'开票未结清') THEN ${manualStatus}
     WHEN ${manualStatus} = N'未结清'
-      AND ${alias}.invoiceAmount > 0
-      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.invoiceAmount
-    THEN N'开票未结清'
-    WHEN ${manualStatus} = N'未结清'
       AND ${alias}.salesAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.salesAmount
     THEN N'销售未结清'
-    WHEN ${alias}.salesAmount > 0
-      AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.salesAmount
-    THEN N'销售已结清'
-    WHEN ${alias}.invoiceAmount > 0
+    WHEN ${manualStatus} = N'未结清'
+      AND ${alias}.invoiceAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.invoiceAmount
     THEN N'开票未结清'
     WHEN ${alias}.salesAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.salesAmount
+    THEN N'销售已结清'
+    WHEN ${alias}.salesAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.salesAmount
     THEN N'销售未结清'
+    WHEN ${alias}.invoiceAmount > 0
+      AND ${alias}.receiptAmount + ${alias}.discountAmount < ${alias}.invoiceAmount
+    THEN N'开票未结清'
     WHEN ${alias}.invoiceAmount > 0
       AND ${alias}.receiptAmount + ${alias}.discountAmount >= ${alias}.invoiceAmount
     THEN N'开票已结清'
@@ -538,12 +538,12 @@ const buildListFilters = (inputQuery) => {
 
   if (startDate) {
     params.startDate = startDate
-    sourceWhere.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate >= @startDate)`)
+    sourceWhere.push(`s.latestOrderDate >= @startDate`)
   }
 
   if (endDate) {
     params.endDate = endDate
-    sourceWhere.push(`(s.latestOrderDate IS NULL OR s.latestOrderDate <= @endDate)`)
+    sourceWhere.push(`s.latestOrderDate <= @endDate`)
   }
 
   if (projectStatus) {
@@ -1252,7 +1252,8 @@ router.get('/summary', async (req, res) => {
         ISNULL(SUM(base.completedQty), 0) as completedQty,
         ISNULL(SUM(base.outboundQty), 0) as outboundQty,
         ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
-        ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount
+        ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount,
+        ISNULL(SUM(base.orderArrearsAmount), 0) as orderArrearsAmount
       FROM base
       ${baseWhereSql}`,
       params
@@ -1272,7 +1273,8 @@ router.get('/summary', async (req, res) => {
         completedQty: safeNumber(summary.completedQty),
         outboundQty: safeNumber(summary.outboundQty),
         uninvoicedAmount: safeNumber(summary.uninvoicedAmount),
-        unreceivedAmount: safeNumber(summary.unreceivedAmount)
+        unreceivedAmount: safeNumber(summary.unreceivedAmount),
+        orderArrearsAmount: safeNumber(summary.orderArrearsAmount)
       }
     })
   } catch (error) {

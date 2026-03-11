@@ -166,8 +166,8 @@
       <el-col :xs="24" :sm="12" :lg="4">
         <el-card shadow="hover" class="summary-card summary-card--c6">
           <div class="summary-card__title">未回款金额</div>
-          <div class="summary-card__value">{{ formatAmount(summaryUnreceivedAmount) }}</div>
-          <div class="summary-card__meta">销售金额减回款合计</div>
+          <div class="summary-card__value">{{ formatAmount(summaryCards.orderArrearsAmount) }}</div>
+          <div class="summary-card__meta">订单欠款汇总（销售金额减回款合计）</div>
         </el-card>
       </el-col>
     </el-row>
@@ -292,23 +292,23 @@
             <el-table-column label="销售金额" width="118" align="right">
               <template #default="{ row }">{{ formatAmount(row.salesAmount) }}</template>
             </el-table-column>
-            <el-table-column label="开票金额" width="108" align="right">
-              <template #default="{ row }">{{ formatAmount(row.invoiceAmount) }}</template>
-            </el-table-column>
             <el-table-column label="回款金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.receiptAmount) }}</template>
             </el-table-column>
             <el-table-column label="贴息金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.discountAmount) }}</template>
             </el-table-column>
+            <el-table-column label="订单欠款" width="108" align="right">
+              <template #default="{ row }">{{ formatAmount(row.orderArrearsAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="开票金额" width="108" align="right">
+              <template #default="{ row }">{{ formatAmount(row.invoiceAmount) }}</template>
+            </el-table-column>
             <el-table-column label="未开票金额" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.uninvoicedAmount) }}</template>
             </el-table-column>
             <el-table-column label="开票欠款" width="108" align="right">
               <template #default="{ row }">{{ formatAmount(row.unreceivedAmount) }}</template>
-            </el-table-column>
-            <el-table-column label="订单欠款" width="108" align="right">
-              <template #default="{ row }">{{ formatAmount(row.orderArrearsAmount) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="120" align="center">
               <template #default="{ row }">
@@ -684,17 +684,9 @@ const summaryCards = ref<ComprehensiveQuerySummary>({
   completedQty: 0,
   outboundQty: 0,
   uninvoicedAmount: 0,
-  unreceivedAmount: 0
+  unreceivedAmount: 0,
+  orderArrearsAmount: 0
 })
-
-const summaryUnreceivedAmount = computed(() =>
-  Math.max(
-    0,
-    Number(summaryCards.value.salesAmount || 0) -
-      (Number(summaryCards.value.receiptAmount || 0) +
-        Number(summaryCards.value.discountAmount || 0))
-  )
-)
 
 const projectOptions = computed(() =>
   tableData.value.map((item) => ({
@@ -902,7 +894,8 @@ const loadSummary = async () => {
       completedQty: Number(summary?.completedQty || 0),
       outboundQty: Number(summary?.outboundQty || 0),
       uninvoicedAmount: Number(summary?.uninvoicedAmount || 0),
-      unreceivedAmount: Number(summary?.unreceivedAmount || 0)
+      unreceivedAmount: Number(summary?.unreceivedAmount || 0),
+      orderArrearsAmount: Number(summary?.orderArrearsAmount || 0)
     }
   } catch (error) {
     console.error('[ComprehensiveQuery] loadSummary failed:', error)
@@ -915,7 +908,8 @@ const loadSummary = async () => {
       completedQty: 0,
       outboundQty: 0,
       uninvoicedAmount: 0,
-      unreceivedAmount: 0
+      unreceivedAmount: 0,
+      orderArrearsAmount: 0
     }
   }
 }
