@@ -8,6 +8,7 @@ const router = express.Router()
 const { query, getPool } = require('../database')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability } = require('../middleware/capability')
 
 const TABLE_SUMMARY = '工资汇总'
 const TABLE_DETAIL = '工资明细'
@@ -44,6 +45,11 @@ const TAX_IMPORT_HEADERS = [
   '减免税额',
   '备注'
 ]
+const requireSalaryCreate = requireCapability('SALARY.CREATE')
+const requireSalaryUpdate = requireCapability('SALARY.UPDATE')
+const requireSalaryDelete = requireCapability('SALARY.DELETE')
+const requireSalaryUpload = requireCapability('SALARY.UPLOAD')
+const requireSalaryExport = requireCapability('SALARY.EXPORT')
 
 const ensureSalarySoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
@@ -408,7 +414,7 @@ router.get('/by-month', async (req, res) => {
 })
 
 // 草稿：step1 保存（月份 + 员工范围）
-router.post('/draft/step1', async (req, res) => {
+router.post('/draft/step1', requireSalaryCreate, async (req, res) => {
   try {
     const { month, employeeIds } = req.body || {}
     const result = await upsertDraftStep1({ month, employeeIds })
@@ -501,7 +507,7 @@ router.get('/draft/:id', async (req, res) => {
 })
 
 // 草稿：step2 保存（明细）
-router.put('/draft/:id/step2', async (req, res) => {
+router.put('/draft/:id/step2', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const id = parseInt(req.params.id)
@@ -711,7 +717,7 @@ router.put('/draft/:id/step2', async (req, res) => {
 })
 
 // 草稿：step3 保存（确认页保存）
-router.put('/draft/:id/step3', async (req, res) => {
+router.put('/draft/:id/step3', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const id = parseInt(req.params.id)
@@ -821,7 +827,7 @@ router.put('/draft/:id/step3', async (req, res) => {
 })
 
 // 解锁考勤（并把工资标记为需重新生成/已失效）
-router.post('/:id/unlock-attendance', async (req, res) => {
+router.post('/:id/unlock-attendance', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const id = parseInt(req.params.id)
@@ -913,7 +919,7 @@ router.post('/:id/unlock-attendance', async (req, res) => {
 })
 
 // 完成
-router.put('/complete/:id', async (req, res) => {
+router.put('/complete/:id', requireSalaryUpdate, async (req, res) => {
   try {
     const id = parseInt(req.params.id)
     if (Number.isNaN(id)) return res.status(400).json({ code: 400, message: 'ID 无效' })
@@ -938,7 +944,7 @@ router.put('/complete/:id', async (req, res) => {
 })
 
 // 删除（删除汇总，级联删除明细）
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireSalaryDelete, async (req, res) => {
   let transaction = null
   try {
     const id = parseInt(req.params.id)
@@ -1035,7 +1041,7 @@ router.get('/params/salary-base', async (req, res) => {
   }
 })
 
-router.put('/params/salary-base', async (req, res) => {
+router.put('/params/salary-base', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const { rows } = req.body || {}
@@ -1129,7 +1135,7 @@ router.get('/params/overtime-base', async (req, res) => {
   }
 })
 
-router.put('/params/overtime-base', async (req, res) => {
+router.put('/params/overtime-base', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const { rows } = req.body || {}
@@ -1191,7 +1197,7 @@ router.get('/params/subsidy', async (req, res) => {
   }
 })
 
-router.put('/params/subsidy', async (req, res) => {
+router.put('/params/subsidy', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const { rows } = req.body || {}
@@ -1251,7 +1257,7 @@ router.get('/params/penalty', async (req, res) => {
   }
 })
 
-router.put('/params/penalty', async (req, res) => {
+router.put('/params/penalty', requireSalaryUpdate, async (req, res) => {
   let transaction = null
   try {
     const { rows } = req.body || {}
@@ -1292,7 +1298,7 @@ router.put('/params/penalty', async (req, res) => {
 })
 
 // 个税申报文件：生成 Excel（步骤2数据）
-router.post('/tax-import/export', async (req, res) => {
+router.post('/tax-import/export', requireSalaryExport, async (req, res) => {
   try {
     const { month, rows, batch } = req.body || {}
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -1360,7 +1366,7 @@ router.post('/tax-import/export', async (req, res) => {
 })
 
 // 工资代发文件：生成 Excel（按汇总ID导出第一批/第二批实际代发金额）
-router.post('/payroll/export', async (req, res) => {
+router.post('/payroll/export', requireSalaryExport, async (req, res) => {
   try {
     const { id, batch } = req.body || {}
     const summaryId = Number(id)
@@ -1495,7 +1501,7 @@ router.post('/payroll/export', async (req, res) => {
 })
 
 // 个税导入：读取外部 Excel（步骤3按身份证号+姓名匹配回填个税）
-router.post('/tax-import/read', uploadTaxFile.single('file'), async (req, res) => {
+router.post('/tax-import/read', requireSalaryUpload, uploadTaxFile.single('file'), async (req, res) => {
   try {
     const file = req.file
     if (!file) return res.status(400).json({ code: 400, message: '缺少上传文件' })

@@ -250,8 +250,14 @@
 
         <el-table-column label="操作" width="130" fixed="right" class-name="pt-op-column">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
+            <el-button
+              v-if="canUpdateProductionTask"
+              type="primary"
+              size="small"
+              @click="handleEdit(row)"
+              >编辑</el-button
+            >
           </template>
         </el-table-column>
       </el-table>
@@ -329,7 +335,9 @@
           </div>
           <div class="pt-mobile-card__actions">
             <el-button size="small" type="primary" @click="handleView(row)">查看</el-button>
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="canUpdateProductionTask" size="small" @click="handleEdit(row)"
+              >编辑</el-button
+            >
           </div>
         </el-card>
       </template>
@@ -822,6 +830,7 @@
                             <span>照片</span>
                             <div style="display: flex; gap: 8px">
                               <el-upload
+                                v-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'appearance')"
@@ -833,6 +842,7 @@
                                 <el-button type="primary" size="small">上传模具外观</el-button>
                               </el-upload>
                               <el-upload
+                                v-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'nameplate')"
@@ -844,6 +854,7 @@
                                 <el-button type="primary" size="small">上传模具铭牌</el-button>
                               </el-upload>
                               <el-upload
+                                v-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'counter')"
@@ -904,7 +915,7 @@
                                 下载
                               </el-button>
                               <el-button
-                                v-if="!isViewMode"
+                                v-if="!isViewMode && canDeleteProductionTaskAttachment"
                                 type="danger"
                                 link
                                 size="small"
@@ -962,7 +973,7 @@
                                 下载
                               </el-button>
                               <el-button
-                                v-if="!isViewMode"
+                                v-if="!isViewMode && canDeleteProductionTaskAttachment"
                                 type="danger"
                                 link
                                 size="small"
@@ -1020,7 +1031,7 @@
                                 下载
                               </el-button>
                               <el-button
-                                v-if="!isViewMode"
+                                v-if="!isViewMode && canDeleteProductionTaskAttachment"
                                 type="danger"
                                 link
                                 size="small"
@@ -1048,6 +1059,7 @@
                             <span>文件</span>
                             <div style="display: flex; align-items: center; gap: 8px">
                               <el-button
+                                v-if="canUploadProductionTask"
                                 type="success"
                                 size="small"
                                 :disabled="isViewMode"
@@ -1056,6 +1068,7 @@
                                 生成模具检验记录单
                               </el-button>
                               <el-upload
+                                v-if="canUploadProductionTask"
                                 :action="getAttachmentAction('inspection')"
                                 :headers="uploadAuthHeaders"
                                 :show-file-list="false"
@@ -1117,7 +1130,7 @@
                                 下载
                               </el-button>
                               <el-button
-                                v-if="!isViewMode"
+                                v-if="!isViewMode && canDeleteProductionTaskAttachment"
                                 type="danger"
                                 link
                                 size="small"
@@ -1188,8 +1201,18 @@
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
-        <el-button v-if="isViewMode" type="primary" @click="handleEditFromView">编辑</el-button>
-        <el-button v-else type="primary" :loading="dialogSubmitting" @click="submitDialogForm">
+        <el-button
+          v-if="isViewMode && canUpdateProductionTask"
+          type="primary"
+          @click="handleEditFromView"
+          >编辑</el-button
+        >
+        <el-button
+          v-else-if="!isViewMode && canUpdateProductionTask"
+          type="primary"
+          :loading="dialogSubmitting"
+          @click="submitDialogForm"
+        >
           保存
         </el-button>
       </template>
@@ -1318,6 +1341,8 @@ import {
   type TrialProcessRecord
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
+import { useUserStoreWithOut } from '@/store/modules/user'
+import { hasUserCapability } from '@/utils/capability'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
@@ -1364,7 +1389,18 @@ const sortState = reactive<{ prop: string; order: string }>({
 type ViewMode = 'table' | 'card'
 
 const appStore = useAppStore()
+const userStore = useUserStoreWithOut()
 const uploadAuthHeaders = useUploadAuthHeaders()
+const currentUserInfo = computed(() => (userStore.getUserInfo || {}) as Record<string, unknown>)
+const canUpdateProductionTask = computed(() =>
+  hasUserCapability(currentUserInfo.value, 'PRODUCTION_TASKS.UPDATE', 'ProductionTasksIndex')
+)
+const canUploadProductionTask = computed(() =>
+  hasUserCapability(currentUserInfo.value, 'PRODUCTION_TASKS.UPLOAD', 'ProductionTasksIndex')
+)
+const canDeleteProductionTaskAttachment = computed(() =>
+  hasUserCapability(currentUserInfo.value, 'PRODUCTION_TASKS.DELETE', 'ProductionTasksIndex')
+)
 const isMobile = computed(() => appStore.getMobile)
 const viewMode = ref<ViewMode>(isMobile.value ? 'card' : 'table')
 const showMobileFilters = ref(false)
@@ -1805,6 +1841,10 @@ const handleAttachmentUploadError = (err: any, uploadFile?: any) => {
 }
 
 const openGenerateInspectionDialog = () => {
+  if (!canUploadProductionTask.value) {
+    ElMessage.error('当前用户无上传权限')
+    return
+  }
   if (isViewMode.value) return
   inspectionGenerateDialogVisible.value = true
   void loadInspectionTemplateItems()
@@ -2174,6 +2214,10 @@ const downloadAttachment = async (row: ProductionTaskAttachment) => {
 }
 
 const deleteAttachment = async (row: ProductionTaskAttachment) => {
+  if (!canDeleteProductionTaskAttachment.value) {
+    ElMessage.error('当前用户无删除附件权限')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       `确定删除附件：${row.storedFileName || row.originalName}？`,
@@ -2516,6 +2560,10 @@ const handleCurrentChange = (page: number) => {
 }
 
 const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
+  if (!canUpdateProductionTask.value) {
+    await handleView(row)
+    return
+  }
   try {
     dialogTitle.value = '编辑生产任务'
     isViewMode.value = false
@@ -2539,6 +2587,7 @@ const handleEdit = async (row: Partial<ProductionTaskInfo>) => {
 }
 
 const handleEditFromView = () => {
+  if (!canUpdateProductionTask.value) return
   isViewMode.value = false
   dialogTitle.value = '编辑生产任务'
   dialogActiveTab.value = 'production'
@@ -2583,10 +2632,18 @@ const handleView = async (row: Partial<ProductionTaskInfo>) => {
 }
 
 const handleRowDblClick = (row: Partial<ProductionTaskInfo>) => {
-  handleEdit(row)
+  if (canUpdateProductionTask.value) {
+    handleEdit(row)
+    return
+  }
+  handleView(row)
 }
 
 const submitDialogForm = async () => {
+  if (!canUpdateProductionTask.value) {
+    ElMessage.error('当前用户无编辑权限')
+    return
+  }
   if (!dialogFormRef.value) return
 
   try {

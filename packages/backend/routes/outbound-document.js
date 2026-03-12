@@ -7,8 +7,13 @@ const fsp = fs.promises
 const multer = require('multer')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability } = require('../middleware/capability')
 
 const router = express.Router()
+const requireOutboundCreate = requireCapability('OUTBOUND_DOCUMENT.CREATE')
+const requireOutboundUpdate = requireCapability('OUTBOUND_DOCUMENT.UPDATE')
+const requireOutboundDelete = requireCapability('OUTBOUND_DOCUMENT.DELETE')
+const requireOutboundUpload = requireCapability('OUTBOUND_DOCUMENT.UPLOAD')
 
 let tablesReady = false
 let attachmentsTableReady = false
@@ -845,6 +850,7 @@ router.get('/detail', async (req, res) => {
 // 上传附件
 router.post(
   '/:documentNo/items/:itemCode(*)/attachments',
+  requireOutboundUpload,
   uploadSingleAttachment,
   async (req, res) => {
     try {
@@ -1053,7 +1059,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
 })
 
 // 删除附件
-router.delete('/attachments/:attachmentId', async (req, res) => {
+router.delete('/attachments/:attachmentId', requireOutboundDelete, async (req, res) => {
   try {
     await ensureAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -1101,7 +1107,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
   }
 })
 
-router.post('/', async (req, res) => {
+router.post('/', requireOutboundCreate, async (req, res) => {
   try {
     await ensureTables()
     const body = req.body || {}
@@ -1322,7 +1328,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-router.put('/update', async (req, res) => {
+router.put('/update', requireOutboundUpdate, async (req, res) => {
   try {
     await ensureTables()
     const documentNo = String(req.body?.documentNo || '').trim()
@@ -1668,7 +1674,7 @@ router.put('/update', async (req, res) => {
   }
 })
 
-router.delete('/delete', async (req, res) => {
+router.delete('/delete', requireOutboundDelete, async (req, res) => {
   try {
     await ensureTables()
     await ensureAttachmentsTable()

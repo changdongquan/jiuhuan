@@ -5,9 +5,14 @@ const sql = require('mssql')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 const { assertReviewPermission } = require('../services/reviewAcl')
+const { requireCapability } = require('../middleware/capability')
 const router = express.Router()
 
 const CUSTOMER_CREATE_REVIEW_ACTION = 'CUSTOMER_CREATE.REVIEW'
+const requireCustomerCreate = requireCapability('CUSTOMER_INFO.CREATE')
+const requireCustomerUpdate = requireCapability('CUSTOMER_INFO.UPDATE')
+const requireCustomerDelete = requireCapability('CUSTOMER_INFO.DELETE')
+const requireCustomerApprove = requireCapability('CUSTOMER_INFO.APPROVE')
 
 const ensureCustomerSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
@@ -407,7 +412,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // 新增客户信息
-router.post('/', async (req, res) => {
+router.post('/', requireCustomerCreate, async (req, res) => {
   try {
     const {
       customerName,
@@ -453,7 +458,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-router.post('/review-request', async (req, res) => {
+router.post('/review-request', requireCustomerCreate, async (req, res) => {
   try {
     const pool = await getPool()
     await ensureCustomerCreateReviewTable(pool)
@@ -519,7 +524,7 @@ router.post('/review-request', async (req, res) => {
   }
 })
 
-router.post('/review/approve', async (req, res) => {
+router.post('/review/approve', requireCustomerApprove, async (req, res) => {
   try {
     await assertCustomerCreateReviewPermission(req)
     const requestId = Number(req.body?.requestId || 0)
@@ -620,7 +625,7 @@ router.post('/review/approve', async (req, res) => {
   }
 })
 
-router.post('/review/reject', async (req, res) => {
+router.post('/review/reject', requireCustomerApprove, async (req, res) => {
   try {
     await assertCustomerCreateReviewPermission(req)
     const requestId = Number(req.body?.requestId || 0)
@@ -694,7 +699,7 @@ router.post('/review/reject', async (req, res) => {
 })
 
 // 更新客户信息
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireCustomerUpdate, async (req, res) => {
   try {
     const { id } = req.params
     const { customerName, contact, phone, address, email, status, seqNumber } = req.body
@@ -738,7 +743,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // 删除客户信息
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireCustomerDelete, async (req, res) => {
   try {
     const { id } = req.params
     const customerId = parseInt(id)
@@ -976,7 +981,7 @@ router.get('/delivery-addresses/:addressId', async (req, res) => {
 })
 
 // 新增收货地址
-router.post('/:customerId/delivery-addresses', async (req, res) => {
+router.post('/:customerId/delivery-addresses', requireCustomerUpdate, async (req, res) => {
   try {
     await ensureDeliveryAddressTable()
     const { customerId } = req.params
@@ -1098,7 +1103,7 @@ router.post('/:customerId/delivery-addresses', async (req, res) => {
 })
 
 // 更新收货地址
-router.put('/delivery-addresses/:addressId', async (req, res) => {
+router.put('/delivery-addresses/:addressId', requireCustomerUpdate, async (req, res) => {
   try {
     await ensureDeliveryAddressTable()
     const { addressId } = req.params
@@ -1264,7 +1269,7 @@ router.put('/delivery-addresses/:addressId', async (req, res) => {
 })
 
 // 删除收货地址（软删除：标记为已停用）
-router.delete('/delivery-addresses/:addressId', async (req, res) => {
+router.delete('/delivery-addresses/:addressId', requireCustomerDelete, async (req, res) => {
   try {
     await ensureDeliveryAddressTable()
     const { addressId } = req.params
@@ -1316,7 +1321,7 @@ router.delete('/delivery-addresses/:addressId', async (req, res) => {
 })
 
 // 设置默认收货地址
-router.put('/delivery-addresses/:addressId/set-default', async (req, res) => {
+router.put('/delivery-addresses/:addressId/set-default', requireCustomerUpdate, async (req, res) => {
   try {
     await ensureDeliveryAddressTable()
     const { addressId } = req.params

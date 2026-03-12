@@ -5,13 +5,7 @@ const { syncRoutesToPermissions } = require('../scripts/sync-routes-to-permissio
 const { expandPermissionNames } = require('../services/permission-aliases')
 const { requireAdmin } = require('../middleware/auth')
 const { recordPermissionAudit } = require('../services/permissionAudit')
-const {
-  addUserCapabilityKeys,
-  removeUserCapabilityKeys,
-  addGroupCapabilityKeys,
-  removeGroupCapabilityKeys,
-  routeNamesToCapabilityKeys
-} = require('../services/capabilityAccess')
+const { getEffectivePermissions } = require('../services/permissionAccess')
 
 // 权限管理接口仅管理员可访问
 router.use(requireAdmin)
@@ -224,6 +218,60 @@ router.get('/user/:username', async (req, res) => {
 })
 
 /**
+ * 获取用户直接分配的页面权限（不含组继承）
+ * GET /api/permission/user/:username/direct
+ */
+router.get('/user/:username/direct', async (req, res) => {
+  try {
+    const { username } = req.params
+    const directPermissions = await query(
+      `
+      SELECT DISTINCT p.route_name
+      FROM permissions p
+      INNER JOIN user_permissions up ON p.id = up.permission_id
+      WHERE up.username = @username
+    `,
+      { username }
+    )
+
+    res.json({
+      code: 0,
+      success: true,
+      data: expandPermissionNames(directPermissions.map((p) => p.route_name))
+    })
+  } catch (error) {
+    console.error('获取用户直接权限失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取用户直接权限失败: ' + error.message
+    })
+  }
+})
+
+/**
+ * 获取用户生效页面权限（直接 + 组继承）
+ * GET /api/permission/effective/:username
+ */
+router.get('/effective/:username', async (req, res) => {
+  try {
+    const data = await getEffectivePermissions(req.params.username)
+    res.json({
+      code: 0,
+      success: true,
+      data
+    })
+  } catch (error) {
+    console.error('获取用户生效页面权限失败:', error)
+    res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取用户生效页面权限失败: ' + error.message
+    })
+  }
+})
+
+/**
  * 获取组的权限
  * GET /api/permission/group/:groupKey
  */
@@ -300,16 +348,6 @@ router.post('/user/:username/assign', async (req, res) => {
       })
     }
 
-    const permissionRows = await query(
-      `
-      SELECT id, route_name
-      FROM permissions
-      WHERE id IN (${permissionIds.map((_, i) => `@pid${i}`).join(',')})
-    `,
-      Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
-    )
-    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
-
     // 批量插入（忽略重复）
     const insertPromises = permissionIds.map((permissionId) =>
       query(
@@ -325,9 +363,6 @@ router.post('/user/:username/assign', async (req, res) => {
     )
 
     await Promise.all(insertPromises)
-    if (capabilityKeys.length) {
-      await addUserCapabilityKeys(username, capabilityKeys)
-    }
 
     const operator = resolveOperator(req)
     await recordPermissionAudit({
@@ -335,7 +370,7 @@ router.post('/user/:username/assign', async (req, res) => {
       moduleCode: 'PAGE_PERMISSION',
       targetType: 'USER',
       targetKey: username,
-      detail: { permissionIds, syncedCapabilityKeys: capabilityKeys },
+      detail: { permissionIds },
       operatorUsername: operator.username,
       operatorDisplayName: operator.displayName
     })
@@ -373,16 +408,6 @@ router.delete('/user/:username/remove', async (req, res) => {
       })
     }
 
-    const permissionRows = await query(
-      `
-      SELECT id, route_name
-      FROM permissions
-      WHERE id IN (${permissionIds.map((_, i) => `@pid${i}`).join(',')})
-    `,
-      Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
-    )
-    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
-
     await query(
       `
       DELETE FROM user_permissions
@@ -390,9 +415,6 @@ router.delete('/user/:username/remove', async (req, res) => {
     `,
       { username, ...Object.fromEntries(permissionIds.map((id, i) => [`id${i}`, id])) }
     )
-    if (capabilityKeys.length) {
-      await removeUserCapabilityKeys(username, capabilityKeys)
-    }
 
     const operator = resolveOperator(req)
     await recordPermissionAudit({
@@ -400,7 +422,7 @@ router.delete('/user/:username/remove', async (req, res) => {
       moduleCode: 'PAGE_PERMISSION',
       targetType: 'USER',
       targetKey: username,
-      detail: { permissionIds, syncedCapabilityKeys: capabilityKeys },
+      detail: { permissionIds },
       operatorUsername: operator.username,
       operatorDisplayName: operator.displayName
     })
@@ -467,16 +489,6 @@ router.post('/group/:groupKey/assign', async (req, res) => {
       : normalizedGroupDn
     const normalizedGroupName = String(groupName || fallbackGroupName || '').trim()
 
-    const permissionRows = await query(
-      `
-      SELECT id, route_name
-      FROM permissions
-      WHERE id IN (${permissionIds.map((_, i) => `@pid${i}`).join(',')})
-    `,
-      Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
-    )
-    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
-
     // 批量插入（忽略重复）
     const insertPromises = permissionIds.map((permissionId) =>
       query(
@@ -492,9 +504,6 @@ router.post('/group/:groupKey/assign', async (req, res) => {
     )
 
     await Promise.all(insertPromises)
-    if (capabilityKeys.length) {
-      await addGroupCapabilityKeys(normalizedGroupDn, normalizedGroupName, capabilityKeys)
-    }
 
     const operator = resolveOperator(req)
     await recordPermissionAudit({
@@ -502,7 +511,7 @@ router.post('/group/:groupKey/assign', async (req, res) => {
       moduleCode: 'PAGE_PERMISSION',
       targetType: 'GROUP',
       targetKey: normalizedGroupDn,
-      detail: { groupName: normalizedGroupName, permissionIds, syncedCapabilityKeys: capabilityKeys },
+      detail: { groupName: normalizedGroupName, permissionIds },
       operatorUsername: operator.username,
       operatorDisplayName: operator.displayName
     })
@@ -549,16 +558,6 @@ router.delete('/group/:groupKey/remove', async (req, res) => {
       })
     }
 
-    const permissionRows = await query(
-      `
-      SELECT id, route_name
-      FROM permissions
-      WHERE id IN (${permissionIds.map((_, i) => `@pid${i}`).join(',')})
-    `,
-      Object.fromEntries(permissionIds.map((id, i) => [`pid${i}`, id]))
-    )
-    const capabilityKeys = routeNamesToCapabilityKeys(permissionRows.map((p) => p.route_name))
-
     await query(
       `
       DELETE FROM group_permissions
@@ -566,9 +565,6 @@ router.delete('/group/:groupKey/remove', async (req, res) => {
     `,
       { groupDn: normalizedGroupDn, ...Object.fromEntries(permissionIds.map((id, i) => [`id${i}`, id])) }
     )
-    if (capabilityKeys.length) {
-      await removeGroupCapabilityKeys(normalizedGroupDn, capabilityKeys)
-    }
 
     const operator = resolveOperator(req)
     await recordPermissionAudit({
@@ -576,7 +572,7 @@ router.delete('/group/:groupKey/remove', async (req, res) => {
       moduleCode: 'PAGE_PERMISSION',
       targetType: 'GROUP',
       targetKey: normalizedGroupDn,
-      detail: { permissionIds, syncedCapabilityKeys: capabilityKeys },
+      detail: { permissionIds },
       operatorUsername: operator.username,
       operatorDisplayName: operator.displayName
     })

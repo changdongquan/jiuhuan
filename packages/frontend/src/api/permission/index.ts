@@ -44,6 +44,20 @@ export const getUserPermissionsApi = (username: string) => {
   })
 }
 
+// 获取用户直接分配的页面权限
+export const getDirectUserPermissionsApi = (username: string) => {
+  return request.get<string[]>({
+    url: `/api/permission/user/${username}/direct`
+  })
+}
+
+// 获取用户生效页面权限（直接 + 组继承）
+export const getEffectiveUserPermissionsApi = (username: string) => {
+  return request.get<string[]>({
+    url: `/api/permission/effective/${username}`
+  })
+}
+
 // 分配用户权限
 export const assignUserPermissionsApi = (username: string, permissionIds: number[]) => {
   return request.post({

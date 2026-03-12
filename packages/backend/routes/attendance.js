@@ -2,6 +2,9 @@ const express = require('express')
 const sql = require('mssql')
 const router = express.Router()
 const { query, getPool } = require('../database')
+const { requireCapability } = require('../middleware/capability')
+const requireAttendanceCreate = requireCapability('ATTENDANCE.CREATE')
+const requireAttendanceUpdate = requireCapability('ATTENDANCE.UPDATE')
 
 const TABLE_SUMMARY = '考勤汇总'
 const TABLE_DETAIL = '考勤明细'
@@ -435,7 +438,7 @@ const insertOrUpdate = async ({ id, month, records, isUpdate }) => {
 }
 
 // 新增
-router.post('/', async (req, res) => {
+router.post('/', requireAttendanceCreate, async (req, res) => {
   try {
     const { month, records = [] } = req.body || {}
     if (!month) return res.status(400).json({ code: 400, message: '月份不能为空' })
@@ -460,7 +463,7 @@ router.post('/', async (req, res) => {
 })
 
 // 更新
-router.put('/', async (req, res) => {
+router.put('/', requireAttendanceUpdate, async (req, res) => {
   try {
     const { id, month, records = [] } = req.body || {}
     if (!id) return res.status(400).json({ code: 400, message: 'ID 不能为空' })

@@ -11,6 +11,7 @@ const JSZip = require('jszip')
 const { resolveActorFromReq } = require('../utils/actor')
 const sql = require('mssql')
 const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
+const { requireCapability } = require('../middleware/capability')
 
 // 生产任务附件存储配置
 // 使用统一文件根目录配置，生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -29,6 +30,10 @@ const INSPECTION_TEMPLATE_PATH = path.resolve(
   '../templates/production-task/塑胶模具检验记录单.docx'
 )
 const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const requireProductionTaskRead = requireCapability('PRODUCTION_TASKS.READ')
+const requireProductionTaskUpload = requireCapability('PRODUCTION_TASKS.UPLOAD')
+const requireProductionTaskUpdate = requireCapability('PRODUCTION_TASKS.UPDATE')
+const requireProductionTaskDelete = requireCapability('PRODUCTION_TASKS.DELETE')
 
 const normalizeAttachmentFileName = (name) => {
   if (!name) return name
@@ -652,7 +657,7 @@ function buildOrderByClause(sortField, sortOrder) {
 }
 
 // 获取生产任务列表
-router.get('/list', async (req, res) => {
+router.get('/list', requireProductionTaskRead, async (req, res) => {
   try {
     const { keyword, status, category, page = 1, pageSize = 10, sortField, sortOrder } = req.query
 
@@ -771,7 +776,7 @@ router.get('/list', async (req, res) => {
 })
 
 // 获取生产任务统计数据
-router.get('/statistics', async (req, res) => {
+router.get('/statistics', requireProductionTaskRead, async (req, res) => {
   try {
     const statisticsQuery = `
       SELECT 
@@ -828,7 +833,7 @@ router.get('/statistics', async (req, res) => {
 })
 
 // 获取单个生产任务信息（使用 query 参数）
-router.get('/detail', async (req, res) => {
+router.get('/detail', requireProductionTaskRead, async (req, res) => {
   try {
     const { projectCode } = req.query
 
@@ -914,8 +919,12 @@ router.get('/detail', async (req, res) => {
 // 上传附件（照片 / 模具检验表）
 // 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
 // 使用 :projectCode(*) 以便参数可跨越多个 path segment
-router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async (req, res) => {
-  try {
+router.post(
+  '/:projectCode(*)/attachments/:type',
+  requireProductionTaskUpload,
+  uploadSingleAttachment,
+  async (req, res) => {
+    try {
     await ensureTaskAttachmentsTable()
     const projectCode = getProjectCodeParam(req)
     const type = String(req.params.type || '').trim()
@@ -1129,20 +1138,24 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
         uploadedAt: inserted?.[0]?.uploadedAt
       }
     })
-  } catch (error) {
-    console.error('上传生产任务附件失败:', error)
-    res.status(500).json({
-      code: 500,
-      success: false,
-      message: '上传生产任务附件失败',
-      error: error.message
-    })
+    } catch (error) {
+      console.error('上传生产任务附件失败:', error)
+      res.status(500).json({
+        code: 500,
+        success: false,
+        message: '上传生产任务附件失败',
+        error: error.message
+      })
+    }
   }
-})
+)
 
 // 生成模具检验记录单（基于模板）
-router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res) => {
-  try {
+router.post(
+  '/:projectCode(*)/attachments/inspection/generate',
+  requireProductionTaskUpload,
+  async (req, res) => {
+    try {
     await ensureTaskAttachmentsTable()
     const projectCode = getProjectCodeParam(req)
     if (!projectCode) {
@@ -1385,19 +1398,20 @@ router.post('/:projectCode(*)/attachments/inspection/generate', async (req, res)
         uploadedAt: inserted?.[0]?.uploadedAt
       }
     })
-  } catch (error) {
-    console.error('生成模具检验记录单失败:', error)
-    res.status(500).json({
-      code: 500,
-      success: false,
-      message: '生成模具检验记录单失败',
-      error: error.message
-    })
+    } catch (error) {
+      console.error('生成模具检验记录单失败:', error)
+      res.status(500).json({
+        code: 500,
+        success: false,
+        message: '生成模具检验记录单失败',
+        error: error.message
+      })
+    }
   }
-})
+)
 
 // 获取检验结果需要填充的行（模板中黄色高亮的行）
-router.get('/inspection-template/items', async (req, res) => {
+router.get('/inspection-template/items', requireProductionTaskRead, async (req, res) => {
   try {
     const templateExists = await ensureTemplateExists(INSPECTION_TEMPLATE_PATH)
     if (!templateExists) {
@@ -1438,7 +1452,7 @@ router.get('/inspection-template/items', async (req, res) => {
 })
 
 // 获取检验模板条目（按项目计算默认结果，用于只读展示）
-router.get('/:projectCode(*)/inspection-template/items', async (req, res) => {
+router.get('/:projectCode(*)/inspection-template/items', requireProductionTaskRead, async (req, res) => {
   try {
     const projectCode = getProjectCodeParam(req)
     if (!projectCode) {
@@ -1562,7 +1576,7 @@ router.get('/:projectCode(*)/inspection-template/items', async (req, res) => {
 })
 
 // 获取检验模板条目（按项目计算默认结果，用于只读展示）
-router.get('/:projectCode(*)/inspection-template/items', async (req, res) => {
+router.get('/:projectCode(*)/inspection-template/items', requireProductionTaskRead, async (req, res) => {
   try {
     const projectCode = getProjectCodeParam(req)
     if (!projectCode) {
@@ -1688,7 +1702,7 @@ router.get('/:projectCode(*)/inspection-template/items', async (req, res) => {
 // 获取某生产任务下的附件列表（按类型可选）
 // 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
 // 使用 :projectCode(*) 以便参数可跨越多个 path segment
-router.get('/:projectCode(*)/attachments', async (req, res) => {
+router.get('/:projectCode(*)/attachments', requireProductionTaskRead, async (req, res) => {
   try {
     await ensureTaskAttachmentsTable()
     const projectCode = getProjectCodeParam(req)
@@ -1737,7 +1751,7 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
 })
 
 // 下载附件
-router.get('/attachments/:attachmentId/download', async (req, res) => {
+router.get('/attachments/:attachmentId/download', requireProductionTaskRead, async (req, res) => {
   try {
     await ensureTaskAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -1781,8 +1795,11 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
 })
 
 // 预览 PDF（将 docx 按需转换为 pdf）
-router.get('/attachments/:attachmentId/preview-pdf', async (req, res) => {
-  try {
+router.get(
+  '/attachments/:attachmentId/preview-pdf',
+  requireProductionTaskRead,
+  async (req, res) => {
+    try {
     await ensureTaskAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
     if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
@@ -1838,19 +1855,20 @@ router.get('/attachments/:attachmentId/preview-pdf', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'inline; filename=\"preview.pdf\"')
     res.send(pdfBuffer)
-  } catch (error) {
-    console.error('预览 PDF 失败:', error)
-    res.status(500).json({
-      code: 500,
-      success: false,
-      message: '预览 PDF 失败',
-      error: error.message
-    })
+    } catch (error) {
+      console.error('预览 PDF 失败:', error)
+      res.status(500).json({
+        code: 500,
+        success: false,
+        message: '预览 PDF 失败',
+        error: error.message
+      })
+    }
   }
-})
+)
 
 // 删除附件
-router.delete('/attachments/:attachmentId', async (req, res) => {
+router.delete('/attachments/:attachmentId', requireProductionTaskDelete, async (req, res) => {
   try {
     await ensureTaskAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -1904,7 +1922,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
 })
 
 // 更新生产任务信息（使用 body 中的 projectCode）
-router.put('/update', async (req, res) => {
+router.put('/update', requireProductionTaskUpdate, async (req, res) => {
   try {
     const { projectCode, ...data } = req.body
 
@@ -2023,7 +2041,7 @@ router.put('/update', async (req, res) => {
 })
 
 // 删除生产任务（使用 query 参数）
-router.delete('/delete', async (req, res) => {
+router.delete('/delete', requireProductionTaskDelete, async (req, res) => {
   try {
     const { projectCode } = req.query
 

@@ -10,6 +10,7 @@ const { query, getPool } = require('../database')
 const sql = require('mssql')
 const { resolveActorFromReq } = require('../utils/actor')
 const { assertReviewPermission } = require('../services/reviewAcl')
+const { requireCapability } = require('../middleware/capability')
 const {
   STATUS: INITIATION_STATUS,
   normalizeStatus: normalizeInitiationStatus,
@@ -23,6 +24,12 @@ const {
   approveAndApply: approveAndApplyQuotationInitiation,
   listReviewTasks: listQuotationInitiationReviewTasks
 } = require('../services/quotationInitiation')
+const requireQuotationCreate = requireCapability('QUOTATION.CREATE')
+const requireQuotationUpdate = requireCapability('QUOTATION.UPDATE')
+const requireQuotationDelete = requireCapability('QUOTATION.DELETE')
+const requireQuotationUpload = requireCapability('QUOTATION.UPLOAD')
+const requireQuotationExport = requireCapability('QUOTATION.EXPORT')
+const requireQuotationApprove = requireCapability('QUOTATION.APPROVE')
 
 const execFileAsync = promisify(execFile)
 const router = express.Router()
@@ -1322,7 +1329,7 @@ const rmDirRecursive = async (dir) => {
 }
 
 // 上传零件报价单明细截图（返回匿名静态资源 URL）
-router.post('/upload-part-item-image', (req, res) => {
+router.post('/upload-part-item-image', requireQuotationUpload, (req, res) => {
   uploadPartItemImage.single('file')(req, res, (err) => {
     if (err) {
       const message =
@@ -1371,7 +1378,7 @@ router.post('/upload-part-item-image', (req, res) => {
 })
 
 // 删除临时图示（取消/关闭弹窗时调用）
-router.post('/delete-temp-part-item-image', async (req, res) => {
+router.post('/delete-temp-part-item-image', requireQuotationUpload, async (req, res) => {
   try {
     const url = String(req.body?.url || '').trim()
     if (!url) {
@@ -1768,7 +1775,7 @@ router.get('/generate-no', async (req, res) => {
 })
 
 // 创建报价单
-router.post('/create', async (req, res) => {
+router.post('/create', requireQuotationCreate, async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
@@ -2010,7 +2017,7 @@ router.post('/create', async (req, res) => {
 })
 
 // 更新报价单
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireQuotationUpdate, async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
@@ -2231,7 +2238,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // 删除报价单
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireQuotationDelete, async (req, res) => {
   try {
     const { id } = req.params
 
@@ -2263,7 +2270,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 // 下载当前报价单对应的 Excel 文件（基于美菱改模报价单模板）
-router.get('/:id/export-excel', async (req, res) => {
+router.get('/:id/export-excel', requireQuotationExport, async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
@@ -2487,7 +2494,7 @@ router.get('/:id/export-excel', async (req, res) => {
 })
 
 // 下载当前报价单对应的 报价 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
-router.get('/:id/export-pdf', async (req, res) => {
+router.get('/:id/export-pdf', requireQuotationExport, async (req, res) => {
   try {
     await ensureQuotationRemarkColumn()
     await ensureQuotationEnableImageColumn()
@@ -2845,7 +2852,7 @@ router.get('/:id/export-pdf', async (req, res) => {
 })
 
 // 下载当前报价单对应的 完工单 PDF 文件（先填充 Excel 模板，再通过 LibreOffice 转为 PDF）
-router.get('/:id/export-completion-pdf', async (req, res) => {
+router.get('/:id/export-completion-pdf', requireQuotationExport, async (req, res) => {
   try {
     const { id } = req.params
 
@@ -3159,7 +3166,7 @@ router.get('/initiation-request/project-code-check', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/draft', async (req, res) => {
+router.post('/initiation-request/draft', requireQuotationUpdate, async (req, res) => {
   try {
     const actor = resolveActorFromReq(req)
     const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
@@ -3186,7 +3193,7 @@ router.post('/initiation-request/draft', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/customer-review', async (req, res) => {
+router.post('/initiation-request/customer-review', requireQuotationUpdate, async (req, res) => {
   try {
     await ensureQuotationInitiationTable(await getPool())
     await ensureCustomerCreateReviewTable()
@@ -3264,7 +3271,7 @@ router.post('/initiation-request/customer-review', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/confirm', async (req, res) => {
+router.post('/initiation-request/confirm', requireQuotationUpdate, async (req, res) => {
   try {
     const actor = resolveActorFromReq(req)
     const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
@@ -3320,7 +3327,7 @@ router.post('/initiation-request/confirm', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/withdraw', async (req, res) => {
+router.post('/initiation-request/withdraw', requireQuotationUpdate, async (req, res) => {
   try {
     await ensureQuotationInitiationTable(await getPool())
     const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
@@ -3416,7 +3423,7 @@ router.get('/initiation-review/pending-count', async (req, res) => {
   }
 })
 
-router.post('/initiation-review/reject', async (req, res) => {
+router.post('/initiation-review/reject', requireQuotationApprove, async (req, res) => {
   try {
     await assertReviewPermission({
       req,
@@ -3462,7 +3469,7 @@ router.post('/initiation-review/reject', async (req, res) => {
   }
 })
 
-router.post('/initiation-review/approve-and-apply', async (req, res) => {
+router.post('/initiation-review/approve-and-apply', requireQuotationApprove, async (req, res) => {
   try {
     const quotationId = Number(req.body?.quotationId || req.body?.quotation_id || 0)
     if (!quotationId) {

@@ -28,6 +28,12 @@ export const getUserCapabilitiesApi = (username: string) => {
   })
 }
 
+export const getEffectiveUserCapabilitiesApi = (username: string) => {
+  return request.get<string[]>({
+    url: `/api/capability/effective/${username}`
+  })
+}
+
 export const assignUserCapabilitiesApi = (username: string, capabilityKeys: string[]) => {
   return request.post({
     url: `/api/capability/user/${username}/assign`,

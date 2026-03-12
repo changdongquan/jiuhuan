@@ -8,6 +8,7 @@ const router = express.Router()
 const fsp = fs.promises
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability } = require('../middleware/capability')
 
 // 销售订单附件存储配置
 // 生产环境建议通过环境变量显式设置 JIUHUAN_FILES_ROOT=/mnt/jiuhuan-files（兼容旧变量 SALES_ORDER_FILES_ROOT）
@@ -21,6 +22,10 @@ const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.SALES_ORDER_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
   10
 )
+const requireSalesOrderCreate = requireCapability('SALES_ORDERS.CREATE')
+const requireSalesOrderUpdate = requireCapability('SALES_ORDERS.UPDATE')
+const requireSalesOrderDelete = requireCapability('SALES_ORDERS.DELETE')
+const requireSalesOrderUpload = requireCapability('SALES_ORDERS.UPLOAD')
 
 // 处理上传文件名中的中文乱码（multipart 默认按 latin1 解码）
 const normalizeAttachmentFileName = (name) => {
@@ -727,7 +732,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // 创建销售订单
-router.post('/create', async (req, res) => {
+router.post('/create', requireSalesOrderCreate, async (req, res) => {
   try {
     const { orderNo, orderDate, signDate, contractNo, customerId, details } = req.body
 
@@ -897,7 +902,7 @@ router.post('/create', async (req, res) => {
 })
 
 // 更新销售订单（批量更新同一订单号下的记录）
-router.put('/update', async (req, res) => {
+router.put('/update', requireSalesOrderUpdate, async (req, res) => {
   try {
     const { orderNo, orderDate, signDate, contractNo, customerId, details } = req.body
 
@@ -1093,7 +1098,7 @@ router.put('/update', async (req, res) => {
 })
 
 // 删除销售订单（按订单编号删除所有明细）
-router.delete('/delete/:orderNo', async (req, res) => {
+router.delete('/delete/:orderNo', requireSalesOrderDelete, async (req, res) => {
   try {
     const { orderNo } = req.params
 
@@ -1192,7 +1197,7 @@ router.delete('/delete/:orderNo', async (req, res) => {
 })
 
 // 拆分销售订单：将同一订单号下的部分明细移动到新订单号（新订单号按系统流水号生成）
-router.post('/:orderNo/split', async (req, res) => {
+router.post('/:orderNo/split', requireSalesOrderUpdate, async (req, res) => {
   let transaction = null
   const movedFiles = []
   try {
@@ -1367,6 +1372,7 @@ router.post('/:orderNo/split', async (req, res) => {
 // 上传单个附件（按明细行）
 router.post(
   '/:orderNo/details/:detailId/attachments',
+  requireSalesOrderUpload,
   uploadAttachment.single('file'),
   async (req, res) => {
     try {
@@ -1711,7 +1717,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
 })
 
 // 删除附件
-router.delete('/attachments/:attachmentId', async (req, res) => {
+router.delete('/attachments/:attachmentId', requireSalesOrderDelete, async (req, res) => {
   try {
     const attachmentId = parseInt(req.params.attachmentId, 10)
     if (!Number.isInteger(attachmentId) || attachmentId <= 0) {

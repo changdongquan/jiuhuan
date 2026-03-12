@@ -7,6 +7,7 @@ import {
   ElInput,
   ElCheckbox,
   ElMessage,
+  ElTag,
   ElLoading,
   ElTable,
   ElTableColumn,
@@ -17,7 +18,8 @@ import {
 import { BaseButton } from '@/components/Button'
 import {
   getPermissionListApi,
-  getUserPermissionsApi,
+  getDirectUserPermissionsApi,
+  getEffectiveUserPermissionsApi,
   assignUserPermissionsApi,
   removeUserPermissionsApi,
   getGroupPermissionsApi,
@@ -42,9 +44,13 @@ import {
   type ReviewAclActionItem
 } from '@/api/reviewAcl'
 import {
+  assignGroupCapabilitiesApi,
   assignUserCapabilitiesApi,
   getCapabilityActionsApi,
+  getEffectiveUserCapabilitiesApi,
+  getGroupCapabilitiesApi,
   getUserCapabilitiesApi,
+  removeGroupCapabilitiesApi,
   removeUserCapabilitiesApi,
   type CapabilityActionItem
 } from '@/api/capability'
@@ -118,9 +124,11 @@ const selectedUserGroups = ref<AdGroupItem[]>([])
 const loadingUserGroups = ref(false)
 const userOriginalRouteNames = ref<string[]>([])
 const userCheckedRouteNames = ref<string[]>([])
+const userEffectiveRouteNames = ref<string[]>([])
 const userPermissionFilter = ref('')
 const userOriginalCapabilityKeys = ref<string[]>([])
 const userCheckedCapabilityKeys = ref<string[]>([])
+const userEffectiveCapabilityKeys = ref<string[]>([])
 const userCapabilityFilter = ref('')
 const savingUserPermissions = ref(false)
 
@@ -195,20 +203,31 @@ const selectUser = async (user: AdUserItem) => {
   selectedUser.value = user
   loadingUserPermissions.value = true
   try {
-    const [permissionRes, capabilityRes] = await Promise.all([
-      getUserPermissionsApi(user.username),
-      getUserCapabilitiesApi(user.username)
-    ])
-    const permissions = (permissionRes.data as any[]) || []
+    const [directPermissionRes, effectivePermissionRes, capabilityRes, effectiveCapabilityRes] =
+      await Promise.all([
+        getDirectUserPermissionsApi(user.username),
+        getEffectiveUserPermissionsApi(user.username),
+        getUserCapabilitiesApi(user.username),
+        getEffectiveUserCapabilitiesApi(user.username)
+      ])
+    const directPermissions = (directPermissionRes.data as any[]) || []
+    const effectivePermissions = (effectivePermissionRes.data as any[]) || []
     const capabilities = ((capabilityRes.data as string[]) || []).map((x) =>
       String(x || '')
         .trim()
         .toUpperCase()
     )
-    userOriginalRouteNames.value = permissions
-    userCheckedRouteNames.value = [...permissions]
+    const effectiveCapabilities = ((effectiveCapabilityRes.data as string[]) || []).map((x) =>
+      String(x || '')
+        .trim()
+        .toUpperCase()
+    )
+    userOriginalRouteNames.value = directPermissions
+    userCheckedRouteNames.value = [...directPermissions]
+    userEffectiveRouteNames.value = effectivePermissions
     userOriginalCapabilityKeys.value = capabilities
     userCheckedCapabilityKeys.value = [...capabilities]
+    userEffectiveCapabilityKeys.value = effectiveCapabilities
     await loadUserGroups(user.username)
   } catch (error: any) {
     ElMessage.error('加载用户权限失败: ' + (error.message || '未知错误'))
@@ -225,22 +244,8 @@ const toggleUserPermission = (routeName: string, checked: boolean) => {
     current.add(routeName)
   } else {
     current.delete(routeName)
-    const routeKeys = getCapabilityKeysByRouteName(routeName)
-    if (routeKeys.length) {
-      const capabilitySet = new Set(userCheckedCapabilityKeys.value)
-      routeKeys.forEach((k) => capabilitySet.delete(k))
-      userCheckedCapabilityKeys.value = Array.from(capabilitySet)
-    }
   }
   userCheckedRouteNames.value = Array.from(current)
-  if (checked) {
-    const routeKeys = getCapabilityKeysByRouteName(routeName)
-    if (routeKeys.length) {
-      const capabilitySet = new Set(userCheckedCapabilityKeys.value)
-      routeKeys.forEach((k) => capabilitySet.add(k))
-      userCheckedCapabilityKeys.value = Array.from(capabilitySet)
-    }
-  }
 }
 
 const toggleUserGroupPermissions = (groupKey: string, checked: boolean) => {
@@ -335,9 +340,24 @@ const saveUserPermissions = async () => {
     return
   }
 
+  if (
+    toAddRouteNames.length !== toAddIds.length ||
+    toRemoveRouteNames.length !== toRemoveIds.length
+  ) {
+    ElMessage.warning('页面权限映射不完整，请先同步菜单权限后再保存')
+    return
+  }
+
+  if (!validateUserPermissionSelection(toAddCapabilityKeys)) {
+    return
+  }
+
   savingUserPermissions.value = true
   const loading = ElLoading.service({ target: '.user-permission-panel' })
   try {
+    const expectedRouteNames = [...userCheckedRouteNames.value]
+    const expectedCapabilityKeys = [...userCheckedCapabilityKeys.value]
+
     if (toAddIds.length) {
       await assignUserPermissionsApi(username, toAddIds)
     }
@@ -354,8 +374,14 @@ const saveUserPermissions = async () => {
       await removeUserCapabilitiesApi(username, toRemoveCapabilityKeys)
     }
 
-    userOriginalRouteNames.value = [...userCheckedRouteNames.value]
-    userOriginalCapabilityKeys.value = [...userCheckedCapabilityKeys.value]
+    await selectUser(selectedUser.value)
+    if (
+      !arraysEqual(userOriginalRouteNames.value, expectedRouteNames) ||
+      !arraysEqual(userOriginalCapabilityKeys.value, expectedCapabilityKeys)
+    ) {
+      ElMessage.warning('保存已完成，但服务端回读结果与本次勾选不完全一致，请立即复核')
+      return
+    }
     ElMessage.success('用户权限保存成功（页面权限 + 模块能力权限）')
   } catch (error: any) {
     ElMessage.error('保存用户权限失败: ' + (error.message || '未知错误'))
@@ -408,8 +434,11 @@ const loadingGroups = ref(false)
 const selectedGroup = ref<AdGroupItem | null>(null)
 const groupOriginalRouteNames = ref<string[]>([])
 const groupCheckedRouteNames = ref<string[]>([])
+const groupOriginalCapabilityKeys = ref<string[]>([])
+const groupCheckedCapabilityKeys = ref<string[]>([])
 const savingGroupPermissions = ref(false)
 const groupPermissionFilter = ref('')
+const groupCapabilityFilter = ref('')
 
 const groupPagination = ref({
   page: 1,
@@ -441,10 +470,20 @@ const selectGroup = async (group: AdGroupItem) => {
   selectedGroup.value = group
   loadingGroupPermissions.value = true
   try {
-    const res = await getGroupPermissionsApi(group.group_dn)
-    const permissions = (res.data as any[]) || []
+    const [permissionRes, capabilityRes] = await Promise.all([
+      getGroupPermissionsApi(group.group_dn),
+      getGroupCapabilitiesApi(group.group_dn)
+    ])
+    const permissions = (permissionRes.data as any[]) || []
+    const capabilities = ((capabilityRes.data as string[]) || []).map((x) =>
+      String(x || '')
+        .trim()
+        .toUpperCase()
+    )
     groupOriginalRouteNames.value = permissions
     groupCheckedRouteNames.value = [...permissions]
+    groupOriginalCapabilityKeys.value = capabilities
+    groupCheckedCapabilityKeys.value = [...capabilities]
   } catch (error: any) {
     ElMessage.error('加载组权限失败: ' + (error.message || '未知错误'))
   } finally {
@@ -518,7 +557,9 @@ const isGroupGroupIndeterminate = (groupKey: string) => {
 
 const resetGroupPermissionSelection = () => {
   groupPermissionFilter.value = ''
+  groupCapabilityFilter.value = ''
   groupCheckedRouteNames.value = [...groupOriginalRouteNames.value]
+  groupCheckedCapabilityKeys.value = [...groupOriginalCapabilityKeys.value]
 }
 
 const saveGroupPermissions = async () => {
@@ -547,11 +588,6 @@ const saveGroupPermissions = async () => {
     }
   })
 
-  if (!toAddRouteNames.length && !toRemoveRouteNames.length) {
-    ElMessage.info('权限未变化，无需保存')
-    return
-  }
-
   const map = permissionMapByRouteName.value
   const toAddIds = toAddRouteNames
     .map((name) => {
@@ -568,6 +604,25 @@ const saveGroupPermissions = async () => {
     })
     .filter((id) => Number.isFinite(id))
 
+  const originalCapabilitySet = new Set(groupOriginalCapabilityKeys.value)
+  const currentCapabilitySet = new Set(groupCheckedCapabilityKeys.value)
+  const toAddCapabilityKeys = Array.from(currentCapabilitySet).filter(
+    (x) => !originalCapabilitySet.has(x)
+  )
+  const toRemoveCapabilityKeys = Array.from(originalCapabilitySet).filter(
+    (x) => !currentCapabilitySet.has(x)
+  )
+
+  if (
+    !toAddRouteNames.length &&
+    !toRemoveRouteNames.length &&
+    !toAddCapabilityKeys.length &&
+    !toRemoveCapabilityKeys.length
+  ) {
+    ElMessage.info('权限未变化，无需保存')
+    return
+  }
+
   savingGroupPermissions.value = true
   const loading = ElLoading.service({ target: '.group-permission-panel' })
   try {
@@ -579,8 +634,20 @@ const saveGroupPermissions = async () => {
       await removeGroupPermissionsApi(groupDn, toRemoveIds)
     }
 
-    groupOriginalRouteNames.value = [...groupCheckedRouteNames.value]
-    ElMessage.success('组权限保存成功')
+    if (toAddCapabilityKeys.length) {
+      await assignGroupCapabilitiesApi(
+        groupDn,
+        toAddCapabilityKeys,
+        selectedGroup.value?.group_name || ''
+      )
+    }
+
+    if (toRemoveCapabilityKeys.length) {
+      await removeGroupCapabilitiesApi(groupDn, toRemoveCapabilityKeys)
+    }
+
+    await selectGroup(selectedGroup.value)
+    ElMessage.success('组权限保存成功（页面权限 + 模块能力权限）')
   } catch (error: any) {
     ElMessage.error('保存组权限失败: ' + (error.message || '未知错误'))
   } finally {
@@ -607,6 +674,7 @@ const handleGroupPageSizeChange = (size: number) => {
 
 const totalGroupPermissions = computed(() => permissionList.value.length)
 const checkedGroupPermissionsCount = computed(() => groupCheckedRouteNames.value.length)
+const checkedGroupCapabilityCount = computed(() => groupCheckedCapabilityKeys.value.length)
 
 // ========================
 // 接口审核权限（Review ACL）
@@ -862,16 +930,83 @@ const getCapabilityKeyByRouteAction = (routeName: string, actionCode: string) =>
   )
 }
 
-const getCapabilityKeysByRouteName = (routeName: string) => {
-  const actionMap = capabilityRouteActionMap.value.get(String(routeName || '').trim())
-  if (!actionMap) return []
-  return Array.from(actionMap.values())
+const capabilityKeyRouteMap = computed(() => {
+  const map = new Map<string, string>()
+  capabilityActions.value.forEach((item) => {
+    const capabilityKey = String(item.capabilityKey || '')
+      .trim()
+      .toUpperCase()
+    const routeName = String(item.routeName || '').trim()
+    if (!capabilityKey || !routeName) return
+    map.set(capabilityKey, routeName)
+  })
+  return map
+})
+
+const getRouteNamesByCapabilityKeys = (capabilityKeys: string[]) => {
+  const routeNames = new Set<string>()
+  capabilityKeys.forEach((key) => {
+    const routeName = capabilityKeyRouteMap.value.get(
+      String(key || '')
+        .trim()
+        .toUpperCase()
+    )
+    if (routeName) routeNames.add(routeName)
+  })
+  return Array.from(routeNames)
+}
+
+const capabilityActionMap = computed(() => {
+  const map = new Map<string, CapabilityActionItem>()
+  capabilityActions.value.forEach((item) => {
+    const key = String(item.capabilityKey || '')
+      .trim()
+      .toUpperCase()
+    if (!key) return
+    map.set(key, item)
+  })
+  return map
+})
+
+const summarizeList = (items: string[], limit = 4) => {
+  const list = Array.from(new Set(items.filter(Boolean)))
+  return {
+    items: list.slice(0, limit),
+    overflow: Math.max(list.length - limit, 0),
+    total: list.length
+  }
 }
 
 const userSelectedPageRows = computed(() => {
   const map = permissionMapByRouteName.value
   const keyword = userCapabilityFilter.value.trim().toLowerCase()
-  return userCheckedRouteNames.value
+  const routeNames = Array.from(
+    new Set([
+      ...userCheckedRouteNames.value,
+      ...getRouteNamesByCapabilityKeys(userCheckedCapabilityKeys.value)
+    ])
+  )
+  return routeNames
+    .map((routeName) => map.get(routeName))
+    .filter(Boolean)
+    .filter((perm) => {
+      if (!keyword) return true
+      const routeName = String(perm?.route_name || '').toLowerCase()
+      const title = String(perm?.page_title || '').toLowerCase()
+      return routeName.includes(keyword) || title.includes(keyword)
+    }) as PermissionItem[]
+})
+
+const groupSelectedPageRows = computed(() => {
+  const map = permissionMapByRouteName.value
+  const keyword = groupCapabilityFilter.value.trim().toLowerCase()
+  const routeNames = Array.from(
+    new Set([
+      ...groupCheckedRouteNames.value,
+      ...getRouteNamesByCapabilityKeys(groupCheckedCapabilityKeys.value)
+    ])
+  )
+  return routeNames
     .map((routeName) => map.get(routeName))
     .filter(Boolean)
     .filter((perm) => {
@@ -891,7 +1026,121 @@ const toggleUserRouteCapability = (routeName: string, actionCode: string, checke
   userCheckedCapabilityKeys.value = Array.from(set)
 }
 
+const toggleGroupRouteCapability = (routeName: string, actionCode: string, checked: boolean) => {
+  const capKey = getCapabilityKeyByRouteAction(routeName, actionCode)
+  if (!capKey) return
+  const set = new Set(groupCheckedCapabilityKeys.value)
+  if (checked) set.add(capKey)
+  else set.delete(capKey)
+  groupCheckedCapabilityKeys.value = Array.from(set)
+}
+
 const totalCapabilityActions = computed(() => capabilityActions.value.length)
+const userDirectPermissionSet = computed(() => new Set(userCheckedRouteNames.value))
+const userEffectivePermissionSet = computed(() => new Set(userEffectiveRouteNames.value))
+const userDirectCapabilitySet = computed(() => new Set(userCheckedCapabilityKeys.value))
+const userEffectiveCapabilitySet = computed(() => new Set(userEffectiveCapabilityKeys.value))
+const userInheritedRouteNames = computed(() =>
+  userEffectiveRouteNames.value.filter(
+    (routeName) => !userCheckedRouteNames.value.includes(routeName)
+  )
+)
+const userInheritedCapabilityKeys = computed(() =>
+  userEffectiveCapabilityKeys.value.filter((key) => !userCheckedCapabilityKeys.value.includes(key))
+)
+const userCapabilityOnlyRouteNames = computed(() => {
+  const routeSet = new Set(getRouteNamesByCapabilityKeys(userCheckedCapabilityKeys.value))
+  userCheckedRouteNames.value.forEach((routeName) => routeSet.delete(routeName))
+  return Array.from(routeSet)
+})
+const userUnknownCapabilityKeys = computed(() =>
+  userCheckedCapabilityKeys.value.filter((key) => !capabilityActionMap.value.has(key))
+)
+const userPermissionOverview = computed(() => ({
+  direct: userCheckedRouteNames.value.length,
+  inherited: userInheritedRouteNames.value.length,
+  effective: userEffectiveRouteNames.value.length,
+  inheritedSummary: summarizeList(
+    userInheritedRouteNames.value.map((routeName) => {
+      const item = permissionMapByRouteName.value.get(routeName)
+      return item?.page_title || routeName
+    })
+  )
+}))
+const userCapabilityOverview = computed(() => ({
+  direct: userCheckedCapabilityKeys.value.length,
+  inherited: userInheritedCapabilityKeys.value.length,
+  effective: userEffectiveCapabilityKeys.value.length,
+  inheritedSummary: summarizeList(
+    userInheritedCapabilityKeys.value.map(
+      (key) => capabilityActionMap.value.get(key)?.capabilityName || key
+    )
+  )
+}))
+const userRiskOverview = computed(() => ({
+  orphanRoutes: summarizeList(
+    userCapabilityOnlyRouteNames.value.map((routeName) => {
+      const item = permissionMapByRouteName.value.get(routeName)
+      return item?.page_title || routeName
+    })
+  ),
+  unknownCapabilities: summarizeList(userUnknownCapabilityKeys.value)
+}))
+
+const isUserInheritedPermission = (routeName: string) => {
+  return (
+    !userDirectPermissionSet.value.has(routeName) && userEffectivePermissionSet.value.has(routeName)
+  )
+}
+
+const isUserInheritedCapability = (routeName: string, actionCode: string) => {
+  const capKey = getCapabilityKeyByRouteAction(routeName, actionCode)
+  if (!capKey) return false
+  return !userDirectCapabilitySet.value.has(capKey) && userEffectiveCapabilitySet.value.has(capKey)
+}
+
+const arraysEqual = (left: string[], right: string[]) => {
+  const a = [...left].sort()
+  const b = [...right].sort()
+  if (a.length !== b.length) return false
+  return a.every((item, index) => item === b[index])
+}
+
+const validateUserPermissionSelection = (toAddCapabilityKeys: string[]) => {
+  const missingRouteNames = new Set<string>()
+  toAddCapabilityKeys.forEach((key) => {
+    const routeName = capabilityKeyRouteMap.value.get(
+      String(key || '')
+        .trim()
+        .toUpperCase()
+    )
+    if (!routeName) return
+    const accessible =
+      userCheckedRouteNames.value.includes(routeName) ||
+      userEffectiveRouteNames.value.includes(routeName)
+    if (!accessible) missingRouteNames.add(routeName)
+  })
+
+  if (missingRouteNames.size) {
+    const labels = Array.from(missingRouteNames).map((routeName) => {
+      const item = permissionMapByRouteName.value.get(routeName)
+      return item?.page_title || routeName
+    })
+    ElMessage.warning(
+      `以下页面没有可生效的访问权，不能新增模块能力：${labels.slice(0, 4).join('、')}${
+        labels.length > 4 ? ' 等' : ''
+      }`
+    )
+    return false
+  }
+
+  if (userUnknownCapabilityKeys.value.length) {
+    ElMessage.warning('存在未注册的模块能力键，请先清理异常能力后再保存')
+    return false
+  }
+
+  return true
+}
 
 // ========================
 // 路由/权限同步
@@ -961,6 +1210,121 @@ const handleTabChange = (tab: string) => {
 
     <div class="center-content">
       <div v-if="activeTab === 'user'" class="user-center-layout">
+        <div v-if="selectedUser" class="user-overview-panel">
+          <div class="overview-card">
+            <div class="overview-card-title">页面权限来源</div>
+            <div class="overview-card-stats">
+              <div class="overview-stat">
+                <span class="overview-stat-label">直绑</span>
+                <strong>{{ userPermissionOverview.direct }}</strong>
+              </div>
+              <div class="overview-stat">
+                <span class="overview-stat-label">组继承</span>
+                <strong>{{ userPermissionOverview.inherited }}</strong>
+              </div>
+              <div class="overview-stat">
+                <span class="overview-stat-label">最终生效</span>
+                <strong>{{ userPermissionOverview.effective }}</strong>
+              </div>
+            </div>
+            <div class="overview-card-subtitle">组继承页面</div>
+            <div v-if="userPermissionOverview.inheritedSummary.total" class="overview-tags">
+              <ElTag
+                v-for="item in userPermissionOverview.inheritedSummary.items"
+                :key="item"
+                size="small"
+                type="info"
+              >
+                {{ item }}
+              </ElTag>
+              <span v-if="userPermissionOverview.inheritedSummary.overflow" class="overview-more">
+                +{{ userPermissionOverview.inheritedSummary.overflow }}
+              </span>
+            </div>
+            <div v-else class="overview-empty">当前没有组继承页面</div>
+          </div>
+
+          <div class="overview-card">
+            <div class="overview-card-title">模块能力来源</div>
+            <div class="overview-card-stats">
+              <div class="overview-stat">
+                <span class="overview-stat-label">直绑</span>
+                <strong>{{ userCapabilityOverview.direct }}</strong>
+              </div>
+              <div class="overview-stat">
+                <span class="overview-stat-label">组继承</span>
+                <strong>{{ userCapabilityOverview.inherited }}</strong>
+              </div>
+              <div class="overview-stat">
+                <span class="overview-stat-label">最终生效</span>
+                <strong>{{ userCapabilityOverview.effective }}</strong>
+              </div>
+            </div>
+            <div class="overview-card-subtitle">组继承能力</div>
+            <div v-if="userCapabilityOverview.inheritedSummary.total" class="overview-tags">
+              <ElTag
+                v-for="item in userCapabilityOverview.inheritedSummary.items"
+                :key="item"
+                size="small"
+                type="success"
+              >
+                {{ item }}
+              </ElTag>
+              <span v-if="userCapabilityOverview.inheritedSummary.overflow" class="overview-more">
+                +{{ userCapabilityOverview.inheritedSummary.overflow }}
+              </span>
+            </div>
+            <div v-else class="overview-empty">当前没有组继承能力</div>
+          </div>
+
+          <div class="overview-card risk">
+            <div class="overview-card-title">异常与风险</div>
+            <div class="overview-card-subtitle">这些状态会影响授权的稳定性和可解释性</div>
+            <div class="overview-risk-row">
+              <span>能力无页面入口</span>
+              <strong>{{ userRiskOverview.orphanRoutes.total }}</strong>
+            </div>
+            <div v-if="userRiskOverview.orphanRoutes.total" class="overview-tags">
+              <ElTag
+                v-for="item in userRiskOverview.orphanRoutes.items"
+                :key="item"
+                size="small"
+                type="warning"
+              >
+                {{ item }}
+              </ElTag>
+              <span v-if="userRiskOverview.orphanRoutes.overflow" class="overview-more">
+                +{{ userRiskOverview.orphanRoutes.overflow }}
+              </span>
+            </div>
+            <div class="overview-risk-row">
+              <span>未注册能力键</span>
+              <strong>{{ userRiskOverview.unknownCapabilities.total }}</strong>
+            </div>
+            <div v-if="userRiskOverview.unknownCapabilities.total" class="overview-tags">
+              <ElTag
+                v-for="item in userRiskOverview.unknownCapabilities.items"
+                :key="item"
+                size="small"
+                type="danger"
+              >
+                {{ item }}
+              </ElTag>
+              <span v-if="userRiskOverview.unknownCapabilities.overflow" class="overview-more">
+                +{{ userRiskOverview.unknownCapabilities.overflow }}
+              </span>
+            </div>
+            <div
+              v-if="
+                !userRiskOverview.orphanRoutes.total && !userRiskOverview.unknownCapabilities.total
+              "
+              class="overview-empty"
+            >
+              当前没有发现明显异常
+            </div>
+          </div>
+        </div>
+
         <div class="center-column user-list-column">
           <div class="permission-sidebar-header">
             <div class="permission-sidebar-title">第一步：选择用户</div>
@@ -1020,6 +1384,14 @@ const handleTabChange = (tab: string) => {
               </template>
               <template v-else>请先在左侧选择用户</template>
             </div>
+            <div v-if="selectedUser" class="permission-sidebar-meta">
+              所属组：
+              <template v-if="loadingUserGroups">加载中...</template>
+              <template v-else-if="selectedUserGroups.length">
+                {{ selectedUserGroups.map((item) => item.group_name || item.group_dn).join(' / ') }}
+              </template>
+              <template v-else>无</template>
+            </div>
           </div>
           <div class="permission-toolbar">
             <div class="permission-toolbar-left">
@@ -1033,6 +1405,9 @@ const handleTabChange = (tab: string) => {
                 已选 {{ checkedUserPermissionsCount }} / 共 {{ totalUserPermissions }} 个页面
               </span>
             </div>
+          </div>
+          <div class="permission-hint">
+            这里编辑的是用户直绑页面权限；带“组继承”的页面当前会生效，但需到组授权中心调整。
           </div>
           <div
             v-loading="loadingUserPermissions || loadingPermissions"
@@ -1064,6 +1439,12 @@ const handleTabChange = (tab: string) => {
                       @change="(val: boolean | string) => toggleUserPermission(perm.route_name, !!val)"
                     >
                       {{ perm.label }}
+                      <span
+                        v-if="isUserInheritedPermission(perm.route_name)"
+                        class="permission-tag"
+                      >
+                        组继承
+                      </span>
                     </ElCheckbox>
                   </div>
                 </div>
@@ -1081,7 +1462,9 @@ const handleTabChange = (tab: string) => {
         <div class="center-column capability-column user-permission-panel">
           <div class="permission-sidebar-header">
             <div class="permission-sidebar-title">第三步：分配模块能力权限</div>
-            <div class="permission-sidebar-subtitle">仅对已勾选页面开放能力配置</div>
+            <div class="permission-sidebar-subtitle">
+              编辑用户直绑能力；组继承能力只显示标记，不会在这里被移除
+            </div>
           </div>
           <div class="permission-toolbar">
             <div class="permission-toolbar-left">
@@ -1101,6 +1484,11 @@ const handleTabChange = (tab: string) => {
               </BaseButton>
             </div>
           </div>
+          <div v-if="userCapabilityOnlyRouteNames.length" class="permission-hint warning">
+            存在
+            {{ userCapabilityOnlyRouteNames.length }}
+            个仅保留能力绑定、但未勾选页面访问权的页面，已自动纳入第三步显示以便清理。
+          </div>
           <div
             v-loading="loadingUserPermissions || loadingCapabilityActions"
             class="permission-tree capability-matrix"
@@ -1115,7 +1503,15 @@ const handleTabChange = (tab: string) => {
                 </thead>
                 <tbody>
                   <tr v-for="perm in userSelectedPageRows" :key="perm.route_name">
-                    <td class="capability-page-cell">{{ perm.page_title || perm.route_name }}</td>
+                    <td class="capability-page-cell">
+                      {{ perm.page_title || perm.route_name }}
+                      <span
+                        v-if="isUserInheritedPermission(perm.route_name)"
+                        class="permission-tag inline"
+                      >
+                        组继承页面
+                      </span>
+                    </td>
                     <td
                       v-for="col in capabilityActionColumns"
                       :key="`${perm.route_name}-${col.code}`"
@@ -1133,6 +1529,12 @@ const handleTabChange = (tab: string) => {
                         "
                       />
                       <span v-else>-</span>
+                      <span
+                        v-if="isUserInheritedCapability(perm.route_name, col.code)"
+                        class="permission-tag inline"
+                      >
+                        组继承
+                      </span>
                     </td>
                   </tr>
                 </tbody>
@@ -1219,8 +1621,8 @@ const handleTabChange = (tab: string) => {
             </div>
           </div>
 
-          <!-- 右侧：权限面板 -->
-          <div class="permission-main">
+          <!-- 中间：页面权限面板 -->
+          <div class="center-column user-permission-panel">
             <div v-if="!selectedGroup" class="permission-empty">
               <ElEmpty description="请先在左侧选择一个 AD 组" />
             </div>
@@ -1311,6 +1713,77 @@ const handleTabChange = (tab: string) => {
                 </BaseButton>
                 <BaseButton text @click="resetGroupPermissionSelection"> 取消修改 </BaseButton>
               </div>
+            </div>
+          </div>
+
+          <div class="center-column capability-column group-permission-panel">
+            <div class="permission-sidebar-header">
+              <div class="permission-sidebar-title">模块能力权限</div>
+              <div class="permission-sidebar-subtitle">仅对已勾选页面开放能力配置</div>
+            </div>
+            <div class="permission-toolbar">
+              <div class="permission-toolbar-left">
+                <ElInput
+                  v-model="groupCapabilityFilter"
+                  placeholder="筛选已选页面"
+                  clearable
+                  style="width: 180px"
+                />
+                <span class="permission-toolbar-summary">
+                  已选 {{ checkedGroupCapabilityCount }} / 共 {{ totalCapabilityActions }} 个能力
+                </span>
+              </div>
+              <div class="permission-toolbar-right">
+                <BaseButton text type="primary" @click="resetGroupPermissionSelection">
+                  重置
+                </BaseButton>
+              </div>
+            </div>
+            <div
+              v-loading="loadingGroupPermissions || loadingCapabilityActions"
+              class="permission-tree capability-matrix"
+            >
+              <template v-if="selectedGroup && groupSelectedPageRows.length">
+                <table class="capability-table">
+                  <thead>
+                    <tr>
+                      <th>页面</th>
+                      <th v-for="col in capabilityActionColumns" :key="col.code">{{
+                        col.label
+                      }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="perm in groupSelectedPageRows" :key="perm.route_name">
+                      <td class="capability-page-cell">{{ perm.page_title || perm.route_name }}</td>
+                      <td
+                        v-for="col in capabilityActionColumns"
+                        :key="`${perm.route_name}-${col.code}`"
+                      >
+                        <ElCheckbox
+                          v-if="getCapabilityKeyByRouteAction(perm.route_name, col.code)"
+                          :model-value="
+                            groupCheckedCapabilityKeys.includes(
+                              getCapabilityKeyByRouteAction(perm.route_name, col.code)
+                            )
+                          "
+                          @change="
+                            (val: boolean | string) =>
+                              toggleGroupRouteCapability(perm.route_name, col.code, !!val)
+                          "
+                        />
+                        <span v-else>-</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+              <template v-else-if="selectedGroup">
+                <ElEmpty description="请先勾选页面访问权" />
+              </template>
+              <template v-else>
+                <ElEmpty description="请先在左侧选择一个 AD 组" />
+              </template>
             </div>
           </div>
         </div>
@@ -1603,6 +2076,93 @@ const handleTabChange = (tab: string) => {
   min-height: 620px;
 }
 
+.user-overview-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-card {
+  padding: 12px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+}
+
+.overview-card.risk {
+  background: linear-gradient(180deg, #fffaf5 0%, #fff7ed 100%);
+  border-color: #fed7aa;
+}
+
+.overview-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.overview-card-subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.overview-card-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.overview-stat {
+  min-width: 76px;
+  padding: 8px 10px;
+  background: rgb(255 255 255 / 80%);
+  border-radius: 8px;
+}
+
+.overview-stat-label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.overview-stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.overview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.overview-more {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.overview-empty {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.overview-risk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #7c2d12;
+}
+
 .permission-layout {
   display: flex;
   width: 100%;
@@ -1618,11 +2178,11 @@ const handleTabChange = (tab: string) => {
 }
 
 .center-column {
+  display: flex;
+  min-height: 620px;
+  padding: 12px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 12px;
-  min-height: 620px;
-  display: flex;
   flex-direction: column;
 }
 
@@ -1646,6 +2206,13 @@ const handleTabChange = (tab: string) => {
 .permission-sidebar-subtitle {
   font-size: 12px;
   color: #6b7280;
+}
+
+.permission-sidebar-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #4b5563;
 }
 
 .permission-sidebar-table {
@@ -1713,6 +2280,21 @@ const handleTabChange = (tab: string) => {
   color: #6b7280;
 }
 
+.permission-hint {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.permission-hint.warning {
+  color: #9a3412;
+  background: #fff7ed;
+}
+
 .permission-tree {
   max-height: 420px;
   padding: 10px 12px;
@@ -1729,20 +2311,20 @@ const handleTabChange = (tab: string) => {
 
 .capability-table {
   width: 100%;
-  border-collapse: collapse;
   font-size: 12px;
+  border-collapse: collapse;
 }
 
 .capability-table th,
 .capability-table td {
-  border: 1px solid #e5e7eb;
-  text-align: center;
   padding: 6px 4px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
 }
 
 .capability-page-cell {
-  text-align: left !important;
   min-width: 180px;
+  text-align: left !important;
 }
 
 .permission-group {
@@ -1773,10 +2355,40 @@ const handleTabChange = (tab: string) => {
   min-width: 260px;
 }
 
+.permission-tag {
+  display: inline-flex;
+  padding: 1px 6px;
+  margin-left: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #1d4ed8;
+  vertical-align: middle;
+  background: #eff6ff;
+  border-radius: 999px;
+}
+
+.permission-tag.inline {
+  margin-left: 6px;
+}
+
 .permission-actions {
   display: flex;
   margin-top: 12px;
   gap: 8px;
   justify-content: flex-end;
+}
+
+@media (width <= 1280px) {
+  .user-center-layout {
+    grid-template-columns: 300px 1fr;
+  }
+
+  .user-overview-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .capability-column {
+    grid-column: 1 / -1;
+  }
 }
 </style>

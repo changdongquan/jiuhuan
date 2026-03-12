@@ -3,8 +3,12 @@ const sql = require('mssql')
 const config = require('../config')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability } = require('../middleware/capability')
 
 const router = express.Router()
+const requireSupplierCreate = requireCapability('SUPPLIER_INFO.CREATE')
+const requireSupplierUpdate = requireCapability('SUPPLIER_INFO.UPDATE')
+const requireSupplierDelete = requireCapability('SUPPLIER_INFO.DELETE')
 
 // 获取供方信息列表
 router.get('/list', async (req, res) => {
@@ -177,7 +181,7 @@ router.get('/detail/:id', async (req, res) => {
 })
 
 // 新增供方信息
-router.post('/create', async (req, res) => {
+router.post('/create', requireSupplierCreate, async (req, res) => {
   let pool = null
   try {
     pool = await sql.connect(config)
@@ -261,7 +265,7 @@ router.post('/create', async (req, res) => {
 })
 
 // 更新供方信息
-router.put('/update/:id', async (req, res) => {
+router.put('/update/:id', requireSupplierUpdate, async (req, res) => {
   let pool = null
   try {
     pool = await sql.connect(config)
@@ -367,7 +371,7 @@ router.put('/update/:id', async (req, res) => {
 })
 
 // 删除供方信息（软删除）
-router.delete('/delete/:id', async (req, res) => {
+router.delete('/delete/:id', requireSupplierDelete, async (req, res) => {
   let pool = null
   try {
     pool = await sql.connect(config)

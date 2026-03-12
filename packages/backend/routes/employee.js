@@ -5,6 +5,10 @@ const { getPool } = require('../database')
 const sql = require('mssql')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability } = require('../middleware/capability')
+const requireEmployeeCreate = requireCapability('EMPLOYEE_INFO.CREATE')
+const requireEmployeeUpdate = requireCapability('EMPLOYEE_INFO.UPDATE')
+const requireEmployeeDelete = requireCapability('EMPLOYEE_INFO.DELETE')
 
 const ensureEmployeeSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
@@ -177,7 +181,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // 创建员工
-router.post('/', async (req, res) => {
+router.post('/', requireEmployeeCreate, async (req, res) => {
   try {
     const {
       employeeName,
@@ -237,7 +241,7 @@ router.post('/', async (req, res) => {
 })
 
 // 更新员工
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireEmployeeUpdate, async (req, res) => {
   try {
     const { id } = req.params
     const {
@@ -302,7 +306,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // 删除员工
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireEmployeeDelete, async (req, res) => {
   try {
     const { id } = req.params
     const employeeId = parseInt(id)

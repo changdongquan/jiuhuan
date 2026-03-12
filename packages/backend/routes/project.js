@@ -18,8 +18,14 @@ const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
 const sql = require('mssql')
 const { getPool } = require('../database')
+const { requireCapability } = require('../middleware/capability')
 
 const execFileAsync = promisify(execFile)
+const requireProjectCreate = requireCapability('PROJECT_MANAGEMENT.CREATE')
+const requireProjectUpdate = requireCapability('PROJECT_MANAGEMENT.UPDATE')
+const requireProjectDelete = requireCapability('PROJECT_MANAGEMENT.DELETE')
+const requireProjectUpload = requireCapability('PROJECT_MANAGEMENT.UPLOAD')
+const requireProjectExport = requireCapability('PROJECT_MANAGEMENT.EXPORT')
 
 // 项目管理附件存储配置
 // 使用与销售订单相同的路径配置
@@ -1636,7 +1642,7 @@ router.get('/detail', async (req, res) => {
 })
 
 // 生成试模单（xlsx）：基于模板单元格填充，直接下载（不保存附件）
-router.post('/trial-form-xlsx', async (req, res) => {
+router.post('/trial-form-xlsx', requireProjectExport, async (req, res) => {
   try {
     const { projectCode, trialCount } = req.body || {}
     const code = String(projectCode || '').trim()
@@ -1990,7 +1996,7 @@ router.get('/tripartite-agreement-pdf', async (req, res) => {
 })
 
 // 生成三方协议（pdf）并保存到“项目管理附件-三方协议”（不直接下载）
-router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
+router.post('/tripartite-agreement-generate-pdf', requireProjectExport, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
 
@@ -2191,7 +2197,7 @@ router.post('/tripartite-agreement-generate-pdf', async (req, res) => {
 
 // 生成封样单（xlsx）并保存到“项目管理附件-封样单”（不直接下载）
 // 基于模板填充，多产品时每产品一个文件
-router.post('/seal-sample-generate-xlsx', async (req, res) => {
+router.post('/seal-sample-generate-xlsx', requireProjectExport, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
 
@@ -2407,7 +2413,7 @@ router.post('/seal-sample-generate-xlsx', async (req, res) => {
 })
 
 // 新增项目信息
-router.post('/', async (req, res) => {
+router.post('/', requireProjectCreate, async (req, res) => {
   try {
     const data = req.body
 
@@ -2537,7 +2543,7 @@ router.post('/', async (req, res) => {
 })
 
 // 更新项目信息（使用 body 中的 projectCode，避免路径参数包含斜杠的问题）
-router.put('/update', async (req, res) => {
+router.put('/update', requireProjectUpdate, async (req, res) => {
   try {
     const { projectCode, ...data } = req.body
 
@@ -2700,7 +2706,7 @@ router.put('/update', async (req, res) => {
 })
 
 // 删除项目信息（使用 query 参数，避免路径参数包含斜杠的问题）
-router.delete('/delete', async (req, res) => {
+router.delete('/delete', requireProjectDelete, async (req, res) => {
   try {
     const { projectCode } = req.query
 
@@ -2752,7 +2758,7 @@ router.delete('/delete', async (req, res) => {
 })
 
 // 批量导入移模单明细：按项目编号写入 制件厂家/移模日期/封样单号（字段级跳过已有或覆盖）
-router.post('/relocation-import', async (req, res) => {
+router.post('/relocation-import', requireProjectUpload, async (req, res) => {
   try {
     const { overwriteMode, mouldMoveDate, items } = req.body || {}
 
@@ -2901,7 +2907,11 @@ const relocationPdfUpload = multer({
   limits: { fileSize: 30 * 1024 * 1024 }
 })
 
-router.post('/relocation-parse-pdf', relocationPdfUpload.single('file'), async (req, res) => {
+router.post(
+  '/relocation-parse-pdf',
+  requireProjectUpload,
+  relocationPdfUpload.single('file'),
+  async (req, res) => {
   try {
     const file = req.file
     if (!file || !file.buffer) {
@@ -2952,14 +2962,19 @@ router.post('/relocation-parse-pdf', relocationPdfUpload.single('file'), async (
       message: error?.message || '解析 PDF 失败'
     })
   }
-})
+  }
+)
 
 // === 项目管理附件相关接口 ===
 
 // 上传附件
 // 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
 // 使用 :projectCode(*) 以便参数可跨越多个 path segment
-router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async (req, res) => {
+router.post(
+  '/:projectCode(*)/attachments/:type',
+  requireProjectUpload,
+  uploadSingleAttachment,
+  async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -3360,7 +3375,8 @@ router.post('/:projectCode(*)/attachments/:type', uploadSingleAttachment, async 
       error: error.message
     })
   }
-})
+  }
+)
 
 // 获取附件列表
 // 注意：项目编号可能包含斜杠（例如 JH05-25-044/01），Express 会在路由匹配前将 %2F 解码为 /
@@ -3545,7 +3561,7 @@ router.get('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
 })
 
 // 新建试模过程：同一项目内试模次数从 1 递增（并发安全）
-router.post('/:projectCode(*)/trial-processes', async (req, res) => {
+router.post('/:projectCode(*)/trial-processes', requireProjectUpdate, async (req, res) => {
   try {
     await ensureTrialProcessTables()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -3836,7 +3852,7 @@ router.post('/:projectCode(*)/trial-processes', async (req, res) => {
 })
 
 // 更新试模过程
-router.put('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
+router.put('/:projectCode(*)/trial-processes/:trialNo', requireProjectUpdate, async (req, res) => {
   try {
     await ensureTrialProcessTables()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -3955,7 +3971,7 @@ router.put('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
 })
 
 // 作废试模过程（不物理删除）
-router.delete('/:projectCode(*)/trial-processes/:trialNo', async (req, res) => {
+router.delete('/:projectCode(*)/trial-processes/:trialNo', requireProjectDelete, async (req, res) => {
   try {
     await ensureTrialProcessTables()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -4050,6 +4066,7 @@ router.get('/:projectCode(*)/trial-processes/:trialNo/trial-attachments', async 
 // 上传试模过程附件（仅 PDF / 图片，支持多文件）
 router.post(
   '/:projectCode(*)/trial-processes/:trialNo/trial-attachments',
+  requireProjectUpload,
   uploadTrialProcessAttachments,
   async (req, res) => {
     try {
@@ -4302,7 +4319,7 @@ router.get('/trial-process-attachments/:attachmentId/preview', async (req, res) 
 })
 
 // 删除试模过程附件
-router.delete('/trial-process-attachments/:attachmentId', async (req, res) => {
+router.delete('/trial-process-attachments/:attachmentId', requireProjectDelete, async (req, res) => {
   try {
     await ensureTrialProcessTables()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -4406,7 +4423,7 @@ router.get('/:projectCode(*)/inspection-reports', async (req, res) => {
 })
 
 // 迁移检验报告绑定（图号改名 / rowIndex -> drawing）
-router.post('/:projectCode(*)/inspection-reports/move', async (req, res) => {
+router.post('/:projectCode(*)/inspection-reports/move', requireProjectUpdate, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -4478,7 +4495,7 @@ router.post('/:projectCode(*)/inspection-reports/move', async (req, res) => {
 })
 
 // 标记 rowIndex 绑定的检验报告为孤儿（用于“图号为空的行被删除”）
-router.post('/:projectCode(*)/inspection-reports/orphan', async (req, res) => {
+router.post('/:projectCode(*)/inspection-reports/orphan', requireProjectUpdate, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const projectCode = String(req.params.projectCode || '').trim()
@@ -4574,7 +4591,7 @@ router.get('/inspection-reports/:attachmentId/download', async (req, res) => {
 })
 
 // 删除检验报告（仅前端控制入口；如需更严格可在后端加权限校验）
-router.delete('/inspection-reports/:attachmentId', async (req, res) => {
+router.delete('/inspection-reports/:attachmentId', requireProjectDelete, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -4673,7 +4690,7 @@ router.get('/attachments/:attachmentId/download', async (req, res) => {
 })
 
 // 删除附件
-router.delete('/attachments/:attachmentId', async (req, res) => {
+router.delete('/attachments/:attachmentId', requireProjectDelete, async (req, res) => {
   try {
     await ensureProjectAttachmentsTable()
     const attachmentId = parseInt(req.params.attachmentId, 10)
@@ -4729,7 +4746,7 @@ router.delete('/attachments/:attachmentId', async (req, res) => {
 // === 零件图示相关接口 ===
 
 // 上传零件图示
-router.post('/upload-part-image', (req, res) => {
+router.post('/upload-part-image', requireProjectUpload, (req, res) => {
   uploadPartImage.single('file')(req, res, (err) => {
     if (err) {
       const message =
@@ -4778,7 +4795,7 @@ router.post('/upload-part-image', (req, res) => {
 })
 
 // 删除临时零件图示
-router.post('/delete-temp-part-image', async (req, res) => {
+router.post('/delete-temp-part-image', requireProjectUpload, async (req, res) => {
   try {
     const url = String(req.body?.url || '').trim()
     if (!url) {
