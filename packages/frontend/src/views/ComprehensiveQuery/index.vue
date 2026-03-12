@@ -116,7 +116,11 @@
               <el-form-item label="执行进度">
                 <div class="cq-progress-range">
                   <el-select v-model="queryForm.progressType" clearable placeholder="选择指标">
-                    <el-option label="开票百分比" value="invoice" />
+                    <el-option
+                      label="开票百分比"
+                      value="invoice"
+                      :disabled="invoiceProgressTypeDisabled"
+                    />
                     <el-option label="回款百分比" value="receipt" />
                   </el-select>
                   <div class="cq-progress-range__inputs">
@@ -125,6 +129,7 @@
                       placeholder="最小%"
                       clearable
                       inputmode="decimal"
+                      :disabled="progressRangeDisabled"
                     />
                     <span class="cq-progress-range__divider">-</span>
                     <el-input
@@ -132,6 +137,7 @@
                       placeholder="最大%"
                       clearable
                       inputmode="decimal"
+                      :disabled="progressRangeDisabled"
                     />
                   </div>
                 </div>
@@ -819,6 +825,8 @@ const hasAppliedSearch = computed(() => appliedSnapshot.value !== null)
 const filtersDirty = computed(
   () => serializeQueryState(queryForm) !== serializeQueryState(appliedSnapshot.value)
 )
+const invoiceProgressTypeDisabled = computed(() => queryForm.invoiceStatus === '未开票')
+const progressRangeDisabled = computed(() => !queryForm.progressType)
 
 const projectOptions = computed(() =>
   tableData.value.map((item) => ({
@@ -954,6 +962,53 @@ const normalizePercentValue = (value: string) => {
   return Math.min(100, Math.max(0, num))
 }
 
+const clearProgressFilter = (clearType = true) => {
+  if (clearType) queryForm.progressType = ''
+  queryForm.progressMin = ''
+  queryForm.progressMax = ''
+}
+
+const syncProgressRangeInputs = (source: QueryForm) => {
+  const min = normalizePercentValue(source.progressMin)
+  const max = normalizePercentValue(source.progressMax)
+  source.progressMin = min === undefined ? '' : String(min)
+  source.progressMax = max === undefined ? '' : String(max)
+}
+
+const getInvoiceProgressConflictMessage = (source: QueryForm) => {
+  if (source.progressType !== 'invoice') return ''
+  if (source.invoiceStatus === '未开票') {
+    return '“未开票”与“开票百分比”互斥，已清空执行进度。'
+  }
+  if (source.invoiceStatus !== '仅开部分发票') return ''
+
+  const min = normalizePercentValue(source.progressMin)
+  const max = normalizePercentValue(source.progressMax)
+
+  if (min === 0 && max === 0) {
+    return '“仅开部分发票”不可能是 0%，已清空执行进度范围。'
+  }
+  if (min === 100 && max === 100) {
+    return '“仅开部分发票”不可能是 100%，已清空执行进度范围。'
+  }
+  return ''
+}
+
+const validateProgressRange = (source: QueryForm) => {
+  if (!source.progressType) return true
+
+  syncProgressRangeInputs(source)
+
+  const min = normalizePercentValue(source.progressMin)
+  const max = normalizePercentValue(source.progressMax)
+
+  if (min !== undefined && max !== undefined && min > max) {
+    ElMessage.warning('执行进度范围无效：最小百分比不能大于最大百分比。')
+    return false
+  }
+  return true
+}
+
 const parseResponseData = (rawResp: unknown) => {
   const raw = rawResp as any
   const pr: any = raw?.data ?? raw
@@ -1074,6 +1129,7 @@ const applyCurrentDraft = async (mode?: TableMode) => {
 }
 
 const handleApplySearch = () => {
+  if (!validateProgressRange(queryForm)) return
   void applyCurrentDraft()
 }
 
@@ -1166,6 +1222,45 @@ watch(
   (value) => {
     if (value === 'insights' && selectedProjectCode.value && !journey.value) {
       void loadJourney()
+    }
+  }
+)
+
+let syncingProgressConflict = false
+
+watch(
+  () => [
+    queryForm.invoiceStatus,
+    queryForm.progressType,
+    queryForm.progressMin,
+    queryForm.progressMax
+  ],
+  () => {
+    if (syncingProgressConflict) return
+
+    const message = getInvoiceProgressConflictMessage(queryForm)
+    if (!message) return
+
+    syncingProgressConflict = true
+    if (queryForm.invoiceStatus === '未开票') {
+      clearProgressFilter(true)
+    } else {
+      clearProgressFilter(false)
+    }
+    ElMessage.warning(message)
+    syncingProgressConflict = false
+  }
+)
+
+watch(
+  () => queryForm.progressType,
+  (value, oldValue) => {
+    if (!value && oldValue) {
+      clearProgressFilter(false)
+      return
+    }
+    if (value) {
+      syncProgressRangeInputs(queryForm)
     }
   }
 )
