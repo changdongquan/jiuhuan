@@ -1,6 +1,6 @@
 const sql = require('mssql')
 const { getPool } = require('../database')
-const { normalizeUsername, isAdmin, getEffectivePermissions } = require('./permissionAccess')
+const { normalizeUsername, isAdmin } = require('./permissionAccess')
 
 let ldap = null
 try {
@@ -19,7 +19,8 @@ const LDAP_CONFIG = {
 const TABLES = {
   capabilities: 'capabilities',
   userBindings: 'user_capabilities',
-  groupBindings: 'group_capabilities'
+  groupBindings: 'group_capabilities',
+  migrationState: 'capability_migration_state'
 }
 
 const DEFAULT_MODULE_DEFS = [
@@ -32,10 +33,13 @@ const DEFAULT_MODULE_DEFS = [
   ['EMPLOYEE_INFO', '员工信息', 'EmployeeInfoIndex'],
   ['QUOTATION', '报价单', 'QuotationIndex'],
   ['BILLING_DOCUMENTS', '开票单据', 'BillingDocuments'],
+  ['RECEIVABLE_DOCUMENTS', '回款单据', 'ReceivableDocuments'],
   ['COMPREHENSIVE_QUERY', '综合查询', 'ComprehensiveQuery'],
   ['ATTENDANCE', '考勤管理', 'AttendanceIndex'],
   ['SALARY', '工资管理', 'Salary'],
   ['ANALYSIS', '分析报表', 'Analysis'],
+  ['BMO_SYNC', 'BMO采集', 'BmoSync'],
+  ['BMO_RELAY_MANAGE', 'BMO中转管理', 'BmoRelayManage'],
   ['BREAK_SNAKE_GAME', '贪吃蛇游戏', 'BreakSnakeGame']
 ]
 
@@ -250,10 +254,162 @@ const ensureDefaultCapabilities = async (poolOrTx) => {
   )
 }
 
+const ensureCapabilityMigrationStateTable = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF OBJECT_ID(N'dbo.${TABLES.migrationState}', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.${TABLES.migrationState} (
+        migration_key NVARCHAR(120) NOT NULL PRIMARY KEY,
+        executed_at DATETIME2 NOT NULL CONSTRAINT DF_capability_migration_state_executed_at DEFAULT (SYSDATETIME())
+      );
+    END
+  `)
+}
+
+const insertUserCapabilityKeysWithPool = async (poolOrTx, username, capabilityKeys) => {
+  const normalizedUsername = normalizePrincipal(username)
+  const normalizedKeys = Array.from(
+    new Set((capabilityKeys || []).map((x) => normalizeCapabilityKey(x)).filter(Boolean))
+  )
+  if (!normalizedUsername || !normalizedKeys.length) return
+  await Promise.all(
+    normalizedKeys.map(async (capabilityKey) => {
+      const req = new sql.Request(poolOrTx)
+      req.input('capabilityKey', sql.NVarChar(160), capabilityKey)
+      req.input('username', sql.NVarChar(120), normalizedUsername)
+      await req.query(`
+        IF EXISTS (SELECT 1 FROM dbo.${TABLES.capabilities} WHERE capability_key = @capabilityKey)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.${TABLES.userBindings}
+          WHERE capability_key = @capabilityKey AND username = @username
+        )
+        BEGIN
+          INSERT INTO dbo.${TABLES.userBindings} (capability_key, username)
+          VALUES (@capabilityKey, @username)
+        END
+      `)
+    })
+  )
+}
+
+const insertGroupCapabilityKeysWithPool = async (poolOrTx, groupDn, groupName, capabilityKeys) => {
+  const normalizedGroupDn = normalizeText(groupDn)
+  const normalizedGroupName = normalizeText(groupName)
+  const normalizedKeys = Array.from(
+    new Set((capabilityKeys || []).map((x) => normalizeCapabilityKey(x)).filter(Boolean))
+  )
+  if (!normalizedGroupDn || !normalizedKeys.length) return
+  await Promise.all(
+    normalizedKeys.map(async (capabilityKey) => {
+      const req = new sql.Request(poolOrTx)
+      req.input('capabilityKey', sql.NVarChar(160), capabilityKey)
+      req.input('groupDn', sql.NVarChar(500), normalizedGroupDn)
+      req.input('groupName', sql.NVarChar(200), normalizedGroupName || null)
+      await req.query(`
+        IF EXISTS (SELECT 1 FROM dbo.${TABLES.capabilities} WHERE capability_key = @capabilityKey)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.${TABLES.groupBindings}
+          WHERE capability_key = @capabilityKey AND group_dn = @groupDn
+        )
+        BEGIN
+          INSERT INTO dbo.${TABLES.groupBindings} (capability_key, group_dn, group_name)
+          VALUES (@capabilityKey, @groupDn, @groupName)
+        END
+      `)
+    })
+  )
+}
+
+const LEGACY_ROUTE_CAPABILITY_BACKFILL_KEY = 'LEGACY_ROUTE_CAPABILITY_BACKFILL_V1'
+
+const ensureLegacyRouteCapabilityBackfill = async (poolOrTx) => {
+  await ensureCapabilityMigrationStateTable(poolOrTx)
+  const markerReq = new sql.Request(poolOrTx)
+  markerReq.input('migrationKey', sql.NVarChar(120), LEGACY_ROUTE_CAPABILITY_BACKFILL_KEY)
+  const markerRows = await markerReq.query(`
+    SELECT TOP 1 migration_key AS migrationKey
+    FROM dbo.${TABLES.migrationState}
+    WHERE migration_key = @migrationKey
+  `)
+  if (markerRows.recordset?.length) return
+
+  const userRouteRows = await new sql.Request(poolOrTx).query(`
+    SELECT
+      up.username AS username,
+      p.route_name AS routeName
+    FROM dbo.user_permissions up
+    INNER JOIN dbo.permissions p ON p.id = up.permission_id
+    WHERE up.username IS NOT NULL
+      AND p.route_name IS NOT NULL
+  `)
+  const userRouteMap = new Map()
+  ;(userRouteRows.recordset || []).forEach((row) => {
+    const username = normalizePrincipal(row.username)
+    const routeName = normalizeText(row.routeName)
+    if (!username || !routeName) return
+    const set = userRouteMap.get(username) || new Set()
+    set.add(routeName)
+    userRouteMap.set(username, set)
+  })
+  for (const [username, routeNames] of userRouteMap.entries()) {
+    const capabilityKeys = routeNamesToCapabilityKeys(Array.from(routeNames))
+    await insertUserCapabilityKeysWithPool(poolOrTx, username, capabilityKeys)
+  }
+
+  const groupRouteRows = await new sql.Request(poolOrTx).query(`
+    SELECT
+      gp.group_dn AS groupDn,
+      gp.group_name AS groupName,
+      p.route_name AS routeName
+    FROM dbo.group_permissions gp
+    INNER JOIN dbo.permissions p ON p.id = gp.permission_id
+    WHERE gp.group_dn IS NOT NULL
+      AND p.route_name IS NOT NULL
+  `)
+  const groupRouteMap = new Map()
+  ;(groupRouteRows.recordset || []).forEach((row) => {
+    const groupDn = normalizeText(row.groupDn)
+    const routeName = normalizeText(row.routeName)
+    if (!groupDn || !routeName) return
+    const current =
+      groupRouteMap.get(groupDn) || {
+        groupName: normalizeText(row.groupName),
+        routeNames: new Set()
+      }
+    current.routeNames.add(routeName)
+    if (!current.groupName) current.groupName = normalizeText(row.groupName)
+    groupRouteMap.set(groupDn, current)
+  })
+  for (const [groupDn, item] of groupRouteMap.entries()) {
+    const capabilityKeys = routeNamesToCapabilityKeys(Array.from(item.routeNames))
+    await insertGroupCapabilityKeysWithPool(poolOrTx, groupDn, item.groupName, capabilityKeys)
+  }
+
+  const insertMarkerReq = new sql.Request(poolOrTx)
+  insertMarkerReq.input('migrationKey', sql.NVarChar(120), LEGACY_ROUTE_CAPABILITY_BACKFILL_KEY)
+  await insertMarkerReq.query(`
+    IF NOT EXISTS (
+      SELECT 1 FROM dbo.${TABLES.migrationState} WHERE migration_key = @migrationKey
+    )
+    BEGIN
+      INSERT INTO dbo.${TABLES.migrationState} (migration_key)
+      VALUES (@migrationKey)
+    END
+  `)
+}
+
+const ensureCapabilityRuntime = async (poolOrTx) => {
+  await ensureCapabilitySchema(poolOrTx)
+  await ensureDefaultCapabilities(poolOrTx)
+  await ensureLegacyRouteCapabilityBackfill(poolOrTx)
+}
+
 const listCapabilities = async ({ includeDisabled = true } = {}) => {
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('includeDisabled', sql.Bit, includeDisabled ? 1 : 0)
   const rows = await req.query(`
@@ -289,8 +445,7 @@ const listCapabilities = async ({ includeDisabled = true } = {}) => {
 
 const getAllCapabilityKeys = async ({ includeDisabled = false } = {}) => {
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('includeDisabled', sql.Bit, includeDisabled ? 1 : 0)
   const rows = await req.query(`
@@ -306,8 +461,7 @@ const getUserCapabilityKeys = async (username) => {
   const normalizedUsername = normalizePrincipal(username)
   if (!normalizedUsername) return []
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('username', sql.NVarChar(120), normalizedUsername)
   const rows = await req.query(`
@@ -329,27 +483,8 @@ const addUserCapabilityKeys = async (username, capabilityKeys) => {
   )
   if (!normalizedUsername || !normalizedKeys.length) return
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
-  await Promise.all(
-    normalizedKeys.map(async (capabilityKey) => {
-      const req = new sql.Request(pool)
-      req.input('capabilityKey', sql.NVarChar(160), capabilityKey)
-      req.input('username', sql.NVarChar(120), normalizedUsername)
-      await req.query(`
-        IF EXISTS (SELECT 1 FROM dbo.${TABLES.capabilities} WHERE capability_key = @capabilityKey)
-        AND NOT EXISTS (
-          SELECT 1
-          FROM dbo.${TABLES.userBindings}
-          WHERE capability_key = @capabilityKey AND username = @username
-        )
-        BEGIN
-          INSERT INTO dbo.${TABLES.userBindings} (capability_key, username)
-          VALUES (@capabilityKey, @username)
-        END
-      `)
-    })
-  )
+  await ensureCapabilityRuntime(pool)
+  await insertUserCapabilityKeysWithPool(pool, normalizedUsername, normalizedKeys)
 }
 
 const removeUserCapabilityKeys = async (username, capabilityKeys) => {
@@ -359,8 +494,7 @@ const removeUserCapabilityKeys = async (username, capabilityKeys) => {
   )
   if (!normalizedUsername || !normalizedKeys.length) return
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('username', sql.NVarChar(120), normalizedUsername)
   normalizedKeys.forEach((key, idx) => {
@@ -378,8 +512,7 @@ const getGroupCapabilityKeys = async (groupDn) => {
   const normalizedGroupDn = normalizeText(groupDn)
   if (!normalizedGroupDn) return []
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('groupDn', sql.NVarChar(500), normalizedGroupDn)
   const rows = await req.query(`
@@ -402,28 +535,8 @@ const addGroupCapabilityKeys = async (groupDn, groupName, capabilityKeys) => {
   )
   if (!normalizedGroupDn || !normalizedKeys.length) return
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
-  await Promise.all(
-    normalizedKeys.map(async (capabilityKey) => {
-      const req = new sql.Request(pool)
-      req.input('capabilityKey', sql.NVarChar(160), capabilityKey)
-      req.input('groupDn', sql.NVarChar(500), normalizedGroupDn)
-      req.input('groupName', sql.NVarChar(200), normalizedGroupName || null)
-      await req.query(`
-        IF EXISTS (SELECT 1 FROM dbo.${TABLES.capabilities} WHERE capability_key = @capabilityKey)
-        AND NOT EXISTS (
-          SELECT 1
-          FROM dbo.${TABLES.groupBindings}
-          WHERE capability_key = @capabilityKey AND group_dn = @groupDn
-        )
-        BEGIN
-          INSERT INTO dbo.${TABLES.groupBindings} (capability_key, group_dn, group_name)
-          VALUES (@capabilityKey, @groupDn, @groupName)
-        END
-      `)
-    })
-  )
+  await ensureCapabilityRuntime(pool)
+  await insertGroupCapabilityKeysWithPool(pool, normalizedGroupDn, normalizedGroupName, normalizedKeys)
 }
 
 const removeGroupCapabilityKeys = async (groupDn, capabilityKeys) => {
@@ -433,8 +546,7 @@ const removeGroupCapabilityKeys = async (groupDn, capabilityKeys) => {
   )
   if (!normalizedGroupDn || !normalizedKeys.length) return
   const pool = await getPool()
-  await ensureCapabilitySchema(pool)
-  await ensureDefaultCapabilities(pool)
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   req.input('groupDn', sql.NVarChar(500), normalizedGroupDn)
   normalizedKeys.forEach((key, idx) => {
@@ -452,6 +564,7 @@ const getUserGroupCapabilityKeys = async (pureUsername) => {
   const groupDns = await loadUserGroupDns(pureUsername)
   if (!groupDns.length) return []
   const pool = await getPool()
+  await ensureCapabilityRuntime(pool)
   const req = new sql.Request(pool)
   groupDns.forEach((dn, idx) => {
     req.input(`groupDn${idx}`, sql.NVarChar(500), dn)
@@ -476,10 +589,7 @@ const getEffectiveCapabilityKeys = async (username) => {
   }
   const directKeys = await getUserCapabilityKeys(pureUsername)
   const groupKeys = await getUserGroupCapabilityKeys(pureUsername)
-  // 页面权限默认拥有该页面全部能力（读/增/改/删/传/导/审）
-  const effectiveRoutePermissions = await getEffectivePermissions(pureUsername)
-  const defaultPageKeys = routeNamesToCapabilityKeys(effectiveRoutePermissions)
-  return Array.from(new Set([...directKeys, ...groupKeys, ...defaultPageKeys]))
+  return Array.from(new Set([...directKeys, ...groupKeys]))
 }
 
 const hasCapability = async (username, capabilityKey) => {

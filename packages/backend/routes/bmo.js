@@ -38,11 +38,46 @@ const {
   upsertDetailCache,
   getDetailCacheByRecordId
 } = require('../services/bmoAutoSync')
+const { requireCapability, requireAnyCapability } = require('../middleware/capability')
 
 const router = express.Router()
 let persistInFlight = null
+const requireBmoSyncRead = requireCapability('BMO_SYNC.READ', { fallbackRoute: 'BmoSync' })
+const requireBmoSyncCreate = requireCapability('BMO_SYNC.CREATE', { fallbackRoute: 'BmoSync' })
+const requireBmoSyncUpdate = requireCapability('BMO_SYNC.UPDATE', { fallbackRoute: 'BmoSync' })
+const requireBmoSyncApprove = requireCapability('BMO_SYNC.APPROVE', { fallbackRoute: 'BmoSync' })
+const requireBmoRelayRead = requireCapability('BMO_RELAY_MANAGE.READ', {
+  fallbackRoute: 'BmoRelayManage'
+})
+const requireBmoRelayCreate = requireCapability('BMO_RELAY_MANAGE.CREATE', {
+  fallbackRoute: 'BmoRelayManage'
+})
+const requireBmoRelayUpdate = requireCapability('BMO_RELAY_MANAGE.UPDATE', {
+  fallbackRoute: 'BmoRelayManage'
+})
+const requireBmoSyncOrRelayRead = requireAnyCapability([
+  { capabilityKey: 'BMO_SYNC.READ', fallbackRoute: 'BmoSync' },
+  { capabilityKey: 'BMO_RELAY_MANAGE.READ', fallbackRoute: 'BmoRelayManage' }
+])
 
-router.get('/health', (req, res) => {
+router.use('/relay', requireBmoRelayRead)
+router.use(
+  [
+    '/tech-spec',
+    '/initiation-request',
+    '/sync',
+    '/latest',
+    '/tasks',
+    '/mould-procurement',
+    '/initiation-review',
+    '/attachment',
+    '/auto-sync',
+    '/initiation'
+  ],
+  requireBmoSyncRead
+)
+
+router.get('/health', requireBmoSyncOrRelayRead, (req, res) => {
   return res.json({
     code: 0,
     success: true,
@@ -62,7 +97,7 @@ router.get('/health', (req, res) => {
   })
 })
 
-router.get('/health/worker', async (req, res) => {
+router.get('/health/worker', requireBmoRelayRead, async (req, res) => {
   try {
     const data = await getDownloadWorkerHealth()
     return res.json({ code: 0, success: true, data })
@@ -75,7 +110,7 @@ router.get('/health/worker', async (req, res) => {
   }
 })
 
-router.post('/health/worker/restart', async (req, res) => {
+router.post('/health/worker/restart', requireBmoRelayUpdate, async (req, res) => {
   try {
     const data = await restartDownloadWorker()
     return res.json({ code: 0, success: true, data })
@@ -88,7 +123,7 @@ router.post('/health/worker/restart', async (req, res) => {
   }
 })
 
-router.get('/status', (req, res) => {
+router.get('/status', requireBmoSyncOrRelayRead, (req, res) => {
   if (isHubOnlyMode()) {
     return res.json({
       code: 0,
@@ -109,7 +144,7 @@ router.get('/status', (req, res) => {
   })
 })
 
-router.post('/session/ensure', async (req, res) => {
+router.post('/session/ensure', requireBmoSyncOrRelayRead, async (req, res) => {
   if (isRelayEnabled()) {
     try {
       const pushLocalAuthToRelay = async () => {
@@ -776,7 +811,7 @@ router.get('/tech-spec/parsed-cache', async (req, res) => {
   }
 })
 
-router.post('/tech-spec/parsed-cache', async (req, res) => {
+router.post('/tech-spec/parsed-cache', requireBmoSyncUpdate, async (req, res) => {
   try {
     const fdId = String(req.body?.fdId || req.body?.bmoRecordId || req.body?.bmo_record_id || '').trim()
     const attachmentId = String(req.body?.attachmentId || req.body?.id || '').trim()
@@ -798,7 +833,7 @@ router.post('/tech-spec/parsed-cache', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/cavity-snapshot/refresh', async (req, res) => {
+router.post('/initiation-request/cavity-snapshot/refresh', requireBmoSyncUpdate, async (req, res) => {
   try {
     const fdId = String(req.body?.fdId || req.body?.bmoRecordId || req.body?.bmo_record_id || '').trim()
     if (!fdId) {
@@ -1098,7 +1133,7 @@ const runSyncWithTask = async (requestBody, triggeredBy) => {
   }
 }
 
-router.post('/sync', async (req, res) => {
+router.post('/sync', requireBmoSyncUpdate, async (req, res) => {
   try {
     if (isHubOnlyMode()) {
       return res.status(400).json({
@@ -1124,7 +1159,7 @@ router.post('/sync', async (req, res) => {
   }
 })
 
-router.post('/sync/retry/:taskId', async (req, res) => {
+router.post('/sync/retry/:taskId', requireBmoSyncUpdate, async (req, res) => {
   try {
     if (isHubOnlyMode()) {
       return res.status(400).json({
@@ -1423,7 +1458,7 @@ router.get('/mould-procurement/by-project', async (req, res) => {
 })
 
 // Open page → try live within 3s → return latest data, and auto-persist in background.
-router.get('/mould-procurement/refresh', async (req, res) => {
+router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) => {
   const relayEnabled = isRelayEnabled()
   const maxWaitMs = toSafeInt(req.query.maxWaitMs, 3000)
   const pageSize = toSafeLimit(req.query.pageSize ?? req.query.limit, 200, 200)
@@ -1737,7 +1772,7 @@ router.get('/mould-procurement/detail', async (req, res) => {
   }
 })
 
-router.post('/auto-sync/run', async (req, res) => {
+router.post('/auto-sync/run', requireBmoSyncUpdate, async (req, res) => {
   try {
     if (isHubOnlyMode()) {
       return res.status(400).json({
@@ -1762,7 +1797,7 @@ router.post('/auto-sync/run', async (req, res) => {
   }
 })
 
-router.post('/download-jobs', async (req, res) => {
+router.post('/download-jobs', requireBmoSyncUpdate, async (req, res) => {
   try {
     const attachmentId = String(
       req.body?.attachmentId || req.body?.id || req.query.attachmentId || req.query.id || ''
@@ -1884,7 +1919,7 @@ router.get('/download-jobs/:jobId/file', async (req, res) => {
   return fs.createReadStream(file.localPath).pipe(res)
 })
 
-router.post('/relay/jobs', async (req, res) => {
+router.post('/relay/jobs', requireBmoRelayCreate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -1967,7 +2002,7 @@ router.get('/relay/sync-status', async (req, res) => {
   }
 })
 
-router.post('/relay/sync/run', async (req, res) => {
+router.post('/relay/sync/run', requireBmoRelayUpdate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -1991,7 +2026,7 @@ router.post('/relay/sync/run', async (req, res) => {
   }
 })
 
-router.post('/relay/persist-mould', async (req, res) => {
+router.post('/relay/persist-mould', requireBmoRelayUpdate, async (req, res) => {
   const requestBody = req.body && typeof req.body === 'object' ? req.body : {}
   const list = Array.isArray(requestBody.list) ? requestBody.list : []
   const traceId = String(requestBody.traceId || '').trim() || null
@@ -2032,7 +2067,7 @@ router.post('/relay/persist-mould', async (req, res) => {
   }
 })
 
-router.post('/relay/jobs/:jobId/retry', async (req, res) => {
+router.post('/relay/jobs/:jobId/retry', requireBmoRelayUpdate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -2081,7 +2116,7 @@ router.get('/relay/auth/status', async (req, res) => {
   }
 })
 
-router.post('/relay/auth/login', async (req, res) => {
+router.post('/relay/auth/login', requireBmoRelayUpdate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -2106,7 +2141,7 @@ router.post('/relay/auth/login', async (req, res) => {
   }
 })
 
-router.post('/relay/auth/logout', async (req, res) => {
+router.post('/relay/auth/logout', requireBmoRelayUpdate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -2130,7 +2165,7 @@ router.post('/relay/auth/logout', async (req, res) => {
   }
 })
 
-router.post('/relay/auth/set', async (req, res) => {
+router.post('/relay/auth/set', requireBmoRelayUpdate, async (req, res) => {
   try {
     if (!isRelayEnabled()) {
       return res.status(400).json({
@@ -3129,7 +3164,7 @@ router.get('/initiation-request/by-project', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/draft', async (req, res) => {
+router.post('/initiation-request/draft', requireBmoSyncCreate, async (req, res) => {
   try {
     const actor = resolveActorFromReq(req)
     const row = await upsertInitiationDraft({ ...req.body, actor })
@@ -3157,7 +3192,7 @@ router.post('/initiation-request/draft', async (req, res) => {
   }
 })
 
-router.post('/initiation-request/confirm', async (req, res) => {
+router.post('/initiation-request/confirm', requireBmoSyncUpdate, async (req, res) => {
   try {
     const actor = resolveActorFromReq(req)
     const bmoRecordId = String(req.body?.bmo_record_id || req.body?.fdId || '').trim()
@@ -3399,11 +3434,11 @@ const rejectInitiationRequest = async (req, res, options = {}) => {
   }
 }
 
-router.post('/initiation-request/reject', async (req, res) => {
+router.post('/initiation-request/reject', requireBmoSyncApprove, async (req, res) => {
   return rejectInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
-router.post('/initiation-review/reject', async (req, res) => {
+router.post('/initiation-review/reject', requireBmoSyncApprove, async (req, res) => {
   return rejectInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
@@ -3661,11 +3696,11 @@ const approveAndApplyInitiationRequest = async (req, res, options = {}) => {
   }
 }
 
-router.post('/initiation-request/approve-and-apply', async (req, res) => {
+router.post('/initiation-request/approve-and-apply', requireBmoSyncApprove, async (req, res) => {
   return approveAndApplyInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 
-router.post('/initiation-review/approve-and-apply', async (req, res) => {
+router.post('/initiation-review/approve-and-apply', requireBmoSyncApprove, async (req, res) => {
   return approveAndApplyInitiationRequest(req, res, { requireReviewerPermission: true })
 })
 

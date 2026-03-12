@@ -3,8 +3,25 @@ const sql = require('mssql')
 const { query, getPool } = require('../database')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { requireCapability, requireAnyCapability } = require('../middleware/capability')
 
 const router = express.Router()
+const requireBillingRead = requireCapability('BILLING_DOCUMENTS.READ', {
+  fallbackRoute: 'BillingDocuments'
+})
+const requireBillingCreate = requireCapability('BILLING_DOCUMENTS.CREATE')
+const requireBillingUpdate = requireCapability('BILLING_DOCUMENTS.UPDATE')
+const requireBillingDelete = requireCapability('BILLING_DOCUMENTS.DELETE')
+const requireReceivableRead = requireCapability('RECEIVABLE_DOCUMENTS.READ', {
+  fallbackRoute: 'ReceivableDocuments'
+})
+const requireReceivableCreate = requireCapability('RECEIVABLE_DOCUMENTS.CREATE')
+const requireReceivableUpdate = requireCapability('RECEIVABLE_DOCUMENTS.UPDATE')
+const requireReceivableDelete = requireCapability('RECEIVABLE_DOCUMENTS.DELETE')
+const requireFinanceSharedRead = requireAnyCapability([
+  { capabilityKey: 'BILLING_DOCUMENTS.READ', fallbackRoute: 'BillingDocuments' },
+  { capabilityKey: 'RECEIVABLE_DOCUMENTS.READ', fallbackRoute: 'ReceivableDocuments' }
+])
 
 const toDateText = (value) => {
   if (!value) return ''
@@ -54,7 +71,7 @@ const ensureFinanceCustomerSoftDeleteColumns = async (poolOrTx) => {
   `)
 }
 
-router.get('/customer-options', async (req, res) => {
+router.get('/customer-options', requireFinanceSharedRead, async (req, res) => {
   try {
     const pool = await getPool()
     await ensureFinanceCustomerSoftDeleteColumns(pool)
@@ -93,7 +110,7 @@ router.get('/customer-options', async (req, res) => {
   }
 })
 
-router.get('/invoices/list', async (req, res) => {
+router.get('/invoices/list', requireBillingRead, async (req, res) => {
   try {
     const pool = await getPool()
     await ensureFinanceSoftDeleteColumns(pool)
@@ -256,7 +273,7 @@ router.get('/invoices/list', async (req, res) => {
   }
 })
 
-router.get('/invoices/candidates', async (req, res) => {
+router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
   try {
     const { filterType = 'no_invoice', keyword, customerName, page = 1, pageSize = 50 } = req.query
     const baseParams = {}
@@ -360,7 +377,7 @@ router.get('/invoices/candidates', async (req, res) => {
   }
 })
 
-router.get('/receipts/list', async (req, res) => {
+router.get('/receipts/list', requireReceivableRead, async (req, res) => {
   try {
     const pool = await getPool()
     await ensureFinanceSoftDeleteColumns(pool)
@@ -550,7 +567,7 @@ router.get('/receipts/list', async (req, res) => {
   }
 })
 
-router.get('/receipts/candidates', async (req, res) => {
+router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
   try {
     const { keyword, customerName, page = 1, pageSize = 50 } = req.query
     const baseParams = {}
@@ -677,7 +694,7 @@ router.get('/receipts/candidates', async (req, res) => {
   }
 })
 
-router.post('/invoices', async (req, res) => {
+router.post('/invoices', requireBillingCreate, async (req, res) => {
   const payload = req.body || {}
   let documentNo = String(payload.documentNo || '').trim()
   const invoiceNo = String(payload.invoiceNo || '').trim()
@@ -824,7 +841,7 @@ router.post('/invoices', async (req, res) => {
   }
 })
 
-router.put('/invoices/:invoiceId', async (req, res) => {
+router.put('/invoices/:invoiceId', requireBillingUpdate, async (req, res) => {
   const invoiceId = Number(req.params.invoiceId)
   if (!Number.isFinite(invoiceId) || invoiceId <= 0) {
     return res.status(400).json({ code: 400, success: false, message: '发票ID无效' })
@@ -974,7 +991,7 @@ router.put('/invoices/:invoiceId', async (req, res) => {
   }
 })
 
-router.delete('/invoices/:invoiceId', async (req, res) => {
+router.delete('/invoices/:invoiceId', requireBillingDelete, async (req, res) => {
   const invoiceId = Number(req.params.invoiceId)
   if (!Number.isFinite(invoiceId) || invoiceId <= 0) {
     return res.status(400).json({ code: 400, success: false, message: '发票ID无效' })
@@ -1032,7 +1049,7 @@ router.delete('/invoices/:invoiceId', async (req, res) => {
   }
 })
 
-router.post('/receipts', async (req, res) => {
+router.post('/receipts', requireReceivableCreate, async (req, res) => {
   const payload = req.body || {}
   let documentNo = String(payload.receiptNo || '').trim()
   const customerName = String(payload.customerName || '').trim()
@@ -1133,7 +1150,7 @@ router.post('/receipts', async (req, res) => {
   }
 })
 
-router.put('/receipts/:documentNo', async (req, res) => {
+router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) => {
   const sourceDocumentNo = String(req.params.documentNo || '').trim()
   if (!sourceDocumentNo) {
     return res.status(400).json({ code: 400, success: false, message: '单据编号不能为空' })
@@ -1238,7 +1255,7 @@ router.put('/receipts/:documentNo', async (req, res) => {
   }
 })
 
-router.delete('/receipts/:documentNo', async (req, res) => {
+router.delete('/receipts/:documentNo', requireReceivableDelete, async (req, res) => {
   const documentNo = String(req.params.documentNo || '').trim()
   if (!documentNo) {
     return res.status(400).json({ code: 400, success: false, message: '单据编号不能为空' })

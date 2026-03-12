@@ -215,7 +215,6 @@ app.use(
 app.use('/api/quotation', requireCapability('QUOTATION.READ', { fallbackRoute: 'QuotationIndex' }), quotationRoutes)
 app.use(
   '/api/production-task',
-  requireCapability('PRODUCTION_TASKS.READ', { fallbackRoute: 'ProductionTasksIndex' }),
   productionTaskRoutes
 )
 app.use('/api/analysis', requireCapability('ANALYSIS.READ', { fallbackRoute: 'Analysis' }), analysisRoutes)
@@ -231,11 +230,7 @@ app.use(
 app.use('/api/salary', requireCapability('SALARY.READ', { fallbackRoute: 'Salary' }), salaryRoutes)
 app.use('/api/game', requireCapability('BREAK_SNAKE_GAME.READ', { fallbackRoute: 'BreakSnakeGame' }), gameRoutes)
 app.use('/api/bmo', bmoRoutes)
-app.use(
-  '/api/finance',
-  requireCapability('BILLING_DOCUMENTS.READ', { fallbackRoute: 'BillingDocuments' }),
-  financeRoutes
-)
+app.use('/api/finance', financeRoutes)
 app.use(
   '/api/comprehensive-query',
   requireCapability('COMPREHENSIVE_QUERY.READ', { fallbackRoute: 'ComprehensiveQuery' }),
