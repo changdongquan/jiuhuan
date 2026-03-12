@@ -264,7 +264,7 @@
                     {{ formatAmount(row.totalAmount) }}
                   </template>
                 </el-table-column>
-                <el-table-column label="交货日期" width="100" align="center">
+                <el-table-column label="交货日期" width="105" align="center">
                   <template #default="{ row }">
                     {{ formatDate(row.deliveryDate) }}
                   </template>
