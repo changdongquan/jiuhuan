@@ -15,6 +15,17 @@ const { loadStart, loadDone } = usePageLoading()
 // 开发模式下保持“权限为空时放行”，方便调试；
 // 生产构建（如 pro 模式）启用严格权限控制。
 const isDev = import.meta.env.DEV
+const DEV_AUTO_LOGIN_USERNAME = 'dev-user'
+
+const NO_AUTH_ROUTE_NAMES = [
+  '404',
+  '403',
+  'NoFind',
+  'PersonalCenter',
+  'Redirect',
+  'Root',
+  'RedirectWrap'
+]
 
 const HOME_ROUTE_CANDIDATES = [
   'SalesOrdersIndex',
@@ -75,6 +86,75 @@ interface AutoLoginResponse {
   data?: AutoLoginResponseData
   token?: string
   ssoFailed?: boolean
+}
+
+const applyAutoLoginUser = (
+  userStore: ReturnType<typeof useUserStoreWithOut>,
+  res: AutoLoginResponse
+) => {
+  if (!res?.data) return
+  userStore.setUserInfo({
+    username: res.data.username as any,
+    realName: res.data.displayName as any,
+    role: res.data.role as any,
+    roleId: res.data.roleId as any,
+    password: '',
+    roles: res.data.roles || ([] as any),
+    permissions: (res.data as any).permissions || [],
+    capabilities: (res.data as any).capabilities || []
+  } as any)
+  userStore.setToken(res.token || 'SSO_AUTO_LOGIN')
+}
+
+const applyUserRoutes = async (
+  permissionStore: ReturnType<typeof usePermissionStoreWithOut>,
+  appStore: ReturnType<typeof useAppStoreWithOut>,
+  userStore: ReturnType<typeof useUserStoreWithOut>
+) => {
+  permissionStore.setIsAddRouters(false)
+  const userInfo = userStore.getUserInfo as any
+  const userPermissions = (userInfo?.permissions || []) as string[]
+  const isAdmin = userInfo?.username === 'admin'
+  const roleRouters = userStore.getRoleRouters || []
+
+  if (appStore.getDynamicRouter && roleRouters.length > 0) {
+    appStore.serverDynamicRouter
+      ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
+      : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
+  } else if (isAdmin) {
+    await permissionStore.generateRoutes('static')
+  } else if (userPermissions.length > 0) {
+    await permissionStore.generateRoutes('frontEnd', userPermissions as string[])
+  } else if (isDev) {
+    console.warn('[权限][DEV] 用户权限列表为空，使用静态路由生成菜单')
+    await permissionStore.generateRoutes('static')
+  } else {
+    await permissionStore.generateRoutes('frontEnd', [])
+  }
+
+  permissionStore.getAddRouters.forEach((route) => {
+    router.addRoute(route as unknown as RouteRecordRaw)
+  })
+  permissionStore.setIsAddRouters(true)
+}
+
+const tryRestoreDevSession = async (
+  permissionStore: ReturnType<typeof usePermissionStoreWithOut>,
+  appStore: ReturnType<typeof useAppStoreWithOut>,
+  userStore: ReturnType<typeof useUserStoreWithOut>
+) => {
+  if (!isDev) return false
+  try {
+    const res = await autoLoginByIframe()
+    if (!res?.success || !res?.data) return false
+    applyAutoLoginUser(userStore, res)
+    userStore.setAutoTried(false)
+    await applyUserRoutes(permissionStore, appStore, userStore)
+    return true
+  } catch (error: any) {
+    console.warn('[权限][DEV] 自动恢复 dev-user 会话失败:', error?.message || error)
+    return false
+  }
 }
 
 const autoLoginByIframe = (timeoutMs = 5000): Promise<AutoLoginResponse | null> => {
@@ -142,15 +222,32 @@ router.beforeEach(async (to, from, next) => {
   const appStore = useAppStoreWithOut()
   const userStore = useUserStoreWithOut()
   if (userStore.getUserInfo) {
+    if (
+      isDev &&
+      to.path !== '/login' &&
+      String((userStore.getUserInfo as any)?.username || '').trim() !== DEV_AUTO_LOGIN_USERNAME
+    ) {
+      const restored = await tryRestoreDevSession(permissionStore, appStore, userStore)
+      if (restored) {
+        next({ path: to.fullPath, replace: true })
+        return
+      }
+    }
+
     if (to.path === '/login') {
       next({ path: '/' })
     } else {
       // 权限验证：检查用户是否有权限访问目标页面
-      const userInfo = userStore.getUserInfo
-      const userPermissions = (userInfo as any).permissions || []
-      const isAdmin = userInfo?.username === 'admin'
+      let userInfo = userStore.getUserInfo as any
+      let userPermissions = (userInfo as any).permissions || []
+      let isAdmin = userInfo?.username === 'admin'
 
       if (!isAdmin && to.name === 'Analysis' && !userPermissions.includes('Analysis')) {
+        const restored = await tryRestoreDevSession(permissionStore, appStore, userStore)
+        if (restored) {
+          next({ path: to.fullPath, replace: true })
+          return
+        }
         const fallback = pickFirstAccessibleRoute(userPermissions)
         if (fallback) {
           next({ ...fallback, replace: true })
@@ -161,25 +258,24 @@ router.beforeEach(async (to, from, next) => {
       }
 
       // 排除不需要权限验证的路由（如 404、403、个人中心、首页重定向等）
-      const noAuthRoutes = [
-        '404',
-        '403',
-        'NoFind',
-        'PersonalCenter',
-        'Redirect',
-        'Root', // 首页路由
-        'RedirectWrap' // 重定向包装路由
-      ]
-
       // admin 拥有所有权限，直接通过；白名单路由直接通过
-      if (isAdmin || noAuthRoutes.includes(to.name as string)) {
+      if (isAdmin || NO_AUTH_ROUTE_NAMES.includes(to.name as string)) {
         // 允许访问，继续后续流程
       } else if (to.name) {
         // 其他用户需要检查权限
         if (userPermissions.length === 0) {
           if (isDev) {
-            // 开发模式：为方便调试，权限列表为空时暂时放行
-            console.warn('[权限][DEV] 用户权限列表为空，允许访问:', to.name)
+            const restored = await tryRestoreDevSession(permissionStore, appStore, userStore)
+            if (restored) {
+              next({ path: to.fullPath, replace: true })
+              return
+            }
+            userInfo = userStore.getUserInfo as any
+            userPermissions = (userInfo?.permissions || []) as string[]
+            isAdmin = userInfo?.username === 'admin'
+            if (!isAdmin && userPermissions.length === 0) {
+              console.warn('[权限][DEV] 用户权限列表为空，允许访问:', to.name)
+            }
           } else {
             // 生产严格模式：权限列表为空视为无任何权限，除白名单外全部拒绝
             console.warn('[权限] 用户无任何页面权限，拒绝访问:', to.name)
@@ -187,10 +283,31 @@ router.beforeEach(async (to, from, next) => {
             return
           }
         } else if (!userPermissions.includes(to.name)) {
-          // 有权限列表，但当前路由不在权限列表中，拒绝访问
-          console.warn('[权限] 用户无权限访问:', { route: to.name, permissions: userPermissions })
-          next('/403')
-          return
+          if (isDev) {
+            const restored = await tryRestoreDevSession(permissionStore, appStore, userStore)
+            if (restored) {
+              next({ path: to.fullPath, replace: true })
+              return
+            }
+            userInfo = userStore.getUserInfo as any
+            userPermissions = (userInfo?.permissions || []) as string[]
+            isAdmin = userInfo?.username === 'admin'
+            if (isAdmin || userPermissions.includes(to.name as string)) {
+              // 会话恢复成功后已具备权限，继续后续流程
+            } else {
+              console.warn('[权限] 用户无权限访问:', {
+                route: to.name,
+                permissions: userPermissions
+              })
+              next('/403')
+              return
+            }
+          } else {
+            // 有权限列表，但当前路由不在权限列表中，拒绝访问
+            console.warn('[权限] 用户无权限访问:', { route: to.name, permissions: userPermissions })
+            next('/403')
+            return
+          }
         }
       }
 
@@ -199,37 +316,10 @@ router.beforeEach(async (to, from, next) => {
         return
       }
 
-      // 根据用户权限生成可访问的菜单/路由
-      const roleRouters = userStore.getRoleRouters || []
-
-      if (appStore.getDynamicRouter && roleRouters.length > 0) {
-        // 动态路由模式（目前未启用），保留原有逻辑
-        appStore.serverDynamicRouter
-          ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
-          : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
-      } else {
-        // 静态路由模式：admin 使用完整路由；普通用户按权限过滤菜单
-        if (isAdmin) {
-          await permissionStore.generateRoutes('static')
-        } else if (userPermissions.length > 0) {
-          await permissionStore.generateRoutes('frontEnd', userPermissions as string[])
-        } else if (isDev) {
-          // 开发环境下权限列表为空时，为方便调试使用静态路由
-          console.warn('[权限][DEV] 用户权限列表为空，使用静态路由生成菜单')
-          await permissionStore.generateRoutes('static')
-        } else {
-          // 生产环境且无任何权限，仅保留基础路由（不额外添加业务菜单）
-          await permissionStore.generateRoutes('frontEnd', [])
-        }
-      }
-
-      permissionStore.getAddRouters.forEach((route) => {
-        router.addRoute(route as unknown as RouteRecordRaw) // 动态添加可访问路由表
-      })
+      await applyUserRoutes(permissionStore, appStore, userStore)
       const redirectPath = from.query.redirect || to.path
       const redirect = decodeURIComponent(redirectPath as string)
       const nextData = to.path === redirect ? { ...to, replace: true } : { path: redirect }
-      permissionStore.setIsAddRouters(true)
       next(nextData)
     }
   } else {
@@ -249,47 +339,13 @@ router.beforeEach(async (to, from, next) => {
         userStore.setAutoTried(true)
 
         try {
-          // 优先通过 iframe 方式尝试自动登录（页面级请求更容易触发 Kerberos 协商）
-          // 若 iframe 未返回有效结果，则认为当前环境不可用 SSO，不再额外通过 XHR 重试
           const res = await autoLoginByIframe()
 
           if (res?.success && res?.data) {
-            // 自动登录成功，设置用户信息
-            userStore.setUserInfo({
-              username: res.data.username as any,
-              realName: res.data.displayName as any,
-              role: res.data.role as any,
-              roleId: res.data.roleId as any,
-              password: '',
-              roles: res.data.roles || ([] as any),
-              permissions: (res.data as any).permissions || [], // 添加权限列表
-              capabilities: (res.data as any).capabilities || []
-            } as any)
-            userStore.setToken(res.token || 'SSO_AUTO_LOGIN')
-
+            applyAutoLoginUser(userStore, res)
             // 重置标记，允许后续正常流程
             userStore.setAutoTried(false)
-
-            // 加载路由（复用登录成功后的逻辑）
-            const autoUserInfo = userStore.getUserInfo as any
-            const autoPermissions = (autoUserInfo?.permissions || []) as string[]
-            const autoIsAdmin = autoUserInfo?.username === 'admin'
-
-            if (autoIsAdmin) {
-              await permissionStore.generateRoutes('static')
-            } else if (autoPermissions.length > 0) {
-              await permissionStore.generateRoutes('frontEnd', autoPermissions as string[])
-            } else if (isDev) {
-              console.warn('[权限][DEV] 自动登录用户权限列表为空，使用静态路由生成菜单')
-              await permissionStore.generateRoutes('static')
-            } else {
-              await permissionStore.generateRoutes('frontEnd', [])
-            }
-
-            permissionStore.getAddRouters.forEach((route) => {
-              router.addRoute(route as unknown as RouteRecordRaw)
-            })
-            permissionStore.setIsAddRouters(true)
+            await applyUserRoutes(permissionStore, appStore, userStore)
 
             // 使用 next 导航到目标页面，避免在导航守卫中直接调用 router.replace 触发
             // “Invalid navigation guard / next callback was never called” 警告

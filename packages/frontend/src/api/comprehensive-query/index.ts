@@ -67,8 +67,21 @@ export interface ComprehensiveQuerySummary {
   orderArrearsAmount: number
 }
 
+export interface ComprehensiveQueryListResponse {
+  list: ComprehensiveQueryRow[]
+  total: number
+  page: number
+  pageSize: number
+  summary: ComprehensiveQuerySummary
+}
+
 export interface ComprehensiveQueryCustomerOption {
   customerName: string
+}
+
+export interface ComprehensiveQueryFilterOptions {
+  customers: string[]
+  categories: string[]
 }
 
 export interface JourneyStage {
@@ -95,7 +108,7 @@ export interface ProjectJourney {
 }
 
 export const getComprehensiveQueryListApi = (params?: ComprehensiveQueryListParams) => {
-  return request.get({
+  return request.get<ComprehensiveQueryListResponse>({
     url: '/api/comprehensive-query/list',
     params
   })
@@ -127,5 +140,11 @@ export const getComprehensiveQueryCustomerOptionsApi = (params?: { keyword?: str
   return request.get<{ list: ComprehensiveQueryCustomerOption[] }>({
     url: '/api/comprehensive-query/customer-options',
     params
+  })
+}
+
+export const getComprehensiveQueryFilterOptionsApi = () => {
+  return request.get<ComprehensiveQueryFilterOptions>({
+    url: '/api/comprehensive-query/filter-options'
   })
 }
