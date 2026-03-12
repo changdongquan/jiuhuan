@@ -71,11 +71,11 @@ const parseAnomalyTypes = (raw) => {
 }
 
 const PROGRESS_COLUMN_MAP = {
-  production: 'filtered.productionProgress',
-  invoice: 'filtered.invoiceProgress',
-  receipt: 'filtered.receiptProgress',
-  receipt_invoice: 'filtered.receiptInvoiceProgress',
-  outbound: 'filtered.outboundProgress'
+  production: 'base.productionProgress',
+  invoice: 'base.invoiceProgress',
+  receipt: 'base.receiptProgress',
+  receipt_invoice: 'base.receiptInvoiceProgress',
+  outbound: 'base.outboundProgress'
 }
 
 const buildProgressRangeSql = (column, rangeKey) => {
@@ -469,57 +469,10 @@ router.get('/customer-options', async (req, res) => {
   }
 })
 
-router.get('/filter-options', async (_req, res) => {
-  try {
-    const [customerRows, categoryRows] = await Promise.all([
-      query(
-        `
-          SELECT DISTINCT
-            LTRIM(RTRIM(c.客户名称)) as customerName
-          FROM 项目管理 p
-          LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
-          WHERE (p.状态 IS NULL OR p.状态 <> N'已删除')
-            AND c.客户名称 IS NOT NULL
-            AND LTRIM(RTRIM(c.客户名称)) <> ''
-          ORDER BY LTRIM(RTRIM(c.客户名称)) ASC
-        `
-      ),
-      query(
-        `
-          SELECT DISTINCT
-            LTRIM(RTRIM(g.分类)) as category
-          FROM 货物信息 g
-          WHERE (g.状态 IS NULL OR g.状态 <> N'已删除')
-            AND (g.IsNew IS NULL OR CAST(g.IsNew AS INT) != 1)
-            AND g.分类 IS NOT NULL
-            AND LTRIM(RTRIM(g.分类)) <> ''
-          ORDER BY LTRIM(RTRIM(g.分类)) ASC
-        `
-      )
-    ])
-
-    return res.json({
-      code: 0,
-      success: true,
-      data: {
-        customers: (customerRows || []).map((item) => item.customerName).filter(Boolean),
-        categories: (categoryRows || []).map((item) => item.category).filter(Boolean)
-      }
-    })
-  } catch (error) {
-    console.error('获取综合查询筛选项失败:', error)
-    return res.status(500).json({
-      code: 500,
-      success: false,
-      message: '获取综合查询筛选项失败'
-    })
-  }
-})
-
 const buildListFilters = (inputQuery) => {
   const params = {}
   const sourceWhere = [`(p.状态 IS NULL OR p.状态 <> N'已删除')`]
-  const filteredWhere = []
+  const baseWhere = []
 
   const keyword = String(inputQuery.keyword || '').trim()
   const customerName = String(inputQuery.customerName || '').trim()
@@ -534,6 +487,9 @@ const buildListFilters = (inputQuery) => {
   const progressRange = String(inputQuery.progressRange || '').trim()
   const progressFilters = parseProgressFilters(inputQuery.progressFilters)
   const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
+  const settlementStatusSql = buildSettlementStatusSql('base')
+  const anomalyTypeSql = buildAnomalyTypeSql('base')
+
   if (keyword) {
     params.keyword = `%${keyword}%`
     sourceWhere.push(`(
@@ -601,22 +557,22 @@ const buildListFilters = (inputQuery) => {
   }
 
   if (settlementStatus === '销售已结清') {
-    filteredWhere.push(`(filtered.settlementStatus = N'销售已结清')`)
+    baseWhere.push(`(${settlementStatusSql} = N'销售已结清')`)
   } else if (settlementStatus === '销售未结清') {
-    filteredWhere.push(`(filtered.settlementStatus = N'销售未结清')`)
+    baseWhere.push(`(${settlementStatusSql} = N'销售未结清')`)
   } else if (settlementStatus === '开票已结清') {
-    filteredWhere.push(`(filtered.settlementStatus = N'开票已结清')`)
+    baseWhere.push(`(${settlementStatusSql} = N'开票已结清')`)
   } else if (settlementStatus === '开票未结清') {
-    filteredWhere.push(`(filtered.settlementStatus = N'开票未结清')`)
+    baseWhere.push(`(${settlementStatusSql} = N'开票未结清')`)
   } else if (settlementStatus === '未结清') {
-    filteredWhere.push(`(filtered.settlementStatus IN (N'销售未结清', N'开票未结清'))`)
+    baseWhere.push(`(${settlementStatusSql} IN (N'销售未结清', N'开票未结清'))`)
   }
 
   if (anomalyTypes.length > 0) {
-    const checks = anomalyTypes.map((type) => `(filtered.anomalyType = '${type}')`)
+    const checks = anomalyTypes.map((type) => `(${anomalyTypeSql} = '${type}')`)
 
     if (checks.length > 0) {
-      filteredWhere.push(`(${checks.join(' OR ')})`)
+      baseWhere.push(`(${checks.join(' OR ')})`)
     }
   }
 
@@ -636,13 +592,13 @@ const buildListFilters = (inputQuery) => {
     }
   }
   if (progressChecks.length > 0) {
-    filteredWhere.push(`(${progressChecks.join(' AND ')})`)
+    baseWhere.push(`(${progressChecks.join(' AND ')})`)
   }
 
   return {
     params,
     sourceWhereSql: sourceWhere.length ? `WHERE ${sourceWhere.join(' AND ')}` : '',
-    filteredWhereSql: filteredWhere.length ? `WHERE ${filteredWhere.join(' AND ')}` : ''
+    baseWhereSql: baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : ''
   }
 }
 
@@ -817,22 +773,6 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ORDER BY l.updated_at DESC, l.id DESC
       ) msl
       ${sourceWhereSql}
-    )
-  `
-}
-
-const buildFilteredCteSql = () => {
-  const settlementStatusSql = buildSettlementStatusSql('base')
-  const settlementSourceSql = buildSettlementSourceSql('base')
-  const anomalyTypeSql = buildAnomalyTypeSql('base')
-  return `,
-    filtered AS (
-      SELECT
-        base.*,
-        ${settlementStatusSql} as settlementStatus,
-        ${settlementSourceSql} as settlementSource,
-        ${anomalyTypeSql} as anomalyType
-      FROM base
     )
   `
 }
@@ -1144,117 +1084,73 @@ router.get('/list', async (req, res) => {
     const sizeNum = Math.max(parseInt(String(pageSize), 10) || 20, 1)
     const offset = (pageNum - 1) * sizeNum
 
-    const { params, sourceWhereSql, filteredWhereSql } = buildListFilters(req.query)
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
-    const filteredCteSql = buildFilteredCteSql()
+    const settlementStatusSql = buildSettlementStatusSql('base')
+    const settlementSourceSql = buildSettlementSourceSql('base')
+    const anomalyTypeSql = buildAnomalyTypeSql('base')
+
+    const countRows = await query(
+      `${baseCteSql}
+      SELECT COUNT(1) as total
+      FROM base
+      ${baseWhereSql}`,
+      params
+    )
+    const total = safeNumber(countRows?.[0]?.total)
 
     const rows = await query(
       `${baseCteSql}
-      ${filteredCteSql}
-      , ranked AS (
-        SELECT
-          filtered.*,
-          COUNT(1) OVER() as totalCount,
-          ISNULL(SUM(filtered.salesAmount) OVER(), 0) as summarySalesAmount,
-          ISNULL(SUM(filtered.invoiceAmount) OVER(), 0) as summaryInvoiceAmount,
-          ISNULL(SUM(filtered.receiptAmount) OVER(), 0) as summaryReceiptAmount,
-          ISNULL(SUM(filtered.discountAmount) OVER(), 0) as summaryDiscountAmount,
-          ISNULL(SUM(filtered.completedQty) OVER(), 0) as summaryCompletedQty,
-          ISNULL(SUM(filtered.outboundQty) OVER(), 0) as summaryOutboundQty,
-          ISNULL(SUM(filtered.uninvoicedAmount) OVER(), 0) as summaryUninvoicedAmount,
-          ISNULL(SUM(filtered.unreceivedAmount) OVER(), 0) as summaryUnreceivedAmount,
-          ISNULL(SUM(filtered.orderArrearsAmount) OVER(), 0) as summaryOrderArrearsAmount
-        FROM filtered
-        ${filteredWhereSql}
-      )
       SELECT
-        ranked.projectCode,
-        ranked.customerName,
-        ranked.productName,
-        ranked.productDrawing,
-        ranked.customerModelNo,
-        ranked.category,
-        ranked.owner,
-        ranked.salesOrderCount,
-        ranked.salesAmount,
-        ranked.projectStatus,
-        ranked.productionStatus,
-        ranked.orderQuantity,
-        ranked.unitPrice,
-        ranked.contractNo,
-        ranked.remark,
-        ranked.costSource,
-        ranked.completedQty,
-        ranked.outboundDocCount,
-        ranked.outboundQty,
-        ranked.invoiceCount,
-        ranked.invoiceAmount,
-        ranked.receiptCount,
-        ranked.receiptAmount,
-        ranked.discountAmount,
-        ranked.settlementStatus,
-        ranked.settlementSource,
-        ranked.uninvoicedAmount,
-        ranked.unreceivedAmount,
-        ranked.orderArrearsAmount,
-        ranked.anomalyType,
-        CONVERT(varchar(10), ranked.latestOrderDate, 23) as latestOrderDate,
-        CONVERT(varchar(10), ranked.latestOutboundDate, 23) as latestOutboundDate,
-        CONVERT(varchar(10), ranked.latestInvoiceDate, 23) as latestInvoiceDate,
-        CONVERT(varchar(10), ranked.latestReceiptDate, 23) as latestReceiptDate,
-        ranked.totalCount,
-        ranked.summarySalesAmount,
-        ranked.summaryInvoiceAmount,
-        ranked.summaryReceiptAmount,
-        ranked.summaryDiscountAmount,
-        ranked.summaryCompletedQty,
-        ranked.summaryOutboundQty,
-        ranked.summaryUninvoicedAmount,
-        ranked.summaryUnreceivedAmount,
-        ranked.summaryOrderArrearsAmount
-      FROM ranked
-      ORDER BY ranked.projectCode DESC
+        base.projectCode,
+        base.customerName,
+        base.productName,
+        base.productDrawing,
+        base.customerModelNo,
+        base.category,
+        base.owner,
+        base.salesOrderCount,
+        base.salesAmount,
+        base.projectStatus,
+        base.productionStatus,
+        base.orderQuantity,
+        base.unitPrice,
+        base.contractNo,
+        base.remark,
+        base.costSource,
+        base.completedQty,
+        base.outboundDocCount,
+        base.outboundQty,
+        base.invoiceCount,
+        base.invoiceAmount,
+        base.receiptCount,
+        base.receiptAmount,
+        base.discountAmount,
+        ${settlementStatusSql} as settlementStatus,
+        ${settlementSourceSql} as settlementSource,
+        base.uninvoicedAmount,
+        base.unreceivedAmount,
+        base.orderArrearsAmount,
+        ${anomalyTypeSql} as anomalyType,
+        CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
+        CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
+        CONVERT(varchar(10), base.latestInvoiceDate, 23) as latestInvoiceDate,
+        CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
+      FROM base
+      ${baseWhereSql}
+      ORDER BY base.projectCode DESC
       OFFSET ${offset} ROWS FETCH NEXT ${sizeNum} ROWS ONLY`,
       params
     )
-
-    const firstRow = rows?.[0] || {}
-    const total = safeNumber(firstRow.totalCount)
-    const summary = {
-      projectCount: total,
-      salesAmount: safeNumber(firstRow.summarySalesAmount),
-      invoiceAmount: safeNumber(firstRow.summaryInvoiceAmount),
-      receiptAmount: safeNumber(firstRow.summaryReceiptAmount),
-      discountAmount: safeNumber(firstRow.summaryDiscountAmount),
-      completedQty: safeNumber(firstRow.summaryCompletedQty),
-      outboundQty: safeNumber(firstRow.summaryOutboundQty),
-      uninvoicedAmount: safeNumber(firstRow.summaryUninvoicedAmount),
-      unreceivedAmount: safeNumber(firstRow.summaryUnreceivedAmount),
-      orderArrearsAmount: safeNumber(firstRow.summaryOrderArrearsAmount)
-    }
 
     res.json({
       code: 0,
       success: true,
       data: {
-        list: (rows || []).map((row) => {
-          const item = { ...row }
-          delete item.totalCount
-          delete item.summarySalesAmount
-          delete item.summaryInvoiceAmount
-          delete item.summaryReceiptAmount
-          delete item.summaryDiscountAmount
-          delete item.summaryCompletedQty
-          delete item.summaryOutboundQty
-          delete item.summaryUninvoicedAmount
-          delete item.summaryUnreceivedAmount
-          delete item.summaryOrderArrearsAmount
-          return item
-        }),
+        list: rows || [],
         total,
         page: pageNum,
-        pageSize: sizeNum,
-        summary
+        pageSize: sizeNum
       }
     })
   } catch (error) {
@@ -1269,51 +1165,52 @@ router.get('/list', async (req, res) => {
 
 router.get('/export', async (req, res) => {
   try {
-    const { params, sourceWhereSql, filteredWhereSql } = buildListFilters(req.query)
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
-    const filteredCteSql = buildFilteredCteSql()
+    const settlementStatusSql = buildSettlementStatusSql('base')
+    const settlementSourceSql = buildSettlementSourceSql('base')
+    const anomalyTypeSql = buildAnomalyTypeSql('base')
 
     const rows = await query(
       `${baseCteSql}
-      ${filteredCteSql}
       SELECT
-        filtered.projectCode,
-        filtered.customerName,
-        filtered.productName,
-        filtered.productDrawing,
-        filtered.customerModelNo,
-        filtered.category,
-        filtered.owner,
-        filtered.salesOrderCount,
-        filtered.salesAmount,
-        filtered.projectStatus,
-        filtered.productionStatus,
-        filtered.orderQuantity,
-        filtered.unitPrice,
-        filtered.contractNo,
-        filtered.remark,
-        filtered.costSource,
-        filtered.completedQty,
-        filtered.outboundDocCount,
-        filtered.outboundQty,
-        filtered.invoiceCount,
-        filtered.invoiceAmount,
-        filtered.receiptCount,
-        filtered.receiptAmount,
-        filtered.discountAmount,
-        filtered.settlementStatus,
-        filtered.settlementSource,
-        filtered.uninvoicedAmount,
-        filtered.unreceivedAmount,
-        filtered.orderArrearsAmount,
-        filtered.anomalyType,
-        CONVERT(varchar(10), filtered.latestOrderDate, 23) as latestOrderDate,
-        CONVERT(varchar(10), filtered.latestOutboundDate, 23) as latestOutboundDate,
-        CONVERT(varchar(10), filtered.latestInvoiceDate, 23) as latestInvoiceDate,
-        CONVERT(varchar(10), filtered.latestReceiptDate, 23) as latestReceiptDate
-      FROM filtered
-      ${filteredWhereSql}
-      ORDER BY filtered.projectCode DESC`,
+        base.projectCode,
+        base.customerName,
+        base.productName,
+        base.productDrawing,
+        base.customerModelNo,
+        base.category,
+        base.owner,
+        base.salesOrderCount,
+        base.salesAmount,
+        base.projectStatus,
+        base.productionStatus,
+        base.orderQuantity,
+        base.unitPrice,
+        base.contractNo,
+        base.remark,
+        base.costSource,
+        base.completedQty,
+        base.outboundDocCount,
+        base.outboundQty,
+        base.invoiceCount,
+        base.invoiceAmount,
+        base.receiptCount,
+        base.receiptAmount,
+        base.discountAmount,
+        ${settlementStatusSql} as settlementStatus,
+        ${settlementSourceSql} as settlementSource,
+        base.uninvoicedAmount,
+        base.unreceivedAmount,
+        base.orderArrearsAmount,
+        ${anomalyTypeSql} as anomalyType,
+        CONVERT(varchar(10), base.latestOrderDate, 23) as latestOrderDate,
+        CONVERT(varchar(10), base.latestOutboundDate, 23) as latestOutboundDate,
+        CONVERT(varchar(10), base.latestInvoiceDate, 23) as latestInvoiceDate,
+        CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
+      FROM base
+      ${baseWhereSql}
+      ORDER BY base.projectCode DESC`,
       params
     )
 
@@ -1341,26 +1238,24 @@ router.get('/export', async (req, res) => {
 
 router.get('/summary', async (req, res) => {
   try {
-    const { params, sourceWhereSql, filteredWhereSql } = buildListFilters(req.query)
+    const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
-    const filteredCteSql = buildFilteredCteSql()
 
     const rows = await query(
       `${baseCteSql}
-      ${filteredCteSql}
       SELECT
         COUNT(1) as projectCount,
-        ISNULL(SUM(filtered.salesAmount), 0) as salesAmount,
-        ISNULL(SUM(filtered.invoiceAmount), 0) as invoiceAmount,
-        ISNULL(SUM(filtered.receiptAmount), 0) as receiptAmount,
-        ISNULL(SUM(filtered.discountAmount), 0) as discountAmount,
-        ISNULL(SUM(filtered.completedQty), 0) as completedQty,
-        ISNULL(SUM(filtered.outboundQty), 0) as outboundQty,
-        ISNULL(SUM(filtered.uninvoicedAmount), 0) as uninvoicedAmount,
-        ISNULL(SUM(filtered.unreceivedAmount), 0) as unreceivedAmount,
-        ISNULL(SUM(filtered.orderArrearsAmount), 0) as orderArrearsAmount
-      FROM filtered
-      ${filteredWhereSql}`,
+        ISNULL(SUM(base.salesAmount), 0) as salesAmount,
+        ISNULL(SUM(base.invoiceAmount), 0) as invoiceAmount,
+        ISNULL(SUM(base.receiptAmount), 0) as receiptAmount,
+        ISNULL(SUM(base.discountAmount), 0) as discountAmount,
+        ISNULL(SUM(base.completedQty), 0) as completedQty,
+        ISNULL(SUM(base.outboundQty), 0) as outboundQty,
+        ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
+        ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount,
+        ISNULL(SUM(base.orderArrearsAmount), 0) as orderArrearsAmount
+      FROM base
+      ${baseWhereSql}`,
       params
     )
 
