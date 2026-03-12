@@ -7,7 +7,6 @@
             <div class="cq-panel__head">
               <div>
                 <div class="cq-panel__title">查询输入</div>
-                <div class="cq-panel__desc">先编辑草稿，再决定是否应用到当前结果。</div>
               </div>
               <span class="cq-status-pill" :class="{ 'cq-status-pill--dirty': filtersDirty }">
                 {{ draftStatusText }}
@@ -23,22 +22,24 @@
                   @keyup.enter="handleApplySearch"
                 />
               </el-form-item>
-
-              <div class="cq-scope-list">
-                <span class="cq-scope-list__label">可直接搜索</span>
-                <span class="cq-scope-list__chip">项目编号</span>
-                <span class="cq-scope-list__chip">产品名称</span>
-                <span class="cq-scope-list__chip">产品图号</span>
-              </div>
-
               <div class="cq-actions">
-                <el-button type="primary" :loading="loading" @click="handleApplySearch">
+                <el-button
+                  type="primary"
+                  class="cq-action-btn cq-action-btn--apply"
+                  :loading="loading"
+                  @click="handleApplySearch"
+                >
                   应用筛选
                 </el-button>
-                <el-button :disabled="!filtersDirty" @click="handleRestoreDraft"
+                <el-button
+                  class="cq-action-btn cq-action-btn--restore"
+                  :disabled="!filtersDirty"
+                  @click="handleRestoreDraft"
                   >还原草稿</el-button
                 >
-                <el-button text @click="resetWorkspace">清空工作台</el-button>
+                <el-button class="cq-action-btn cq-action-btn--clear" @click="resetWorkspace"
+                  >清空</el-button
+                >
               </div>
             </el-form>
           </section>
@@ -233,12 +234,18 @@
                 <el-button
                   type="primary"
                   size="small"
+                  class="cq-action-btn cq-action-btn--apply cq-action-btn--compact"
                   :loading="loading"
                   @click="handleApplySearch"
                 >
                   应用筛选
                 </el-button>
-                <el-button size="small" @click="handleRestoreDraft">还原草稿</el-button>
+                <el-button
+                  size="small"
+                  class="cq-action-btn cq-action-btn--restore cq-action-btn--compact"
+                  @click="handleRestoreDraft"
+                  >还原草稿</el-button
+                >
               </div>
             </section>
 
@@ -250,6 +257,7 @@
                 </div>
                 <div class="cq-results__actions">
                   <el-button
+                    class="cq-action-btn cq-action-btn--export"
                     :disabled="!hasAppliedSearch"
                     :loading="exporting"
                     @click="handleExport"
@@ -315,6 +323,7 @@
                     border
                     row-key="projectCode"
                     :height="tableHeight"
+                    scrollbar-always-on
                     @row-click="handleRowClick"
                   >
                     <el-table-column type="index" width="60" label="序号" align="center" />
@@ -724,7 +733,7 @@ const tableData = ref<ComprehensiveQueryRow[]>([])
 const total = ref(0)
 const appStore = useAppStore()
 const isMobile = computed(() => appStore.getMobile)
-const tableHeight = computed(() => undefined)
+const tableHeight = computed(() => (isMobile.value ? undefined : '100%'))
 
 const queryForm = reactive<QueryForm>(createEmptyQueryForm())
 const appliedSnapshot = ref<QuerySnapshot | null>(null)
@@ -1313,7 +1322,124 @@ onBeforeUnmount(() => {
 .cq-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.cq-actions :deep(.el-button) {
+  margin: 0;
+}
+
+.cq-actions :deep(.el-button:not(.is-text)) {
+  flex: 1;
+  min-width: 0;
+}
+
+:deep(.cq-action-btn) {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-width: 1px;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+:deep(.cq-action-btn:hover) {
+  transform: translateY(-1px);
+}
+
+:deep(.cq-action-btn .el-icon) {
+  font-size: 13px;
+}
+
+:deep(.cq-action-btn--compact) {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 11px;
+  border-radius: 10px;
+}
+
+:deep(.cq-action-btn--apply) {
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  border-color: #3b82f6;
+  box-shadow: 0 10px 18px rgb(59 130 246 / 18%);
+}
+
+:deep(.cq-action-btn--apply:hover) {
+  background: linear-gradient(135deg, #4f94f8, #2563eb);
+  border-color: #2563eb;
+  box-shadow: 0 14px 24px rgb(59 130 246 / 24%);
+}
+
+:deep(.cq-action-btn--apply.is-disabled) {
+  box-shadow: none;
+}
+
+:deep(.cq-action-btn--restore) {
+  color: #21485b;
+  background: linear-gradient(180deg, rgb(244 248 251 / 96%), rgb(234 241 246 / 96%));
+  border-color: #c9d7e2;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 75%);
+}
+
+:deep(.cq-action-btn--restore:hover) {
+  color: #16394b;
+  background: linear-gradient(180deg, rgb(248 251 253 / 100%), rgb(239 245 249 / 100%));
+  border-color: #aebfcb;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 82%),
+    0 10px 18px rgb(147 167 186 / 16%);
+}
+
+:deep(.cq-action-btn--clear) {
+  flex: 0 0 auto;
+  padding-inline: 12px;
+  color: #8a5b5b;
+  background: linear-gradient(180deg, rgb(255 250 249 / 100%), rgb(250 241 239 / 100%));
+  border-color: rgb(234 209 204 / 95%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 75%);
+}
+
+:deep(.cq-action-btn--clear:hover) {
+  color: #a13f3f;
+  background: linear-gradient(180deg, rgb(255 245 243 / 100%), rgb(251 236 233 / 100%));
+  border-color: #dfb8b2;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 75%),
+    0 10px 18px rgb(205 125 109 / 14%);
+}
+
+:deep(.cq-action-btn--export) {
+  color: #18303a;
+  background: linear-gradient(180deg, rgb(242 247 248 / 98%), rgb(229 238 240 / 98%));
+  border-color: #bed0d6;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 76%),
+    0 10px 18px rgb(64 104 116 / 10%);
+}
+
+:deep(.cq-action-btn--export:hover) {
+  color: #102a33;
+  background: linear-gradient(180deg, rgb(246 250 251 / 100%), rgb(233 242 244 / 100%));
+  border-color: #9eb8c0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 86%),
+    0 12px 22px rgb(64 104 116 / 14%);
+}
+
+:deep(.cq-action-btn.is-disabled),
+:deep(.cq-action-btn.is-disabled:hover) {
+  transform: none;
+  box-shadow: none;
 }
 
 .cq-date-picker {
@@ -1575,9 +1701,24 @@ onBeforeUnmount(() => {
 
 .cq-table-shell {
   min-height: 0;
-  padding-bottom: 42px;
+  padding-bottom: 8px;
   overflow: hidden;
   flex: 1;
+}
+
+.cq-table-shell :deep(.el-scrollbar__bar.is-horizontal) {
+  bottom: 2px;
+  height: 10px;
+  opacity: 1;
+}
+
+.cq-table-shell :deep(.el-scrollbar__bar.is-horizontal > div) {
+  background-color: rgb(138 152 167 / 65%);
+  border-radius: 999px;
+}
+
+.cq-table-shell :deep(.el-scrollbar__bar.is-horizontal:hover > div) {
+  background-color: rgb(92 109 126 / 78%);
 }
 
 :deep(.el-tag.cq-production-status-tag) {
@@ -1617,13 +1758,10 @@ onBeforeUnmount(() => {
 }
 
 .cq-pagination {
-  position: fixed;
-  bottom: 6px;
-  left: 50%;
-  z-index: 10;
   display: flex;
   justify-content: center;
-  transform: translateX(-50%);
+  margin-top: 8px;
+  flex-shrink: 0;
 }
 
 :deep(.cq-pagination .el-pagination) {
@@ -1876,10 +2014,7 @@ onBeforeUnmount(() => {
   }
 
   .cq-pagination--mobile {
-    position: static;
-    left: auto;
     margin-top: 10px;
-    transform: none;
   }
 }
 </style>

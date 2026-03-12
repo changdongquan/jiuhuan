@@ -1216,6 +1216,40 @@ const buildJourney = ({
   }
 }
 
+const querySummaryByFilters = async ({ params, baseCteSql, baseWhereSql }) => {
+  const rows = await query(
+    `${baseCteSql}
+    SELECT
+      COUNT(1) as projectCount,
+      ISNULL(SUM(base.salesAmount), 0) as salesAmount,
+      ISNULL(SUM(base.invoiceAmount), 0) as invoiceAmount,
+      ISNULL(SUM(base.receiptAmount), 0) as receiptAmount,
+      ISNULL(SUM(base.discountAmount), 0) as discountAmount,
+      ISNULL(SUM(base.completedQty), 0) as completedQty,
+      ISNULL(SUM(base.outboundQty), 0) as outboundQty,
+      ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
+      ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount,
+      ISNULL(SUM(base.orderArrearsAmount), 0) as orderArrearsAmount
+    FROM base
+    ${baseWhereSql}`,
+    params
+  )
+
+  const summary = rows?.[0] || {}
+  return {
+    projectCount: safeNumber(summary.projectCount),
+    salesAmount: safeNumber(summary.salesAmount),
+    invoiceAmount: safeNumber(summary.invoiceAmount),
+    receiptAmount: safeNumber(summary.receiptAmount),
+    discountAmount: safeNumber(summary.discountAmount),
+    completedQty: safeNumber(summary.completedQty),
+    outboundQty: safeNumber(summary.outboundQty),
+    uninvoicedAmount: safeNumber(summary.uninvoicedAmount),
+    unreceivedAmount: safeNumber(summary.unreceivedAmount),
+    orderArrearsAmount: safeNumber(summary.orderArrearsAmount)
+  }
+}
+
 router.get('/list', async (req, res) => {
   try {
     const { page = 1, pageSize = 20 } = req.query
@@ -1238,6 +1272,11 @@ router.get('/list', async (req, res) => {
       params
     )
     const total = safeNumber(countRows?.[0]?.total)
+    const summary = await querySummaryByFilters({
+      params,
+      baseCteSql,
+      baseWhereSql
+    })
 
     const rows = await query(
       `${baseCteSql}
@@ -1290,7 +1329,8 @@ router.get('/list', async (req, res) => {
         list: rows || [],
         total,
         page: pageNum,
-        pageSize: sizeNum
+        pageSize: sizeNum,
+        summary
       }
     })
   } catch (error) {
@@ -1380,42 +1420,16 @@ router.get('/summary', async (req, res) => {
   try {
     const { params, sourceWhereSql, baseWhereSql } = buildListFilters(req.query)
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
-
-    const rows = await query(
-      `${baseCteSql}
-      SELECT
-        COUNT(1) as projectCount,
-        ISNULL(SUM(base.salesAmount), 0) as salesAmount,
-        ISNULL(SUM(base.invoiceAmount), 0) as invoiceAmount,
-        ISNULL(SUM(base.receiptAmount), 0) as receiptAmount,
-        ISNULL(SUM(base.discountAmount), 0) as discountAmount,
-        ISNULL(SUM(base.completedQty), 0) as completedQty,
-        ISNULL(SUM(base.outboundQty), 0) as outboundQty,
-        ISNULL(SUM(base.uninvoicedAmount), 0) as uninvoicedAmount,
-        ISNULL(SUM(base.unreceivedAmount), 0) as unreceivedAmount,
-        ISNULL(SUM(base.orderArrearsAmount), 0) as orderArrearsAmount
-      FROM base
-      ${baseWhereSql}`,
-      params
-    )
-
-    const summary = rows?.[0] || {}
+    const summary = await querySummaryByFilters({
+      params,
+      baseCteSql,
+      baseWhereSql
+    })
 
     res.json({
       code: 0,
       success: true,
-      data: {
-        projectCount: safeNumber(summary.projectCount),
-        salesAmount: safeNumber(summary.salesAmount),
-        invoiceAmount: safeNumber(summary.invoiceAmount),
-        receiptAmount: safeNumber(summary.receiptAmount),
-        discountAmount: safeNumber(summary.discountAmount),
-        completedQty: safeNumber(summary.completedQty),
-        outboundQty: safeNumber(summary.outboundQty),
-        uninvoicedAmount: safeNumber(summary.uninvoicedAmount),
-        unreceivedAmount: safeNumber(summary.unreceivedAmount),
-        orderArrearsAmount: safeNumber(summary.orderArrearsAmount)
-      }
+      data: summary
     })
   } catch (error) {
     console.error('获取综合查询汇总失败:', error)
