@@ -3,6 +3,7 @@ const sql = require('mssql')
 const { query, getPool } = require('../database')
 const { resolveActorFromReq } = require('../utils/actor')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { listCustomerOptions } = require('../services/customerOptions')
 const { requireCapability, requireAnyCapability } = require('../middleware/capability')
 
 const router = express.Router()
@@ -75,25 +76,7 @@ router.get('/customer-options', requireFinanceSharedRead, async (req, res) => {
   try {
     const pool = await getPool()
     await ensureFinanceCustomerSoftDeleteColumns(pool)
-
-    const status = String(req.query.status || 'active')
-      .trim()
-      .toLowerCase()
-    const whereParts = ['ISNULL(是否删除, 0) = 0']
-    if (status === 'active') whereParts.push('(是否停用 = 0 OR 是否停用 IS NULL)')
-    if (status === 'inactive') whereParts.push('是否停用 = 1')
-
-    const rows = await query(
-      `
-        SELECT
-          客户ID as id,
-          客户名称 as customerName,
-          CASE WHEN 是否停用 = 1 THEN 'inactive' ELSE 'active' END as status
-        FROM 客户信息
-        WHERE ${whereParts.join(' AND ')}
-        ORDER BY SeqNumber ASC, 客户ID ASC
-      `
-    )
+    const rows = await listCustomerOptions({ status: req.query.status })
 
     return res.json({
       code: 0,
@@ -334,14 +317,17 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
     const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
     const customerOptionRows = await query(
       `
-      SELECT DISTINCT c.客户名称 as customerName
+      SELECT DISTINCT
+        c.客户ID as customerId,
+        c.客户名称 as customerName,
+        ISNULL(c.SeqNumber, 2147483647) as seqNumber
       FROM 销售订单 s
       INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
       INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
       LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
       LEFT JOIN 发票明细 f ON s.项目编号 = f.项目编号
       ${optionWhereClause}
-      ORDER BY c.客户名称 ASC
+      ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
       `,
       baseParams
     )
@@ -645,7 +631,10 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
     const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
     const customerOptionRows = await query(
       `
-      SELECT DISTINCT c.客户名称 as customerName
+      SELECT DISTINCT
+        c.客户ID as customerId,
+        c.客户名称 as customerName,
+        ISNULL(c.SeqNumber, 2147483647) as seqNumber
       FROM 发票明细 f
       LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
       LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
@@ -658,7 +647,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
         GROUP BY 明细ID
       ) r ON r.明细ID = f.明细ID
       ${optionWhereClause}
-      ORDER BY c.客户名称 ASC
+      ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
       `,
       baseParams
     )

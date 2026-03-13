@@ -1,6 +1,7 @@
 const express = require('express')
 const ExcelJS = require('exceljs')
 const { query } = require('../database')
+const { listProjectCustomerOptions } = require('../services/customerOptions')
 const { requireCapability } = require('../middleware/capability')
 
 const router = express.Router()
@@ -478,29 +479,7 @@ const buildAnomalyTypeSql = (alias = 'base') => {
 
 router.get('/customer-options', async (req, res) => {
   try {
-    const keyword = String(req.query.keyword || '').trim()
-    const params = {}
-    const where = ["c.客户名称 IS NOT NULL", "LTRIM(RTRIM(c.客户名称)) <> ''"]
-
-    if (keyword) {
-      where.push('c.客户名称 LIKE @keyword')
-      params.keyword = `%${keyword}%`
-    }
-
-    const rows = await query(
-      `
-        SELECT
-          c.客户ID as customerId,
-          LTRIM(RTRIM(c.客户名称)) as customerName,
-          ISNULL(c.SeqNumber, 2147483647) as seqNumber
-        FROM 项目管理 p
-        LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
-        WHERE ${where.join(' AND ')}
-        GROUP BY c.客户ID, c.客户名称, c.SeqNumber
-        ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
-      `,
-      params
-    )
+    const rows = await listProjectCustomerOptions({ keyword: req.query.keyword })
 
     return res.json({
       code: 0,
@@ -520,21 +499,7 @@ router.get('/customer-options', async (req, res) => {
 router.get('/filter-options', async (_req, res) => {
   try {
     const [customerRows, categoryRows] = await Promise.all([
-      query(
-        `
-          SELECT
-            c.客户ID as customerId,
-            LTRIM(RTRIM(c.客户名称)) as customerName,
-            ISNULL(c.SeqNumber, 2147483647) as seqNumber
-          FROM 项目管理 p
-          LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
-          WHERE (p.状态 IS NULL OR p.状态 <> N'已删除')
-            AND c.客户名称 IS NOT NULL
-            AND LTRIM(RTRIM(c.客户名称)) <> ''
-          GROUP BY c.客户ID, c.客户名称, c.SeqNumber
-          ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
-        `
-      ),
+      listProjectCustomerOptions(),
       query(
         `
           SELECT DISTINCT

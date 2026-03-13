@@ -16,6 +16,7 @@ const { ocrMouldTransferPng } = require('../utils/ocr/mouldTransferOcrClient')
 const { resolveActorFromReq } = require('../utils/actor')
 const { softDeleteByProjectCode } = require('../services/projectSoftDelete')
 const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const { listCustomerOptions } = require('../services/customerOptions')
 const sql = require('mssql')
 const { getPool } = require('../database')
 const { requireCapability } = require('../middleware/capability')
@@ -149,25 +150,7 @@ router.get('/customer-options', async (req, res) => {
   try {
     const pool = await getPool()
     await ensureProjectCustomerSoftDeleteColumns(pool)
-
-    const status = String(req.query.status || 'active')
-      .trim()
-      .toLowerCase()
-    const whereParts = ['ISNULL(是否删除, 0) = 0']
-    if (status === 'active') whereParts.push('(是否停用 = 0 OR 是否停用 IS NULL)')
-    if (status === 'inactive') whereParts.push('是否停用 = 1')
-
-    const rows = await query(
-      `
-        SELECT
-          客户ID as id,
-          客户名称 as customerName,
-          CASE WHEN 是否停用 = 1 THEN 'inactive' ELSE 'active' END as status
-        FROM 客户信息
-        WHERE ${whereParts.join(' AND ')}
-        ORDER BY SeqNumber ASC, 客户ID ASC
-      `
-    )
+    const rows = await listCustomerOptions({ status: req.query.status })
 
     return res.json({
       code: 0,

@@ -38,6 +38,7 @@ const {
   upsertDetailCache,
   getDetailCacheByRecordId
 } = require('../services/bmoAutoSync')
+const { listCustomerOptions } = require('../services/customerOptions')
 const { requireCapability, requireAnyCapability } = require('../middleware/capability')
 
 const router = express.Router()
@@ -2677,25 +2678,7 @@ router.get('/initiation/customers', async (req, res) => {
   try {
     const pool = await getPool()
     await ensureBmoInitiationCustomerSoftDeleteColumns(pool)
-
-    const status = String(req.query.status || 'active')
-      .trim()
-      .toLowerCase()
-    const whereParts = ['ISNULL(是否删除, 0) = 0']
-    if (status === 'active') whereParts.push('(是否停用 = 0 OR 是否停用 IS NULL)')
-    if (status === 'inactive') whereParts.push('是否停用 = 1')
-
-    const list = await query(
-      `
-        SELECT
-          客户ID as id,
-          客户名称 as customerName,
-          CASE WHEN 是否停用 = 1 THEN 'inactive' ELSE 'active' END as status
-        FROM 客户信息
-        WHERE ${whereParts.join(' AND ')}
-        ORDER BY SeqNumber ASC, 客户ID ASC
-      `
-    )
+    const list = await listCustomerOptions({ status: req.query.status })
 
     return res.json({
       code: 0,
