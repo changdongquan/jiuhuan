@@ -96,6 +96,7 @@ const allowOriginList = [
 if (isDev) {
   allowOriginList.push(/^https?:\/\/localhost(:\d+)?$/i)
   allowOriginList.push(/^https?:\/\/127\.0\.0\.1(:\d+)?$/i)
+  allowOriginList.push(/^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/i)
   // 内网调试：允许常见私网网段（例如手机端访问 http://192.168.x.x:4000）
   allowOriginList.push(/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i)
   allowOriginList.push(/^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$/i)
