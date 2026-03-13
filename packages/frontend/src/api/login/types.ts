@@ -8,4 +8,9 @@ export interface UserType {
   password: string
   role: string
   roleId: string
+  realName?: string
+  displayName?: string
+  roles?: string[]
+  permissions?: string[]
+  capabilities?: string[]
 }

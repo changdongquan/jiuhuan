@@ -139,6 +139,7 @@ async function verifyDomainUser(username, password, domain) {
     const client = ldap.createClient({
       url: LDAP_CONFIG.url
     })
+    client.on('error', () => {})
 
     // 构建用户 DN（Distinguished Name）
     // 格式：CN=username,CN=Users,DC=domain,DC=com
@@ -155,6 +156,7 @@ async function verifyDomainUser(username, password, domain) {
       if (err) {
         // 如果 UPN 失败，尝试 userDN
         const client2 = ldap.createClient({ url: LDAP_CONFIG.url })
+        client2.on('error', () => {})
         client2.bind(userDN, password, (err2) => {
           client2.unbind(() => {})
 
@@ -196,6 +198,7 @@ async function fetchAdUserProfile(username, domain) {
   const client = ldap.createClient({
     url: LDAP_CONFIG.url
   })
+  client.on('error', () => {})
 
   // 绑定服务账号（如果配置了）
   if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
@@ -457,6 +460,7 @@ const getDomainUserGroupPermissionNames = async (pureUsername) => {
   if (!pureUsername) return []
 
   const client = ldap.createClient({ url: LDAP_CONFIG.url })
+  client.on('error', () => {})
   try {
     if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
       await new Promise((resolve, reject) => {

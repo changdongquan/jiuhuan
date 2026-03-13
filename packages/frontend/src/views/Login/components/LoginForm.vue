@@ -13,6 +13,7 @@ import { useValidator } from '@/hooks/web/useValidator'
 import { Icon } from '@/components/Icon'
 import { useUserStore } from '@/store/modules/user'
 import { BaseButton } from '@/components/Button'
+import { resolveAccessibleRouteNames } from '@/utils/routeAccess'
 
 const { required } = useValidator()
 
@@ -269,6 +270,8 @@ const signIn = async () => {
 
           // 根据后端返回的权限列表生成可访问路由和菜单
           const permissions = ((res.data as any)?.permissions || []) as string[]
+          const capabilities = ((res.data as any)?.capabilities || []) as string[]
+          const accessibleRouteNames = resolveAccessibleRouteNames(permissions, capabilities)
           const username = (data?.username || '') as string
           const isAdmin = username === 'admin'
           const isDev = import.meta.env.DEV
@@ -277,11 +280,9 @@ const signIn = async () => {
             if (isAdmin) {
               // admin 账户始终拥有全部菜单
               await permissionStore.generateRoutes('static').catch(() => {})
-            } else if (permissions.length > 0) {
-              // 普通用户：按权限路由名称精确过滤菜单
-              await permissionStore
-                .generateRoutes('frontEnd', permissions as string[])
-                .catch(() => {})
+            } else if (accessibleRouteNames.length > 0) {
+              // 普通用户：按可访问路由名称精确过滤菜单
+              await permissionStore.generateRoutes('frontEnd', accessibleRouteNames).catch(() => {})
             } else if (isDev) {
               // 开发模式下权限列表为空时，为方便调试继续展示全部菜单
               console.warn('[权限][DEV] 登录用户权限列表为空，使用静态路由生成菜单')

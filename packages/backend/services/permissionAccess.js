@@ -73,6 +73,7 @@ const loadUserGroupDns = async (pureUsername) => {
   if (!ldap || !pureUsername) return []
 
   const client = ldap.createClient({ url: LDAP_CONFIG.url })
+  client.on('error', () => {})
   try {
     if (LDAP_CONFIG.bindDN && LDAP_CONFIG.bindPassword) {
       await new Promise((resolve, reject) => {

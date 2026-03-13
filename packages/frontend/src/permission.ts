@@ -7,6 +7,7 @@ import { usePermissionStoreWithOut } from '@/store/modules/permission'
 import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
+import { resolveAccessibleRouteNames } from '@/utils/routeAccess'
 
 const { start, done } = useNProgress()
 
@@ -31,10 +32,10 @@ const HOME_ROUTE_CANDIDATES = [
   'Workplace'
 ]
 
-const pickFirstAccessibleRoute = (permissionNames: string[]) => {
+const pickFirstAccessibleRoute = (routeNames: string[]) => {
   const normalized = Array.from(
     new Set(
-      (permissionNames || [])
+      (routeNames || [])
         .map((name) => String(name || '').trim())
         .filter((name) => !!name && name !== 'Dashboard')
     )
@@ -148,10 +149,12 @@ router.beforeEach(async (to, from, next) => {
       // 权限验证：检查用户是否有权限访问目标页面
       const userInfo = userStore.getUserInfo
       const userPermissions = (userInfo as any).permissions || []
+      const userCapabilities = (userInfo as any).capabilities || []
+      const accessibleRouteNames = resolveAccessibleRouteNames(userPermissions, userCapabilities)
       const isAdmin = userInfo?.username === 'admin'
 
-      if (!isAdmin && to.name === 'Analysis' && !userPermissions.includes('Analysis')) {
-        const fallback = pickFirstAccessibleRoute(userPermissions)
+      if (!isAdmin && to.name === 'Analysis' && !accessibleRouteNames.includes('Analysis')) {
+        const fallback = pickFirstAccessibleRoute(accessibleRouteNames)
         if (fallback) {
           next({ ...fallback, replace: true })
           return
@@ -176,7 +179,7 @@ router.beforeEach(async (to, from, next) => {
         // 允许访问，继续后续流程
       } else if (to.name) {
         // 其他用户需要检查权限
-        if (userPermissions.length === 0) {
+        if (accessibleRouteNames.length === 0) {
           if (isDev) {
             // 开发模式：为方便调试，权限列表为空时暂时放行
             console.warn('[权限][DEV] 用户权限列表为空，允许访问:', to.name)
@@ -186,9 +189,13 @@ router.beforeEach(async (to, from, next) => {
             next('/403')
             return
           }
-        } else if (!userPermissions.includes(to.name)) {
+        } else if (!accessibleRouteNames.includes(String(to.name))) {
           // 有权限列表，但当前路由不在权限列表中，拒绝访问
-          console.warn('[权限] 用户无权限访问:', { route: to.name, permissions: userPermissions })
+          console.warn('[权限] 用户无权限访问:', {
+            route: to.name,
+            permissions: userPermissions,
+            capabilities: userCapabilities
+          })
           next('/403')
           return
         }
@@ -211,8 +218,8 @@ router.beforeEach(async (to, from, next) => {
         // 静态路由模式：admin 使用完整路由；普通用户按权限过滤菜单
         if (isAdmin) {
           await permissionStore.generateRoutes('static')
-        } else if (userPermissions.length > 0) {
-          await permissionStore.generateRoutes('frontEnd', userPermissions as string[])
+        } else if (accessibleRouteNames.length > 0) {
+          await permissionStore.generateRoutes('frontEnd', accessibleRouteNames)
         } else if (isDev) {
           // 开发环境下权限列表为空时，为方便调试使用静态路由
           console.warn('[权限][DEV] 用户权限列表为空，使用静态路由生成菜单')
@@ -273,12 +280,14 @@ router.beforeEach(async (to, from, next) => {
             // 加载路由（复用登录成功后的逻辑）
             const autoUserInfo = userStore.getUserInfo as any
             const autoPermissions = (autoUserInfo?.permissions || []) as string[]
+            const autoCapabilities = (autoUserInfo?.capabilities || []) as string[]
+            const autoRouteNames = resolveAccessibleRouteNames(autoPermissions, autoCapabilities)
             const autoIsAdmin = autoUserInfo?.username === 'admin'
 
             if (autoIsAdmin) {
               await permissionStore.generateRoutes('static')
-            } else if (autoPermissions.length > 0) {
-              await permissionStore.generateRoutes('frontEnd', autoPermissions as string[])
+            } else if (autoRouteNames.length > 0) {
+              await permissionStore.generateRoutes('frontEnd', autoRouteNames)
             } else if (isDev) {
               console.warn('[权限][DEV] 自动登录用户权限列表为空，使用静态路由生成菜单')
               await permissionStore.generateRoutes('static')
