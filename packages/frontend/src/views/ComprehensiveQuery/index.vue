@@ -330,10 +330,22 @@
                     row-key="projectCode"
                     :height="tableHeight"
                     scrollbar-always-on
+                    :default-sort="
+                      tableSort.defaultOrder
+                        ? { prop: tableSort.prop, order: tableSort.defaultOrder }
+                        : undefined
+                    "
                     @row-click="handleRowClick"
+                    @sort-change="handleTableSortChange"
                   >
-                    <el-table-column type="index" width="60" label="序号" align="center" />
-                    <el-table-column prop="projectCode" label="项目编号" min-width="150" />
+                    <el-table-column
+                      type="index"
+                      width="60"
+                      label="序号"
+                      align="center"
+                      fixed="left"
+                    />
+                    <el-table-column prop="projectCode" label="项目编号" width="150" fixed="left" />
                     <el-table-column
                       prop="customerName"
                       label="客户名称"
@@ -468,6 +480,7 @@
                         prop="contractNo"
                         label="合同号"
                         min-width="130"
+                        sortable="custom"
                         show-overflow-tooltip
                       />
                       <el-table-column
@@ -493,6 +506,7 @@
                         label="最近出货"
                         width="110"
                         align="center"
+                        sortable="custom"
                       />
                     </template>
 
@@ -501,18 +515,21 @@
                       label="最近订单"
                       width="110"
                       align="center"
+                      sortable="custom"
                     />
                     <el-table-column
                       prop="latestInvoiceDate"
                       label="最近开票"
                       width="110"
                       align="center"
+                      sortable="custom"
                     />
                     <el-table-column
                       prop="latestReceiptDate"
                       label="最近回款"
                       width="110"
                       align="center"
+                      sortable="custom"
                     />
                     <el-table-column label="操作" width="86" align="center" fixed="right">
                       <template #default="{ row }">
@@ -755,6 +772,22 @@ const journey = ref<ProjectJourney | null>(null)
 const pagination = reactive({
   page: 1,
   pageSize: 20
+})
+
+const tableSort = reactive<{
+  prop:
+    | ''
+    | 'contractNo'
+    | 'latestOutboundDate'
+    | 'latestOrderDate'
+    | 'latestInvoiceDate'
+    | 'latestReceiptDate'
+  order: '' | 'asc' | 'desc'
+  defaultOrder: '' | 'ascending' | 'descending'
+}>({
+  prop: '',
+  order: '',
+  defaultOrder: ''
 })
 
 const anomalyLabelMap: Record<string, string> = {
@@ -1065,6 +1098,8 @@ const loadList = async () => {
   try {
     const params = {
       ...buildListParamsFromSnapshot(appliedSnapshot.value),
+      sortField: tableSort.prop || undefined,
+      sortOrder: tableSort.order || undefined,
       page: pagination.page,
       pageSize: pagination.pageSize
     }
@@ -1155,9 +1190,11 @@ const handleExport = async () => {
   }
   try {
     exporting.value = true
-    const resp: any = await exportComprehensiveQueryApi(
-      buildListParamsFromSnapshot(appliedSnapshot.value)
-    )
+    const resp: any = await exportComprehensiveQueryApi({
+      ...buildListParamsFromSnapshot(appliedSnapshot.value),
+      sortField: tableSort.prop || undefined,
+      sortOrder: tableSort.order || undefined
+    })
     const blob = (resp?.data ?? resp) as Blob
     if (!(blob instanceof Blob)) {
       ElMessage.error('导出失败：未获取到文件')
@@ -1197,6 +1234,38 @@ const handlePageChange = (page: number) => {
 
 const handleRowClick = (row: ComprehensiveQueryRow) => {
   selectedProjectCode.value = row.projectCode
+}
+
+const handleTableSortChange = ({
+  prop,
+  order
+}: {
+  column: unknown
+  prop: string
+  order: 'ascending' | 'descending' | null
+}) => {
+  const sortableFields = new Set([
+    'contractNo',
+    'latestOutboundDate',
+    'latestOrderDate',
+    'latestInvoiceDate',
+    'latestReceiptDate'
+  ])
+
+  if (!prop || !sortableFields.has(prop) || !order) {
+    tableSort.prop = ''
+    tableSort.order = ''
+    tableSort.defaultOrder = ''
+  } else {
+    tableSort.prop = prop as typeof tableSort.prop
+    tableSort.order = order === 'ascending' ? 'asc' : 'desc'
+    tableSort.defaultOrder = order
+  }
+
+  pagination.page = 1
+  if (hasAppliedSearch.value) {
+    void loadList()
+  }
 }
 
 const handleViewInsight = (row: ComprehensiveQueryRow) => {

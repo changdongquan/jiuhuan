@@ -16,6 +16,8 @@ export interface ComprehensiveQueryListParams {
   progressMax?: number
   projectStatus?: string
   productionStatus?: string
+  sortField?: string
+  sortOrder?: 'asc' | 'desc'
   page?: number
   pageSize?: number
 }

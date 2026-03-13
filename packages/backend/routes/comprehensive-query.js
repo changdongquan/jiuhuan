@@ -588,7 +588,6 @@ const buildListFilters = (inputQuery) => {
   const progressMax = Number(inputQuery.progressMax)
   const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
   const settlementStatusSql = buildSettlementStatusSql('base')
-  const settlementSourceSql = buildSettlementSourceSql('base')
   const anomalyTypeSql = buildAnomalyTypeSql('base')
 
   if (keyword) {
@@ -671,15 +670,15 @@ const buildListFilters = (inputQuery) => {
 
   if (invoiceStatus === '未开票') {
     baseWhere.push(
-      `(${buildRoundedAmountSql('base', 'invoiceAmount')} <= 0 AND (${settlementStatusSql}) NOT IN (N'销售已结清', N'开票已结清'))`
+      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} <= 0)`
     )
   } else if (invoiceStatus === '仅开部分发票') {
     baseWhere.push(
-      `(${buildRoundedAmountSql('base', 'invoiceAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} < ${buildRoundedAmountSql('base', 'salesAmount')} AND (${settlementStatusSql}) NOT IN (N'销售已结清', N'开票已结清'))`
+      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} < ${buildRoundedAmountSql('base', 'salesAmount')})`
     )
   } else if (invoiceStatus === '已开全额发票') {
     baseWhere.push(
-      `((${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} >= ${buildRoundedAmountSql('base', 'salesAmount')}) OR ((${settlementStatusSql}) IN (N'销售已结清', N'开票已结清') AND (${settlementSourceSql}) IN (N'人工认定', N'历史字段')))`
+      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} >= ${buildRoundedAmountSql('base', 'salesAmount')})`
     )
   }
 
@@ -718,6 +717,30 @@ const buildListFilters = (inputQuery) => {
     sourceWhereSql: sourceWhere.length ? `WHERE ${sourceWhere.join(' AND ')}` : '',
     baseWhereSql: baseWhere.length ? `WHERE ${baseWhere.join(' AND ')}` : ''
   }
+}
+
+const SORT_FIELD_SQL_MAP = {
+  contractNo: `NULLIF(LTRIM(RTRIM(base.contractNo)), N'')`,
+  latestOutboundDate: 'base.latestOutboundDate',
+  latestOrderDate: 'base.latestOrderDate',
+  latestInvoiceDate: 'base.latestInvoiceDate',
+  latestReceiptDate: 'base.latestReceiptDate'
+}
+
+const buildListOrderBySql = (inputQuery) => {
+  const sortField = String(inputQuery.sortField || '').trim()
+  const sortOrder = String(inputQuery.sortOrder || '').trim().toLowerCase() === 'asc' ? 'ASC' : 'DESC'
+  const sortColumn = SORT_FIELD_SQL_MAP[sortField]
+
+  if (!sortColumn) {
+    return 'ORDER BY base.projectCode DESC'
+  }
+
+  if (sortField === 'contractNo') {
+    return `ORDER BY CASE WHEN ${sortColumn} IS NULL THEN 1 ELSE 0 END ASC, ${sortColumn} ${sortOrder}, base.projectCode DESC`
+  }
+
+  return `ORDER BY CASE WHEN ${sortColumn} IS NULL THEN 1 ELSE 0 END ASC, ${sortColumn} ${sortOrder}, base.projectCode DESC`
 }
 
 const buildBaseCteSql = (sourceWhereSql) => {
@@ -1263,6 +1286,7 @@ router.get('/list', async (req, res) => {
     const settlementStatusSql = buildSettlementStatusSql('base')
     const settlementSourceSql = buildSettlementSourceSql('base')
     const anomalyTypeSql = buildAnomalyTypeSql('base')
+    const orderBySql = buildListOrderBySql(req.query)
 
     const countRows = await query(
       `${baseCteSql}
@@ -1317,7 +1341,7 @@ router.get('/list', async (req, res) => {
         CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
       FROM base
       ${baseWhereSql}
-      ORDER BY base.projectCode DESC
+      ${orderBySql}
       OFFSET ${offset} ROWS FETCH NEXT ${sizeNum} ROWS ONLY`,
       params
     )
@@ -1350,6 +1374,7 @@ router.get('/export', requireComprehensiveExport, async (req, res) => {
     const settlementStatusSql = buildSettlementStatusSql('base')
     const settlementSourceSql = buildSettlementSourceSql('base')
     const anomalyTypeSql = buildAnomalyTypeSql('base')
+    const orderBySql = buildListOrderBySql(req.query)
 
     const rows = await query(
       `${baseCteSql}
@@ -1390,7 +1415,7 @@ router.get('/export', requireComprehensiveExport, async (req, res) => {
         CONVERT(varchar(10), base.latestReceiptDate, 23) as latestReceiptDate
       FROM base
       ${baseWhereSql}
-      ORDER BY base.projectCode DESC`,
+      ${orderBySql}`,
       params
     )
 
