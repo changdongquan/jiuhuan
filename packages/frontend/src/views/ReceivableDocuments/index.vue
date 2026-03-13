@@ -602,6 +602,15 @@
     >
       <div class="finance-candidate-toolbar">
         <el-select
+          v-model="receiptCandidateSourceType"
+          style="width: 180px"
+          @change="loadReceiptCandidates(true)"
+        >
+          <el-option label="全部应收" value="all" />
+          <el-option label="已开票欠款" value="invoice_detail" />
+          <el-option label="未开票预付款" value="prepayment_order" />
+        </el-select>
+        <el-select
           v-model="receiptCandidateCustomerName"
           placeholder="客户名称"
           clearable
@@ -636,17 +645,39 @@
         :data="receiptCandidates"
         border
         height="460"
-        row-key="detailId"
+        row-key="sourceKey"
+        class="finance-candidate-table"
         @selection-change="handleReceiptCandidateSelectionChange"
       >
         <el-table-column type="selection" width="50" />
+        <el-table-column prop="sourceLabel" label="应收来源" width="120" show-overflow-tooltip />
         <el-table-column prop="detailId" label="明细ID" width="90" />
-        <el-table-column prop="itemCode" label="项目编号" min-width="130" />
-        <el-table-column prop="productName" label="产品名称" min-width="150" />
-        <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
-        <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
-        <el-table-column prop="customerName" label="客户名称" min-width="160" />
-        <el-table-column label="应收金额" width="120" align="right">
+        <el-table-column prop="itemCode" label="项目编号" min-width="130" show-overflow-tooltip />
+        <el-table-column
+          prop="productName"
+          label="产品名称"
+          min-width="150"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="productDrawingNo"
+          label="产品图号"
+          min-width="140"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="customerPartNo"
+          label="客户模号"
+          min-width="120"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="customerName"
+          label="客户名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column :label="receiptCandidateAmountLabel" width="120" align="right">
           <template #default="{ row }">{{ formatAmount(row.receivableAmount || 0) }}</template>
         </el-table-column>
       </el-table>
@@ -708,6 +739,8 @@ interface ReceiptDetail {
   id: number
   documentNo?: string
   detailId?: number | null
+  sourceType?: string
+  sourceKey?: string
   itemCode: string
   productName: string
   productDrawingNo: string
@@ -770,7 +803,10 @@ interface ReceiptTableRow extends Receipt {
 }
 
 interface ReceiptCandidate {
-  detailId: number
+  detailId: number | null
+  sourceType: 'invoice_detail' | 'prepayment_order'
+  sourceKey: string
+  sourceLabel: string
   itemCode: string
   productName: string
   productDrawingNo: string
@@ -900,6 +936,8 @@ const createEmptyDetail = (): ReceiptDetail => ({
   id: createDetailId(),
   documentNo: '',
   detailId: null,
+  sourceType: '',
+  sourceKey: '',
   itemCode: '',
   productName: '',
   productDrawingNo: '',
@@ -939,6 +977,7 @@ const route = useRoute()
 const customerOptions = ref<string[]>([])
 const receiptCandidateDialogVisible = ref(false)
 const receiptCandidateLoading = ref(false)
+const receiptCandidateSourceType = ref<'all' | 'invoice_detail' | 'prepayment_order'>('all')
 const receiptCandidateCustomerName = ref('')
 const receiptCandidateCustomerOptions = ref<string[]>([])
 const receiptCandidateKeyword = ref('')
@@ -957,6 +996,13 @@ const restoreReceiptCandidatePrefs = () => {
     const raw = localStorage.getItem(RECEIPT_CANDIDATE_PREF_KEY)
     if (!raw) return
     const parsed = JSON.parse(raw)
+    if (
+      parsed?.sourceType === 'all' ||
+      parsed?.sourceType === 'invoice_detail' ||
+      parsed?.sourceType === 'prepayment_order'
+    ) {
+      receiptCandidateSourceType.value = parsed.sourceType
+    }
     if (typeof parsed?.customerName === 'string') {
       receiptCandidateCustomerName.value = parsed.customerName
     }
@@ -978,6 +1024,7 @@ const persistReceiptCandidatePrefs = () => {
       RECEIPT_CANDIDATE_PREF_KEY,
       JSON.stringify({
         customerName: receiptCandidateCustomerName.value,
+        sourceType: receiptCandidateSourceType.value,
         keyword: receiptCandidateKeyword.value,
         pageSize: receiptCandidatePageSize.value
       })
@@ -996,7 +1043,11 @@ const receiptCandidateCustomerSelectOptions = computed(() => {
   return receiptCandidateCustomerOptions.value
 })
 
-const getReceiptCandidateKey = (item: ReceiptCandidate) => String(item.detailId || '')
+const receiptCandidateAmountLabel = computed(() =>
+  receiptCandidateSourceType.value === 'prepayment_order' ? '订单金额' : '应收金额'
+)
+
+const getReceiptCandidateKey = (item: ReceiptCandidate) => String(item.sourceKey || '')
 
 const rebuildSelectedReceiptCandidates = () => {
   selectedReceiptCandidates.value = Object.values(selectedReceiptCandidateMap.value)
@@ -1373,6 +1424,7 @@ const loadReceiptCandidates = async (resetPage = false) => {
       ''
     ).trim()
     const resp = await getFinanceReceiptCandidatesApi({
+      sourceType: receiptCandidateSourceType.value,
       keyword: receiptCandidateKeyword.value.trim() || undefined,
       customerName: selectedCustomerName || undefined,
       page: receiptCandidatePage.value,
@@ -1390,7 +1442,11 @@ const loadReceiptCandidates = async (resetPage = false) => {
     receiptCandidatePage.value = Number(data?.page || receiptCandidatePage.value)
     receiptCandidatePageSize.value = Number(data?.pageSize || receiptCandidatePageSize.value)
     receiptCandidates.value = list.map((it: any) => ({
-      detailId: Number(it.detailId) || 0,
+      detailId: it.detailId == null ? null : Number(it.detailId) || 0,
+      sourceType: String(it.sourceType || 'invoice_detail') as ReceiptCandidate['sourceType'],
+      sourceKey: String(it.sourceKey || ''),
+      sourceLabel:
+        String(it.sourceType || '') === 'prepayment_order' ? '未开票预付款' : '已开票欠款',
       itemCode: String(it.itemCode || ''),
       productName: String(it.productName || ''),
       productDrawingNo: String(it.productDrawingNo || ''),
@@ -1508,11 +1564,13 @@ const applyReceiptCandidates = () => {
   ) {
     dialogForm.details.splice(0, 1)
   }
-  const existingDetailIds = new Set(dialogForm.details.map((d) => String(d.detailId || '')))
+  const existingSourceKeys = new Set(dialogForm.details.map((d) => String(d.sourceKey || '')))
   selectedReceiptCandidates.value.forEach((it) => {
-    if (existingDetailIds.has(String(it.detailId))) return
+    if (existingSourceKeys.has(String(it.sourceKey || ''))) return
     const detail = createEmptyDetail()
     detail.detailId = it.detailId
+    detail.sourceType = it.sourceType
+    detail.sourceKey = it.sourceKey
     detail.itemCode = it.itemCode
     detail.productName = it.productName
     detail.productDrawingNo = it.productDrawingNo
@@ -1527,6 +1585,9 @@ const applyReceiptCandidates = () => {
     detail.receiptMethod = dialogForm.receiptMethod || '现汇'
     detail.accountName = dialogForm.accountName || '交行'
     detail.customerName = dialogForm.customerName
+    if (it.sourceType === 'prepayment_order' && !detail.remark) {
+      detail.remark = '未开票预付款'
+    }
     dialogForm.details.push(detail)
   })
   selectedReceiptCandidateMap.value = {}
@@ -1832,6 +1893,12 @@ onMounted(() => {
   display: flex;
   margin-top: 10px;
   justify-content: flex-end;
+}
+
+:deep(.finance-candidate-table .el-table__cell .cell),
+:deep(.finance-candidate-table .el-table__cell .cell span),
+:deep(.finance-candidate-table .el-table__cell .cell div) {
+  white-space: nowrap !important;
 }
 
 .dialog-form-container {

@@ -647,15 +647,36 @@
         border
         height="460"
         row-key="itemCode"
+        class="finance-candidate-table"
         @selection-change="handleInvoiceCandidateSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="itemCode" label="项目编号" min-width="130" />
-        <el-table-column prop="productName" label="产品名称" min-width="160" />
-        <el-table-column prop="productDrawingNo" label="产品图号" min-width="140" />
-        <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
-        <el-table-column prop="customerName" label="客户名称" min-width="160" />
-        <el-table-column prop="contractNo" label="合同号" min-width="120" />
+        <el-table-column prop="itemCode" label="项目编号" min-width="130" show-overflow-tooltip />
+        <el-table-column
+          prop="productName"
+          label="产品名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="productDrawingNo"
+          label="产品图号"
+          min-width="140"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="customerPartNo"
+          label="客户模号"
+          min-width="120"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="customerName"
+          label="客户名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column prop="contractNo" label="合同号" min-width="120" show-overflow-tooltip />
         <el-table-column label="单价" width="120" align="right">
           <template #default="{ row }">{{ formatAmount(row.unitPrice || 0) }}</template>
         </el-table-column>
@@ -1842,6 +1863,12 @@ onMounted(() => {
   display: flex;
   margin-top: 10px;
   justify-content: flex-end;
+}
+
+:deep(.finance-candidate-table .el-table__cell .cell),
+:deep(.finance-candidate-table .el-table__cell .cell span),
+:deep(.finance-candidate-table .el-table__cell .cell div) {
+  white-space: nowrap !important;
 }
 
 .dialog-form-container {

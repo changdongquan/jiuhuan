@@ -45,6 +45,22 @@ const toDateOrNull = (value) => {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+const RECEIPT_SOURCE_TYPES = {
+  invoice: 'invoice_detail',
+  prepayment: 'prepayment_order'
+}
+
+const buildPrepaymentSourceKeySql = (alias = 's', customerAlias = 'p') =>
+  `CONCAT(
+    ISNULL(NULLIF(LTRIM(RTRIM(${alias}.项目编号)), N''), N''),
+    N'|',
+    ISNULL(NULLIF(LTRIM(RTRIM(${alias}.合同号)), N''), N''),
+    N'|',
+    ISNULL(NULLIF(LTRIM(RTRIM(${customerAlias}.客户模号)), N''), N''),
+    N'|',
+    ISNULL(NULLIF(LTRIM(RTRIM(h.产品名称)), N''), N'')
+  )`
+
 const ensureFinanceSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
   await req.batch(`
@@ -61,6 +77,10 @@ const ensureFinanceSoftDeleteColumns = async (poolOrTx) => {
       ALTER TABLE 回款单据 ADD 删除时间 DATETIME2 NULL;
     IF COL_LENGTH(N'回款单据', N'删除人') IS NULL
       ALTER TABLE 回款单据 ADD 删除人 NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'回款单据', N'来源类型') IS NULL
+      ALTER TABLE 回款单据 ADD 来源类型 NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'回款单据', N'来源键') IS NULL
+      ALTER TABLE 回款单据 ADD 来源键 NVARCHAR(300) NULL;
   `)
 }
 
@@ -425,6 +445,8 @@ router.get('/receipts/list', requireReceivableRead, async (req, res) => {
         r.产品名称 as productName,
         r.产品图号 as productDrawingNo,
         r.客户模号 as customerPartNo,
+        r.来源类型 as sourceType,
+        r.来源键 as sourceKey,
         r.收款账户 as accountName,
         r.收款进度 as receiptProgress,
         r.回款方式 as receiptMethod,
@@ -491,6 +513,8 @@ router.get('/receipts/list', requireReceivableRead, async (req, res) => {
         productName: String(row.productName || ''),
         productDrawingNo: String(row.productDrawingNo || ''),
         customerPartNo: String(row.customerPartNo || ''),
+        sourceType: String(row.sourceType || ''),
+        sourceKey: String(row.sourceKey || ''),
         contractNo: String(row.contractNo || ''),
         receivableAmount: toNum(row.receivableAmount),
         amount: toNum(row.amount),
@@ -555,112 +579,185 @@ router.get('/receipts/list', requireReceivableRead, async (req, res) => {
 
 router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
   try {
-    const { keyword, customerName, page = 1, pageSize = 50 } = req.query
+    const { keyword, customerName, page = 1, pageSize = 50, sourceType = 'all' } = req.query
+    const sourceFilter = String(sourceType || 'all').trim()
     const baseParams = {}
-    const baseWhere = [
-      'ISNULL(f.是否已红冲, 0) = 0',
-      'ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0'
-    ]
     const pageNum = Math.max(1, parseInt(page, 10) || 1)
     const sizeNum = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 50))
     const offset = (pageNum - 1) * sizeNum
 
     if (keyword) {
-      baseWhere.push(
-        '(f.项目编号 LIKE @keyword OR f.产品名称 LIKE @keyword OR f.产品图号 LIKE @keyword OR f.客户模号 LIKE @keyword OR f.合同号 LIKE @keyword OR CONVERT(NVARCHAR(50), f.明细ID) LIKE @keyword)'
-      )
       baseParams.keyword = `%${String(keyword).trim()}%`
     }
 
     const params = { ...baseParams }
-    const where = [...baseWhere]
     if (customerName) {
-      where.push('c.客户名称 = @customerName')
       params.customerName = String(customerName).trim()
     }
 
-    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
-    const baseSql = `
-      SELECT
-        f.明细ID as detailId,
-        f.项目编号 as itemCode,
-        f.产品名称 as productName,
-        f.产品图号 as productDrawingNo,
-        f.客户模号 as customerPartNo,
-        f.合同号 as contractNo,
-        ISNULL(soMatched.数量, 0) as orderQuantity,
-        ISNULL(soMatched.单价, 0) as orderUnitPrice,
-        ISNULL(soMatched.总金额, 0) as orderAmount,
-        c.客户名称 as customerName,
-        ISNULL(f.金额, 0) as invoiceAmount,
-        ISNULL(r.totalReceived, 0) as receivedAmount,
-        ISNULL(r.totalDiscount, 0) as discountAmount,
-        ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount
-      FROM 发票明细 f
-      LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
-      LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
-      OUTER APPLY (
-        SELECT TOP 1
-          so.数量,
-          so.单价,
-          so.总金额
-        FROM 销售订单 so
-        WHERE (so.状态 IS NULL OR so.状态 <> N'已删除')
-          AND so.项目编号 = f.项目编号
-          AND (
-            NULLIF(f.合同号, '') IS NULL
-            OR so.合同号 = f.合同号
-          )
-        ORDER BY so.订单日期 DESC, so.订单ID DESC
-      ) soMatched
-      LEFT JOIN (
+    const candidateSql = `
+      WITH invoice_candidates AS (
         SELECT
-          明细ID,
-          SUM(ISNULL(实收金额, 0)) as totalReceived,
-          SUM(ISNULL(贴息金额, 0)) as totalDiscount
-        FROM 回款单据
-        GROUP BY 明细ID
-      ) r ON r.明细ID = f.明细ID
-      ${whereClause}
+          N'${RECEIPT_SOURCE_TYPES.invoice}' as sourceType,
+          CONVERT(NVARCHAR(100), f.明细ID) as sourceKey,
+          f.明细ID as detailId,
+          f.项目编号 as itemCode,
+          f.产品名称 as productName,
+          f.产品图号 as productDrawingNo,
+          f.客户模号 as customerPartNo,
+          f.合同号 as contractNo,
+          ISNULL(soMatched.数量, 0) as orderQuantity,
+          ISNULL(soMatched.单价, 0) as orderUnitPrice,
+          ISNULL(soMatched.总金额, 0) as orderAmount,
+          c.客户ID as customerId,
+          c.客户名称 as customerName,
+          ISNULL(c.SeqNumber, 2147483647) as seqNumber,
+          ISNULL(f.金额, 0) as invoiceAmount,
+          ISNULL(r.totalReceived, 0) as receivedAmount,
+          ISNULL(r.totalDiscount, 0) as discountAmount,
+          ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount
+        FROM 发票明细 f
+        LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
+        LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
+        OUTER APPLY (
+          SELECT TOP 1
+            so.数量,
+            so.单价,
+            so.总金额
+          FROM 销售订单 so
+          WHERE (so.状态 IS NULL OR so.状态 <> N'已删除')
+            AND so.项目编号 = f.项目编号
+            AND (NULLIF(f.合同号, '') IS NULL OR so.合同号 = f.合同号)
+          ORDER BY so.订单日期 DESC, so.订单ID DESC
+        ) soMatched
+        LEFT JOIN (
+          SELECT
+            明细ID,
+            SUM(ISNULL(实收金额, 0)) as totalReceived,
+            SUM(ISNULL(贴息金额, 0)) as totalDiscount
+          FROM 回款单据
+          WHERE ISNULL(是否删除, 0) = 0
+          GROUP BY 明细ID
+        ) r ON r.明细ID = f.明细ID
+        WHERE ISNULL(i.是否删除, 0) = 0
+          AND ISNULL(f.是否已红冲, 0) = 0
+          AND ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0
+          AND (@keyword IS NULL OR (
+            f.项目编号 LIKE @keyword
+            OR f.产品名称 LIKE @keyword
+            OR f.产品图号 LIKE @keyword
+            OR f.客户模号 LIKE @keyword
+            OR f.合同号 LIKE @keyword
+            OR CONVERT(NVARCHAR(50), f.明细ID) LIKE @keyword
+          ))
+          AND (@customerName IS NULL OR c.客户名称 = @customerName)
+      ),
+      prepayment_candidates AS (
+        SELECT
+          N'${RECEIPT_SOURCE_TYPES.prepayment}' as sourceType,
+          ${buildPrepaymentSourceKeySql('s', 'p')} as sourceKey,
+          CAST(NULL AS INT) as detailId,
+          s.项目编号 as itemCode,
+          h.产品名称 as productName,
+          h.产品图号 as productDrawingNo,
+          p.客户模号 as customerPartNo,
+          s.合同号 as contractNo,
+          ISNULL(s.数量, 0) as orderQuantity,
+          ISNULL(s.单价, 0) as orderUnitPrice,
+          ISNULL(s.总金额, 0) as orderAmount,
+          c.客户ID as customerId,
+          c.客户名称 as customerName,
+          ISNULL(c.SeqNumber, 2147483647) as seqNumber,
+          CAST(0 AS DECIMAL(18, 2)) as invoiceAmount,
+          ISNULL(r.totalReceived, 0) as receivedAmount,
+          ISNULL(r.totalDiscount, 0) as discountAmount,
+          ISNULL(s.总金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount
+        FROM 销售订单 s
+        INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
+        INNER JOIN 货物信息 h ON h.项目编号 = s.项目编号
+        LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
+        LEFT JOIN (
+          SELECT
+            来源键,
+            SUM(ISNULL(实收金额, 0)) as totalReceived,
+            SUM(ISNULL(贴息金额, 0)) as totalDiscount
+          FROM 回款单据
+          WHERE ISNULL(是否删除, 0) = 0
+            AND 来源类型 = N'${RECEIPT_SOURCE_TYPES.prepayment}'
+            AND NULLIF(来源键, N'') IS NOT NULL
+          GROUP BY 来源键
+        ) r ON r.来源键 = ${buildPrepaymentSourceKeySql('s', 'p')}
+        WHERE (s.状态 IS NULL OR s.状态 <> N'已删除')
+          AND c.客户名称 IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM 发票明细 fd
+            INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
+            WHERE ISNULL(inv.是否删除, 0) = 0
+              AND fd.项目编号 = s.项目编号
+              AND (
+                NULLIF(s.合同号, N'') IS NULL
+                OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+              )
+          )
+          AND ISNULL(s.总金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0
+          AND (@keyword IS NULL OR (
+            s.项目编号 LIKE @keyword
+            OR h.产品名称 LIKE @keyword
+            OR h.产品图号 LIKE @keyword
+            OR p.客户模号 LIKE @keyword
+            OR s.合同号 LIKE @keyword
+          ))
+          AND (@customerName IS NULL OR c.客户名称 = @customerName)
+      ),
+      candidates AS (
+        SELECT * FROM invoice_candidates
+        WHERE @sourceType IN (N'', N'all', N'${RECEIPT_SOURCE_TYPES.invoice}')
+        UNION ALL
+        SELECT * FROM prepayment_candidates
+        WHERE @sourceType IN (N'', N'all', N'${RECEIPT_SOURCE_TYPES.prepayment}')
+      )
     `
-    const optionWhere = [
-      ...baseWhere,
-      "c.客户名称 IS NOT NULL",
-      "LTRIM(RTRIM(c.客户名称)) <> ''"
-    ]
-    const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
+
+    params.keyword = baseParams.keyword || null
+    params.customerName = params.customerName || null
+    params.sourceType = sourceFilter
+
     const customerOptionRows = await query(
       `
+      ${candidateSql}
       SELECT DISTINCT
-        c.客户ID as customerId,
-        c.客户名称 as customerName,
-        ISNULL(c.SeqNumber, 2147483647) as seqNumber
-      FROM 发票明细 f
-      LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
-      LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
-      LEFT JOIN (
-        SELECT
-          明细ID,
-          SUM(ISNULL(实收金额, 0)) as totalReceived,
-          SUM(ISNULL(贴息金额, 0)) as totalDiscount
-        FROM 回款单据
-        GROUP BY 明细ID
-      ) r ON r.明细ID = f.明细ID
-      ${optionWhereClause}
-      ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
+        customerId,
+        customerName,
+        seqNumber
+      FROM candidates
+      WHERE customerName IS NOT NULL
+        AND LTRIM(RTRIM(customerName)) <> ''
+      ORDER BY seqNumber ASC, customerId ASC
       `,
-      baseParams
+      params
     )
     const customerOptions = customerOptionRows.map((r) => String(r.customerName || '').trim()).filter(Boolean)
 
-    const countRows = await query(`SELECT COUNT(1) as total FROM (${baseSql}) t`, params)
+    const countRows = await query(
+      `
+      ${candidateSql}
+      SELECT COUNT(1) as total FROM candidates
+      `,
+      params
+    )
     const total = Number(countRows?.[0]?.total || 0)
 
     const list = await query(
       `
+      ${candidateSql}
       SELECT *
-      FROM (${baseSql}) t
-      ORDER BY t.detailId DESC
+      FROM candidates
+      ORDER BY
+        CASE WHEN sourceType = N'${RECEIPT_SOURCE_TYPES.invoice}' THEN 0 ELSE 1 END ASC,
+        CASE WHEN detailId IS NULL THEN 1 ELSE 0 END ASC,
+        detailId DESC,
+        itemCode DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
       `,
       { ...params, offset, pageSize: sizeNum }
@@ -1071,6 +1168,8 @@ router.post('/receipts', requireReceivableCreate, async (req, res) => {
 
   const normalizedDetails = details.map((d) => ({
     detailId: d.detailId != null ? Number(d.detailId) : null,
+    sourceType: String(d.sourceType || '').trim() || null,
+    sourceKey: String(d.sourceKey || '').trim() || null,
     itemCode: String(d.itemCode || '').trim(),
     productName: String(d.productName || '').trim(),
     productDrawingNo: String(d.productDrawingNo || ''),
@@ -1098,6 +1197,8 @@ router.post('/receipts', requireReceivableCreate, async (req, res) => {
       reqTx.input('documentNo', sql.NVarChar, documentNo)
       reqTx.input('documentDate', sql.DateTime2, documentDate)
       reqTx.input('detailId', sql.Int, d.detailId)
+      reqTx.input('sourceType', sql.NVarChar, d.sourceType)
+      reqTx.input('sourceKey', sql.NVarChar, d.sourceKey)
       reqTx.input('itemCode', sql.NVarChar, d.itemCode || null)
       reqTx.input('productName', sql.NVarChar, d.productName || null)
       reqTx.input('productDrawingNo', sql.NVarChar, d.productDrawingNo || null)
@@ -1117,12 +1218,12 @@ router.post('/receipts', requireReceivableCreate, async (req, res) => {
 
       const inserted = await reqTx.query(`
         INSERT INTO 回款单据 (
-          单据编号, 单据日期, 明细ID, 项目编号, 产品名称, 产品图号, 客户模号, 合同号,
+          单据编号, 单据日期, 明细ID, 来源类型, 来源键, 项目编号, 产品名称, 产品图号, 客户模号, 合同号,
           应收金额, 实收金额, 贴息金额, 收款进度, 回款日期, 回款方式, 备注, 是否结清, 收款账户, 客户名称, 合计金额
         )
         OUTPUT INSERTED.回款ID as receiptId
         VALUES (
-          @documentNo, @documentDate, @detailId, @itemCode, @productName, @productDrawingNo, @customerPartNo, @contractNo,
+          @documentNo, @documentDate, @detailId, @sourceType, @sourceKey, @itemCode, @productName, @productDrawingNo, @customerPartNo, @contractNo,
           @receivableAmount, @amount, @discountAmount, @receiptProgress, @receiptDate, @receiptMethod, @remark, @isSettled, @accountName, @customerName, @totalAmount
         )
       `)
@@ -1160,6 +1261,8 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
 
   const normalizedDetails = details.map((d) => ({
     detailId: d.detailId != null ? Number(d.detailId) : null,
+    sourceType: String(d.sourceType || '').trim() || null,
+    sourceKey: String(d.sourceKey || '').trim() || null,
     itemCode: String(d.itemCode || '').trim(),
     productName: String(d.productName || '').trim(),
     productDrawingNo: String(d.productDrawingNo || ''),
@@ -1202,6 +1305,8 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
       reqTx.input('documentNo', sql.NVarChar, documentNo)
       reqTx.input('documentDate', sql.DateTime2, documentDate)
       reqTx.input('detailId', sql.Int, d.detailId)
+      reqTx.input('sourceType', sql.NVarChar, d.sourceType)
+      reqTx.input('sourceKey', sql.NVarChar, d.sourceKey)
       reqTx.input('itemCode', sql.NVarChar, d.itemCode || null)
       reqTx.input('productName', sql.NVarChar, d.productName || null)
       reqTx.input('productDrawingNo', sql.NVarChar, d.productDrawingNo || null)
@@ -1221,12 +1326,12 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
 
       const inserted = await reqTx.query(`
         INSERT INTO 回款单据 (
-          单据编号, 单据日期, 明细ID, 项目编号, 产品名称, 产品图号, 客户模号, 合同号,
+          单据编号, 单据日期, 明细ID, 来源类型, 来源键, 项目编号, 产品名称, 产品图号, 客户模号, 合同号,
           应收金额, 实收金额, 贴息金额, 收款进度, 回款日期, 回款方式, 备注, 是否结清, 收款账户, 客户名称, 合计金额
         )
         OUTPUT INSERTED.回款ID as receiptId
         VALUES (
-          @documentNo, @documentDate, @detailId, @itemCode, @productName, @productDrawingNo, @customerPartNo, @contractNo,
+          @documentNo, @documentDate, @detailId, @sourceType, @sourceKey, @itemCode, @productName, @productDrawingNo, @customerPartNo, @contractNo,
           @receivableAmount, @amount, @discountAmount, @receiptProgress, @receiptDate, @receiptMethod, @remark, @isSettled, @accountName, @customerName, @totalAmount
         )
       `)

@@ -409,6 +409,11 @@
                           formatAmount(row.discountAmount)
                         }}</template>
                       </el-table-column>
+                      <el-table-column label="回款比例" width="96" align="right">
+                        <template #default="{ row }">{{
+                          formatPercent(row.receiptProgress)
+                        }}</template>
+                      </el-table-column>
                       <el-table-column label="订单欠款" width="110" align="right">
                         <template #default="{ row }">{{
                           formatAmount(row.orderArrearsAmount)
@@ -417,6 +422,11 @@
                       <el-table-column label="开票金额" width="110" align="right">
                         <template #default="{ row }">{{
                           formatAmount(row.invoiceAmount)
+                        }}</template>
+                      </el-table-column>
+                      <el-table-column label="开票比例" width="96" align="right">
+                        <template #default="{ row }">{{
+                          formatPercent(row.invoiceProgress)
                         }}</template>
                       </el-table-column>
                       <el-table-column label="未开票金额" width="110" align="right">
@@ -965,6 +975,15 @@ const formatAmount = (value: number) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })
+}
+
+const formatPercent = (value: number) => {
+  const percent = Number(value)
+  if (!Number.isFinite(percent)) return '-'
+  return `${percent.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })}%`
 }
 
 const formatNumber = (value: number) => {

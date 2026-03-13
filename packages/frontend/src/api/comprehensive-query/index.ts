@@ -44,9 +44,11 @@ export interface ComprehensiveQueryRow {
   outboundQty: number
   invoiceCount: number
   invoiceAmount: number
+  invoiceProgress: number
   receiptCount: number
   receiptAmount: number
   discountAmount: number
+  receiptProgress: number
   settlementStatus: string
   settlementSource?: string
   uninvoicedAmount: number
