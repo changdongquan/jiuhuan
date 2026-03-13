@@ -15,8 +15,30 @@
           <span class="ird__hint">PDF/图片可预览，Excel 仅下载</span>
         </div>
         <div class="ird__actions">
+          <MobileUploadTrigger
+            v-if="isMobile && !readonly"
+            :action="uploadAction"
+            :headers="uploadAuthHeaders"
+            :data="uploadData"
+            :multiple="uploadMultiple"
+            :accept="uploadAccept"
+            @success="handleUploadSuccess"
+            @error="handleUploadError"
+          >
+            <template #default="{ open, uploading }">
+              <el-button
+                type="primary"
+                size="small"
+                :disabled="!canUpload"
+                :loading="uploading"
+                @click="open"
+              >
+                上传
+              </el-button>
+            </template>
+          </MobileUploadTrigger>
           <el-upload
-            v-if="!readonly"
+            v-else-if="!readonly"
             :action="uploadAction"
             :headers="uploadAuthHeaders"
             :data="uploadData"
@@ -157,6 +179,7 @@ import {
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 
 const props = defineProps<{
   modelValue: boolean

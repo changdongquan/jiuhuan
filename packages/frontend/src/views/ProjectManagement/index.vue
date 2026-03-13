@@ -1507,7 +1507,30 @@
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>移模流程单</span>
+                            <MobileUploadTrigger
+                              v-if="isMobile"
+                              :action="getAttachmentAction('relocation-process')"
+                              :headers="uploadAuthHeaders"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'relocation-process')
+                              "
+                              @success="handleAttachmentUploadSuccess"
+                              @error="handleAttachmentUploadError"
+                            >
+                              <template #default="{ open, uploading }">
+                                <el-button
+                                  type="primary"
+                                  size="small"
+                                  :loading="uploading"
+                                  @click="open"
+                                >
+                                  上传移模流程单
+                                </el-button>
+                              </template>
+                            </MobileUploadTrigger>
                             <el-upload
+                              v-else
                               :action="getAttachmentAction('relocation-process')"
                               :headers="uploadAuthHeaders"
                               :show-file-list="false"
@@ -1605,7 +1628,30 @@
                               >
                                 打印试模记录表
                               </el-button>
+                              <MobileUploadTrigger
+                                v-if="isMobile"
+                                :action="getAttachmentAction('trial-record')"
+                                :headers="uploadAuthHeaders"
+                                accept=".xls,.xlsx,.pdf,image/*"
+                                :before-upload="
+                                  (file) => beforeAttachmentUpload(file, 'trial-record')
+                                "
+                                @success="handleAttachmentUploadSuccess"
+                                @error="handleAttachmentUploadError"
+                              >
+                                <template #default="{ open, uploading }">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="uploading"
+                                    @click="open"
+                                  >
+                                    上传试模记录表
+                                  </el-button>
+                                </template>
+                              </MobileUploadTrigger>
                               <el-upload
+                                v-else
                                 :action="getAttachmentAction('trial-record')"
                                 :headers="uploadAuthHeaders"
                                 :show-file-list="false"
@@ -2059,7 +2105,29 @@
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>模具图档</span>
+                            <MobileUploadTrigger
+                              v-if="isMobile"
+                              :action="getAttachmentAction('drawing')"
+                              :headers="uploadAuthHeaders"
+                              :multiple="true"
+                              accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
+                              :before-upload="(file) => beforeAttachmentUpload(file, 'drawing')"
+                              @success="handleAttachmentUploadSuccess"
+                              @error="handleAttachmentUploadError"
+                            >
+                              <template #default="{ open, uploading }">
+                                <el-button
+                                  type="primary"
+                                  size="small"
+                                  :loading="uploading"
+                                  @click="open"
+                                >
+                                  上传模具图档
+                                </el-button>
+                              </template>
+                            </MobileUploadTrigger>
                             <el-upload
+                              v-else
                               :action="getAttachmentAction('drawing')"
                               :headers="uploadAuthHeaders"
                               :show-file-list="false"
@@ -2134,7 +2202,30 @@
                         <template #header>
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>技术规格表</span>
+                            <MobileUploadTrigger
+                              v-if="isMobile"
+                              :action="getAttachmentAction('technical-spec')"
+                              :headers="uploadAuthHeaders"
+                              accept=".xls,.xlsx,.pdf,image/*"
+                              :before-upload="
+                                (file) => beforeAttachmentUpload(file, 'technical-spec')
+                              "
+                              @success="handleAttachmentUploadSuccess"
+                              @error="handleAttachmentUploadError"
+                            >
+                              <template #default="{ open, uploading }">
+                                <el-button
+                                  type="primary"
+                                  size="small"
+                                  :loading="uploading"
+                                  @click="open"
+                                >
+                                  上传技术规格表
+                                </el-button>
+                              </template>
+                            </MobileUploadTrigger>
                             <el-upload
+                              v-else
                               :action="getAttachmentAction('technical-spec')"
                               :headers="uploadAuthHeaders"
                               :show-file-list="false"
@@ -2276,6 +2367,7 @@ import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'

@@ -180,8 +180,21 @@
     <el-drawer v-model="attachmentDrawerVisible" :title="attachmentDrawerTitle" size="520px">
       <div class="space-y-3">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+          <MobileUploadTrigger
+            v-if="isMobile && currentAttachmentTrialNo"
+            :action="getTrialProcessAttachmentAction(currentAttachmentTrialNo)"
+            :headers="uploadHeaders"
+            :multiple="true"
+            accept="application/pdf,image/*"
+            @success="handleAttachmentUploadSuccess"
+            @error="handleAttachmentUploadError"
+          >
+            <template #default="{ open, uploading }">
+              <el-button type="primary" :loading="uploading" @click="open">上传 PDF/图片</el-button>
+            </template>
+          </MobileUploadTrigger>
           <el-upload
-            v-if="currentAttachmentTrialNo"
+            v-else-if="currentAttachmentTrialNo"
             :action="getTrialProcessAttachmentAction(currentAttachmentTrialNo)"
             :headers="uploadHeaders"
             :show-file-list="false"
@@ -265,6 +278,8 @@ import {
   type TrialProcessRecord
 } from '@/api/project'
 import { useUserStoreWithOut } from '@/store/modules/user'
+import { useAppStore } from '@/store/modules/app'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 
 const props = defineProps<{
   projectCode?: string
@@ -274,6 +289,8 @@ const props = defineProps<{
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStoreWithOut()
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
 
 const projectCode = computed(() =>
   String(props.projectCode || route.params.projectCode || '').trim()

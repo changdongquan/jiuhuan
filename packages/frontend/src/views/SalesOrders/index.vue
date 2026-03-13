@@ -833,17 +833,25 @@
                   <div class="dialog-mobile-detail-label">附件</div>
                   <div class="dialog-mobile-detail-attachments">
                     <template v-if="!isCreateMode && detail.id">
-                      <el-button
-                        type="primary"
-                        link
-                        size="small"
-                        :loading="
-                          mobileAttachmentUploading && mobileAttachmentTargetDetailId === detail.id
-                        "
-                        @click="openMobileAttachmentPicker(detail)"
+                      <MobileUploadTrigger
+                        :action="`/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${detail.id}/attachments`"
+                        :headers="uploadAuthHeaders"
+                        :before-upload="beforeAttachmentUpload"
+                        @success="() => handleEditAttachmentUploadSuccess(detail)"
+                        @error="handleEditAttachmentUploadError"
                       >
-                        上传附件
-                      </el-button>
+                        <template #default="{ open, uploading }">
+                          <el-button
+                            type="primary"
+                            link
+                            size="small"
+                            :loading="uploading"
+                            @click="open"
+                          >
+                            上传附件
+                          </el-button>
+                        </template>
+                      </MobileUploadTrigger>
                       <div
                         v-if="getDetailAttachments(detail.id).length"
                         class="so-edit-attachment-list"
@@ -934,12 +942,6 @@
           保存
         </el-button>
       </template>
-      <input
-        ref="mobileAttachmentInputRef"
-        class="so-mobile-attachment-input"
-        type="file"
-        @change="handleMobileAttachmentFileChange"
-      />
     </el-dialog>
 
     <!-- 拆分订单弹窗（PC/手机端共用） -->
@@ -1525,6 +1527,7 @@ import { useAppStore } from '@/store/modules/app'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 
 interface OrderQuery {
   searchText: string
@@ -1706,12 +1709,6 @@ const attachmentLoading = ref(false)
 const attachmentOrderNo = ref<string>('')
 const attachmentDetailId = ref<number | null>(null)
 const attachmentReadonly = ref(false)
-const mobileAttachmentInputRef = ref<HTMLInputElement | null>(null)
-const mobileAttachmentTargetDetail = ref<any | null>(null)
-const mobileAttachmentTargetDetailId = computed(
-  () => Number(mobileAttachmentTargetDetail.value?.id) || null
-)
-const mobileAttachmentUploading = ref(false)
 
 // 查看弹窗中，每个明细对应的附件数量（供 PC 按钮和手机端显示）
 const viewAttachmentSummary = ref<Record<number, number>>({})
@@ -1822,77 +1819,6 @@ const beforeAttachmentUpload = (file: File) => {
     return false
   }
   return true
-}
-
-const resetMobileAttachmentInput = () => {
-  const input = mobileAttachmentInputRef.value
-  if (input) input.value = ''
-}
-
-const openMobileAttachmentPicker = (detail: any) => {
-  if (!dialogForm.orderNo || !detail?.id || mobileAttachmentUploading.value) return
-  mobileAttachmentTargetDetail.value = detail
-  const input = mobileAttachmentInputRef.value
-  if (!input) {
-    ElMessage.error('上传控件初始化失败')
-    return
-  }
-  resetMobileAttachmentInput()
-  input.click()
-}
-
-const handleMobileAttachmentFileChange = async (event: Event) => {
-  const input = event.target as HTMLInputElement | null
-  const file = input?.files?.[0]
-  const detail = mobileAttachmentTargetDetail.value
-
-  if (!file || !dialogForm.orderNo || !detail?.id) {
-    resetMobileAttachmentInput()
-    return
-  }
-
-  if (!beforeAttachmentUpload(file)) {
-    resetMobileAttachmentInput()
-    return
-  }
-
-  mobileAttachmentUploading.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const uploadUrl = `/api/sales-orders/${encodeURIComponent(dialogForm.orderNo)}/details/${detail.id}/attachments`
-    const resp = await fetch(uploadUrl, {
-      method: 'POST',
-      body: formData,
-      headers: uploadAuthHeaders.value as Record<string, string>
-    })
-
-    const payload = await resp.json().catch(() => null)
-    if (!resp.ok) {
-      throw {
-        message: payload?.message || `上传失败（HTTP ${resp.status}）`,
-        status: resp.status,
-        response: { data: payload, status: resp.status }
-      }
-    }
-
-    const success = payload?.success ?? payload?.code === 0
-    if (!success) {
-      throw {
-        message: payload?.message || '上传附件失败，请稍后重试',
-        response: { data: payload }
-      }
-    }
-
-    await handleEditAttachmentUploadSuccess(detail)
-  } catch (error) {
-    handleEditAttachmentUploadError(error)
-  } finally {
-    mobileAttachmentUploading.value = false
-    mobileAttachmentTargetDetail.value = null
-    resetMobileAttachmentInput()
-  }
 }
 
 // 编辑弹窗：上传附件成功后刷新当前明细的附件列表和数量（手机端编辑使用）
@@ -4024,18 +3950,6 @@ onMounted(async () => {
   gap: 8px;
   margin-top: 4px;
   flex-wrap: wrap;
-}
-
-.so-mobile-attachment-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .dialog-mobile-detail-field {

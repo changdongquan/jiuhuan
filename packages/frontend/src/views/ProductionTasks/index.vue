@@ -829,8 +829,28 @@
                           <div style="display: flex; justify-content: space-between; gap: 8px">
                             <span>照片</span>
                             <div style="display: flex; gap: 8px">
+                              <MobileUploadTrigger
+                                v-if="isMobile && canUploadProductionTask"
+                                :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
+                                :data="getAttachmentUploadData('photo', 'appearance')"
+                                accept="image/*"
+                                @success="handleAttachmentUploadSuccess"
+                                @error="handleAttachmentUploadError"
+                              >
+                                <template #default="{ open, uploading }">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="uploading"
+                                    @click="open"
+                                  >
+                                    上传模具外观
+                                  </el-button>
+                                </template>
+                              </MobileUploadTrigger>
                               <el-upload
-                                v-if="canUploadProductionTask"
+                                v-else-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'appearance')"
@@ -841,8 +861,28 @@
                               >
                                 <el-button type="primary" size="small">上传模具外观</el-button>
                               </el-upload>
+                              <MobileUploadTrigger
+                                v-if="isMobile && canUploadProductionTask"
+                                :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
+                                :data="getAttachmentUploadData('photo', 'nameplate')"
+                                accept="image/*"
+                                @success="handleAttachmentUploadSuccess"
+                                @error="handleAttachmentUploadError"
+                              >
+                                <template #default="{ open, uploading }">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="uploading"
+                                    @click="open"
+                                  >
+                                    上传模具铭牌
+                                  </el-button>
+                                </template>
+                              </MobileUploadTrigger>
                               <el-upload
-                                v-if="canUploadProductionTask"
+                                v-else-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'nameplate')"
@@ -853,8 +893,28 @@
                               >
                                 <el-button type="primary" size="small">上传模具铭牌</el-button>
                               </el-upload>
+                              <MobileUploadTrigger
+                                v-if="isMobile && canUploadProductionTask"
+                                :action="getAttachmentAction('photo')"
+                                :headers="uploadAuthHeaders"
+                                :data="getAttachmentUploadData('photo', 'counter')"
+                                accept="image/*"
+                                @success="handleAttachmentUploadSuccess"
+                                @error="handleAttachmentUploadError"
+                              >
+                                <template #default="{ open, uploading }">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="uploading"
+                                    @click="open"
+                                  >
+                                    上传计数器照片
+                                  </el-button>
+                                </template>
+                              </MobileUploadTrigger>
                               <el-upload
-                                v-if="canUploadProductionTask"
+                                v-else-if="canUploadProductionTask"
                                 :action="getAttachmentAction('photo')"
                                 :headers="uploadAuthHeaders"
                                 :data="getAttachmentUploadData('photo', 'counter')"
@@ -1067,8 +1127,27 @@
                               >
                                 生成模具检验记录单
                               </el-button>
+                              <MobileUploadTrigger
+                                v-if="isMobile && canUploadProductionTask"
+                                :action="getAttachmentAction('inspection')"
+                                :headers="uploadAuthHeaders"
+                                accept=".xls,.xlsx,.pdf,.doc,.docx,image/*"
+                                @success="handleAttachmentUploadSuccess"
+                                @error="handleAttachmentUploadError"
+                              >
+                                <template #default="{ open, uploading }">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="uploading"
+                                    @click="open"
+                                  >
+                                    上传模具检验记录单
+                                  </el-button>
+                                </template>
+                              </MobileUploadTrigger>
                               <el-upload
-                                v-if="canUploadProductionTask"
+                                v-else-if="canUploadProductionTask"
                                 :action="getAttachmentAction('inspection')"
                                 :headers="uploadAuthHeaders"
                                 :show-file-list="false"
@@ -1346,6 +1425,7 @@ import { hasUserCapability } from '@/utils/capability'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 import InspectionReportDrawer from '@/components/InspectionReportDrawer/InspectionReportDrawer.vue'
 import PartDrawingDrawer from '@/components/PartDrawingDrawer/PartDrawingDrawer.vue'
 import { Calendar, Clock, Box, Paperclip, Document } from '@element-plus/icons-vue'

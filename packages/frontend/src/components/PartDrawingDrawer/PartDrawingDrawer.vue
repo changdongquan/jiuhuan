@@ -14,8 +14,24 @@
           <span class="pdd__hint">PDF/图片可预览，3D 格式仅下载</span>
         </div>
         <div class="pdd__actions">
+          <MobileUploadTrigger
+            v-if="isMobile && !readonly && drawing"
+            :action="uploadAction"
+            :headers="uploadAuthHeaders"
+            :data="uploadData"
+            :multiple="true"
+            accept=".pdf,.dwg,.prt,.x_t,.x_b,.stp,.step,.igs,.iges,.sldprt,.sldasm,.asm,.par,.psm,.catpart,.catproduct"
+            @success="handleUploadSuccess"
+            @error="handleUploadError"
+          >
+            <template #default="{ open, uploading }">
+              <el-button type="primary" size="small" :loading="uploading" @click="open"
+                >上传</el-button
+              >
+            </template>
+          </MobileUploadTrigger>
           <el-upload
-            v-if="!readonly && drawing"
+            v-else-if="!readonly && drawing"
             :action="uploadAction"
             :headers="uploadAuthHeaders"
             :data="uploadData"
@@ -109,6 +125,7 @@ import {
 } from '@/api/project'
 import { useAppStore } from '@/store/modules/app'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 
 const props = defineProps<{
   modelValue: boolean

@@ -1386,8 +1386,21 @@
         v-if="outboundAttachmentDocumentNo && outboundAttachmentItemCode"
         class="attachment-dialog-body"
       >
+        <MobileUploadTrigger
+          v-if="isMobile && !outboundAttachmentReadonly"
+          :action="outboundAttachmentUploadAction"
+          :headers="uploadAuthHeaders"
+          @success="handleOutboundAttachmentUploadSuccess"
+          @error="handleOutboundAttachmentUploadError"
+        >
+          <template #default="{ open, uploading }">
+            <el-button type="primary" size="small" :loading="uploading" @click="open"
+              >上传附件</el-button
+            >
+          </template>
+        </MobileUploadTrigger>
         <el-upload
-          v-if="!outboundAttachmentReadonly"
+          v-else-if="!outboundAttachmentReadonly"
           :action="outboundAttachmentUploadAction"
           :headers="uploadAuthHeaders"
           :show-file-list="false"
@@ -1489,6 +1502,7 @@ import { useUserStore } from '@/store/modules/user'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
+import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<OutboundDocument>[]>([])
