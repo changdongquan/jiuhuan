@@ -407,6 +407,7 @@ const buildSettlementStatusSql = (alias = 'base') => {
   const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
   const projectSettlementStatus = `NULLIF(LTRIM(RTRIM(${alias}.projectSettlementStatus)), N'')`
   const projectReceiptStatus = `NULLIF(LTRIM(RTRIM(${alias}.projectReceiptStatus)), N'')`
+  const receivableAllSettled = `ISNULL(${alias}.receivableAllSettled, 0)`
   const salesAmount = buildRoundedAmountSql(alias, 'salesAmount')
   const invoiceAmount = buildRoundedAmountSql(alias, 'invoiceAmount')
   const receiptTotal = buildRoundedReceiptTotalSql(alias)
@@ -422,7 +423,6 @@ const buildSettlementStatusSql = (alias = 'base') => {
     THEN N'开票未结清'
     WHEN ${projectSettlementStatus} = N'已结清'
       OR ${projectReceiptStatus} IN (N'尾款结清', N'已结清')
-      OR ISNULL(${alias}.receivableAllSettled, 0) = 1
     THEN N'销售已结清'
     WHEN ${salesAmount} > 0
       AND ${receiptTotal} >= ${salesAmount}
@@ -430,6 +430,9 @@ const buildSettlementStatusSql = (alias = 'base') => {
     WHEN ${salesAmount} > 0
       AND ${receiptTotal} < ${salesAmount}
     THEN N'销售未结清'
+    WHEN ${invoiceAmount} > 0
+      AND ${receivableAllSettled} = 1
+    THEN N'开票已结清'
     WHEN ${invoiceAmount} > 0
       AND ${receiptTotal} < ${invoiceAmount}
     THEN N'开票未结清'
@@ -444,6 +447,7 @@ const buildSettlementSourceSql = (alias = 'base') => {
   const manualStatus = `NULLIF(LTRIM(RTRIM(${alias}.manualSettlementStatus)), N'')`
   const projectSettlementStatus = `NULLIF(LTRIM(RTRIM(${alias}.projectSettlementStatus)), N'')`
   const projectReceiptStatus = `NULLIF(LTRIM(RTRIM(${alias}.projectReceiptStatus)), N'')`
+  const receivableAllSettled = `ISNULL(${alias}.receivableAllSettled, 0)`
   const settlementStatusSql = buildSettlementStatusSql(alias)
   return `CASE
     WHEN ${manualStatus} IN (N'销售已结清', N'销售未结清', N'开票已结清', N'开票未结清') THEN N'人工认定'
@@ -452,7 +456,9 @@ const buildSettlementSourceSql = (alias = 'base') => {
     THEN N'人工认定'
     WHEN ${projectSettlementStatus} = N'已结清'
       OR ${projectReceiptStatus} IN (N'尾款结清', N'已结清')
-      OR ISNULL(${alias}.receivableAllSettled, 0) = 1
+    THEN N'历史字段'
+    WHEN ${receivableAllSettled} = 1
+      AND (${settlementStatusSql}) = N'开票已结清'
     THEN N'历史字段'
     WHEN (${settlementStatusSql}) = N'' THEN N''
     ELSE N'系统计算'
