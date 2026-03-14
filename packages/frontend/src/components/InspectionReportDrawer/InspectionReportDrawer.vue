@@ -177,6 +177,7 @@ import {
   getProjectInspectionReportsApi,
   type ProjectInspectionReportAttachment
 } from '@/api/project'
+import { deleteProductionTaskInspectionReportApi } from '@/api/production-task'
 import { useAppStore } from '@/store/modules/app'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
@@ -187,6 +188,7 @@ const props = defineProps<{
   drawing?: string | null
   rowIndex?: number | null
   readonly?: boolean
+  writeScope?: 'project' | 'production-task'
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
@@ -202,6 +204,7 @@ const visible = computed({
 })
 
 const readonly = computed(() => !!props.readonly)
+const writeScope = computed(() => props.writeScope || 'project')
 const loading = ref(false)
 const all = ref<ProjectInspectionReportAttachment[]>([])
 const activeGroup = ref<'current' | 'orphan'>('current')
@@ -224,8 +227,10 @@ const formatUploadedDate = (val?: string | null) => {
   return m?.[1] || s
 }
 
-const uploadAction = computed(
-  () => `/api/project/${encodeURIComponent(props.projectCode)}/attachments/inspection-report`
+const uploadAction = computed(() =>
+  writeScope.value === 'production-task'
+    ? `/api/production-task/${encodeURIComponent(props.projectCode)}/inspection-reports`
+    : `/api/project/${encodeURIComponent(props.projectCode)}/attachments/inspection-report`
 )
 const uploadAccept = computed(() =>
   isMobile.value ? '.pdf,application/pdf,image/*' : '.pdf,.xls,.xlsx,image/*'
@@ -402,7 +407,11 @@ const remove = async (a: ProjectInspectionReportAttachment) => {
   }
 
   try {
-    await deleteProjectInspectionReportApi(a.id)
+    if (writeScope.value === 'production-task') {
+      await deleteProductionTaskInspectionReportApi(a.id)
+    } else {
+      await deleteProjectInspectionReportApi(a.id)
+    }
     await refresh()
     if (previewId.value === a.id) {
       clearPreviewUrl()
@@ -431,7 +440,8 @@ const handleUploadSuccess = async (response: any) => {
 }
 const handleUploadError = (err: any) => {
   console.error('上传失败:', err)
-  ElMessage.error('上传失败')
+  const msg = err?.response?.data?.message || err?.message || '上传失败'
+  ElMessage.error(typeof msg === 'string' ? msg : '上传失败')
 }
 
 const handleClose = () => {

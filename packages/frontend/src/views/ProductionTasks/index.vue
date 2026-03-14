@@ -720,6 +720,7 @@
                   :drawing="inspectionDrawerDrawing"
                   :row-index="inspectionDrawerRowIndex"
                   :readonly="false"
+                  write-scope="production-task"
                 />
                 <PartDrawingDrawer
                   v-model="partDrawingDrawerVisible"

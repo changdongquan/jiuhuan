@@ -231,6 +231,30 @@ const generateAttachmentFileName = (customerModelNo, type, tag, originalFileName
   return ext ? `${namePrefix}.${ext}` : namePrefix
 }
 
+const parseJsonArray = (val, defaultValue = []) => {
+  if (!val) return defaultValue
+  if (Array.isArray(val)) return val
+  try {
+    const parsed = typeof val === 'string' ? JSON.parse(val) : val
+    return Array.isArray(parsed) ? parsed : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
+const ensureUniqueFileName = (dirPath, fileName) => {
+  const parsed = path.parse(String(fileName || ''))
+  const base = parsed.name || '附件'
+  const ext = parsed.ext || ''
+  let candidate = `${base}${ext}`
+  let i = 2
+  while (fs.existsSync(path.join(dirPath, candidate))) {
+    candidate = `${base}_${i}${ext}`
+    i += 1
+  }
+  return candidate
+}
+
 const ensureTemplateExists = async (templatePath) => {
   try {
     await fsp.access(templatePath, fs.constants.R_OK)
@@ -1409,6 +1433,223 @@ router.post(
     }
   }
 )
+
+router.post(
+  '/:projectCode(*)/inspection-reports',
+  requireProductionTaskUpload,
+  uploadSingleAttachment,
+  async (req, res) => {
+    try {
+      const projectCode = getProjectCodeParam(req)
+      if (!projectCode) {
+        return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+      }
+
+      const existed = await assertProjectExists(projectCode)
+      if (!existed) {
+        return res.status(404).json({ code: 404, success: false, message: '生产任务不存在' })
+      }
+
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+      }
+
+      const bindingDrawing = String(req.body?.drawing || '').trim() || null
+      const rowIndexRaw = req.body?.rowIndex
+      const bindingRowIndex =
+        rowIndexRaw === undefined || rowIndexRaw === null || String(rowIndexRaw).trim() === ''
+          ? null
+          : parseInt(String(rowIndexRaw), 10)
+
+      if (!bindingDrawing && (bindingRowIndex === null || Number.isNaN(bindingRowIndex))) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '检验报告需要提供 drawing 或 rowIndex 进行绑定'
+        })
+      }
+
+      const originalName = normalizeAttachmentFileName(file.originalname)
+      const ext = String(path.extname(originalName || '') || '').toLowerCase().replace('.', '')
+      const isPdf = ext === 'pdf'
+      const isExcel = ext === 'xls' || ext === 'xlsx'
+      const isImage = String(file.mimetype || '').toLowerCase().startsWith('image/')
+      if (!isPdf && !isExcel && !isImage) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '检验报告仅支持 PDF / Excel（.xls .xlsx）/ 图片文件'
+        })
+      }
+
+      const category = getCategoryFromProjectCode(projectCode)
+      const safeProjectCode = safeProjectCodeForPath(projectCode)
+      const finalRelativeDir = path.posix.join(category, safeProjectCode, '项目管理', '检验报告')
+      const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+      ensureDirSync(finalFullDir)
+
+      let productDrawing = bindingDrawing
+      let productName = bindingDrawing || '未命名'
+      const projectRows = await query(
+        `SELECT TOP 1 产品列表, 产品名称列表 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+        { projectCode }
+      )
+      if (projectRows.length > 0) {
+        const drawings = parseJsonArray(projectRows[0].产品列表, []).map((d) =>
+          String(d ?? '').trim()
+        )
+        const names = parseJsonArray(projectRows[0].产品名称列表, []).map((n) =>
+          String(n ?? '').trim()
+        )
+        let idx = -1
+        if (bindingDrawing) {
+          idx = drawings.findIndex((d) => d === bindingDrawing)
+          if (idx >= 0 && names[idx]) productName = names[idx]
+        } else if (
+          bindingRowIndex !== null &&
+          !Number.isNaN(bindingRowIndex) &&
+          bindingRowIndex >= 0 &&
+          bindingRowIndex < drawings.length
+        ) {
+          idx = bindingRowIndex
+          productDrawing = drawings[idx] || '图号'
+          productName = names[idx] || productDrawing
+        }
+      }
+
+      const generatedFileName = `${safeFileName(projectCode) || '项目'}_${
+        safeFileName(productDrawing) || '图号'
+      }_${safeFileName(productName) || '未命名'}_检验报告${ext ? `.${ext}` : ''}`
+      const storedFileName = ensureUniqueFileName(finalFullDir, safeFileName(generatedFileName))
+
+      const tempFile = path.join(
+        req._tempAttachmentFullDir || FILE_ROOT,
+        req._attachmentStoredFileName || file.filename
+      )
+      const finalFile = path.join(finalFullDir, storedFileName)
+      if (fs.existsSync(tempFile)) {
+        await moveFileWithFallback(tempFile, finalFile)
+      }
+
+      const uploadedBy = resolveActorFromReq(req)
+      const inserted = await query(
+        `
+        INSERT INTO 项目管理附件 (
+          项目编号,
+          附件类型,
+          原始文件名,
+          存储文件名,
+          相对路径,
+          文件大小,
+          内容类型,
+          上传人,
+          绑定产品图号,
+          绑定行序号,
+          是否孤儿,
+          孤儿原因,
+          孤儿行序号
+        )
+        OUTPUT INSERTED.附件ID as id, INSERTED.上传时间 as uploadedAt
+        VALUES (
+          @projectCode,
+          N'inspection-report',
+          @originalName,
+          @storedFileName,
+          @relativePath,
+          @fileSize,
+          @contentType,
+          @uploadedBy,
+          @bindingDrawing,
+          @bindingRowIndex,
+          0,
+          NULL,
+          NULL
+        )
+      `,
+        {
+          projectCode,
+          originalName,
+          storedFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedBy,
+          bindingDrawing,
+          bindingRowIndex
+        }
+      )
+
+      return res.json({
+        code: 0,
+        success: true,
+        message: '上传成功',
+        data: {
+          id: inserted?.[0]?.id,
+          uploadedAt: inserted?.[0]?.uploadedAt
+        }
+      })
+    } catch (error) {
+      console.error('上传生产任务检验报告失败:', error)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '上传生产任务检验报告失败',
+        error: error.message
+      })
+    }
+  }
+)
+
+router.delete('/inspection-reports/:attachmentId', requireProductionTaskDelete, async (req, res) => {
+  try {
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1 附件ID as id
+      FROM 项目管理附件
+      WHERE 附件ID = @attachmentId
+        AND 附件类型 = N'inspection-report'
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+    `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const actor = resolveActorFromReq(req)
+    await query(
+      `
+      UPDATE 项目管理附件
+      SET
+        删除前状态 = CASE
+          WHEN (状态 IS NULL OR 状态 <> N'已删除') AND 删除前状态 IS NULL THEN 状态
+          ELSE 删除前状态
+        END,
+        状态 = N'已删除',
+        删除时间 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN SYSDATETIME() ELSE 删除时间 END,
+        删除人 = CASE WHEN (状态 IS NULL OR 状态 <> N'已删除') THEN @actor ELSE 删除人 END
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId, actor }
+    )
+
+    return res.json({ code: 0, success: true, message: '删除成功（已软删除）' })
+  } catch (error) {
+    console.error('删除生产任务检验报告失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除生产任务检验报告失败',
+      error: error.message
+    })
+  }
+})
 
 // 获取检验结果需要填充的行（模板中黄色高亮的行）
 router.get('/inspection-template/items', requireProductionTaskRead, async (req, res) => {

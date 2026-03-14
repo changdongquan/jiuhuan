@@ -48,6 +48,24 @@ export interface ProductionTaskAttachment {
   uploadedBy?: string
 }
 
+export interface ProductionTaskInspectionReportAttachment {
+  id: number
+  projectCode: string
+  type: 'inspection-report'
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+  drawing?: string | null
+  rowIndex?: number | null
+  isOrphan?: boolean
+  orphanReason?: string | null
+  orphanRowIndex?: number | null
+}
+
 export type InspectionTemplateResult = 'yes' | 'no' | 'none' | ''
 
 export interface InspectionTemplateItem {
@@ -136,6 +154,39 @@ export const deleteProductionTaskAttachmentApi = (attachmentId: number) => {
     message?: string
   }>({
     url: `/api/production-task/attachments/${attachmentId}`
+  })
+}
+
+export const uploadProductionTaskInspectionReportApi = (
+  projectCode: string,
+  file: File,
+  payload: { drawing?: string | null; rowIndex?: number | null }
+) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (payload.drawing) formData.append('drawing', payload.drawing)
+  if (payload.rowIndex !== null && payload.rowIndex !== undefined) {
+    formData.append('rowIndex', String(payload.rowIndex))
+  }
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: { id: number; uploadedAt: string }
+  }>({
+    url: `/api/production-task/${encodeURIComponent(projectCode)}/inspection-reports`,
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export const deleteProductionTaskInspectionReportApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/production-task/inspection-reports/${attachmentId}`
   })
 }
 
