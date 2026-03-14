@@ -321,6 +321,8 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
         p.客户模号 as customerPartNo,
         c.客户名称 as customerName,
         s.单价 as unitPrice,
+        ISNULL(s.数量, 0) as orderQuantity,
+        ISNULL(s.总金额, 0) as orderAmount,
         s.合同号 as contractNo
       FROM 销售订单 s
       INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
@@ -360,7 +362,7 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
       `
       SELECT *
       FROM (${baseSql}) t
-      ORDER BY t.itemCode DESC
+      ORDER BY t.itemCode ASC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
       `,
       { ...params, offset, pageSize: sizeNum }

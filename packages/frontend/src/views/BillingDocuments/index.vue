@@ -602,7 +602,7 @@
     <el-dialog
       v-model="invoiceCandidateDialogVisible"
       title="选择开票明细"
-      width="1200px"
+      width="1350px"
       :close-on-click-modal="false"
     >
       <div class="finance-candidate-toolbar">
@@ -651,7 +651,13 @@
         @selection-change="handleInvoiceCandidateSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="itemCode" label="项目编号" min-width="130" show-overflow-tooltip />
+        <el-table-column
+          prop="itemCode"
+          label="项目编号"
+          min-width="150"
+          show-overflow-tooltip
+          sortable
+        />
         <el-table-column
           prop="productName"
           label="产品名称"
@@ -676,9 +682,21 @@
           min-width="160"
           show-overflow-tooltip
         />
-        <el-table-column prop="contractNo" label="合同号" min-width="120" show-overflow-tooltip />
+        <el-table-column
+          prop="contractNo"
+          label="合同号"
+          min-width="120"
+          show-overflow-tooltip
+          sortable
+        />
         <el-table-column label="单价" width="120" align="right">
           <template #default="{ row }">{{ formatAmount(row.unitPrice || 0) }}</template>
+        </el-table-column>
+        <el-table-column label="数量" width="100" align="right">
+          <template #default="{ row }">{{ row.orderQuantity || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="订单金额" width="130" align="right">
+          <template #default="{ row }">{{ formatAmount(row.orderAmount || 0) }}</template>
         </el-table-column>
       </el-table>
       <div class="finance-candidate-pagination">
@@ -803,6 +821,8 @@ interface InvoiceCandidate {
   customerName: string
   contractNo: string
   unitPrice: number
+  orderQuantity: number
+  orderAmount: number
 }
 
 type InvoicePayload = Omit<Invoice, 'id'> & { documentNo: string }
@@ -1427,7 +1447,9 @@ const loadInvoiceCandidates = async (resetPage = false) => {
       customerPartNo: String(it.customerPartNo || ''),
       customerName: String(it.customerName || ''),
       contractNo: String(it.contractNo || ''),
-      unitPrice: Number(it.unitPrice) || 0
+      unitPrice: Number(it.unitPrice) || 0,
+      orderQuantity: Number(it.orderQuantity) || 0,
+      orderAmount: Number(it.orderAmount) || 0
     }))
     await nextTick()
     await syncInvoiceCandidateSelection()

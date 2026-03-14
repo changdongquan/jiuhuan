@@ -235,8 +235,8 @@
                 style="width: 100%"
                 :row-class-name="viewDetailRowClassName"
               >
-                <el-table-column type="index" label="序号" width="45" align="center" />
-                <el-table-column prop="itemCode" label="项目编号" min-width="135" />
+                <el-table-column type="index" label="序号" width="45" align="center" fixed="left" />
+                <el-table-column prop="itemCode" label="项目编号" min-width="135" fixed="left" />
                 <el-table-column
                   prop="productName"
                   label="产品名称"
@@ -334,8 +334,8 @@
           <template #default="{ row }">
             <div class="so-expanded-wrap">
               <el-table :data="row.details" border size="small" row-key="id" style="width: 100%">
-                <el-table-column type="index" label="序号" width="50" />
-                <el-table-column prop="itemCode" label="项目编号" min-width="90" />
+                <el-table-column type="index" label="序号" width="50" fixed="left" />
+                <el-table-column prop="itemCode" label="项目编号" min-width="90" fixed="left" />
                 <el-table-column prop="productName" label="产品名称" min-width="100" />
                 <el-table-column prop="productDrawingNo" label="产品图号" min-width="100" />
                 <el-table-column prop="customerPartNo" label="客户模号" min-width="100" />
@@ -630,8 +630,8 @@
               row-key="id"
               style="width: 100%"
             >
-              <el-table-column type="index" label="序号" width="45" />
-              <el-table-column label="项目编号" min-width="140">
+              <el-table-column type="index" label="序号" width="45" fixed="left" />
+              <el-table-column label="项目编号" min-width="140" fixed="left">
                 <template #default="{ row }">
                   <el-input
                     v-model="row.itemCode"
@@ -964,8 +964,14 @@
         </div>
 
         <el-table :data="dialogForm.details" border height="520" style="width: 100%">
-          <el-table-column type="index" label="序号" width="60" align="center" />
-          <el-table-column prop="itemCode" label="项目编号" min-width="140" show-overflow-tooltip />
+          <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
+          <el-table-column
+            prop="itemCode"
+            label="项目编号"
+            min-width="140"
+            show-overflow-tooltip
+            fixed="left"
+          />
           <el-table-column
             prop="productName"
             label="产品名称"
@@ -1288,8 +1294,8 @@
               style="width: 100%"
               :row-class-name="viewDetailRowClassName"
             >
-              <el-table-column type="index" label="序号" width="45" align="center" />
-              <el-table-column prop="itemCode" label="项目编号" min-width="135" />
+              <el-table-column type="index" label="序号" width="45" align="center" fixed="left" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="135" fixed="left" />
               <el-table-column
                 prop="productName"
                 label="产品名称"
