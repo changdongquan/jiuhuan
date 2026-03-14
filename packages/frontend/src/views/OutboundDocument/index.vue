@@ -879,65 +879,76 @@
             </el-button>
           </div>
           <div v-if="!isMobile" class="dialog-table-wrapper">
-            <el-table
-              :data="createForm.details"
-              border
-              size="small"
-              row-key="id"
-              style="width: 100%"
-            >
-              <el-table-column type="index" label="序号" width="45" />
-              <el-table-column label="项目编号" min-width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
-                </template>
-              </el-table-column>
-              <el-table-column label="产品名称" min-width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.productName" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="产品图号" min-width="120">
-                <template #default="{ row }">
-                  <el-input v-model="row.productDrawingNo" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="客户模号" min-width="120">
-                <template #default="{ row }">
-                  <el-input v-model="row.customerPartNo" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="数量" width="140" align="center">
-                <template #default="{ row }">
-                  <el-tooltip
-                    :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
-                    placement="top"
-                    :show-after="300"
-                  >
-                    <el-input-number
-                      v-model="row.quantity"
-                      :min="1"
-                      :step="1"
-                      :precision="0"
-                      step-strictly
-                      style="width: 100%"
-                    />
-                  </el-tooltip>
-                </template>
-              </el-table-column>
-              <el-table-column label="备注" min-width="130">
-                <template #default="{ row }">
-                  <el-input v-model="row.remark" placeholder="备注" />
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="55" fixed="right">
-                <template #default="{ $index }">
-                  <el-button type="danger" link @click="removeCreateDetailRow($index)">
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="dialog-detail-grid" role="table" aria-label="新增出库单明细">
+              <div class="dialog-detail-grid__table">
+                <div class="dialog-detail-grid__row dialog-detail-grid__row--header" role="row">
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">序号</div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                    项目编号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                    产品名称
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                    产品图号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                    客户模号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                    数量
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">备注</div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions">操作</div>
+                </div>
+                <div
+                  v-for="(row, index) in createForm.details"
+                  :key="row.id || index"
+                  class="dialog-detail-grid__row"
+                  role="row"
+                >
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">
+                    {{ index + 1 }}
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                    <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                    <el-input v-model="row.productName" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                    <el-input v-model="row.productDrawingNo" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                    <el-input v-model="row.customerPartNo" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                    <el-tooltip
+                      :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
+                      placement="top"
+                      :show-after="300"
+                    >
+                      <el-input-number
+                        v-model="row.quantity"
+                        :min="1"
+                        :step="1"
+                        :precision="0"
+                        step-strictly
+                        style="width: 100%"
+                      />
+                    </el-tooltip>
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">
+                    <el-input v-model="row.remark" placeholder="备注" />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions">
+                    <el-button type="danger" link @click="removeCreateDetailRow(index)">
+                      删除
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div v-else class="dialog-mobile-details-list">
             <div
@@ -1236,66 +1247,85 @@
             </el-button>
           </div>
           <div v-if="!isMobile" class="dialog-table-wrapper">
-            <el-table :data="editForm.details" border size="small" row-key="id" style="width: 100%">
-              <el-table-column type="index" label="序号" width="45" />
-              <el-table-column label="项目编号" min-width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.itemCode" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="产品名称" min-width="140">
-                <template #default="{ row }">
-                  <el-input v-model="row.productName" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="产品图号" min-width="120">
-                <template #default="{ row }">
-                  <el-input v-model="row.productDrawingNo" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="客户模号" min-width="120">
-                <template #default="{ row }">
-                  <el-input v-model="row.customerPartNo" disabled />
-                </template>
-              </el-table-column>
-              <el-table-column label="数量" width="140" align="center">
-                <template #default="{ row }">
-                  <el-tooltip
-                    :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
-                    placement="top"
-                    :show-after="300"
-                  >
-                    <el-input-number
-                      v-model="row.quantity"
-                      :min="1"
-                      :step="1"
-                      :precision="0"
-                      step-strictly
-                      style="width: 100%"
-                    />
-                  </el-tooltip>
-                </template>
-              </el-table-column>
-              <el-table-column label="备注" min-width="130">
-                <template #default="{ row }">
-                  <el-input v-model="row.remark" placeholder="备注" />
-                </template>
-              </el-table-column>
-              <el-table-column label="附件" min-width="120" fixed="right">
-                <template #default="{ row }">
-                  <el-button
-                    v-if="editForm.出库单号 && row.itemCode"
-                    type="primary"
-                    link
-                    size="small"
-                    @click="openOutboundAttachmentDialog(editForm.出库单号, row.itemCode)"
-                  >
-                    管理附件
-                  </el-button>
-                  <span v-else class="so-attachment-hint">保存后可上传附件</span>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="dialog-detail-grid" role="table" aria-label="编辑出库单明细">
+              <div class="dialog-detail-grid__table dialog-detail-grid__table--edit">
+                <div class="dialog-detail-grid__row dialog-detail-grid__row--header" role="row">
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">序号</div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                    项目编号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                    产品名称
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                    产品图号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                    客户模号
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                    数量
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">备注</div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--attachment">
+                    附件
+                  </div>
+                </div>
+                <div
+                  v-for="(row, index) in editForm.details"
+                  :key="row.id || index"
+                  class="dialog-detail-grid__row"
+                  role="row"
+                >
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">
+                    {{ index + 1 }}
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                    <el-input v-model="row.itemCode" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                    <el-input v-model="row.productName" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                    <el-input v-model="row.productDrawingNo" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                    <el-input v-model="row.customerPartNo" disabled />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                    <el-tooltip
+                      :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
+                      placement="top"
+                      :show-after="300"
+                    >
+                      <el-input-number
+                        v-model="row.quantity"
+                        :min="1"
+                        :step="1"
+                        :precision="0"
+                        step-strictly
+                        style="width: 100%"
+                      />
+                    </el-tooltip>
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">
+                    <el-input v-model="row.remark" placeholder="备注" />
+                  </div>
+                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--attachment">
+                    <el-button
+                      v-if="editForm.出库单号 && row.itemCode"
+                      type="primary"
+                      link
+                      size="small"
+                      @click="openOutboundAttachmentDialog(editForm.出库单号, row.itemCode)"
+                    >
+                      管理附件
+                    </el-button>
+                    <span v-else class="so-attachment-hint">保存后可上传附件</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div v-else class="dialog-mobile-details-list">
             <div
@@ -3957,6 +3987,21 @@ onMounted(() => {
 
 /* PC 端编辑弹窗：拉高整体高度并收紧头/脚边距，主体自适应填充 */
 @media (width >= 769px) {
+  :deep(.od-dialog .el-dialog) {
+    display: flex;
+    max-height: calc(100vh - 48px);
+    margin: 24px auto !important;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  :deep(.od-dialog .el-dialog__body) {
+    min-height: 0;
+    padding: 14px 16px;
+    overflow: hidden auto;
+    flex: 1;
+  }
+
   :deep(.pm-edit-dialog .el-dialog) {
     display: flex;
     height: 720px;
@@ -3999,6 +4044,69 @@ onMounted(() => {
 
 .dialog-table-wrapper {
   width: 100%;
+}
+
+.dialog-detail-grid {
+  max-height: min(520px, calc(100vh - 340px));
+  overflow: auto;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+}
+
+.dialog-detail-grid__table {
+  min-width: 980px;
+}
+
+.dialog-detail-grid__table--edit {
+  min-width: 1060px;
+}
+
+.dialog-detail-grid__row {
+  display: grid;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  grid-template-columns: 56px 180px 220px 170px 170px 130px minmax(220px, 1fr) 88px;
+}
+
+.dialog-detail-grid__table--edit .dialog-detail-grid__row {
+  grid-template-columns: 56px 180px 220px 170px 170px 130px minmax(220px, 1fr) 108px;
+}
+
+.dialog-detail-grid__row:last-child {
+  border-bottom: none;
+}
+
+.dialog-detail-grid__row--header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f7fa;
+}
+
+.dialog-detail-grid__cell {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 8px;
+  border-right: 1px solid var(--el-border-color-lighter);
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-detail-grid__cell:last-child {
+  border-right: none;
+}
+
+.dialog-detail-grid__row--header .dialog-detail-grid__cell {
+  min-height: 40px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.dialog-detail-grid__cell--index,
+.dialog-detail-grid__cell--actions,
+.dialog-detail-grid__cell--attachment {
+  text-align: center;
 }
 
 .dialog-mobile-details-list {
