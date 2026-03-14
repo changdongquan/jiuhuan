@@ -639,13 +639,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  getAttendanceEmployeeListApi,
   getAttendanceListApi,
   getAttendanceDetailApi,
   saveAttendanceApi,
   type AttendanceRecord,
-  type AttendanceSummary
+  type AttendanceSummary,
+  type AttendanceEmployeeInfo
 } from '@/api/attendance'
-import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import { useAppStore } from '@/store/modules/app'
 
 const appStore = useAppStore()
@@ -1111,12 +1112,12 @@ const initRows = async () => {
 }
 
 const loadActiveEmployees = async () => {
-  const response: any = await getEmployeeListApi({
+  const response: any = await getAttendanceEmployeeListApi({
     status: '在职',
     page: 1,
     pageSize: 500
   })
-  let list: EmployeeInfo[] = []
+  let list: AttendanceEmployeeInfo[] = []
   if (response?.code === 0 && response?.data) {
     list = response.data.list || []
   } else {
@@ -1125,7 +1126,7 @@ const loadActiveEmployees = async () => {
   return list.filter((item) => item.employeeName !== '常冬泉')
 }
 
-const buildRecordFromEmployee = (emp: EmployeeInfo): AttendanceRecord => {
+const buildRecordFromEmployee = (emp: AttendanceEmployeeInfo): AttendanceRecord => {
   return {
     employeeId: emp.id,
     employeeName: emp.employeeName,

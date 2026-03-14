@@ -49,6 +49,17 @@ export interface AttendanceSummary {
   updatedAt?: string
 }
 
+export interface AttendanceEmployeeInfo {
+  id: number
+  employeeName: string
+  employeeNumber: number | string
+  gender: string
+  level: string | number
+  entryDate: string
+  department: string
+  status?: string
+}
+
 export interface AttendanceDetail {
   id?: number
   month: string
@@ -68,6 +79,14 @@ export const getAttendanceDetailApi = (id: number) => {
   return request({
     url: `/api/attendance/${id}`,
     method: 'get'
+  })
+}
+
+export const getAttendanceEmployeeListApi = (params: Record<string, any> = {}) => {
+  return request({
+    url: '/api/attendance/employees',
+    method: 'get',
+    params
   })
 }
 

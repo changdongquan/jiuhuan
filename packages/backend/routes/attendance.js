@@ -9,6 +9,19 @@ const requireAttendanceUpdate = requireCapability('ATTENDANCE.UPDATE')
 const TABLE_SUMMARY = '考勤汇总'
 const TABLE_DETAIL = '考勤明细'
 const TABLE_LOCK = '工资_考勤锁定'
+const TABLE_EMPLOYEE = '员工信息'
+
+const ensureEmployeeSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'是否删除') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 是否删除 BIT NOT NULL CONSTRAINT DF_员工信息_是否删除 DEFAULT(0);
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'删除时间') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'删除人') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 删除人 NVARCHAR(100) NULL;
+  `)
+}
 
 const toNumber = (val) => {
   if (val === null || val === undefined || val === '') return 0
@@ -90,6 +103,54 @@ const assertAttendanceNotLocked = async ({ month }) => {
     throw err
   }
 }
+
+// 获取考勤可用员工列表
+router.get('/employees', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureEmployeeSoftDeleteColumns(pool)
+
+    const { status, page = 1, pageSize = 500 } = req.query
+    let whereClause = 'WHERE ISNULL(是否删除, 0) = 0'
+    const params = {}
+
+    if (status) {
+      whereClause += ' AND 在职状态 = @status'
+      params.status = status
+    }
+
+    const offset = (parseInt(page) - 1) * parseInt(pageSize)
+    const list = await query(
+      `
+      SELECT
+        ID as id,
+        姓名 as employeeName,
+        工号 as employeeNumber,
+        性别 as gender,
+        职级 as level,
+        入职时间 as entryDate,
+        部门 as department,
+        在职状态 as status
+      FROM ${TABLE_EMPLOYEE}
+      ${whereClause}
+      ORDER BY 工号
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${parseInt(pageSize)} ROWS ONLY
+    `,
+      params
+    )
+
+    res.json({
+      code: 0,
+      data: {
+        list
+      }
+    })
+  } catch (error) {
+    console.error('获取考勤员工列表失败:', error)
+    res.status(500).json({ code: 500, message: '获取考勤员工列表失败' })
+  }
+})
 
 // 获取考勤列表
 router.get('/list', async (req, res) => {
