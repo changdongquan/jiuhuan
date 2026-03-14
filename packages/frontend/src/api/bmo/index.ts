@@ -198,6 +198,17 @@ export interface BmoMouldProcurementRefreshResult {
   traceId?: string | null
   fetchedAt?: string
   latestUpdatedAt?: string | null
+  syncStatus?: BmoSyncStatusSummary | null
+}
+
+export interface BmoSyncStatusSummary {
+  enabled: boolean
+  running: boolean
+  lastStartedAt?: string | null
+  lastFinishedAt?: string | null
+  lastSuccessAt?: string | null
+  lastErrorAt?: string | null
+  lastError?: string | null
 }
 
 export const ensureBmoSessionApi = (
@@ -218,6 +229,7 @@ export const getBmoMouldProcurementApi = (params: { limit?: number; timeout?: nu
     list: BmoMouldProcurementRow[]
     count: number
     latestUpdatedAt?: string | null
+    syncStatus?: BmoSyncStatusSummary | null
   }>({
     url: '/api/bmo/mould-procurement',
     params: { limit: params.limit },

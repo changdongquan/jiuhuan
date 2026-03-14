@@ -12,6 +12,10 @@ const requireCapability = (capabilityKey, options = {}) => {
         return res.status(401).json({ code: 401, success: false, message: '缺少认证用户信息' })
       }
 
+      // Internal relay sync requests are authenticated by X-Internal-Token on a strict allowlist.
+      // They should not be blocked by user-facing capability checks.
+      if (req?.auth?.internalToken === true) return next()
+
       if (targetCapability) {
         const allowedByCapability = await hasCapability(username, targetCapability)
         if (allowedByCapability) return next()
@@ -53,6 +57,8 @@ const requireAnyCapability = (entries = []) => {
       if (!username) {
         return res.status(401).json({ code: 401, success: false, message: '缺少认证用户信息' })
       }
+
+      if (req?.auth?.internalToken === true) return next()
 
       for (const entry of normalizedEntries) {
         if (entry.capabilityKey) {

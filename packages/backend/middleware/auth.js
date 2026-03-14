@@ -45,6 +45,7 @@ const authenticateRequest = (req, res, next) => {
     req.auth = {
       username: 'relay-sync',
       displayName: 'relay-sync',
+      internalToken: true,
       role: 'system',
       roleId: 'relay-sync',
       domain: 'INTERNAL',

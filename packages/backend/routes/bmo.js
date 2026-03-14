@@ -443,6 +443,25 @@ const relayRequestJson = async (pathname, input = {}) => {
   }
 }
 
+const getRelaySyncStatusSummary = async () => {
+  if (!isRelayEnabled()) return null
+  try {
+    const raw = await relayRequestJson('/sync/status', { method: 'GET', timeoutMs: 8000 })
+    const data = raw?.data && typeof raw.data === 'object' ? raw.data : raw
+    return {
+      enabled: data?.enabled === true,
+      running: data?.running === true,
+      lastStartedAt: toIsoFromRelayTime(data?.lastStartedAt),
+      lastFinishedAt: toIsoFromRelayTime(data?.lastFinishedAt),
+      lastSuccessAt: toIsoFromRelayTime(data?.lastSuccessAt),
+      lastErrorAt: toIsoFromRelayTime(data?.lastErrorAt),
+      lastError: data?.lastError ? String(data.lastError).trim() : null
+    }
+  } catch (e) {
+    return null
+  }
+}
+
 const relayWaitJob = async (jobId, options = {}) => {
   const timeoutMs = toSafeInt(options.timeoutMs, 120000)
   const intervalMs = toSafeInt(options.intervalMs, 1000)
@@ -1325,13 +1344,15 @@ router.get('/tasks', async (req, res) => {
 router.get('/mould-procurement', async (req, res) => {
   try {
     const rows = await fetchMouldProcurementFromDb(req.query.limit)
+    const syncStatus = await getRelaySyncStatusSummary()
     return res.json({
       code: 0,
       success: true,
       data: {
         list: rows,
         count: rows.length,
-        latestUpdatedAt: resolveLatestUpdatedAt(rows)
+        latestUpdatedAt: resolveLatestUpdatedAt(rows),
+        syncStatus
       }
     })
   } catch (error) {
@@ -1472,6 +1493,7 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
   if (!relayEnabled && isHubOnlyMode()) {
     try {
       const rows = await fetchMouldProcurementFromDb(pageSize)
+      const syncStatus = await getRelaySyncStatusSummary()
       return res.json({
         code: 0,
         success: true,
@@ -1483,7 +1505,8 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
           },
           list: rows,
           count: rows.length,
-          latestUpdatedAt: resolveLatestUpdatedAt(rows)
+          latestUpdatedAt: resolveLatestUpdatedAt(rows),
+          syncStatus
         }
       })
     } catch (dbError) {
@@ -1569,7 +1592,16 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
               pageSize: toSafeInt(result?.pageSize, pageSize),
               totalSize: Number(result?.total ?? result?.totalSize ?? viewList.length),
               traceId: null,
-              fetchedAt: new Date().toISOString()
+              fetchedAt: new Date().toISOString(),
+              syncStatus: {
+                enabled: true,
+                running: false,
+                lastStartedAt: null,
+                lastFinishedAt: new Date().toISOString(),
+                lastSuccessAt: null,
+                lastErrorAt: null,
+                lastError: null
+              }
             }
           })
         }
@@ -1586,6 +1618,7 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
   if (relayEnabled && (relayErrorMessage || !relaySuccess)) {
     try {
       const rows = await fetchMouldProcurementFromDb(pageSize)
+      const syncStatus = await getRelaySyncStatusSummary()
       return res.json({
         code: 0,
         success: true,
@@ -1599,7 +1632,8 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
           },
           list: rows,
           count: rows.length,
-          latestUpdatedAt: resolveLatestUpdatedAt(rows)
+          latestUpdatedAt: resolveLatestUpdatedAt(rows),
+          syncStatus
         }
       })
     } catch (dbError) {
@@ -1660,7 +1694,16 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
         pageSize: liveResult.pageSize,
         totalSize: liveResult.totalSize,
         traceId: liveResult.traceId,
-        fetchedAt: liveResult.fetchedAt
+        fetchedAt: liveResult.fetchedAt,
+        syncStatus: {
+          enabled: false,
+          running: false,
+          lastStartedAt: null,
+          lastFinishedAt: liveResult.fetchedAt,
+          lastSuccessAt: null,
+          lastErrorAt: null,
+          lastError: null
+        }
       }
     })
   } catch (error) {
@@ -1671,6 +1714,7 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
 
     try {
       const rows = await fetchMouldProcurementFromDb(pageSize)
+      const syncStatus = await getRelaySyncStatusSummary()
       return res.json({
         code: 0,
         success: true,
@@ -1679,7 +1723,8 @@ router.get('/mould-procurement/refresh', requireBmoSyncUpdate, async (req, res) 
           connection: { state, message: message || 'live failed' },
           list: rows,
           count: rows.length,
-          latestUpdatedAt: resolveLatestUpdatedAt(rows)
+          latestUpdatedAt: resolveLatestUpdatedAt(rows),
+          syncStatus
         }
       })
     } catch (dbError) {

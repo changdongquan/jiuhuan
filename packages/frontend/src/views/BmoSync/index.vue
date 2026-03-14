@@ -7,12 +7,18 @@
             <h3 class="bmo-title">BMO 数据采集</h3>
             <div class="bmo-title-status">
               <el-tag :type="connTagType" effect="plain">{{ connShortLabel }}</el-tag>
-              <span v-if="lastRefreshSource" class="bmo-conn-meta"
-                >来源：{{ lastRefreshSource }}</span
+              <span v-if="lastDataSourceText" class="bmo-conn-meta"
+                >数据来源：{{ lastDataSourceText }}</span
               >
-              <span v-if="lastUpdatedAtText" class="bmo-conn-meta"
-                >最后更新时间：{{ lastUpdatedAtText }}</span
+              <span v-if="lastFetchedAtText" class="bmo-conn-meta"
+                >最近抓取时间：{{ lastFetchedAtText }}</span
               >
+              <span v-if="lastPersistedAtText" class="bmo-conn-meta"
+                >最近获得新数据时间：{{ lastPersistedAtText }}</span
+              >
+              <span v-if="lastRefreshOutcomeText" class="bmo-conn-meta">{{
+                lastRefreshOutcomeText
+              }}</span>
             </div>
           </div>
           <p class="bmo-subtitle">通过 BMO 中转结果进行查看与立项</p>
@@ -483,6 +489,7 @@ import {
   type BmoMouldProcurementRow,
   type BmoMouldProcurementDetail,
   type BmoMouldProcurementDetailField,
+  type BmoSyncStatusSummary,
   type BmoInitiationCustomerOption,
   type BmoInitiationRequestRow
 } from '@/api/bmo'
@@ -628,10 +635,12 @@ const isMobile = ref(false)
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai'
 
 const latestList = ref<BmoMouldProcurementRow[]>([])
-const lastRefreshSource = ref<'live' | 'db' | null>(null)
+const lastDataSource = ref<'live' | 'db' | null>(null)
 const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
-const lastUpdatedAt = ref<string | null>(null)
+const lastFetchedAt = ref<string | null>(null)
+const lastPersistedAt = ref<string | null>(null)
+const lastRefreshOutcomeText = ref('')
 
 const initiateDialogVisible = ref(false)
 const dialogMode = ref<'view' | 'initiate'>('initiate')
@@ -698,8 +707,16 @@ const connShortLabel = computed(() => {
   if (lastConnectionState.value === 'error') return '连接异常'
   return '未知状态'
 })
-const lastUpdatedAtText = computed(() =>
-  lastUpdatedAt.value ? formatTime(lastUpdatedAt.value) : ''
+const lastDataSourceText = computed(() => {
+  if (lastDataSource.value === 'live') return '实时采集'
+  if (lastDataSource.value === 'db') return '库内缓存'
+  return ''
+})
+const lastFetchedAtText = computed(() => {
+  return lastFetchedAt.value ? formatTime(lastFetchedAt.value) : ''
+})
+const lastPersistedAtText = computed(() =>
+  lastPersistedAt.value ? formatTime(lastPersistedAt.value) : ''
 )
 const descriptionColumns = computed(() => (isMobile.value ? 1 : 3))
 const techDescriptionColumns = computed(() => (isMobile.value ? 1 : 4))
@@ -743,6 +760,31 @@ const formatFileSize = (bytes: number | null | undefined) => {
     idx += 1
   }
   return `${size.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
+const serializeBmoListForCompare = (rows: BmoMouldProcurementRow[]) =>
+  JSON.stringify(
+    (rows || []).map((row) => ({
+      bmo_record_id: row.bmo_record_id || null,
+      project_manager: row.project_manager || null,
+      part_no: row.part_no || null,
+      part_name: row.part_name || null,
+      model: row.model || null,
+      mold_number: row.mold_number || null,
+      project_code: row.project_code || null,
+      project_status: row.project_status || null,
+      initiation_status: row.initiation_status || null,
+      bid_price_tax_incl: row.bid_price_tax_incl ?? null,
+      bid_time: row.bid_time || null
+    }))
+  )
+
+const applySyncStatus = (syncStatus: BmoSyncStatusSummary | null | undefined) => {
+  const lastFinishedAt = String(syncStatus?.lastFinishedAt || '').trim()
+  const lastStartedAt = String(syncStatus?.lastStartedAt || '').trim()
+  const lastSuccessAt = String(syncStatus?.lastSuccessAt || '').trim()
+  lastFetchedAt.value = lastFinishedAt || lastStartedAt || null
+  lastPersistedAt.value = lastSuccessAt || null
 }
 
 const parseProjectCodeParts = (projectCode: string) => {
@@ -1076,11 +1118,9 @@ const ensureSessionOnOpen = async () => {
     const res = await ensureBmoSessionApi({ maxWaitMs: 2000, keeperTimeoutMs: 60000 })
     const data = res.data
     lastConnectionState.value = data?.state || null
-    lastRefreshSource.value = (data?.source as any) || null
     lastConnectionMessage.value = data?.message || null
   } catch (e: any) {
     lastConnectionState.value = 'error'
-    lastRefreshSource.value = 'db'
     lastConnectionMessage.value = e?.message || 'ensure session failed'
   }
 }
@@ -1090,8 +1130,11 @@ const loadLatest = async () => {
   try {
     const res = await getBmoMouldProcurementApi({ limit: 200, timeout: 12000 })
     latestList.value = res.data?.list || []
-    lastRefreshSource.value = 'db'
-    lastUpdatedAt.value = res.data?.latestUpdatedAt || null
+    lastDataSource.value = 'db'
+    applySyncStatus(res.data?.syncStatus)
+    if (!lastPersistedAt.value) {
+      lastPersistedAt.value = res.data?.latestUpdatedAt || null
+    }
   } finally {
     loadingLatest.value = false
   }
@@ -1100,19 +1143,30 @@ const loadLatest = async () => {
 const refreshAll = async () => {
   manualRefreshing.value = true
   try {
+    const previousSnapshot = serializeBmoListForCompare(latestList.value)
     const res = await getBmoMouldProcurementRefreshApi({
       pageSize: 200,
       offset: 0,
       maxWaitMs: 60000,
       timeout: 70000
     })
-    latestList.value = res.data?.list || []
-    lastRefreshSource.value = res.data?.source || null
+    const nextList = res.data?.list || []
+    latestList.value = nextList
+    lastDataSource.value = res.data?.source || null
     lastConnectionState.value = res.data?.connection?.state || null
     lastConnectionMessage.value = res.data?.connection?.message || null
-    lastUpdatedAt.value = res.data?.fetchedAt || res.data?.latestUpdatedAt || null
+    applySyncStatus(res.data?.syncStatus)
+    if (res.data?.fetchedAt) {
+      lastFetchedAt.value = res.data.fetchedAt
+    }
+    if (!lastPersistedAt.value) {
+      lastPersistedAt.value = res.data?.latestUpdatedAt || null
+    }
+    const changed = previousSnapshot !== serializeBmoListForCompare(nextList)
+    lastRefreshOutcomeText.value = changed ? '本次刷新：发现数据变化' : '本次刷新：未发现数据变化'
     ElMessage.success('已刷新 BMO 数据')
   } catch (e: any) {
+    lastRefreshOutcomeText.value = '本次刷新：失败'
     ElMessage.error(e?.message || '刷新 BMO 数据失败')
   } finally {
     manualRefreshing.value = false
