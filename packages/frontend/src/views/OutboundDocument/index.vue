@@ -442,29 +442,53 @@
       <template v-else>
         <el-card v-for="row in tableData" :key="row.出库单号" class="pm-mobile-card" shadow="hover">
           <div class="pm-mobile-card__header">
-            <div>
-              <div class="pm-mobile-card__code">出库单号：{{ row.出库单号 || '-' }}</div>
+            <div class="pm-mobile-card__hero">
+              <div class="pm-mobile-card__eyebrow">Outbound Ticket</div>
+              <div class="pm-mobile-card__code">{{ row.出库单号 || '-' }}</div>
               <div class="pm-mobile-card__name">{{ row.客户名称 || '-' }}</div>
+              <div class="pm-mobile-card__type-chip">{{ row.出库类型 || '未分类' }}</div>
+            </div>
+            <div class="pm-mobile-card__qty-badge">
+              <span class="label">总数量</span>
+              <strong>{{
+                formatDecimal(row.totalQuantity ?? sumDetailQuantity(row.details))
+              }}</strong>
             </div>
           </div>
-          <div class="pm-mobile-card__meta">
-            <div>
-              <span class="label">出库日期</span>
-              <span class="value">{{ formatDate(row.出库日期) }}</span>
-            </div>
-            <div>
-              <span class="label">出库类型</span>
-              <span class="value">{{ row.出库类型 || '-' }}</span>
+          <div class="pm-mobile-card__stats">
+            <div class="stat">
+              <span class="label">明细数</span>
+              <strong>{{ row.detailCount ?? (row.details?.length || 0) }}</strong>
             </div>
             <div>
               <span class="label">仓库</span>
               <span class="value">{{ row.仓库 || '-' }}</span>
             </div>
             <div>
-              <span class="label">总数量</span>
-              <span class="value">
-                {{ formatDecimal(row.totalQuantity ?? sumDetailQuantity(row.details)) }}
-              </span>
+              <span class="label">经办人</span>
+              <span class="value">{{ formatOperatorName(row.经办人) || '-' }}</span>
+            </div>
+            <div>
+              <span class="label">出库日期</span>
+              <span class="value">{{ formatDate(row.出库日期) }}</span>
+            </div>
+            <div>
+              <span class="label">收货方</span>
+              <span class="value">{{ row.收货方名称 || row.客户名称 || '-' }}</span>
+            </div>
+          </div>
+          <div v-if="row.details?.length" class="pm-mobile-card__detail-strip">
+            <div
+              v-for="detail in row.details.slice(0, 2)"
+              :key="detail.id || detail.项目编号 || detail.产品名称"
+              class="pm-mobile-card__detail-pill"
+            >
+              <span class="code">{{ detail.项目编号 || '-' }}</span>
+              <span class="text">{{ detail.产品名称 || '-' }}</span>
+              <span class="qty">{{ formatDecimal(detail.出库数量) }}</span>
+            </div>
+            <div v-if="(row.details?.length || 0) > 2" class="pm-mobile-card__detail-more">
+              另有 {{ (row.details?.length || 0) - 2 }} 条明细
             </div>
           </div>
           <div class="pm-mobile-card__actions">
@@ -758,24 +782,46 @@
           <div class="create-dialog-hero">
             <div class="create-dialog-hero__eyebrow">Outbound Workspace</div>
             <div class="create-dialog-hero__main">
-              <div>
+              <div class="create-dialog-hero__content">
                 <div class="create-dialog-hero__title">新增出库单</div>
                 <div class="create-dialog-hero__desc">
                   先确认单据头信息，再从存货中批量带入明细，最后统一调整数量与备注。
                 </div>
-              </div>
-              <div class="create-dialog-hero__stats">
-                <div class="create-dialog-stat">
-                  <span class="create-dialog-stat__label">单据日期</span>
-                  <strong class="create-dialog-stat__value">
-                    {{ createForm.出库日期 || '待选择' }}
-                  </strong>
+                <div class="create-dialog-hero__route">
+                  <div class="create-dialog-route-step">
+                    <span class="index">01</span>
+                    <span class="text">填写单据头</span>
+                  </div>
+                  <div class="create-dialog-route-step">
+                    <span class="index">02</span>
+                    <span class="text">带入存货</span>
+                  </div>
+                  <div class="create-dialog-route-step">
+                    <span class="index">03</span>
+                    <span class="text">校对并保存</span>
+                  </div>
                 </div>
-                <div class="create-dialog-stat">
-                  <span class="create-dialog-stat__label">当前明细</span>
-                  <strong class="create-dialog-stat__value"
-                    >{{ createForm.details.length }} 项</strong
-                  >
+              </div>
+              <div class="create-dialog-hero__aside">
+                <div class="create-dialog-hero__stats">
+                  <div class="create-dialog-stat create-dialog-stat--primary">
+                    <span class="create-dialog-stat__label">单据日期</span>
+                    <strong class="create-dialog-stat__value">
+                      {{ createForm.出库日期 || '待选择' }}
+                    </strong>
+                  </div>
+                  <div class="create-dialog-stat">
+                    <span class="create-dialog-stat__label">当前明细</span>
+                    <strong class="create-dialog-stat__value"
+                      >{{ createForm.details.length }} 项</strong
+                    >
+                  </div>
+                </div>
+                <div class="create-dialog-hero__note">
+                  <div class="create-dialog-hero__note-title">录入建议</div>
+                  <div class="create-dialog-hero__note-text">
+                    先选客户与收货方，再从存货中批量带入，可减少手动录入与错配。
+                  </div>
                 </div>
               </div>
             </div>
@@ -3966,12 +4012,12 @@ onMounted(() => {
     min-height: 70px;
   }
 
-  .pm-mobile-card__meta {
+  .pm-mobile-card__stats {
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 
-  .pm-mobile-card__dates {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .pm-mobile-card__detail-pill {
+    grid-template-columns: 1fr;
   }
 
   :deep(.pm-table .el-table__body-wrapper tbody tr) {
@@ -4131,6 +4177,19 @@ onMounted(() => {
     font-size: 22px;
   }
 
+  .create-dialog-hero__route {
+    gap: 8px;
+  }
+
+  .create-dialog-route-step {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .create-dialog-hero__aside {
+    width: 100%;
+  }
+
   .create-dialog-hero__stats,
   .create-dialog-toolbar__chips {
     flex-wrap: wrap;
@@ -4156,9 +4215,13 @@ onMounted(() => {
   position: relative;
   padding: 18px 20px;
   overflow: hidden;
-  color: #f8fafc;
-  background: linear-gradient(135deg, rgb(15 23 42 / 96%), rgb(20 83 45 / 88%));
+  color: #0f172a;
+  background:
+    radial-gradient(circle at top right, rgb(14 165 233 / 10%), transparent 34%),
+    linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(248 250 252 / 96%));
+  border: 1px solid rgb(148 163 184 / 18%);
   border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
 
 .create-dialog-hero::after {
@@ -4168,7 +4231,7 @@ onMounted(() => {
   width: 180px;
   height: 180px;
   pointer-events: none;
-  background: radial-gradient(circle, rgb(255 255 255 / 20%) 0%, transparent 68%);
+  background: radial-gradient(circle, rgb(14 165 233 / 12%) 0%, transparent 68%);
   content: '';
 }
 
@@ -4177,15 +4240,22 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
-  color: rgb(226 232 240 / 80%);
+  color: rgb(14 116 144 / 80%);
   text-transform: uppercase;
 }
 
 .create-dialog-hero__main {
   display: flex;
   gap: 20px;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: space-between;
+}
+
+.create-dialog-hero__content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .create-dialog-hero__title {
@@ -4200,35 +4270,105 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.7;
-  color: rgb(226 232 240 / 80%);
+  color: #64748b;
+}
+
+.create-dialog-hero__route {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.create-dialog-route-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(241 245 249 / 96%));
+  border: 1px solid #dbe6ee;
+  border-radius: 999px;
+}
+
+.create-dialog-route-step .index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #06202b;
+  background: linear-gradient(135deg, #fef3c7 0%, #fdba74 100%);
+  border-radius: 999px;
+}
+
+.create-dialog-route-step .text {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.create-dialog-hero__aside {
+  display: flex;
+  width: min(320px, 100%);
+  flex-direction: column;
+  gap: 12px;
 }
 
 .create-dialog-hero__stats {
   display: flex;
-  flex-shrink: 0;
   gap: 10px;
 }
 
 .create-dialog-stat {
+  position: relative;
   min-width: 122px;
   padding: 10px 12px;
-  background: rgb(255 255 255 / 10%);
-  border: 1px solid rgb(255 255 255 / 12%);
+  background: linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(241 245 249 / 96%));
+  border: 1px solid #dbe6ee;
   border-radius: 14px;
-  backdrop-filter: blur(8px);
+}
+
+.create-dialog-stat--primary {
+  background:
+    radial-gradient(circle at top right, rgb(125 211 252 / 22%), transparent 46%),
+    linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(239 246 255 / 96%));
 }
 
 .create-dialog-stat__label {
   display: block;
   margin-bottom: 4px;
   font-size: 11px;
-  color: rgb(226 232 240 / 72%);
+  color: #64748b;
 }
 
 .create-dialog-stat__value {
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
+}
+
+.create-dialog-hero__note {
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgb(248 250 252 / 100%), rgb(241 245 249 / 96%));
+  border: 1px solid #dbe6ee;
+  border-radius: 16px;
+}
+
+.create-dialog-hero__note-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #0f766e;
+  text-transform: uppercase;
+}
+
+.create-dialog-hero__note-text {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #64748b;
 }
 
 .create-dialog-panel {
@@ -4972,90 +5112,167 @@ onMounted(() => {
 }
 
 .pm-mobile-card {
-  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgb(21 101 192 / 8%);
+  border-radius: 20px;
+  box-shadow: 0 14px 28px rgb(15 23 42 / 8%);
 }
 
 .pm-mobile-card__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pm-mobile-card__hero {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pm-mobile-card__eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #0f6c8d;
+  text-transform: uppercase;
 }
 
 .pm-mobile-card__code {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .pm-mobile-card__name {
   font-size: 13px;
-  color: #666;
+  color: #4b6478;
 }
 
-.pm-name-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.pm-column-toggle-icon {
+.pm-mobile-card__type-chip {
   display: inline-flex;
-  width: 18px;
-  height: 18px;
-  margin-left: 4px;
-  color: var(--el-text-color-placeholder);
-  cursor: pointer;
   align-items: center;
-  justify-content: center;
+  width: fit-content;
+  padding: 5px 9px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #37556c;
+  background: linear-gradient(180deg, #f4f8fb 0%, #eaf1f6 100%);
+  border: 1px solid #dbe6ee;
+  border-radius: 999px;
 }
 
-.pm-column-toggle-icon:hover {
-  color: var(--el-color-primary);
+.pm-mobile-card__qty-badge {
+  display: flex;
+  min-width: 88px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgb(37 99 235 / 10%), rgb(56 189 248 / 8%));
+  border: 1px solid rgb(59 130 246 / 14%);
+  border-radius: 16px;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
-.pm-mobile-card__meta {
+.pm-mobile-card__qty-badge .label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #5d7488;
+}
+
+.pm-mobile-card__qty-badge strong {
+  margin-top: 4px;
+  font-size: 17px;
+  color: #0f172a;
+}
+
+.pm-mobile-card__stats {
   display: grid;
-  font-size: 13px;
-  color: #555;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: 10px;
 }
 
-.pm-mobile-card__meta .label {
-  margin-right: 4px;
-  color: #888;
+.pm-mobile-card__stats > div,
+.pm-mobile-card__stats .stat {
+  display: flex;
+  gap: 4px;
+  padding: 10px 11px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f3f7fb 100%);
+  border: 1px solid #e2eaf0;
+  border-radius: 14px;
+  flex-direction: column;
 }
 
-.pm-mobile-card__dates {
-  display: grid;
-  margin: 8px 0;
+.pm-mobile-card__stats .stat strong {
+  font-size: 15px;
+  color: #111827;
+}
+
+.pm-mobile-card__stats .label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #74879a;
+}
+
+.pm-mobile-card__stats .value {
   font-size: 13px;
-  color: #555;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 10px;
+  font-weight: 600;
+  color: #1f2937;
+  word-break: break-word;
 }
 
-.pm-mobile-card__dates .label {
-  margin-right: 4px;
-  color: #888;
+.pm-mobile-card__detail-strip {
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+  margin-top: 10px;
 }
 
-.pm-mobile-card__impact {
-  margin: 6px 0;
-  color: #666;
+.pm-mobile-card__detail-pill {
+  display: grid;
+  grid-template-columns: minmax(0, 88px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  background: #f7fafc;
+  border: 1px dashed #d4e0e8;
+  border-radius: 14px;
 }
 
-.pm-mobile-card__impact .label {
-  margin-right: 6px;
-  color: #888;
+.pm-mobile-card__detail-pill .code {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f6c8d;
+}
+
+.pm-mobile-card__detail-pill .text {
+  font-size: 12px;
+  color: #334155;
+  word-break: break-word;
+}
+
+.pm-mobile-card__detail-pill .qty {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pm-mobile-card__detail-more {
+  font-size: 11px;
+  color: #6b7280;
 }
 
 .pm-mobile-card__actions {
   display: flex;
   gap: 8px;
-  justify-content: flex-end;
-  margin-top: 6px;
+  justify-content: stretch;
+  margin-top: 12px;
+}
+
+.pm-mobile-card__actions .el-button {
+  flex: 1;
 }
 
 .pm-plan-date-cell {

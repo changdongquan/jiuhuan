@@ -1,9 +1,38 @@
 <template>
   <div class="attendance-page px-4 pt-0 pb-2 space-y-3">
+    <div v-if="isMobile" class="att-mobile-hero">
+      <div class="att-mobile-hero__copy">
+        <div class="att-mobile-hero__eyebrow">Attendance Desk</div>
+        <div class="att-mobile-hero__title">考勤工作台</div>
+        <div class="att-mobile-hero__desc">
+          按月份快速查看考勤汇总，直接进入编辑或查看，减少手机端表格横向滚动。
+        </div>
+      </div>
+      <div class="att-mobile-hero__stats">
+        <div class="att-mobile-hero__stat">
+          <span>记录</span>
+          <strong>{{ mobileAttendanceOverview.records }}</strong>
+        </div>
+        <div class="att-mobile-hero__stat">
+          <span>人数</span>
+          <strong>{{ mobileAttendanceOverview.employees }}</strong>
+        </div>
+        <div class="att-mobile-hero__stat">
+          <span>全勤</span>
+          <strong>{{ mobileAttendanceOverview.fullAttendance }}</strong>
+        </div>
+        <div class="att-mobile-hero__stat">
+          <span>加班合计</span>
+          <strong>{{ formatMoney(mobileAttendanceOverview.overtimeSubtotal) }}</strong>
+        </div>
+      </div>
+    </div>
+
     <div v-if="isMobile" class="mobile-top-bar">
       <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
         {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
       </el-button>
+      <el-button text type="success" @click="handleCreate">新增考勤</el-button>
     </div>
 
     <el-form
@@ -46,6 +75,70 @@
     <!-- 列表 -->
     <div class="att-table-wrapper" v-loading="loading">
       <el-empty v-if="!tableData.length && !loading" description="暂无考勤数据" />
+      <div v-else-if="isMobile" class="att-mobile-list">
+        <div v-for="row in tableData" :key="row.id" class="att-mobile-card">
+          <div class="att-mobile-card__header">
+            <div>
+              <div class="att-mobile-card__month">{{ row.month }}</div>
+              <div class="att-mobile-card__updated"
+                >更新于 {{ formatDate(row.updatedAt) || '-' }}</div
+              >
+            </div>
+            <div class="att-mobile-card__chips">
+              <el-tag size="small" effect="plain" type="info">ID {{ row.id }}</el-tag>
+              <el-tag
+                size="small"
+                effect="plain"
+                :type="
+                  row.isLocked ? 'danger' : isEditableMonthString(row.month) ? 'success' : 'warning'
+                "
+              >
+                {{
+                  row.isLocked ? '工资锁定' : isEditableMonthString(row.month) ? '可编辑' : '仅查看'
+                }}
+              </el-tag>
+            </div>
+          </div>
+
+          <div class="att-mobile-card__stats">
+            <div class="att-mobile-card__stat">
+              <span>人数</span>
+              <strong>{{ row.employeeCount ?? '-' }}</strong>
+            </div>
+            <div class="att-mobile-card__stat">
+              <span>全勤</span>
+              <strong>{{ row.fullAttendanceCount ?? '-' }}</strong>
+            </div>
+            <div class="att-mobile-card__stat">
+              <span>普通加班</span>
+              <strong>{{ formatMoney(row.overtimeNormalTotal) }}</strong>
+            </div>
+            <div class="att-mobile-card__stat">
+              <span>两倍加班</span>
+              <strong>{{ formatMoney(row.overtimeDoubleTotal) }}</strong>
+            </div>
+            <div class="att-mobile-card__stat">
+              <span>三倍加班</span>
+              <strong>{{ formatMoney(row.overtimeTripleTotal) }}</strong>
+            </div>
+            <div class="att-mobile-card__stat att-mobile-card__stat--accent">
+              <span>加班合计</span>
+              <strong>{{ formatMoney(row.overtimeSubtotalTotal) }}</strong>
+            </div>
+          </div>
+
+          <div class="att-mobile-card__footer">
+            <el-button
+              type="primary"
+              :disabled="!isEditableMonthString(row.month)"
+              @click="handleEdit(row)"
+            >
+              编辑
+            </el-button>
+            <el-button @click="handleView(row)">查看</el-button>
+          </div>
+        </div>
+      </div>
       <el-table
         v-else
         :data="tableData"
@@ -139,7 +232,22 @@
       :close-on-click-modal="false"
       class="att-create-dialog"
     >
-      <el-form :model="createForm" label-width="70px">
+      <div v-if="isMobile" class="att-create-mobile-hero">
+        <div class="att-create-mobile-hero__eyebrow">New Attendance</div>
+        <div class="att-create-mobile-hero__title">新建考勤月份</div>
+        <div class="att-create-mobile-hero__desc">
+          先选月份，再进入考勤录入工作台。系统只允许当月和上月新建，避免重复建档。
+        </div>
+        <div class="att-create-mobile-hero__tips">
+          <span>可选月份</span>
+          <strong>当月 / 上月</strong>
+        </div>
+      </div>
+      <el-form
+        :model="createForm"
+        label-width="70px"
+        :class="{ 'att-create-form--mobile': isMobile }"
+      >
         <el-form-item label="月份" required>
           <el-date-picker
             v-model="createForm.month"
@@ -168,7 +276,12 @@
     >
       <template #header>
         <div class="att-dialog-header">
-          <div class="att-dialog-title">{{ dialogTitle }}</div>
+          <div>
+            <div class="att-dialog-title">{{ dialogTitle }}</div>
+            <div v-if="isMobile && isCreateAttendanceMode" class="att-dialog-subtitle">
+              新建月份后直接进入手机端录入工作台
+            </div>
+          </div>
           <div class="att-dialog-actions">
             <el-date-picker
               v-model="editMonth"
@@ -183,6 +296,25 @@
       </template>
 
       <div class="att-dialog-body" v-loading="dialogLoading">
+        <div v-if="isMobile && isCreateAttendanceMode" class="att-create-workbench">
+          <div class="att-create-workbench__head">
+            <div>
+              <div class="att-create-workbench__eyebrow">Attendance Workbench</div>
+              <div class="att-create-workbench__title">新增考勤录入</div>
+            </div>
+            <el-tag type="success" effect="plain" size="small">{{ editMonth || '-' }}</el-tag>
+          </div>
+          <div class="att-create-workbench__stats">
+            <div class="att-create-workbench__stat">
+              <span>员工数</span>
+              <strong>{{ attendanceRows.length }}</strong>
+            </div>
+            <div class="att-create-workbench__stat">
+              <span>模式</span>
+              <strong>新建</strong>
+            </div>
+          </div>
+        </div>
         <el-table
           v-if="attendanceRows.length"
           :data="attendanceRows"
@@ -678,6 +810,19 @@ const paginationLayout = computed(() =>
   isMobile.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
 )
 const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
+const isCreateAttendanceMode = computed(() => !isViewMode.value && currentId.value === null)
+const mobileAttendanceOverview = computed(() => {
+  return tableData.value.reduce(
+    (acc, row) => {
+      acc.records += 1
+      acc.employees += Number(row.employeeCount || 0)
+      acc.fullAttendance += Number(row.fullAttendanceCount || 0)
+      acc.overtimeSubtotal += Number(row.overtimeSubtotalTotal || 0)
+      return acc
+    },
+    { records: 0, employees: 0, fullAttendance: 0, overtimeSubtotal: 0 }
+  )
+})
 
 const handleAttendanceSortChange = (payload: {
   prop?: string
@@ -1275,47 +1420,115 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@media (width <= 768px) {
-  .query-form--mobile {
-    padding: 12px;
-  }
-
-  :deep(.query-form--mobile .el-form-item) {
-    width: 100%;
-    margin-right: 0;
-    margin-bottom: 12px;
-  }
-
-  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
-    width: 100%;
-  }
-
-  :deep(.query-form--mobile .el-input),
-  :deep(.query-form--mobile .el-select),
-  :deep(.query-form--mobile .el-date-editor) {
-    width: 100%;
-  }
-
-  :deep(.query-form--mobile .el-button) {
-    width: 100%;
-  }
-}
-
 .attendance-page {
+  --att-line: #d8e4ea;
+  --att-card: linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(243 249 249 / 95%) 100%);
+  --att-bg: linear-gradient(180deg, #f4f8fb 0%, #edf5f3 100%);
+  --att-strong: #0f172a;
+  --att-soft: #64748b;
+  --att-accent: #1f8a70;
+
   position: relative;
 }
 
-.mobile-top-bar {
-  display: flex;
-  align-items: center;
+.att-mobile-hero {
+  position: relative;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--att-bg);
+  border: 1px solid var(--att-line);
+  border-radius: 22px;
+  box-shadow: 0 18px 36px rgb(15 23 42 / 6%);
+}
+
+.att-mobile-hero::after {
+  position: absolute;
+  top: -32px;
+  right: -18px;
+  width: 150px;
+  height: 150px;
+  background:
+    radial-gradient(circle, rgb(31 138 112 / 16%) 0%, rgb(31 138 112 / 0%) 70%),
+    radial-gradient(circle, rgb(59 130 246 / 14%) 0%, rgb(59 130 246 / 0%) 64%);
+  content: '';
+}
+
+.att-mobile-hero__copy,
+.att-mobile-hero__stats {
+  position: relative;
+  z-index: 1;
+}
+
+.att-mobile-hero__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--att-accent);
+  text-transform: uppercase;
+}
+
+.att-mobile-hero__title {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--att-strong);
+}
+
+.att-mobile-hero__desc {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--att-soft);
+}
+
+.att-mobile-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  padding: 4px 0;
+  margin-top: 14px;
+}
+
+.att-mobile-hero__stat {
+  padding: 10px 12px;
+  background: rgb(255 255 255 / 72%);
+  border: 1px solid rgb(219 232 233 / 90%);
+  border-radius: 14px;
+}
+
+.att-mobile-hero__stat span {
+  display: block;
+  font-size: 11px;
+  color: #6b7e8f;
+}
+
+.att-mobile-hero__stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--att-strong);
+}
+
+.mobile-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  padding: 8px 0 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .query-form {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  border: 1px solid var(--att-line);
+  border-radius: 18px;
+  box-shadow: 0 14px 30px rgb(15 23 42 / 4%);
 }
 
 .query-form__actions {
@@ -1333,6 +1546,85 @@ onMounted(() => {
   padding: 4px;
   background: var(--el-bg-color);
   border-radius: 8px;
+}
+
+.att-mobile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.att-mobile-card {
+  padding: 12px;
+  background: var(--att-card);
+  border: 1px solid var(--att-line);
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgb(15 23 42 / 4%);
+}
+
+.att-mobile-card__header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.att-mobile-card__month {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--att-strong);
+}
+
+.att-mobile-card__updated {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--att-soft);
+}
+
+.att-mobile-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.att-mobile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.att-mobile-card__stat {
+  padding: 9px 10px;
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid #dce8e9;
+  border-radius: 12px;
+}
+
+.att-mobile-card__stat--accent {
+  background: linear-gradient(180deg, #effaf6 0%, #f7fcfb 100%);
+  border-color: #cfe7dd;
+}
+
+.att-mobile-card__stat span {
+  display: block;
+  font-size: 11px;
+  color: #6c7d8f;
+}
+
+.att-mobile-card__stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--att-strong);
+}
+
+.att-mobile-card__footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .pagination-footer {
@@ -1357,6 +1649,12 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.att-dialog-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--att-soft);
+}
+
 .att-dialog-actions {
   display: flex;
   gap: 8px;
@@ -1367,6 +1665,101 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.att-create-mobile-hero {
+  padding: 14px;
+  margin-bottom: 14px;
+  background: var(--att-bg);
+  border: 1px solid var(--att-line);
+  border-radius: 18px;
+}
+
+.att-create-mobile-hero__eyebrow,
+.att-create-workbench__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--att-accent);
+  text-transform: uppercase;
+}
+
+.att-create-mobile-hero__title,
+.att-create-workbench__title {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--att-strong);
+}
+
+.att-create-mobile-hero__desc {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--att-soft);
+}
+
+.att-create-mobile-hero__tips {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-top: 12px;
+  background: rgb(255 255 255 / 74%);
+  border: 1px solid #d8e8e3;
+  border-radius: 14px;
+}
+
+.att-create-mobile-hero__tips span {
+  font-size: 11px;
+  color: var(--att-soft);
+}
+
+.att-create-mobile-hero__tips strong {
+  font-size: 13px;
+  color: var(--att-strong);
+}
+
+.att-create-workbench {
+  padding: 12px;
+  background: var(--att-card);
+  border: 1px solid var(--att-line);
+  border-radius: 18px;
+}
+
+.att-create-workbench__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.att-create-workbench__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.att-create-workbench__stat {
+  padding: 9px 10px;
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid #dce8e9;
+  border-radius: 12px;
+}
+
+.att-create-workbench__stat span {
+  display: block;
+  font-size: 11px;
+  color: var(--att-soft);
+}
+
+.att-create-workbench__stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--att-strong);
 }
 
 .att-edit-grid {
@@ -1465,5 +1858,70 @@ onMounted(() => {
 :deep(.att-edit-grid th.att-col-name-header .cell .att-name-toggle) {
   order: 3;
   margin-left: auto;
+}
+
+@media (width <= 768px) {
+  .query-form--mobile {
+    padding: 12px;
+    background: var(--att-card);
+  }
+
+  :deep(.query-form--mobile .el-form-item) {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-input),
+  :deep(.query-form--mobile .el-select),
+  :deep(.query-form--mobile .el-date-editor) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-button) {
+    width: 100%;
+  }
+
+  .att-table-wrapper {
+    padding: 0;
+    background: transparent;
+  }
+
+  .pagination-footer--mobile {
+    padding-bottom: 6px;
+  }
+
+  .att-dialog-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .att-dialog-actions {
+    width: 100%;
+  }
+
+  .att-dialog-actions :deep(.el-date-editor) {
+    width: 100% !important;
+  }
+
+  .att-create-form--mobile :deep(.el-form-item__label) {
+    padding-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .att-create-dialog :deep(.el-dialog__footer) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .att-create-dialog :deep(.el-dialog__footer .el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
 }
 </style>
