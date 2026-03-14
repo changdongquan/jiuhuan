@@ -463,8 +463,8 @@
             </div>
           </div>
           <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
-            <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="项目编号" min-width="140">
+            <el-table-column type="index" label="序号" width="45" fixed="left" />
+            <el-table-column label="项目编号" min-width="140" fixed="left">
               <template #default="{ row }">
                 <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
               </template>
@@ -652,7 +652,13 @@
         <el-table-column type="selection" width="50" />
         <el-table-column prop="sourceLabel" label="应收来源" width="120" show-overflow-tooltip />
         <el-table-column prop="detailId" label="明细ID" width="90" />
-        <el-table-column prop="itemCode" label="项目编号" min-width="130" show-overflow-tooltip />
+        <el-table-column
+          prop="itemCode"
+          label="项目编号"
+          min-width="130"
+          show-overflow-tooltip
+          sortable
+        />
         <el-table-column
           prop="productName"
           label="产品名称"

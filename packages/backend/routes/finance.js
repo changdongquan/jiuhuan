@@ -757,9 +757,9 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
       FROM candidates
       ORDER BY
         CASE WHEN sourceType = N'${RECEIPT_SOURCE_TYPES.invoice}' THEN 0 ELSE 1 END ASC,
+        itemCode ASC,
         CASE WHEN detailId IS NULL THEN 1 ELSE 0 END ASC,
-        detailId DESC,
-        itemCode DESC
+        detailId DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
       `,
       { ...params, offset, pageSize: sizeNum }
