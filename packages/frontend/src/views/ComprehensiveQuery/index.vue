@@ -2,149 +2,22 @@
   <div class="cq-page">
     <section class="cq-shell">
       <div class="cq-layout">
-        <aside class="cq-sidebar">
-          <section class="cq-panel cq-panel--primary">
-            <div class="cq-panel__head">
-              <div>
-                <div class="cq-panel__title">查询输入</div>
-              </div>
-              <span class="cq-status-pill" :class="{ 'cq-status-pill--dirty': filtersDirty }">
-                {{ draftStatusText }}
-              </span>
-            </div>
-
-            <el-form :model="queryForm" label-position="top" class="cq-form">
-              <el-form-item label="关键词">
-                <el-input
-                  v-model="queryForm.keyword"
-                  placeholder="项目编号 / 产品名称 / 产品图号"
-                  clearable
-                  @keyup.enter="handleApplySearch"
-                />
-              </el-form-item>
-              <div class="cq-actions">
-                <el-button
-                  type="primary"
-                  class="cq-action-btn cq-action-btn--apply"
-                  :loading="loading"
-                  @click="handleApplySearch"
-                >
-                  应用筛选
-                </el-button>
-                <el-button
-                  class="cq-action-btn cq-action-btn--restore"
-                  :disabled="!filtersDirty"
-                  @click="handleRestoreDraft"
-                  >还原草稿</el-button
-                >
-                <el-button class="cq-action-btn cq-action-btn--clear" @click="resetWorkspace"
-                  >清空</el-button
-                >
-              </div>
-            </el-form>
-          </section>
-
-          <section class="cq-panel">
-            <div class="cq-panel__head">
-              <div>
-                <div class="cq-panel__title">基础筛选</div>
-                <div class="cq-panel__desc">优先缩小客户、分类和订单日期范围。</div>
-              </div>
-            </div>
-            <el-form :model="queryForm" label-position="top" class="cq-form">
-              <el-form-item label="客户">
-                <el-select
-                  v-model="queryForm.customerName"
-                  filterable
-                  clearable
-                  placeholder="全部客户"
-                >
-                  <el-option
-                    v-for="item in customerOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="分类">
-                <el-select v-model="queryForm.category" filterable clearable placeholder="全部分类">
-                  <el-option
-                    v-for="item in categoryOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="订单日期">
-                <el-date-picker
-                  v-model="queryForm.dateRange"
-                  type="daterange"
-                  value-format="YYYY-MM-DD"
-                  range-separator="~"
-                  start-placeholder="开始日期"
-                  end-placeholder="结束日期"
-                  clearable
-                  class="cq-date-picker"
-                />
-              </el-form-item>
-            </el-form>
-          </section>
-
-          <section class="cq-panel">
-            <div class="cq-panel__head">
-              <div>
-                <div class="cq-panel__title">财务筛选</div>
-                <div class="cq-panel__desc">按订单结款、开票状态和执行进度做财务收敛。</div>
-              </div>
-            </div>
-            <el-form :model="queryForm" label-position="top" class="cq-form">
-              <el-form-item label="结款状态">
-                <el-select v-model="queryForm.settlementStatus" clearable placeholder="全部">
-                  <el-option label="订单已结清" value="销售已结清" />
-                  <el-option label="订单未结清" value="销售未结清" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="开票状态">
-                <el-select v-model="queryForm.invoiceStatus" clearable placeholder="全部">
-                  <el-option label="未开票" value="未开票" />
-                  <el-option label="仅开部分发票" value="仅开部分发票" />
-                  <el-option label="已开全额发票" value="已开全额发票" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="执行进度">
-                <div class="cq-progress-range">
-                  <el-select v-model="queryForm.progressType" clearable placeholder="选择指标">
-                    <el-option
-                      label="开票百分比"
-                      value="invoice"
-                      :disabled="invoiceProgressTypeDisabled"
-                    />
-                    <el-option label="回款百分比" value="receipt" />
-                  </el-select>
-                  <div class="cq-progress-range__inputs">
-                    <el-input
-                      v-model="queryForm.progressMin"
-                      placeholder="最小%"
-                      clearable
-                      inputmode="decimal"
-                      :disabled="progressRangeDisabled"
-                    />
-                    <span class="cq-progress-range__divider">-</span>
-                    <el-input
-                      v-model="queryForm.progressMax"
-                      placeholder="最大%"
-                      clearable
-                      inputmode="decimal"
-                      :disabled="progressRangeDisabled"
-                    />
-                  </div>
-                </div>
-              </el-form-item>
-            </el-form>
-          </section>
-        </aside>
+        <FilterSidebar
+          :query-form="queryForm"
+          :loading="loading"
+          :filters-dirty="filtersDirty"
+          :draft-status-text="draftStatusText"
+          :customer-options="customerOptions"
+          :category-options="categoryOptions"
+          :is-mobile="isMobile"
+          :mobile-filters-expanded="mobileFiltersExpanded"
+          :invoice-progress-type-disabled="invoiceProgressTypeDisabled"
+          :progress-range-disabled="progressRangeDisabled"
+          @apply-search="handleApplySearch"
+          @restore-draft="handleRestoreDraft"
+          @reset-workspace="resetWorkspace"
+          @update:mobile-filters-expanded="mobileFiltersExpanded = $event"
+        />
 
         <main class="cq-main">
           <template v-if="!hasAppliedSearch">
@@ -256,73 +129,35 @@
             </section>
 
             <section class="cq-results">
-              <div class="cq-results__toolbar">
-                <div>
-                  <div class="cq-results__title">结果工作台</div>
-                  <div class="cq-results__desc">统一查看列表、财务字段与项目阶段时间线。</div>
-                </div>
-                <div class="cq-results__actions">
-                  <el-button
-                    class="cq-action-btn cq-action-btn--export"
-                    :disabled="!hasAppliedSearch"
-                    :loading="exporting"
-                    @click="handleExport"
-                  >
-                    导出 Excel
-                  </el-button>
-                  <div class="cq-switch-group">
-                    <button
-                      type="button"
-                      class="cq-switch-chip"
-                      :class="{ 'cq-switch-chip--active': activeView === 'table' }"
-                      @click="activeView = 'table'"
-                    >
-                      列表工作台
-                    </button>
-                    <button
-                      type="button"
-                      class="cq-switch-chip"
-                      :class="{ 'cq-switch-chip--active': activeView === 'insights' }"
-                      @click="activeView = 'insights'"
-                    >
-                      阶段洞察
-                    </button>
-                  </div>
-
-                  <div
-                    v-if="activeView === 'table'"
-                    class="cq-switch-group cq-switch-group--compact"
-                  >
-                    <button
-                      type="button"
-                      class="cq-switch-chip cq-switch-chip--compact"
-                      :class="{ 'cq-switch-chip--active': tableMode === 'overview' }"
-                      @click="tableMode = 'overview'"
-                    >
-                      概览
-                    </button>
-                    <button
-                      type="button"
-                      class="cq-switch-chip cq-switch-chip--compact"
-                      :class="{ 'cq-switch-chip--active': tableMode === 'finance' }"
-                      @click="tableMode = 'finance'"
-                    >
-                      财务
-                    </button>
-                    <button
-                      type="button"
-                      class="cq-switch-chip cq-switch-chip--compact"
-                      :class="{ 'cq-switch-chip--active': tableMode === 'full' }"
-                      @click="tableMode = 'full'"
-                    >
-                      全量字段
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <ResultsToolbar
+                :active-view="activeView"
+                :table-mode="tableMode"
+                :has-applied-search="hasAppliedSearch"
+                :exporting="exporting"
+                :total="total"
+                :is-mobile="isMobile"
+                :mobile-table-mode-text="mobileTableModeText"
+                @export="handleExport"
+                @update:active-view="activeView = $event"
+                @update:table-mode="tableMode = $event"
+              />
 
               <template v-if="activeView === 'table'">
-                <div class="cq-table-shell">
+                <MobileCardList
+                  v-if="isMobile"
+                  :loading="loading"
+                  :table-data="tableData"
+                  :table-mode="tableMode"
+                  :anomaly-label-map="anomalyLabelMap"
+                  :format-amount="formatAmount"
+                  :format-percent="formatPercent"
+                  :format-number="formatNumber"
+                  :get-settlement-status-tag-type="getSettlementStatusTagType"
+                  @row-click="handleRowClick"
+                  @view-insight="handleViewInsight"
+                />
+
+                <div v-else class="cq-table-shell">
                   <el-table
                     v-loading="loading"
                     :data="tableData"
@@ -345,7 +180,13 @@
                       align="center"
                       fixed="left"
                     />
-                    <el-table-column prop="projectCode" label="项目编号" width="150" fixed="left" />
+                    <el-table-column
+                      prop="projectCode"
+                      label="项目编号"
+                      width="150"
+                      fixed="left"
+                      sortable="custom"
+                    />
                     <el-table-column
                       prop="customerName"
                       label="客户名称"
@@ -688,12 +529,7 @@
 import {
   ElButton,
   ElCard,
-  ElDatePicker,
   ElEmpty,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElOption,
   ElPagination,
   ElSelect,
   ElSkeleton,
@@ -718,22 +554,10 @@ import {
   getProjectJourneyApi
 } from '@/api/comprehensive-query'
 import { useAppStore } from '@/store/modules/app'
-
-interface QueryForm {
-  keyword: string
-  customerName: string
-  category: string
-  settlementStatus: string
-  invoiceStatus: string
-  progressType: string
-  progressMin: string
-  progressMax: string
-  dateRange: [string, string] | []
-}
-
-type QuerySnapshot = QueryForm
-
-type TableMode = 'overview' | 'finance' | 'full'
+import FilterSidebar from './components/FilterSidebar.vue'
+import MobileCardList from './components/MobileCardList.vue'
+import ResultsToolbar from './components/ResultsToolbar.vue'
+import type { QueryForm, QuerySnapshot, TableMode } from './types'
 
 const EMPTY_SUMMARY: ComprehensiveQuerySummary = {
   projectCount: 0,
@@ -778,6 +602,7 @@ const tableMode = ref<TableMode>('overview')
 const selectedProjectCode = ref('')
 const journeyLoading = ref(false)
 const journey = ref<ProjectJourney | null>(null)
+const mobileFiltersExpanded = ref(false)
 
 const pagination = reactive({
   page: 1,
@@ -787,6 +612,7 @@ const pagination = reactive({
 const tableSort = reactive<{
   prop:
     | ''
+    | 'projectCode'
     | 'contractNo'
     | 'latestOutboundDate'
     | 'latestOrderDate'
@@ -877,6 +703,11 @@ const projectOptions = computed(() =>
     label: `${item.projectCode}${item.customerName ? ` / ${item.customerName}` : ''}`
   }))
 )
+const mobileTableModeText = computed(() => {
+  if (tableMode.value === 'finance') return '财务'
+  if (tableMode.value === 'full') return '全量'
+  return '概览'
+})
 
 const draftStatusText = computed(() => {
   if (filtersDirty.value && hasAppliedSearch.value) return '草稿已修改'
@@ -1199,6 +1030,7 @@ const resetWorkspace = () => {
   resetQueryDraft()
   appliedSnapshot.value = null
   tableMode.value = 'overview'
+  mobileFiltersExpanded.value = false
   resetResultState()
 }
 
@@ -1264,6 +1096,7 @@ const handleTableSortChange = ({
   order: 'ascending' | 'descending' | null
 }) => {
   const sortableFields = new Set([
+    'projectCode',
     'contractNo',
     'latestOutboundDate',
     'latestOrderDate',
@@ -1291,6 +1124,14 @@ const handleViewInsight = (row: ComprehensiveQueryRow) => {
   selectedProjectCode.value = row.projectCode
   activeView.value = 'insights'
 }
+
+watch(
+  () => isMobile.value,
+  (value) => {
+    mobileFiltersExpanded.value = !value
+  },
+  { immediate: true }
+)
 
 watch(
   () => selectedProjectCode.value,
@@ -1414,6 +1255,10 @@ onBeforeUnmount(() => {
   scrollbar-gutter: stable;
 }
 
+.cq-sidebar--mobile-collapsed {
+  overflow: visible;
+}
+
 .cq-main {
   display: flex;
   flex-direction: column;
@@ -1516,6 +1361,29 @@ onBeforeUnmount(() => {
 .cq-actions :deep(.el-button:not(.is-text)) {
   flex: 1;
   min-width: 0;
+}
+
+.cq-mobile-filter-toggle {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1b4f66;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgb(236 245 249 / 96%), rgb(224 238 244 / 96%));
+  border: 1px solid #c9dbe4;
+  border-radius: 12px;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.cq-mobile-filter-toggle:hover {
+  background: linear-gradient(180deg, rgb(242 248 251 / 100%), rgb(231 241 246 / 100%));
+  border-color: #9fc0cf;
+  transform: translateY(-1px);
 }
 
 :deep(.cq-action-btn) {
@@ -1840,6 +1708,22 @@ onBeforeUnmount(() => {
   display: none;
 }
 
+.cq-mobile-results-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.cq-mobile-results-meta span {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #4f6476;
+  background: #eff4f7;
+  border-radius: 999px;
+}
+
 .cq-results__actions {
   display: flex;
   gap: 6px;
@@ -1887,6 +1771,139 @@ onBeforeUnmount(() => {
   padding-bottom: 8px;
   overflow: hidden;
   flex: 1;
+}
+
+.cq-mobile-card-list {
+  display: flex;
+  padding-bottom: 8px;
+  overflow: auto;
+  gap: 10px;
+  flex: 1;
+  flex-direction: column;
+}
+
+.cq-mobile-card {
+  display: flex;
+  gap: 12px;
+  flex-direction: column;
+  padding: 14px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(248 251 253 / 98%)),
+    linear-gradient(135deg, rgb(17 138 178 / 6%), transparent);
+  border: 1px solid #d9e4eb;
+  border-radius: 18px;
+  box-shadow: 0 14px 24px rgb(15 23 42 / 6%);
+}
+
+.cq-mobile-card__head,
+.cq-mobile-card__footer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.cq-mobile-card__code {
+  font-size: 15px;
+  font-weight: 800;
+  color: #152130;
+}
+
+.cq-mobile-card__title {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #4e6174;
+}
+
+.cq-mobile-card__status {
+  flex-shrink: 0;
+}
+
+.cq-mobile-card__summary {
+  display: flex;
+  gap: 6px;
+  flex-direction: column;
+}
+
+.cq-mobile-card__product {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e2f3f;
+}
+
+.cq-mobile-card__subline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #6b7b8c;
+}
+
+.cq-mobile-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cq-mobile-metric {
+  display: flex;
+  gap: 4px;
+  flex-direction: column;
+  padding: 10px;
+  background: #f6fafc;
+  border: 1px solid #e1eaef;
+  border-radius: 14px;
+}
+
+.cq-mobile-metric__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #68798a;
+}
+
+.cq-mobile-metric__value {
+  font-size: 13px;
+  font-weight: 800;
+  color: #162536;
+}
+
+.cq-mobile-card__finance,
+.cq-mobile-card__detail {
+  display: grid;
+  gap: 8px;
+}
+
+.cq-mobile-pair {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  font-size: 12px;
+  color: #637284;
+  border-bottom: 1px dashed #dbe5eb;
+}
+
+.cq-mobile-pair:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.cq-mobile-pair strong {
+  max-width: 60%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2d3f;
+  text-align: right;
+}
+
+.cq-mobile-card__dates {
+  display: flex;
+  gap: 6px;
+  flex-direction: column;
+  font-size: 11px;
+  color: #6f7f90;
 }
 
 .cq-table-shell :deep(.el-scrollbar__bar.is-horizontal) {
@@ -2138,8 +2155,27 @@ onBeforeUnmount(() => {
 
 @media (width <= 768px) {
   .cq-page {
-    height: auto;
+    height: 100%;
+    min-height: 0;
     padding: 10px;
+    overflow: hidden auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cq-shell {
+    height: auto;
+    min-height: max-content;
+    overflow: visible;
+  }
+
+  .cq-layout {
+    gap: 10px;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .cq-sidebar {
+    padding-right: 0;
   }
 
   .cq-panel,
@@ -2150,6 +2186,11 @@ onBeforeUnmount(() => {
 
   .cq-empty-stage {
     padding: 20px 16px;
+  }
+
+  .cq-main {
+    min-height: auto;
+    overflow: visible;
   }
 
   .cq-empty-stage__grid {
@@ -2169,6 +2210,11 @@ onBeforeUnmount(() => {
     justify-content: flex-start;
   }
 
+  .cq-results {
+    min-height: auto;
+    overflow: visible;
+  }
+
   .cq-results__toolbar,
   .cq-insight-toolbar {
     flex-direction: column;
@@ -2181,11 +2227,14 @@ onBeforeUnmount(() => {
 
   .cq-switch-group {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    overflow: auto hidden;
+    scrollbar-width: none;
   }
 
   .cq-switch-chip {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: max-content;
   }
 
   .cq-insight-toolbar__select {
@@ -2198,6 +2247,37 @@ onBeforeUnmount(() => {
 
   .cq-pagination--mobile {
     margin-top: 10px;
+  }
+
+  :deep(.cq-pagination--mobile .el-pagination) {
+    width: 100%;
+    justify-content: center;
+    border-radius: 18px;
+  }
+
+  :deep(.cq-pagination--mobile .el-pagination__sizes),
+  :deep(.cq-pagination--mobile .el-pagination__jump) {
+    display: none;
+  }
+
+  .cq-mobile-card__footer {
+    align-items: flex-end;
+  }
+
+  .cq-mobile-card-list {
+    overflow: visible;
+    flex: none;
+  }
+
+  .cq-insight-layout {
+    min-height: auto;
+  }
+
+  .cq-insight-left,
+  .cq-insight-right,
+  .cq-insight-empty {
+    min-height: auto;
+    overflow: visible;
   }
 }
 </style>

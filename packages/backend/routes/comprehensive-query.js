@@ -673,6 +673,7 @@ const buildListFilters = (inputQuery) => {
 }
 
 const SORT_FIELD_SQL_MAP = {
+  projectCode: `NULLIF(LTRIM(RTRIM(base.projectCode)), N'')`,
   contractNo: `NULLIF(LTRIM(RTRIM(base.contractNo)), N'')`,
   latestOutboundDate: 'base.latestOutboundDate',
   latestOrderDate: 'base.latestOrderDate',

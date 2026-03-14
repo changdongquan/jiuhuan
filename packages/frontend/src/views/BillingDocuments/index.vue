@@ -1,18 +1,36 @@
 <template>
   <div class="sales-orders-page px-4 pt-0 pb-1 space-y-2">
+    <div v-if="isMobile" class="mobile-top-bar">
+      <div class="mobile-top-bar-left">
+        <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
+          {{ showMobileFilters ? '收起筛选' : '展开筛选' }}
+        </el-button>
+      </div>
+      <div class="view-mode-switch">
+        <span class="view-mode-switch__label">视图</span>
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="card">卡片</el-radio-button>
+          <el-radio-button value="table">表格</el-radio-button>
+        </el-radio-group>
+      </div>
+    </div>
     <el-form
       ref="queryFormRef"
       :model="queryForm"
-      label-width="90px"
-      inline
+      :label-width="isMobile ? 'auto' : '90px'"
+      :label-position="isMobile ? 'top' : 'right'"
+      :inline="!isMobile"
       class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] py-2 shadow-sm"
+      :class="{ 'query-form--mobile': isMobile }"
+      v-show="!isMobile || showMobileFilters"
     >
       <el-form-item label="模糊查询">
         <el-input
           v-model="queryForm.itemCode"
           placeholder="项目编号/产品名称/图号/模号/发票号/单据号"
           clearable
-          style="width: 280px"
+          :style="{ width: isMobile ? '100%' : '280px' }"
+          @keydown.enter.prevent="handleSearch"
         />
       </el-form-item>
       <el-form-item label="客户名称">
@@ -20,7 +38,8 @@
           v-model="queryForm.customerName"
           placeholder="请输入客户名称"
           clearable
-          style="width: 150px"
+          :style="{ width: isMobile ? '100%' : '150px' }"
+          @keydown.enter.prevent="handleSearch"
         />
       </el-form-item>
       <el-form-item label="单据状态">
@@ -28,7 +47,7 @@
           v-model="queryForm.status"
           placeholder="请选择单据状态"
           clearable
-          style="width: 140px"
+          :style="{ width: isMobile ? '100%' : '140px' }"
         >
           <el-option
             v-for="item in statusOptions"
@@ -47,7 +66,7 @@
           end-placeholder="结束日期"
           value-format="YYYY-MM-DD"
           clearable
-          style="width: 230px"
+          :style="{ width: isMobile ? '100%' : '230px' }"
         />
       </el-form-item>
       <el-form-item class="query-form__actions">
@@ -59,14 +78,101 @@
       </el-form-item>
     </el-form>
 
-    <div v-if="viewMode === 'table'" class="so-table-wrapper">
+    <div v-if="isMobile && viewMode === 'card'" v-loading="loading" class="bd-mobile-list">
+      <el-card
+        v-for="row in tableData"
+        :key="row.id || row.documentNo || row.invoiceNo"
+        class="bd-mobile-card"
+        shadow="hover"
+      >
+        <div class="bd-mobile-card__header">
+          <div>
+            <div class="bd-mobile-card__code">{{ row.documentNo || '-' }}</div>
+            <div class="bd-mobile-card__customer">{{ row.customerName || '-' }}</div>
+          </div>
+          <el-tag size="small" :type="statusTagMap[row.status].type">
+            {{ statusTagMap[row.status].label }}
+          </el-tag>
+        </div>
+        <div class="bd-mobile-card__stats">
+          <div class="stat">
+            <span class="label">行项目数</span>
+            <strong>{{ row.details.length }}</strong>
+          </div>
+          <div class="stat">
+            <span class="label">含税金额</span>
+            <strong>{{ formatAmount(row.totalAmount) }}</strong>
+          </div>
+        </div>
+        <div class="bd-mobile-card__meta">
+          <div>
+            <span class="label">发票号码</span>
+            <span class="value">{{ row.invoiceNo || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">开票日期</span>
+            <span class="value">{{ row.invoiceDate || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">到期日期</span>
+            <span class="value">{{ row.deliveryDate || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">合同编号</span>
+            <span class="value">{{ row.contractNo || '-' }}</span>
+          </div>
+          <div>
+            <span class="label">总数量</span>
+            <span class="value">{{ row.totalQuantity }}</span>
+          </div>
+          <div>
+            <span class="label">单据状态</span>
+            <span class="value">{{ statusTagMap[row.status].label }}</span>
+          </div>
+        </div>
+        <div v-if="row.details.length" class="bd-mobile-card__details">
+          <div
+            v-for="detail in row.details.slice(0, 2)"
+            :key="detail.id"
+            class="bd-mobile-card__detail-chip"
+          >
+            <span>{{ detail.itemCode || '-' }}</span>
+            <span>{{ formatAmount(detail.amount) }}</span>
+          </div>
+          <div v-if="row.details.length > 2" class="bd-mobile-card__detail-more">
+            另有 {{ row.details.length - 2 }} 条明细
+          </div>
+        </div>
+        <div class="bd-mobile-card__actions">
+          <el-button size="small" type="success" @click="openViewDialog(row)">查看</el-button>
+          <el-button size="small" type="primary" :disabled="readOnlyMode" @click="handleEdit(row)">
+            编辑
+          </el-button>
+          <el-button size="small" type="danger" :disabled="readOnlyMode" @click="handleDelete(row)">
+            删除
+          </el-button>
+        </div>
+      </el-card>
+      <el-empty
+        v-if="!tableData.length && !loading"
+        description="当前条件下暂无开票数据"
+        class="rounded-lg bg-[var(--el-bg-color-overlay)] py-12"
+        :image-size="160"
+      />
+    </div>
+
+    <div
+      v-else-if="!isMobile || viewMode === 'table'"
+      class="so-table-wrapper"
+      :class="{ 'so-table-wrapper--mobile': isMobile }"
+    >
       <el-table
         ref="tableRef"
         v-loading="loading"
         :data="tableData"
         border
         class="so-table"
-        height="calc(100vh - 320px)"
+        :height="tableHeight"
         row-key="id"
         @row-dblclick="handleRowDblClick"
       >
@@ -339,14 +445,19 @@
       </div>
     </div>
 
-    <div class="pagination-footer">
+    <div
+      v-if="tableData.length"
+      class="pagination-footer"
+      :class="{ 'pagination-footer--mobile': isMobile || viewMode === 'card' }"
+    >
       <el-pagination
         background
-        layout="total, sizes, prev, pager, next, jumper"
+        :layout="paginationLayout"
         :current-page="pagination.page"
         :page-size="pagination.size"
         :page-sizes="[10, 20, 30, 50]"
         :total="total"
+        :pager-count="paginationPagerCount"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       />
@@ -355,14 +466,15 @@
     <el-dialog
       v-model="viewDialogVisible"
       title="查看开票单据"
-      width="1400px"
+      :width="isMobile ? '100%' : '1400px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="so-dialog so-dialog-view"
     >
       <div v-if="viewInvoiceData" class="view-dialog-container">
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">开票基本信息</h3>
-          <div class="view-dialog-info-grid">
+          <div class="view-dialog-info-grid" :class="{ 'view-dialog-info-grid--mobile': isMobile }">
             <div class="view-dialog-info-item">
               <span class="view-dialog-info-label">单据编号：</span>
               <span class="view-dialog-info-value">{{ viewInvoiceData.documentNo || '-' }}</span>
@@ -397,7 +509,7 @@
         </div>
         <div class="view-dialog-section">
           <h3 class="view-dialog-section-title">发票明细</h3>
-          <div class="dialog-table-wrapper">
+          <div v-if="!isMobile" class="dialog-table-wrapper">
             <el-table :data="viewInvoiceData.details" border size="small">
               <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="id" label="明细ID" width="70" />
@@ -419,6 +531,62 @@
               <el-table-column prop="contractNo" label="合同号" min-width="120" />
             </el-table>
           </div>
+          <div v-else class="view-dialog-mobile-details">
+            <div
+              v-for="(detail, index) in viewInvoiceData.details"
+              :key="detail.id || index"
+              class="view-dialog-mobile-detail-card"
+            >
+              <div class="view-dialog-mobile-detail-header">
+                <div class="view-dialog-mobile-detail-title">明细 {{ index + 1 }}</div>
+                <div class="view-dialog-mobile-detail-amount">
+                  {{ formatAmount(detail.amount) }}
+                </div>
+              </div>
+              <div class="view-dialog-mobile-detail-body">
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">项目编号</span>
+                  <span class="value">{{ detail.itemCode || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">产品名称</span>
+                  <span class="value">{{ detail.productName || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">产品图号</span>
+                  <span class="value">{{ detail.productDrawingNo || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">客户模号</span>
+                  <span class="value">{{ detail.customerPartNo || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">合同号</span>
+                  <span class="value">{{ detail.contractNo || '-' }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">数量</span>
+                  <span class="value">{{ detail.quantity || 0 }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">单价</span>
+                  <span class="value">{{ formatAmount(detail.unitPrice) }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">是否已开全额发票</span>
+                  <span class="value">{{ formatBoolean(detail.fullIssued) }}</span>
+                </div>
+                <div class="view-dialog-mobile-detail-row">
+                  <span class="label">是否结清</span>
+                  <span class="value">{{ formatBoolean(detail.detailIsSettled) }}</span>
+                </div>
+                <div v-if="detail.remark" class="view-dialog-mobile-detail-row">
+                  <span class="label">备注</span>
+                  <span class="value">{{ detail.remark }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -429,7 +597,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="1500px"
+      :width="isMobile ? '100%' : '1500px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="finance-create-dialog"
       @closed="handleDialogClosed"
@@ -438,6 +607,7 @@
         ref="dialogFormRef"
         :model="dialogForm"
         :rules="dialogRules"
+        :label-position="isMobile ? 'top' : 'right'"
         label-width="auto"
         class="finance-dialog-form"
       >
@@ -484,7 +654,6 @@
                 value-format="YYYY-MM-DD"
                 placeholder="请选择开票日期"
                 class="dialog-date-picker"
-                style="width: 252px"
               />
             </el-form-item>
             <el-form-item label="单据状态" class="dialog-status-item">
@@ -522,7 +691,14 @@
             </div>
           </div>
 
-          <el-table :data="dialogForm.details" border size="small" row-key="id" style="width: 100%">
+          <el-table
+            v-if="!isMobile"
+            :data="dialogForm.details"
+            border
+            size="small"
+            row-key="id"
+            style="width: 100%"
+          >
             <el-table-column type="index" label="序号" width="45" />
             <el-table-column label="项目编号" min-width="140">
               <template #default="{ row }">
@@ -589,6 +765,70 @@
               </template>
             </el-table-column>
           </el-table>
+          <div v-else class="dialog-mobile-details-list">
+            <div
+              v-for="(row, index) in dialogForm.details"
+              :key="row.id || index"
+              class="dialog-mobile-detail-card"
+            >
+              <div class="dialog-mobile-detail-header">
+                <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
+                <el-button type="danger" link @click="removeDetailRow(index)">删除</el-button>
+              </div>
+              <div class="dialog-mobile-detail-body">
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">项目编号</div>
+                  <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">产品名称</div>
+                  <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">产品图号</div>
+                  <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">客户模号</div>
+                  <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">合同号</div>
+                  <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">单价(元)</div>
+                  <el-input-number
+                    v-model="row.unitPrice"
+                    :min="0"
+                    :step="100"
+                    :precision="2"
+                    :controls="false"
+                    style="width: 100%"
+                    @change="handleDetailUnitPriceChange(row)"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">数量</div>
+                  <el-input-number
+                    v-model="row.quantity"
+                    :min="0"
+                    :step="1"
+                    style="width: 100%"
+                    @change="handleDetailQuantityChange(row)"
+                  />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">金额(元)</div>
+                  <el-input :model-value="formatAmount(row.amount)" disabled />
+                </div>
+                <div class="dialog-mobile-detail-field">
+                  <div class="dialog-mobile-detail-label">备注</div>
+                  <el-input v-model="row.remark" type="textarea" :rows="2" placeholder="备注" />
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
       </el-form>
       <template #footer>
@@ -602,11 +842,18 @@
     <el-dialog
       v-model="invoiceCandidateDialogVisible"
       title="选择开票明细"
-      width="1350px"
+      :width="isMobile ? '100%' : '1350px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
     >
-      <div class="finance-candidate-toolbar">
-        <el-select v-model="invoiceCandidateFilterType" style="width: 180px">
+      <div
+        class="finance-candidate-toolbar"
+        :class="{ 'finance-candidate-toolbar--mobile': isMobile }"
+      >
+        <el-select
+          v-model="invoiceCandidateFilterType"
+          :style="{ width: isMobile ? '100%' : '180px' }"
+        >
           <el-option label="未开票" value="no_invoice" />
           <el-option label="预付已开待后续" value="prepaid_pending" />
           <el-option label="全额发票" value="full" />
@@ -616,7 +863,7 @@
           placeholder="客户名称"
           clearable
           filterable
-          style="width: 220px"
+          :style="{ width: isMobile ? '100%' : '220px' }"
           :disabled="Boolean(dialogForm.customerName)"
           @change="loadInvoiceCandidates(true)"
         >
@@ -631,7 +878,7 @@
           v-model="invoiceCandidateKeyword"
           placeholder="项目编号/产品名称/图号/模号/合同号"
           clearable
-          style="width: 320px"
+          :style="{ width: isMobile ? '100%' : '320px' }"
           @keydown.enter.prevent="loadInvoiceCandidates(true)"
         />
         <el-button type="primary" @click="loadInvoiceCandidates(true)">查询</el-button>
@@ -645,7 +892,7 @@
         v-loading="invoiceCandidateLoading"
         :data="invoiceCandidates"
         border
-        height="460"
+        :height="isMobile ? undefined : 460"
         row-key="itemCode"
         class="finance-candidate-table"
         @selection-change="handleInvoiceCandidateSelectionChange"
@@ -721,7 +968,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
   ElButton,
@@ -736,6 +983,8 @@ import {
   ElMessageBox,
   ElOption,
   ElPagination,
+  ElRadioButton,
+  ElRadioGroup,
   ElSelect,
   ElTable,
   ElTableColumn,
@@ -749,6 +998,7 @@ import {
   getFinanceInvoiceListApi,
   updateFinanceInvoiceApi
 } from '@/api/finance'
+import { useAppStore } from '@/store/modules/app'
 
 type InvoiceStatus = 'normal' | 'red'
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
@@ -970,8 +1220,12 @@ const createEmptyInvoice = (): InvoicePayload => ({
 })
 
 const readOnlyMode = false
+const appStore = useAppStore()
+const isMobile = computed(() => appStore.getMobile)
 const route = useRoute()
+const router = useRouter()
 const customerOptions = ref<string[]>([])
+const showMobileFilters = ref(false)
 const invoiceCandidateDialogVisible = ref(false)
 const invoiceCandidateLoading = ref(false)
 const invoiceCandidateFilterType = ref<'no_invoice' | 'prepaid_pending' | 'full'>('no_invoice')
@@ -1152,13 +1406,28 @@ const tableRef = ref<InstanceType<typeof ElTable>>()
 const tableData = ref<InvoiceTableRow[]>([])
 const total = ref(0)
 const loading = ref(false)
-const resolveViewModeFromRoute = () => {
+type PcViewMode = 'table' | 'timeline'
+type ViewMode = PcViewMode | 'card'
+
+const resolveViewModeFromRoute = (): PcViewMode => {
   const v = route.query.view
-  if (v === 'table' || v === 'timeline') return v as 'table' | 'timeline'
+  if (v === 'table' || v === 'timeline') return v as PcViewMode
   return 'timeline'
 }
 
-const viewMode = ref<'table' | 'timeline'>(resolveViewModeFromRoute())
+const updateViewQuery = (view: PcViewMode) => {
+  const nextQuery = { ...route.query, view }
+  void router.replace({ path: route.path, query: nextQuery })
+}
+
+const viewMode = ref<ViewMode>(isMobile.value ? 'card' : resolveViewModeFromRoute())
+const tableHeight = computed(() => (isMobile.value ? undefined : 'calc(100vh - 320px)'))
+const paginationLayout = computed(() =>
+  isMobile.value || viewMode.value === 'card'
+    ? 'total, prev, pager, next'
+    : 'total, sizes, prev, pager, next, jumper'
+)
+const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 const timelineActiveInvoiceId = ref<number | null>(null)
 const timelineActiveDetailKey = ref<string | null>(null)
 
@@ -1287,9 +1556,27 @@ watch(
 watch(
   () => route.query.view,
   () => {
+    if (isMobile.value) return
     viewMode.value = resolveViewModeFromRoute()
   }
 )
+
+watch(viewMode, (mode) => {
+  if (!isMobile.value && (mode === 'table' || mode === 'timeline')) {
+    if (route.query.view !== mode) {
+      updateViewQuery(mode)
+    }
+  }
+})
+
+watch(isMobile, (mobile) => {
+  if (mobile) {
+    viewMode.value = 'card'
+    showMobileFilters.value = false
+    return
+  }
+  viewMode.value = resolveViewModeFromRoute()
+})
 
 const loadData = async () => {
   loading.value = true
@@ -1771,6 +2058,31 @@ onMounted(() => {
   position: relative;
 }
 
+.mobile-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px 0;
+}
+
+.mobile-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -1794,6 +2106,126 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+.bd-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bd-mobile-card {
+  border: 1px solid rgb(15 23 42 / 8%);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 8%);
+}
+
+.bd-mobile-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bd-mobile-card__code {
+  font-size: 15px;
+  font-weight: 700;
+  color: #102a43;
+  word-break: break-all;
+}
+
+.bd-mobile-card__customer {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #52606d;
+}
+
+.bd-mobile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bd-mobile-card__stats .stat {
+  padding: 8px 10px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+  border-radius: 12px;
+}
+
+.bd-mobile-card__stats .label {
+  display: block;
+  font-size: 11px;
+  color: #7b8794;
+}
+
+.bd-mobile-card__stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  color: #102a43;
+}
+
+.bd-mobile-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin-top: 10px;
+}
+
+.bd-mobile-card__meta .label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: #7b8794;
+}
+
+.bd-mobile-card__meta .value {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #1f2933;
+  word-break: break-word;
+}
+
+.bd-mobile-card__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bd-mobile-card__detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 9px;
+  font-size: 11px;
+  color: #334e68;
+  background: #f5f7fa;
+  border-radius: 999px;
+}
+
+.bd-mobile-card__detail-more {
+  width: 100%;
+  font-size: 12px;
+  color: #7b8794;
+}
+
+.bd-mobile-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bd-mobile-card__actions .el-button {
+  flex: 1;
+}
+
+.bd-mobile-card__actions :deep(.el-button) {
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
 :deep(.query-form .el-form-item:not(.query-form__actions)) {
   margin-right: 18px;
   margin-bottom: 0;
@@ -1802,6 +2234,14 @@ onMounted(() => {
 .so-table-wrapper {
   background: var(--el-bg-color);
   border-radius: 8px;
+}
+
+.so-table-wrapper--mobile {
+  overflow: hidden;
+}
+
+.so-table-wrapper--mobile .so-table {
+  min-width: 880px;
 }
 
 :deep(.so-table .el-table__header .cell),
@@ -1881,6 +2321,15 @@ onMounted(() => {
   color: #606266;
 }
 
+.finance-candidate-toolbar--mobile {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.finance-candidate-toolbar--mobile .finance-candidate-toolbar__selected {
+  margin-left: 0;
+}
+
 .finance-candidate-pagination {
   display: flex;
   margin-top: 10px;
@@ -1940,6 +2389,12 @@ onMounted(() => {
   display: flex;
   transform: translateX(-50%);
   justify-content: center;
+}
+
+.pagination-footer--mobile {
+  position: static;
+  margin: 6px 0 2px;
+  transform: none;
 }
 
 .so-timeline-layout {
@@ -2111,6 +2566,10 @@ onMounted(() => {
   gap: 8px 12px;
 }
 
+.view-dialog-info-grid--mobile {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
 .view-dialog-info-item {
   font-size: 13px;
 }
@@ -2140,5 +2599,144 @@ onMounted(() => {
 
 :deep(.so-view-detail-row--active) .cell {
   color: #409eff !important;
+}
+
+.dialog-mobile-details-list,
+.view-dialog-mobile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-mobile-detail-card,
+.view-dialog-mobile-detail-card {
+  padding: 14px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+}
+
+.dialog-mobile-detail-header,
+.view-dialog-mobile-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dialog-mobile-detail-title,
+.view-dialog-mobile-detail-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #102a43;
+}
+
+.view-dialog-mobile-detail-amount {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.dialog-mobile-detail-body,
+.view-dialog-mobile-detail-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.dialog-mobile-detail-field,
+.view-dialog-mobile-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dialog-mobile-detail-label,
+.view-dialog-mobile-detail-row .label {
+  font-size: 12px;
+  color: #7b8794;
+}
+
+.view-dialog-mobile-detail-row .value {
+  font-size: 14px;
+  color: #1f2933;
+  word-break: break-word;
+}
+
+@media (width <= 768px) {
+  .query-form--mobile {
+    padding: 14px;
+  }
+
+  :deep(.query-form--mobile .el-form-item) {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  :deep(.query-form--mobile .el-form-item .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.query-form--mobile .el-input),
+  :deep(.query-form--mobile .el-select),
+  :deep(.query-form--mobile .el-date-editor) {
+    width: 100% !important;
+  }
+
+  :deep(.query-form--mobile .query-form__actions) {
+    margin-bottom: 0;
+    margin-left: 0;
+  }
+
+  .query-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .query-actions .el-button {
+    flex: 1;
+    min-width: calc(50% - 4px);
+    margin-left: 0;
+  }
+
+  .finance-dialog-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .dialog-input,
+  .dialog-date-picker {
+    width: 100% !important;
+  }
+
+  .finance-dialog-section__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-dialog-summary {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .dialog-mobile-detail-field:last-child,
+  .view-dialog-mobile-detail-row:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .view-dialog-section-header--timeline {
+    flex-direction: column;
+  }
+
+  .so-timeline-header-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: stretch;
+  }
+
+  .so-timeline-header-actions .el-button {
+    flex: 1;
+  }
 }
 </style>
