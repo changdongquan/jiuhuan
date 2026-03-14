@@ -167,6 +167,64 @@ router.get('/customer-options', async (req, res) => {
   }
 })
 
+router.get('/relocation-status-check', async (req, res) => {
+  try {
+    const projectCode = String(req.query?.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1 项目编号 as projectCode, 生产状态 as productionStatus
+      FROM 生产任务
+      WHERE 项目编号 = @projectCode
+    `,
+      { projectCode }
+    )
+
+    const task = rows?.[0] || null
+    if (!task) {
+      return res.json({
+        code: 0,
+        success: true,
+        data: {
+          projectCode,
+          exists: false,
+          canRelocate: false,
+          productionStatus: null,
+          message: '未找到对应的生产任务，无法将项目状态设置为“已经移模”'
+        }
+      })
+    }
+
+    const productionStatus = String(task.productionStatus || '').trim()
+    const canRelocate = productionStatus === '已完成'
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        projectCode,
+        exists: true,
+        canRelocate,
+        productionStatus,
+        message: canRelocate ? '' : '生产任务状态必须为“已完成”才能将项目状态设置为“已经移模”'
+      }
+    })
+  } catch (error) {
+    console.error('校验项目移模状态失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '校验项目移模状态失败'
+    })
+  }
+})
+
 /** 从产品重量列表中取第一个有效数值；若无则回退到单个产品重量 */
 const resolveFirstProductWeight = (row) => {
   const listRaw = row?.产品重量列表
@@ -2535,6 +2593,32 @@ router.put('/update', requireProjectUpdate, async (req, res) => {
         success: false,
         message: '项目编号不能为空'
       })
+    }
+
+    if (data.项目状态 === '已经移模') {
+      const taskRows = await query(
+        `
+        SELECT TOP 1 生产状态 as productionStatus
+        FROM 生产任务
+        WHERE 项目编号 = @projectCode
+      `,
+        { projectCode }
+      )
+      const task = taskRows?.[0] || null
+      if (!task) {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '未找到对应的生产任务，无法将项目状态设置为“已经移模”'
+        })
+      }
+      if (String(task.productionStatus || '').trim() !== '已完成') {
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '生产任务状态必须为“已完成”才能将项目状态设置为“已经移模”'
+        })
+      }
     }
 
     // 兼容旧字段：产品图号列表 -> 产品列表

@@ -87,6 +87,45 @@ export interface SalaryDraft {
   rows: SalaryDraftRow[]
 }
 
+export interface SalaryEmployeeInfo {
+  id: number
+  employeeName: string
+  employeeNumber: number | string
+  gender: string
+  level: string | number
+  entryDate: string
+  idCard?: string | null
+  department?: string
+  status?: string
+}
+
+export interface SalaryAttendanceRecord {
+  employeeId: number
+  employeeName: string
+  employeeNumber: number | string
+  gender: string
+  department: string
+  level: string | number
+  entryDate: string
+  overtimeHours: number | null
+  doubleOvertimeHours: number | null
+  tripleOvertimeHours: number | null
+  nightShiftCount: number | null
+  overtimeSubtotal: number | null
+  seniorityYears: number | null
+  fullAttendanceBonus: number | null
+  mealAllowanceCount: number | null
+  subsidySubtotal: number | null
+  lateCount: number | null
+  newOrPersonalLeaveHours: number | null
+  sickLeaveHours: number | null
+  absenceHours: number | null
+  hygieneFee: number | null
+  waterFee: number | null
+  electricityFee: number | null
+  deductionSubtotal: number | null
+}
+
 export const getSalaryListApi = (params: Record<string, any> = {}) => {
   return request({
     url: '/api/salary/list',
@@ -98,6 +137,22 @@ export const getSalaryListApi = (params: Record<string, any> = {}) => {
 export const getSalarySummaryByMonthApi = (month: string) => {
   return request({
     url: '/api/salary/by-month',
+    method: 'get',
+    params: { month }
+  })
+}
+
+export const getSalaryEmployeeListApi = (params: Record<string, any> = {}) => {
+  return request({
+    url: '/api/salary/employees',
+    method: 'get',
+    params
+  })
+}
+
+export const getSalaryAttendanceRecordsApi = (month: string) => {
+  return request({
+    url: '/api/salary/attendance-records',
     method: 'get',
     params: { month }
   })

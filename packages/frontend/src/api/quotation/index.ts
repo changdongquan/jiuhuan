@@ -85,6 +85,21 @@ export interface QuotationInitiationRequestRow {
   withdrawn_at?: string | null
 }
 
+export interface QuotationProjectOption {
+  项目编号?: string
+  projectCode?: string
+  productName?: string
+  productDrawing?: string
+  客户模号?: string
+}
+
+export interface QuotationProjectGoods {
+  productDrawing?: string
+  productName?: string
+  category?: string
+  customerModelNo?: string
+}
+
 // 生成新的报价单编号
 export const generateQuotationNoApi = () => {
   return request.get<{
@@ -102,6 +117,38 @@ export const getQuotationCustomerOptionsApi = (
   return request.get<{ list: QuotationCustomerOption[] }>({
     url: '/api/quotation/customer-options',
     params
+  })
+}
+
+export const getQuotationProjectOptionsApi = (params?: {
+  keyword?: string
+  category?: string
+  page?: number
+  pageSize?: number
+}) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: {
+      list: QuotationProjectOption[]
+      total: number
+      page: number
+      pageSize: number
+    }
+  }>({
+    url: '/api/quotation/project-options',
+    params
+  })
+}
+
+export const getQuotationProjectGoodsApi = (projectCode: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: QuotationProjectGoods | null
+  }>({
+    url: '/api/quotation/project-goods',
+    params: { projectCode }
   })
 }
 

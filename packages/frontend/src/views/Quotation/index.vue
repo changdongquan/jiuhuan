@@ -1783,10 +1783,11 @@ import { useAppStore } from '@/store/modules/app'
 import { useUserStore } from '@/store/modules/user'
 
 const userStore = useUserStore()
-import { getProjectGoodsApi, getProjectListApi } from '@/api/project'
 import {
   checkQuotationInitiationProjectCodeApi,
   generateQuotationNoApi,
+  getQuotationProjectGoodsApi,
+  getQuotationProjectOptionsApi,
   createQuotationApi,
   updateQuotationApi,
   deleteQuotationApi,
@@ -1803,6 +1804,7 @@ import {
   deleteQuotationTempPartItemImageApi,
   type QuotationFormData,
   type QuotationCustomerOption,
+  type QuotationProjectOption,
   type QuotationInitiationProjectDetailDraft,
   type QuotationInitiationProjectDraft,
   type QuotationInitiationRequestRow,
@@ -2054,7 +2056,7 @@ const initiationProjectDetails = ref<QuotationInitiationProjectDetailDraft[]>([]
 const projectImportDialogVisible = ref(false)
 const projectSearchKeyword = ref('')
 const projectSearchLoading = ref(false)
-const projectSearchResults = ref<any[]>([])
+const projectSearchResults = ref<QuotationProjectOption[]>([])
 const projectSearchPage = ref(1)
 const projectSearchPageSize = ref(20)
 const projectSearchTotal = ref(0)
@@ -2856,7 +2858,7 @@ const syncInitiationRawFieldsFromProject = async (
   const token = ++initiationProjectGoodsSyncToken.value
 
   try {
-    const response: any = await getProjectGoodsApi(sourceProjectCode)
+    const response: any = await getQuotationProjectGoodsApi(sourceProjectCode)
     if (token !== initiationProjectGoodsSyncToken.value) return
 
     let data: any = null
@@ -3796,7 +3798,7 @@ const searchProjectsForImport = async () => {
       pageSize: projectSearchPageSize.value
     }
 
-    const listResponse: any = await getProjectListApi(listParams)
+    const listResponse: any = await getQuotationProjectOptionsApi(listParams)
 
     let projectList: any[] = []
     let total = 0
@@ -3851,7 +3853,7 @@ const handleSelectProjectForImport = async (row: any) => {
   try {
     importingProject.value = true
 
-    const response: any = await getProjectGoodsApi(projectCode)
+    const response: any = await getQuotationProjectGoodsApi(projectCode)
 
     let data: any = null
     if (response?.data?.data) {

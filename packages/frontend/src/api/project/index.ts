@@ -84,6 +84,14 @@ export interface ProjectCustomerOption {
   status: 'active' | 'inactive'
 }
 
+export interface ProjectRelocationStatusCheck {
+  projectCode: string
+  exists: boolean
+  canRelocate: boolean
+  productionStatus: string | null
+  message?: string
+}
+
 // 获取项目信息列表
 export const getProjectListApi = (params?: ProjectQueryParams) => {
   return request.get({
@@ -104,6 +112,17 @@ export const getProjectCustomerOptionsApi = (
 // 获取单个项目信息
 export const getProjectDetailApi = (projectCode: string) => {
   return request.get({ url: `/api/project/detail`, params: { projectCode } })
+}
+
+export const getProjectRelocationStatusCheckApi = (projectCode: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectRelocationStatusCheck
+  }>({
+    url: '/api/project/relocation-status-check',
+    params: { projectCode }
+  })
 }
 
 // 新增项目信息

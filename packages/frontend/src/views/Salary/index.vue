@@ -1295,25 +1295,23 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { useRoute, useRouter } from 'vue-router'
-import { getEmployeeListApi, type EmployeeInfo } from '@/api/employee'
 import {
   completeSalaryApi,
   deleteSalaryApi,
   exportSalaryPayrollApi,
   exportSalaryTaxImportTemplateApi,
+  getSalaryAttendanceRecordsApi,
   getSalaryDraftApi,
+  getSalaryEmployeeListApi,
   getSalaryListApi,
   readSalaryIncomeTaxApi,
   saveSalaryDraftStep1Api,
   saveSalaryDraftStep2Api,
   saveSalaryDraftStep3Api,
-  unlockSalaryAttendanceApi
+  unlockSalaryAttendanceApi,
+  type SalaryAttendanceRecord,
+  type SalaryEmployeeInfo
 } from '@/api/salary'
-import {
-  getAttendanceDetailApi,
-  getAttendanceListApi,
-  type AttendanceRecord
-} from '@/api/attendance'
 import {
   getOvertimeBaseParamsApi,
   getPenaltyParamsApi,
@@ -1509,7 +1507,7 @@ const taxLoading = ref(false)
 const taxTemplateExported = ref(false)
 
 const addEmployeesLoading = ref(false)
-const addEmployees = ref<EmployeeInfo[]>([])
+const addEmployees = ref<SalaryEmployeeInfo[]>([])
 const addRows = ref<SalaryDraftRow[]>([])
 
 const formatMoneyWithThousands = (val?: number | null) => {
@@ -2421,13 +2419,13 @@ const handleTaxFileChange = (event: Event) => {
 }
 
 const loadActiveEmployees = async () => {
-  const response: any = await getEmployeeListApi({
+  const response: any = await getSalaryEmployeeListApi({
     status: '在职',
     page: 1,
     pageSize: 500
   })
 
-  let list: EmployeeInfo[] = []
+  let list: SalaryEmployeeInfo[] = []
   if (response?.code === 0 && response?.data) {
     list = response.data.list || []
   } else {
@@ -2833,20 +2831,9 @@ const loadPenaltyAmountByName = async (name: string) => {
 }
 
 const loadAttendanceRecordsByMonth = async (month: string) => {
-  const resp: any = await getAttendanceListApi({ month, page: 1, pageSize: 1 })
-  let list: any[] = []
-  if (resp?.code === 0 && resp?.data) {
-    list = resp.data.list || []
-  } else {
-    list = resp?.list || resp?.data?.list || resp?.data || []
-  }
-  const summary = list?.[0]
-  const attendanceId = toNumberOrNull(summary?.id)
-  if (!attendanceId) return []
-
-  const detailResp: any = await getAttendanceDetailApi(attendanceId)
-  const detail = detailResp?.data || detailResp || {}
-  const records: AttendanceRecord[] = detail.records || []
+  const resp: any = await getSalaryAttendanceRecordsApi(month)
+  const detail = resp?.data || resp || {}
+  const records: SalaryAttendanceRecord[] = detail.records || []
   return Array.isArray(records) ? records : []
 }
 
@@ -2869,7 +2856,7 @@ const applyAttendanceOvertimeToDraftRows = async (month: string, rows: SalaryDra
     loadPenaltyAmountByName('迟到扣款')
   ])
 
-  const attByEmployeeId = new Map<number, AttendanceRecord>()
+  const attByEmployeeId = new Map<number, SalaryAttendanceRecord>()
   for (const rec of attendanceRecords) attByEmployeeId.set(rec.employeeId, rec)
 
   return rows.map((row) => {

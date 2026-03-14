@@ -16,7 +16,9 @@ const TABLE_SALARY_BASE = '工资_工资基数'
 const TABLE_OVERTIME_BASE = '工资_加班费基数'
 const TABLE_SUBSIDY = '工资_补助'
 const TABLE_PENALTY = '工资_罚扣'
+const TABLE_EMPLOYEE = '员工信息'
 const TABLE_ATTENDANCE_SUMMARY = '考勤汇总'
+const TABLE_ATTENDANCE_DETAIL = '考勤明细'
 const TABLE_ATTENDANCE_LOCK = '工资_考勤锁定'
 const TAX_IMPORT_SHEET_NAME = '正常工资薪金收入'
 const TAX_IMPORT_HEADERS = [
@@ -60,6 +62,18 @@ const ensureSalarySoftDeleteColumns = async (poolOrTx) => {
       ALTER TABLE 工资汇总 ADD 删除时间 DATETIME2 NULL;
     IF COL_LENGTH(N'工资汇总', N'删除人') IS NULL
       ALTER TABLE 工资汇总 ADD 删除人 NVARCHAR(100) NULL;
+  `)
+}
+
+const ensureEmployeeSoftDeleteColumns = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'是否删除') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 是否删除 BIT NOT NULL CONSTRAINT DF_员工信息_是否删除 DEFAULT(0);
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'删除时间') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 删除时间 DATETIME2 NULL;
+    IF COL_LENGTH(N'${TABLE_EMPLOYEE}', N'删除人') IS NULL
+      ALTER TABLE ${TABLE_EMPLOYEE} ADD 删除人 NVARCHAR(100) NULL;
   `)
 }
 
@@ -183,6 +197,123 @@ const assertSalaryNotInvalid = async (summaryId) => {
     throw err
   }
 }
+
+router.get('/employees', async (req, res) => {
+  try {
+    const pool = await getPool()
+    await ensureEmployeeSoftDeleteColumns(pool)
+
+    const { status, page = 1, pageSize = 500 } = req.query
+    let whereClause = 'WHERE ISNULL(是否删除, 0) = 0'
+    const params = {}
+
+    if (status) {
+      whereClause += ' AND 在职状态 = @status'
+      params.status = status
+    }
+
+    const offset = (parseInt(page, 10) - 1) * parseInt(pageSize, 10)
+    const list = await query(
+      `
+      SELECT
+        ID as id,
+        姓名 as employeeName,
+        工号 as employeeNumber,
+        性别 as gender,
+        职级 as level,
+        入职时间 as entryDate,
+        身份证号码 as idCard,
+        部门 as department,
+        在职状态 as status
+      FROM ${TABLE_EMPLOYEE}
+      ${whereClause}
+      ORDER BY 工号
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${parseInt(pageSize, 10)} ROWS ONLY
+    `,
+      params
+    )
+
+    return res.json({
+      code: 0,
+      data: {
+        list
+      }
+    })
+  } catch (error) {
+    console.error('获取工资员工列表失败:', error)
+    return res.status(500).json({ code: 500, message: '获取工资员工列表失败' })
+  }
+})
+
+router.get('/attendance-records', async (req, res) => {
+  try {
+    const month = String(req.query?.month || '').trim()
+    if (!month) {
+      return res.status(400).json({ code: 400, message: '月份不能为空' })
+    }
+
+    const summaryRows = await query(
+      `
+      SELECT TOP 1 ID as id
+      FROM ${TABLE_ATTENDANCE_SUMMARY}
+      WHERE 月份 = @month
+      ORDER BY ID DESC
+    `,
+      { month }
+    )
+    const summaryId = Number(summaryRows?.[0]?.id || 0)
+    if (!summaryId) {
+      return res.json({ code: 0, data: { records: [] } })
+    }
+
+    const records = await query(
+      `
+      SELECT
+        ID as id,
+        汇总ID as summaryId,
+        员工ID as employeeId,
+        姓名 as employeeName,
+        工号 as employeeNumber,
+        性别 as gender,
+        部门 as department,
+        职级 as level,
+        入职时间 as entryDate,
+        加班小时 as overtimeHours,
+        两倍加班小时 as doubleOvertimeHours,
+        三倍加班小时 as tripleOvertimeHours,
+        夜班天数 as nightShiftCount,
+        加班小计 as overtimeSubtotal,
+        工龄数 as seniorityYears,
+        全勤费 as fullAttendanceBonus,
+        误餐次数 as mealAllowanceCount,
+        补助小计 as subsidySubtotal,
+        迟到次数 as lateCount,
+        新进及事假小时 as newOrPersonalLeaveHours,
+        病假小时 as sickLeaveHours,
+        旷工小时 as absenceHours,
+        卫生费 as hygieneFee,
+        水费 as waterFee,
+        电费 as electricityFee,
+        扣款小计 as deductionSubtotal,
+        创建时间 as createdAt,
+        更新时间 as updatedAt
+      FROM ${TABLE_ATTENDANCE_DETAIL}
+      WHERE 汇总ID = @summaryId
+      ORDER BY 工号
+    `,
+      { summaryId }
+    )
+
+    return res.json({
+      code: 0,
+      data: { records }
+    })
+  } catch (error) {
+    console.error('获取工资考勤记录失败:', error)
+    return res.status(500).json({ code: 500, message: '获取工资考勤记录失败' })
+  }
+})
 
 const upsertDraftStep1 = async ({ month, employeeIds }) => {
   if (!isValidMonth(month)) throw new Error('月份格式无效')

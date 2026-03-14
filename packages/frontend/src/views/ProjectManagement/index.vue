@@ -2340,6 +2340,7 @@ import {
   createProjectApi,
   updateProjectApi,
   getProjectGoodsApi,
+  getProjectRelocationStatusCheckApi,
   getProjectStatisticsApi,
   getProjectAttachmentsApi,
   getProjectInspectionReportsApi,
@@ -2357,7 +2358,6 @@ import {
   type ProjectAttachmentType,
   type ProjectInspectionReportAttachment
 } from '@/api/project'
-import { getProductionTaskDetailApi } from '@/api/production-task'
 import {
   getProductionTaskAttachmentsApi,
   downloadProductionTaskAttachmentApi,
@@ -6526,21 +6526,22 @@ const handleSubmitEdit = async () => {
     }
 
     try {
-      const response: any = await getProductionTaskDetailApi(projectCode)
-      const taskData = response?.data?.data || response?.data || null
+      const response: any = await getProjectRelocationStatusCheckApi(projectCode)
+      const payload = response?.data?.data || response?.data || response
 
-      if (!taskData) {
-        ElMessage.error('未找到对应的生产任务，无法将项目状态设置为“已经移模”')
+      if (!payload?.exists) {
+        ElMessage.error(payload?.message || '未找到对应的生产任务，无法将项目状态设置为“已经移模”')
         return
       }
 
-      const taskStatus = taskData.生产状态
-      if (taskStatus !== '已完成') {
-        ElMessage.error('生产任务状态必须为“已完成”才能将项目状态设置为“已经移模”')
+      if (!payload?.canRelocate) {
+        ElMessage.error(
+          payload?.message || '生产任务状态必须为“已完成”才能将项目状态设置为“已经移模”'
+        )
         return
       }
     } catch (error: any) {
-      ElMessage.error('校验生产任务状态失败，暂不能将项目状态设置为“已经移模”')
+      ElMessage.error(error?.message || '校验生产任务状态失败，暂不能将项目状态设置为“已经移模”')
       return
     }
   }

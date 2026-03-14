@@ -1466,6 +1466,142 @@ router.get('/customer-options', async (req, res) => {
   }
 })
 
+router.get('/project-options', async (req, res) => {
+  try {
+    const { keyword, category, page = 1, pageSize = 10 } = req.query
+    const pageNum = parseInt(page, 10)
+    const pageSizeNum = parseInt(pageSize, 10)
+    const offset = (pageNum - 1) * pageSizeNum
+
+    const whereConditions = ['(p.状态 IS NULL OR p.状态 <> N\'已删除\')']
+    const params = {}
+
+    if (keyword) {
+      whereConditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM 货物信息 g_kw
+          LEFT JOIN 项目管理 p_kw ON g_kw.项目编号 = p_kw.项目编号
+          WHERE g_kw.项目编号 = p.项目编号
+            AND (
+              g_kw.项目编号 LIKE @keyword
+              OR g_kw.产品名称 LIKE @keyword
+              OR g_kw.产品图号 LIKE @keyword
+              OR p_kw.客户模号 LIKE @keyword
+            )
+        )
+      `)
+      params.keyword = `%${keyword}%`
+    }
+
+    if (category) {
+      whereConditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM 货物信息 g_cat
+          WHERE g_cat.项目编号 = p.项目编号
+            AND g_cat.分类 = @category
+        )
+      `)
+      params.category = category
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`
+    const countRows = await query(
+      `
+      SELECT COUNT(*) as total
+      FROM 项目管理 p
+      ${whereClause}
+    `,
+      params
+    )
+
+    const list = await query(
+      `
+      SELECT
+        p.*,
+        (SELECT TOP 1 g1.产品名称
+         FROM 货物信息 g1
+         WHERE g1.项目编号 = p.项目编号
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productName,
+        (SELECT TOP 1 g1.产品图号
+         FROM 货物信息 g1
+         WHERE g1.项目编号 = p.项目编号
+           AND CAST(g1.IsNew AS INT) != 1
+         ORDER BY g1.货物ID) as productDrawing
+      FROM 项目管理 p
+      ${whereClause}
+      ORDER BY p.项目编号 DESC
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${pageSizeNum} ROWS ONLY
+    `,
+      params
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        list,
+        total: Number(countRows?.[0]?.total || 0) || 0,
+        page: pageNum,
+        pageSize: pageSizeNum
+      }
+    })
+  } catch (error) {
+    console.error('获取报价单项目选项失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取报价单项目选项失败'
+    })
+  }
+})
+
+router.get('/project-goods', async (req, res) => {
+  try {
+    const projectCode = String(req.query?.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '项目编号不能为空'
+      })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        g.产品图号 as productDrawing,
+        g.产品名称 as productName,
+        g.分类 as category,
+        p.客户模号 as customerModelNo
+      FROM 货物信息 g
+      LEFT JOIN 项目管理 p ON g.项目编号 = p.项目编号
+      WHERE g.项目编号 = @projectCode
+        AND (g.IsNew IS NULL OR CAST(g.IsNew AS INT) != 1)
+        AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+      ORDER BY g.货物ID
+    `,
+      { projectCode }
+    )
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: rows?.[0] || null
+    })
+  } catch (error) {
+    console.error('获取报价单项目货物信息失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取报价单项目货物信息失败'
+    })
+  }
+})
+
 // 获取报价单列表
 router.get('/list', async (req, res) => {
   try {
