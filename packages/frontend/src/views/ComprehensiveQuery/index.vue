@@ -14,6 +14,7 @@
           :invoice-progress-type-disabled="invoiceProgressTypeDisabled"
           :progress-range-disabled="progressRangeDisabled"
           @apply-search="handleApplySearch"
+          @patch-query-form="patchQueryForm"
           @restore-draft="handleRestoreDraft"
           @reset-workspace="resetWorkspace"
           @update:mobile-filters-expanded="mobileFiltersExpanded = $event"
@@ -402,11 +403,12 @@
                 >
                   <el-pagination
                     background
-                    layout="total, sizes, prev, pager, next, jumper"
+                    :layout="paginationLayout"
                     :current-page="pagination.page"
                     :page-size="pagination.pageSize"
                     :page-sizes="[10, 20, 30, 50]"
                     :total="total"
+                    :pager-count="paginationPagerCount"
                     @size-change="handlePageSizeChange"
                     @current-change="handlePageChange"
                   />
@@ -672,6 +674,12 @@ const assignQueryForm = (target: QueryForm, source: QuerySnapshot | QueryForm) =
   target.dateRange = source.dateRange.length === 2 ? [source.dateRange[0], source.dateRange[1]] : []
 }
 
+const patchQueryForm = (patch: Partial<QueryForm>) => {
+  Object.entries(patch).forEach(([key, value]) => {
+    ;(queryForm as Record<string, unknown>)[key] = value as unknown
+  })
+}
+
 const buildListParamsFromSnapshot = (
   source: QuerySnapshot | QueryForm
 ): ComprehensiveQueryListParams => ({
@@ -708,6 +716,10 @@ const mobileTableModeText = computed(() => {
   if (tableMode.value === 'full') return '全量'
   return '概览'
 })
+const paginationLayout = computed(() =>
+  isMobile.value ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'
+)
+const paginationPagerCount = computed(() => (isMobile.value ? 5 : 7))
 
 const draftStatusText = computed(() => {
   if (filtersDirty.value && hasAppliedSearch.value) return '草稿已修改'
@@ -2198,7 +2210,7 @@ onBeforeUnmount(() => {
   }
 
   .cq-summary-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cq-draft-banner {
@@ -2212,6 +2224,7 @@ onBeforeUnmount(() => {
 
   .cq-results {
     min-height: auto;
+    padding: 12px 12px 10px;
     overflow: visible;
   }
 
@@ -2243,6 +2256,14 @@ onBeforeUnmount(() => {
 
   .cq-stage-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cq-summary-card {
+    min-height: 72px;
+  }
+
+  :deep(.cq-summary-card .el-card__body) {
+    padding: 10px 10px 9px;
   }
 
   .cq-pagination--mobile {
