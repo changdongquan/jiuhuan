@@ -43,7 +43,7 @@ const permissionRoutes = require('./routes/permission')
 const reviewAclRoutes = require('./routes/review-acl')
 const capabilityRoutes = require('./routes/capability')
 const { authenticateRequest } = require('./middleware/auth')
-const { requireCapability } = require('./middleware/capability')
+const { requireCapability, requireAnyCapability } = require('./middleware/capability')
 const userRoutes = require('./routes/user')
 const attendanceRoutes = require('./routes/attendance')
 const salaryRoutes = require('./routes/salary')
@@ -200,7 +200,10 @@ app.use(
 app.use('/api/database', databaseRoutes)
 app.use(
   '/api/project',
-  requireCapability('PROJECT_MANAGEMENT.READ', { fallbackRoute: 'ProjectManagementIndex' }),
+  requireAnyCapability([
+    { capabilityKey: 'PROJECT_MANAGEMENT.READ', fallbackRoute: 'ProjectManagementIndex' },
+    { capabilityKey: 'PRODUCTION_TASKS.READ', fallbackRoute: 'ProductionTasksIndex' }
+  ]),
   projectRoutes
 )
 app.use(
