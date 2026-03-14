@@ -744,7 +744,7 @@
       :width="isMobile ? '100%' : 'min(1400px, calc(100vw - 48px))'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
-      class="od-dialog"
+      class="od-dialog od-dialog--create"
       @closed="handleCreateDialogClosed"
     >
       <el-form
@@ -754,264 +754,328 @@
         label-width="auto"
         class="dialog-form-container"
       >
-        <div class="dialog-form-columns">
-          <div class="dialog-form-column dialog-form-column--col1">
-            <el-form-item label="出库单号" prop="出库单号">
-              <el-input
-                v-model="createForm.出库单号"
-                placeholder="自动生成"
-                disabled
-                style="width: 180px"
-              />
-            </el-form-item>
-            <el-form-item label="出库日期" prop="出库日期">
-              <el-date-picker
-                v-model="createForm.出库日期"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择出库日期"
-                style="width: 180px"
-              />
-            </el-form-item>
+        <div class="create-dialog-shell">
+          <div class="create-dialog-hero">
+            <div class="create-dialog-hero__eyebrow">Outbound Workspace</div>
+            <div class="create-dialog-hero__main">
+              <div>
+                <div class="create-dialog-hero__title">新增出库单</div>
+                <div class="create-dialog-hero__desc">
+                  先确认单据头信息，再从存货中批量带入明细，最后统一调整数量与备注。
+                </div>
+              </div>
+              <div class="create-dialog-hero__stats">
+                <div class="create-dialog-stat">
+                  <span class="create-dialog-stat__label">单据日期</span>
+                  <strong class="create-dialog-stat__value">
+                    {{ createForm.出库日期 || '待选择' }}
+                  </strong>
+                </div>
+                <div class="create-dialog-stat">
+                  <span class="create-dialog-stat__label">当前明细</span>
+                  <strong class="create-dialog-stat__value"
+                    >{{ createForm.details.length }} 项</strong
+                  >
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="dialog-form-column dialog-form-column--col2">
-            <el-form-item label="客户名称" prop="客户ID">
-              <el-select
-                v-model="createForm.客户ID"
-                placeholder="请选择客户"
-                filterable
-                clearable
-                style="width: 200px"
-                @change="handleCreateCustomerChange"
-              >
-                <el-option
-                  v-for="customer in customerList"
-                  :key="customer.id"
-                  :label="customer.customerName"
-                  :value="customer.id"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="收货方名称">
-              <el-select
-                v-model="createForm.收货方名称"
-                placeholder="请选择或输入收货方名称"
-                filterable
-                allow-create
-                clearable
-                :loading="addressLoading"
-                :disabled="!createForm.客户ID"
-                style="width: 200px"
-                @change="handleCreateConsigneeNameChange"
-              >
-                <el-option
-                  v-for="addr in deliveryAddressList"
-                  :key="addr.id"
-                  :label="getConsigneeNameOptionLabel(addr)"
-                  :value="addr.收货方名称"
-                >
-                  <div>
-                    <div>{{ addr.收货方名称 }}</div>
-                    <div style="font-size: 12px; color: #999">
-                      {{
-                        addr.收货地址?.length > 40
-                          ? addr.收货地址.substring(0, 40) + '...'
-                          : addr.收货地址
-                      }}
+
+          <section class="create-dialog-panel">
+            <div class="create-dialog-panel__header">
+              <div class="create-dialog-panel__title">基础信息</div>
+              <div class="create-dialog-panel__hint">客户与收货信息会决定后续明细填充范围。</div>
+            </div>
+            <div class="dialog-form-columns dialog-form-columns--create">
+              <div class="dialog-form-column dialog-form-column--col1">
+                <el-form-item label="出库单号" prop="出库单号">
+                  <el-input
+                    v-model="createForm.出库单号"
+                    placeholder="自动生成"
+                    disabled
+                    style="width: 180px"
+                  />
+                </el-form-item>
+                <el-form-item label="出库日期" prop="出库日期">
+                  <el-date-picker
+                    v-model="createForm.出库日期"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择出库日期"
+                    style="width: 180px"
+                  />
+                </el-form-item>
+              </div>
+              <div class="dialog-form-column dialog-form-column--col2">
+                <el-form-item label="客户名称" prop="客户ID">
+                  <el-select
+                    v-model="createForm.客户ID"
+                    placeholder="请选择客户"
+                    filterable
+                    clearable
+                    style="width: 200px"
+                    @change="handleCreateCustomerChange"
+                  >
+                    <el-option
+                      v-for="customer in customerList"
+                      :key="customer.id"
+                      :label="customer.customerName"
+                      :value="customer.id"
+                    />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="收货方名称">
+                  <el-select
+                    v-model="createForm.收货方名称"
+                    placeholder="请选择或输入收货方名称"
+                    filterable
+                    allow-create
+                    clearable
+                    :loading="addressLoading"
+                    :disabled="!createForm.客户ID"
+                    style="width: 200px"
+                    @change="handleCreateConsigneeNameChange"
+                  >
+                    <el-option
+                      v-for="addr in deliveryAddressList"
+                      :key="addr.id"
+                      :label="getConsigneeNameOptionLabel(addr)"
+                      :value="addr.收货方名称"
+                    >
+                      <div>
+                        <div>{{ addr.收货方名称 }}</div>
+                        <div style="font-size: 12px; color: #999">
+                          {{
+                            addr.收货地址?.length > 40
+                              ? addr.收货地址.substring(0, 40) + '...'
+                              : addr.收货地址
+                          }}
+                        </div>
+                      </div>
+                    </el-option>
+                  </el-select>
+                </el-form-item>
+              </div>
+              <div class="dialog-form-column dialog-form-column--col3">
+                <el-form-item label="收货地址">
+                  <el-input
+                    v-model="createForm.收货地址"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="请选择收货方名称自动填充或手动输入完整地址"
+                    style="width: 200px"
+                  />
+                </el-form-item>
+                <el-form-item label="经办人">
+                  <el-input v-model="createForm.经办人" disabled style="width: 200px" />
+                </el-form-item>
+              </div>
+              <div class="dialog-form-column dialog-form-column--col4">
+                <el-form-item label="出库类型">
+                  <el-select
+                    v-model="createForm.出库类型"
+                    placeholder="请选择出库类型"
+                    clearable
+                    style="width: 180px"
+                  >
+                    <el-option
+                      v-for="item in outboundTypeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="仓库">
+                  <el-select
+                    v-model="createForm.仓库"
+                    placeholder="请选择仓库"
+                    clearable
+                    style="width: 180px"
+                  >
+                    <el-option
+                      v-for="item in warehouseOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </div>
+            </div>
+          </section>
+
+          <section class="create-dialog-panel create-dialog-panel--details">
+            <div class="create-dialog-panel__header create-dialog-panel__header--details">
+              <div>
+                <div class="create-dialog-panel__title">出库明细</div>
+                <div class="create-dialog-panel__hint">
+                  支持批量带入存货记录，并在当前区域内直接完成录入校对。
+                </div>
+              </div>
+              <div class="create-dialog-toolbar">
+                <div class="create-dialog-toolbar__chips">
+                  <span class="create-dialog-toolbar__chip"
+                    >产品项数 {{ createForm.details.length }}</span
+                  >
+                  <span class="create-dialog-toolbar__chip"
+                    >总数量 {{ createTotals.totalQuantity }}</span
+                  >
+                </div>
+                <el-button type="primary" size="small" @click="openInventorySelectDialog('create')">
+                  从存货中选择
+                </el-button>
+              </div>
+            </div>
+
+            <div class="dialog-product-section">
+              <div v-if="!isMobile" class="dialog-table-wrapper">
+                <div class="dialog-detail-grid" role="table" aria-label="新增出库单明细">
+                  <div class="dialog-detail-grid__table">
+                    <div class="dialog-detail-grid__row dialog-detail-grid__row--header" role="row">
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index"
+                        >序号</div
+                      >
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                        项目编号
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                        产品名称
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                        产品图号
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                        客户模号
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                        数量
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">
+                        备注
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions"
+                        >操作</div
+                      >
+                    </div>
+                    <div
+                      v-for="(row, index) in createForm.details"
+                      :key="row.id || index"
+                      class="dialog-detail-grid__row"
+                      role="row"
+                    >
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">
+                        {{ index + 1 }}
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
+                        <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
+                        <el-input v-model="row.productName" disabled />
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
+                        <el-input v-model="row.productDrawingNo" disabled />
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
+                        <el-input v-model="row.customerPartNo" disabled />
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
+                        <el-tooltip
+                          :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
+                          placement="top"
+                          :show-after="300"
+                        >
+                          <el-input-number
+                            v-model="row.quantity"
+                            :min="1"
+                            :step="1"
+                            :precision="0"
+                            step-strictly
+                            style="width: 100%"
+                          />
+                        </el-tooltip>
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">
+                        <el-input v-model="row.remark" placeholder="备注" />
+                      </div>
+                      <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions">
+                        <el-button type="danger" link @click="removeCreateDetailRow(index)">
+                          删除
+                        </el-button>
+                      </div>
                     </div>
                   </div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-          </div>
-          <div class="dialog-form-column dialog-form-column--col3">
-            <el-form-item label="收货地址">
-              <el-input
-                v-model="createForm.收货地址"
-                type="textarea"
-                :rows="2"
-                placeholder="请选择收货方名称自动填充或手动输入完整地址"
-                style="width: 200px"
-              />
-            </el-form-item>
-            <el-form-item label="经办人">
-              <el-input v-model="createForm.经办人" disabled style="width: 200px" />
-            </el-form-item>
-          </div>
-          <div class="dialog-form-column dialog-form-column--col4">
-            <el-form-item label="出库类型">
-              <el-select
-                v-model="createForm.出库类型"
-                placeholder="请选择出库类型"
-                clearable
-                style="width: 180px"
-              >
-                <el-option
-                  v-for="item in outboundTypeOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="仓库">
-              <el-select
-                v-model="createForm.仓库"
-                placeholder="请选择仓库"
-                clearable
-                style="width: 180px"
-              >
-                <el-option
-                  v-for="item in warehouseOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </div>
-        </div>
-
-        <div class="dialog-product-section">
-          <div style="margin-bottom: 12px">
-            <el-button type="primary" size="small" @click="openInventorySelectDialog('create')">
-              从存货中选择
-            </el-button>
-          </div>
-          <div v-if="!isMobile" class="dialog-table-wrapper">
-            <div class="dialog-detail-grid" role="table" aria-label="新增出库单明细">
-              <div class="dialog-detail-grid__table">
-                <div class="dialog-detail-grid__row dialog-detail-grid__row--header" role="row">
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">序号</div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
-                    项目编号
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
-                    产品名称
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
-                    产品图号
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
-                    客户模号
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
-                    数量
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">备注</div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions">操作</div>
                 </div>
+              </div>
+              <div v-else class="dialog-mobile-details-list">
                 <div
-                  v-for="(row, index) in createForm.details"
-                  :key="row.id || index"
-                  class="dialog-detail-grid__row"
-                  role="row"
+                  v-for="(detail, index) in createForm.details"
+                  :key="detail.id || index"
+                  class="dialog-mobile-detail-card"
                 >
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--index">
-                    {{ index + 1 }}
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--item">
-                    <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--name">
-                    <el-input v-model="row.productName" disabled />
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--drawing">
-                    <el-input v-model="row.productDrawingNo" disabled />
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--customer-part">
-                    <el-input v-model="row.customerPartNo" disabled />
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--quantity">
-                    <el-tooltip
-                      :content="`剩余可出货：${formatRemainingShippable(row.remainingShippable)}`"
-                      placement="top"
-                      :show-after="300"
+                  <div class="dialog-mobile-detail-header">
+                    <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
+                    <el-button
+                      type="danger"
+                      text
+                      size="small"
+                      @click="removeCreateDetailRow(index)"
                     >
-                      <el-input-number
-                        v-model="row.quantity"
-                        :min="1"
-                        :step="1"
-                        :precision="0"
-                        step-strictly
-                        style="width: 100%"
-                      />
-                    </el-tooltip>
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--remark">
-                    <el-input v-model="row.remark" placeholder="备注" />
-                  </div>
-                  <div class="dialog-detail-grid__cell dialog-detail-grid__cell--actions">
-                    <el-button type="danger" link @click="removeCreateDetailRow(index)">
                       删除
                     </el-button>
                   </div>
+                  <div class="dialog-mobile-detail-body">
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">项目编号</div>
+                      <el-input v-model="detail.itemCode" placeholder="请输入项目编号" />
+                    </div>
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">产品名称</div>
+                      <el-input v-model="detail.productName" disabled />
+                    </div>
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">产品图号</div>
+                      <el-input v-model="detail.productDrawingNo" disabled />
+                    </div>
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">客户模号</div>
+                      <el-input v-model="detail.customerPartNo" disabled />
+                    </div>
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">数量</div>
+                      <el-tooltip
+                        :content="`剩余可出货：${formatRemainingShippable(detail.remainingShippable)}`"
+                        placement="top"
+                        :show-after="300"
+                      >
+                        <el-input-number
+                          v-model="detail.quantity"
+                          :min="1"
+                          :step="1"
+                          :precision="0"
+                          step-strictly
+                          style="width: 100%"
+                        />
+                      </el-tooltip>
+                    </div>
+                    <div class="dialog-mobile-detail-field">
+                      <div class="dialog-mobile-detail-label">备注</div>
+                      <el-input v-model="detail.remark" placeholder="备注" />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-          <div v-else class="dialog-mobile-details-list">
-            <div
-              v-for="(detail, index) in createForm.details"
-              :key="detail.id || index"
-              class="dialog-mobile-detail-card"
-            >
-              <div class="dialog-mobile-detail-header">
-                <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
-                <el-button type="danger" text size="small" @click="removeCreateDetailRow(index)">
-                  删除
-                </el-button>
-              </div>
-              <div class="dialog-mobile-detail-body">
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">项目编号</div>
-                  <el-input v-model="detail.itemCode" placeholder="请输入项目编号" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">产品名称</div>
-                  <el-input v-model="detail.productName" disabled />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">产品图号</div>
-                  <el-input v-model="detail.productDrawingNo" disabled />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">客户模号</div>
-                  <el-input v-model="detail.customerPartNo" disabled />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">数量</div>
-                  <el-tooltip
-                    :content="`剩余可出货：${formatRemainingShippable(detail.remainingShippable)}`"
-                    placement="top"
-                    :show-after="300"
-                  >
-                    <el-input-number
-                      v-model="detail.quantity"
-                      :min="1"
-                      :step="1"
-                      :precision="0"
-                      step-strictly
-                      style="width: 100%"
-                    />
-                  </el-tooltip>
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">备注</div>
-                  <el-input v-model="detail.remark" placeholder="备注" />
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div class="dialog-product-summary">
-            <div>
-              <span class="dialog-product-summary__item"
-                >产品项数：{{ createForm.details.length }}</span
-              >
-              <span>总数量：{{ createTotals.totalQuantity }}</span>
+              <div class="dialog-product-summary">
+                <div>
+                  <span class="dialog-product-summary__item"
+                    >产品项数：{{ createForm.details.length }}</span
+                  >
+                  <span>总数量：{{ createTotals.totalQuantity }}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
       </el-form>
       <template #footer>
@@ -4002,6 +4066,27 @@ onMounted(() => {
     flex: 1;
   }
 
+  :deep(.od-dialog--create .el-dialog) {
+    background:
+      radial-gradient(circle at top right, rgb(15 118 110 / 8%), transparent 28%),
+      linear-gradient(180deg, #fcfcfa 0%, #f5f5f1 100%);
+    border: 1px solid rgb(15 23 42 / 8%);
+    border-radius: 20px;
+    box-shadow: 0 24px 60px rgb(15 23 42 / 18%);
+  }
+
+  :deep(.od-dialog--create .el-dialog__header) {
+    display: none;
+  }
+
+  :deep(.od-dialog--create .el-dialog__body) {
+    padding: 18px;
+  }
+
+  :deep(.od-dialog--create .el-dialog__footer) {
+    padding: 0 18px 18px;
+  }
+
   :deep(.pm-edit-dialog .el-dialog) {
     display: flex;
     height: 720px;
@@ -4025,13 +4110,195 @@ onMounted(() => {
   }
 }
 
+@media (width <= 768px) {
+  .create-dialog-shell {
+    gap: 10px;
+  }
+
+  .create-dialog-hero {
+    padding: 14px 16px;
+    border-radius: 14px;
+  }
+
+  .create-dialog-hero__main,
+  .create-dialog-panel__header,
+  .create-dialog-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .create-dialog-hero__title {
+    font-size: 22px;
+  }
+
+  .create-dialog-hero__stats,
+  .create-dialog-toolbar__chips {
+    flex-wrap: wrap;
+  }
+
+  .create-dialog-panel {
+    padding: 14px;
+    border-radius: 14px;
+  }
+}
+
 .dialog-form-container {
   padding-top: 6px;
+}
+
+.create-dialog-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.create-dialog-hero {
+  position: relative;
+  padding: 18px 20px;
+  overflow: hidden;
+  color: #f8fafc;
+  background: linear-gradient(135deg, rgb(15 23 42 / 96%), rgb(20 83 45 / 88%));
+  border-radius: 18px;
+}
+
+.create-dialog-hero::after {
+  position: absolute;
+  top: -32px;
+  right: -24px;
+  width: 180px;
+  height: 180px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgb(255 255 255 / 20%) 0%, transparent 68%);
+  content: '';
+}
+
+.create-dialog-hero__eyebrow {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: rgb(226 232 240 / 80%);
+  text-transform: uppercase;
+}
+
+.create-dialog-hero__main {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.create-dialog-hero__title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.create-dialog-hero__desc {
+  max-width: 700px;
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgb(226 232 240 / 80%);
+}
+
+.create-dialog-hero__stats {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.create-dialog-stat {
+  min-width: 122px;
+  padding: 10px 12px;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.create-dialog-stat__label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: rgb(226 232 240 / 72%);
+}
+
+.create-dialog-stat__value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.create-dialog-panel {
+  padding: 16px 18px 18px;
+  background: rgb(255 255 255 / 88%);
+  border: 1px solid rgb(148 163 184 / 20%);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 75%);
+}
+
+.create-dialog-panel--details {
+  padding-bottom: 14px;
+}
+
+.create-dialog-panel__header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.create-dialog-panel__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.create-dialog-panel__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.create-dialog-panel__header--details {
+  align-items: center;
+}
+
+.create-dialog-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.create-dialog-toolbar__chips {
+  display: flex;
+  gap: 8px;
+}
+
+.create-dialog-toolbar__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #14532d;
+  background: linear-gradient(180deg, #effdf5 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
 }
 
 .dialog-form-columns {
   display: flex;
   gap: 24px;
+}
+
+.dialog-form-columns--create {
+  gap: 18px;
 }
 
 .dialog-form-column {
@@ -4049,8 +4316,10 @@ onMounted(() => {
 .dialog-detail-grid {
   max-height: min(520px, calc(100vh - 340px));
   overflow: auto;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(248 250 252 / 96%));
+  border: 1px solid #dbe3ea;
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 90%);
 }
 
 .dialog-detail-grid__table {
@@ -4078,16 +4347,18 @@ onMounted(() => {
 .dialog-detail-grid__row--header {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background: #f5f7fa;
+  z-index: 6;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  box-shadow: 0 1px 0 #dbe3ea;
 }
 
 .dialog-detail-grid__cell {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 48px;
   padding: 6px 8px;
-  border-right: 1px solid var(--el-border-color-lighter);
+  border-right: 1px solid #e2e8f0;
   align-items: center;
   justify-content: center;
 }
@@ -4097,16 +4368,32 @@ onMounted(() => {
 }
 
 .dialog-detail-grid__row--header .dialog-detail-grid__cell {
+  z-index: 2;
   min-height: 40px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  letter-spacing: 0.04em;
+  color: #334155;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 
 .dialog-detail-grid__cell--index,
 .dialog-detail-grid__cell--actions,
 .dialog-detail-grid__cell--attachment {
   text-align: center;
+}
+
+.dialog-detail-grid__row--header .dialog-detail-grid__cell--quantity {
+  z-index: 8;
+}
+
+:deep(.dialog-detail-grid .el-input-number) {
+  z-index: 1;
+}
+
+:deep(.dialog-detail-grid .el-input-number__decrease),
+:deep(.dialog-detail-grid .el-input-number__increase) {
+  z-index: 1;
 }
 
 .dialog-mobile-details-list {
