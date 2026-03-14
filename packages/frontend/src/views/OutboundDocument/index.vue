@@ -4126,11 +4126,11 @@ onMounted(() => {
   }
 
   :deep(.od-dialog--create .el-dialog__body) {
-    padding: 18px;
+    padding: 14px;
   }
 
   :deep(.od-dialog--create .el-dialog__footer) {
-    padding: 0 18px 18px;
+    padding: 0 14px 14px;
   }
 
   :deep(.pm-edit-dialog .el-dialog) {
@@ -4208,12 +4208,12 @@ onMounted(() => {
 .create-dialog-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .create-dialog-hero {
   position: relative;
-  padding: 18px 20px;
+  padding: 14px 16px;
   overflow: hidden;
   color: #0f172a;
   background:
@@ -4236,7 +4236,7 @@ onMounted(() => {
 }
 
 .create-dialog-hero__eyebrow {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -4246,7 +4246,7 @@ onMounted(() => {
 
 .create-dialog-hero__main {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   align-items: stretch;
   justify-content: space-between;
 }
@@ -4259,7 +4259,7 @@ onMounted(() => {
 }
 
 .create-dialog-hero__title {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.02em;
@@ -4267,9 +4267,9 @@ onMounted(() => {
 
 .create-dialog-hero__desc {
   max-width: 700px;
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.55;
   color: #64748b;
 }
 
@@ -4277,14 +4277,14 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 16px;
+  margin-top: 10px;
 }
 
 .create-dialog-route-step {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(241 245 249 / 96%));
   border: 1px solid #dbe6ee;
   border-radius: 999px;
@@ -4313,7 +4313,7 @@ onMounted(() => {
   display: flex;
   width: min(320px, 100%);
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .create-dialog-hero__stats {
@@ -4324,7 +4324,7 @@ onMounted(() => {
 .create-dialog-stat {
   position: relative;
   min-width: 122px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(241 245 249 / 96%));
   border: 1px solid #dbe6ee;
   border-radius: 14px;
@@ -4350,7 +4350,7 @@ onMounted(() => {
 }
 
 .create-dialog-hero__note {
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: linear-gradient(180deg, rgb(248 250 252 / 100%), rgb(241 245 249 / 96%));
   border: 1px solid #dbe6ee;
   border-radius: 16px;
@@ -4365,14 +4365,14 @@ onMounted(() => {
 }
 
 .create-dialog-hero__note-text {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.55;
   color: #64748b;
 }
 
 .create-dialog-panel {
-  padding: 16px 18px 18px;
+  padding: 12px 14px 14px;
   background: rgb(255 255 255 / 88%);
   border: 1px solid rgb(148 163 184 / 20%);
   border-radius: 18px;
@@ -4380,7 +4380,7 @@ onMounted(() => {
 }
 
 .create-dialog-panel--details {
-  padding-bottom: 14px;
+  padding-bottom: 12px;
 }
 
 .create-dialog-panel__header {
@@ -4388,7 +4388,7 @@ onMounted(() => {
   gap: 10px;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .create-dialog-panel__title {
@@ -4398,10 +4398,14 @@ onMounted(() => {
 }
 
 .create-dialog-panel__hint {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.45;
   color: #64748b;
+}
+
+.create-dialog-panel:not(.create-dialog-panel--details) :deep(.el-form-item) {
+  margin-bottom: 10px;
 }
 
 .create-dialog-panel__header--details {
@@ -4454,7 +4458,7 @@ onMounted(() => {
 }
 
 .dialog-detail-grid {
-  max-height: min(520px, calc(100vh - 340px));
+  max-height: min(350px, calc(100vh - 340px));
   overflow: auto;
   background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(248 250 252 / 96%));
   border: 1px solid #dbe3ea;

@@ -162,7 +162,7 @@
     </div>
 
     <div
-      v-else-if="!isMobile || viewMode === 'table'"
+      v-else-if="viewMode === 'table'"
       class="so-table-wrapper"
       :class="{ 'so-table-wrapper--mobile': isMobile }"
     >
@@ -686,118 +686,50 @@
               <span class="finance-dialog-summary__item"
                 >金额合计 {{ formatAmount(dialogTotals.totalAmount) }}</span
               >
-              <el-button @click="openInvoiceCandidateDialog">从候选池选择</el-button>
+              <el-button type="primary" @click="openInvoiceCandidateDialog">从候选池选择</el-button>
               <el-button type="primary" plain @click="addDetailRow">新增明细</el-button>
             </div>
           </div>
 
-          <el-table
-            v-if="!isMobile"
-            :data="dialogForm.details"
-            border
-            size="small"
-            row-key="id"
-            style="width: 100%"
-          >
-            <el-table-column type="index" label="序号" width="45" />
-            <el-table-column label="项目编号" min-width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="产品名称" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.productName" placeholder="请输入产品名称" />
-              </template>
-            </el-table-column>
-            <el-table-column label="产品图号" min-width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="客户模号" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="合同号" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.contractNo" placeholder="请输入合同号" />
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="120" align="right">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
-                  :min="0"
-                  :step="100"
-                  :precision="2"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="handleDetailUnitPriceChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="数量" width="140" align="center">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :min="0"
-                  :step="1"
-                  style="width: 100%"
-                  @change="handleDetailQuantityChange(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="金额(元)" width="80" align="right">
-              <template #default="{ row }">
-                {{ formatAmount(row.amount) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.remark" placeholder="备注" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="55" fixed="right">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div v-else class="dialog-mobile-details-list">
-            <div
-              v-for="(row, index) in dialogForm.details"
-              :key="row.id || index"
-              class="dialog-mobile-detail-card"
+          <div class="finance-dialog-detail-scroll">
+            <el-table
+              v-if="!isMobile"
+              :data="dialogForm.details"
+              border
+              size="small"
+              :max-height="420"
+              row-key="id"
+              class="finance-dialog-detail-table"
+              style="width: max-content; min-width: 100%"
             >
-              <div class="dialog-mobile-detail-header">
-                <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
-                <el-button type="danger" link @click="removeDetailRow(index)">删除</el-button>
-              </div>
-              <div class="dialog-mobile-detail-body">
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">项目编号</div>
+              <el-table-column type="index" label="序号" width="45" />
+              <el-table-column prop="itemCode" label="项目编号" min-width="140" sortable>
+                <template #default="{ row }">
                   <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">产品名称</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="产品名称" min-width="150">
+                <template #default="{ row }">
                   <el-input v-model="row.productName" placeholder="请输入产品名称" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">产品图号</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="产品图号" min-width="140">
+                <template #default="{ row }">
                   <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">客户模号</div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="customerPartNo" label="客户模号" min-width="130" sortable>
+                <template #default="{ row }">
                   <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">合同号</div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="contractNo" label="合同号" min-width="130" sortable>
+                <template #default="{ row }">
                   <el-input v-model="row.contractNo" placeholder="请输入合同号" />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">单价(元)</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="单价(元)" width="120" align="right">
+                <template #default="{ row }">
                   <el-input-number
                     v-model="row.unitPrice"
                     :min="0"
@@ -807,9 +739,10 @@
                     style="width: 100%"
                     @change="handleDetailUnitPriceChange(row)"
                   />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">数量</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="数量" width="140" align="center">
+                <template #default="{ row }">
                   <el-input-number
                     v-model="row.quantity"
                     :min="0"
@@ -817,14 +750,85 @@
                     style="width: 100%"
                     @change="handleDetailQuantityChange(row)"
                   />
+                </template>
+              </el-table-column>
+              <el-table-column label="金额(元)" width="80" align="right">
+                <template #default="{ row }">
+                  {{ formatAmount(row.amount) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="备注" min-width="150">
+                <template #default="{ row }">
+                  <el-input v-model="row.remark" placeholder="备注" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="55" fixed="right">
+                <template #default="{ $index }">
+                  <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-else class="dialog-mobile-details-list">
+              <div
+                v-for="(row, index) in dialogForm.details"
+                :key="row.id || index"
+                class="dialog-mobile-detail-card"
+              >
+                <div class="dialog-mobile-detail-header">
+                  <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
+                  <el-button type="danger" link @click="removeDetailRow(index)">删除</el-button>
                 </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">金额(元)</div>
-                  <el-input :model-value="formatAmount(row.amount)" disabled />
-                </div>
-                <div class="dialog-mobile-detail-field">
-                  <div class="dialog-mobile-detail-label">备注</div>
-                  <el-input v-model="row.remark" type="textarea" :rows="2" placeholder="备注" />
+                <div class="dialog-mobile-detail-body">
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">项目编号</div>
+                    <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">产品名称</div>
+                    <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">产品图号</div>
+                    <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">客户模号</div>
+                    <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">合同号</div>
+                    <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">单价(元)</div>
+                    <el-input-number
+                      v-model="row.unitPrice"
+                      :min="0"
+                      :step="100"
+                      :precision="2"
+                      :controls="false"
+                      style="width: 100%"
+                      @change="handleDetailUnitPriceChange(row)"
+                    />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">数量</div>
+                    <el-input-number
+                      v-model="row.quantity"
+                      :min="0"
+                      :step="1"
+                      style="width: 100%"
+                      @change="handleDetailQuantityChange(row)"
+                    />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">金额(元)</div>
+                    <el-input :model-value="formatAmount(row.amount)" disabled />
+                  </div>
+                  <div class="dialog-mobile-detail-field">
+                    <div class="dialog-mobile-detail-label">备注</div>
+                    <el-input v-model="row.remark" type="textarea" :rows="2" placeholder="备注" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -2366,6 +2370,15 @@ onMounted(() => {
   content: '';
 }
 
+.finance-dialog-detail-scroll {
+  overflow: auto hidden;
+}
+
+:deep(.finance-dialog-detail-table) {
+  width: max-content !important;
+  min-width: 100%;
+}
+
 .dialog-product-section {
   margin-top: 24px;
 }
@@ -2718,6 +2731,10 @@ onMounted(() => {
   .finance-dialog-summary {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .finance-dialog-detail-scroll {
+    overflow: visible;
   }
 
   .dialog-mobile-detail-field:last-child,

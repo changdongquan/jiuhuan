@@ -627,8 +627,10 @@
               :data="dialogForm.details"
               border
               size="small"
+              :max-height="420"
               row-key="id"
-              style="width: 100%"
+              class="dialog-detail-table"
+              style="width: max-content; min-width: 100%"
             >
               <el-table-column type="index" label="序号" width="45" fixed="left" />
               <el-table-column label="项目编号" min-width="140" fixed="left">
@@ -3915,7 +3917,12 @@ onMounted(async () => {
 .dialog-table-wrapper {
   width: 100%;
   padding-bottom: 8px;
-  overflow-x: auto;
+  overflow: auto hidden;
+}
+
+:deep(.dialog-detail-table) {
+  width: max-content !important;
+  min-width: 100%;
 }
 
 .dialog-mobile-details-list {
