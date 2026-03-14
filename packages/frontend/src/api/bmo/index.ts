@@ -187,6 +187,87 @@ export interface BmoRelayAuthStatus {
   }
 }
 
+export interface BmoRelayDashboardEvent {
+  time: string | null
+  type: string
+  status: 'success' | 'warning' | 'danger' | 'info' | string
+  title: string
+  detail?: string | null
+}
+
+export interface BmoRelayDashboardError {
+  time: string | null
+  stage: string
+  message: string
+}
+
+export interface BmoRelayDashboardPersist {
+  id: number
+  time: string | null
+  trigger: string | null
+  fetched: number
+  upserted: number
+  fetchedAt?: string | null
+  traceId?: string | null
+}
+
+export interface BmoRelayDashboardTask {
+  id: number
+  status: string
+  triggeredBy: string | null
+  rowsFetched: number
+  rowsUpserted: number
+  startedAt: string | null
+  finishedAt: string | null
+  createdAt: string | null
+  errorMessage: string | null
+  request?: Record<string, any> | null
+  response?: Record<string, any> | null
+}
+
+export interface BmoRelayDashboardData {
+  checkedAt: string
+  relay: {
+    enabled: boolean
+    ready: boolean
+    message?: string | null
+  }
+  auth: {
+    source?: string | null
+    updatedAt?: string | null
+    hasCookie: boolean
+    hasToken: boolean
+    cookiePreview?: string | null
+    tokenPreview?: string | null
+    probe?: {
+      ok: boolean
+      status: number
+      message?: string | null
+    } | null
+  } | null
+  sync: {
+    enabled: boolean
+    running: boolean
+    lastStartedAt?: string | null
+    lastFinishedAt?: string | null
+    lastSuccessAt?: string | null
+    lastErrorAt?: string | null
+    lastError?: string | null
+  } | null
+  summary: {
+    lastCheckedAt?: string | null
+    lastPersistAt?: string | null
+    lastNewDataAt?: string | null
+    latestDisconnectAt?: string | null
+    latestReconnectAt?: string | null
+    latestDisconnectReason?: string | null
+  }
+  recentPersists: BmoRelayDashboardPersist[]
+  recentEvents: BmoRelayDashboardEvent[]
+  recentErrors: BmoRelayDashboardError[]
+  recentTasks: BmoRelayDashboardTask[]
+}
+
 export interface BmoMouldProcurementRefreshResult {
   source: 'live' | 'db'
   connection: { state: 'connected' | 'expired' | 'error'; message?: string }
@@ -486,6 +567,12 @@ export const getBmoRelayAuthStatusApi = (params: { probe?: 0 | 1 } = {}) => {
   return request.get<BmoRelayAuthStatus>({
     url: '/api/bmo/relay/auth/status',
     params
+  })
+}
+
+export const getBmoRelayDashboardApi = () => {
+  return request.get<BmoRelayDashboardData>({
+    url: '/api/bmo/relay/dashboard'
   })
 }
 

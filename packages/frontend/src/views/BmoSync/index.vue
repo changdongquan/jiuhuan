@@ -16,22 +16,12 @@
               <span v-if="lastPersistedAtText" class="bmo-conn-meta"
                 >最近获得新数据时间：{{ lastPersistedAtText }}</span
               >
-              <span v-if="lastRefreshOutcomeText" class="bmo-conn-meta">{{
-                lastRefreshOutcomeText
-              }}</span>
             </div>
           </div>
           <p class="bmo-subtitle">通过 BMO 中转结果进行查看与立项</p>
         </div>
         <div class="bmo-actions">
           <el-button :disabled="!latestList.length" @click="exportCsv">导出CSV</el-button>
-          <el-switch
-            v-model="autoRefresh"
-            active-text="自动刷新"
-            inactive-text="手动"
-            @change="handleAutoRefreshToggle"
-          />
-          <el-button :loading="manualRefreshing" @click="refreshAll">刷新</el-button>
         </div>
       </div>
     </div>
@@ -479,7 +469,6 @@ import { useUserStoreWithOut } from '@/store/modules/user'
 import {
   ensureBmoSessionApi,
   getBmoMouldProcurementApi,
-  getBmoMouldProcurementRefreshApi,
   getBmoMouldProcurementDetailApi,
   getBmoInitiationCustomersApi,
   getBmoInitiationRequestApi,
@@ -628,9 +617,6 @@ const getStatusTagClass = (status?: string | null) => {
 }
 
 const loadingLatest = ref(false)
-const manualRefreshing = ref(false)
-const autoRefresh = ref(true)
-const pollingTimer = ref<number | null>(null)
 const isMobile = ref(false)
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai'
 
@@ -640,7 +626,6 @@ const lastConnectionState = ref<'connected' | 'expired' | 'error' | null>(null)
 const lastConnectionMessage = ref<string | null>(null)
 const lastFetchedAt = ref<string | null>(null)
 const lastPersistedAt = ref<string | null>(null)
-const lastRefreshOutcomeText = ref('')
 
 const initiateDialogVisible = ref(false)
 const dialogMode = ref<'view' | 'initiate'>('initiate')
@@ -761,23 +746,6 @@ const formatFileSize = (bytes: number | null | undefined) => {
   }
   return `${size.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
 }
-
-const serializeBmoListForCompare = (rows: BmoMouldProcurementRow[]) =>
-  JSON.stringify(
-    (rows || []).map((row) => ({
-      bmo_record_id: row.bmo_record_id || null,
-      project_manager: row.project_manager || null,
-      part_no: row.part_no || null,
-      part_name: row.part_name || null,
-      model: row.model || null,
-      mold_number: row.mold_number || null,
-      project_code: row.project_code || null,
-      project_status: row.project_status || null,
-      initiation_status: row.initiation_status || null,
-      bid_price_tax_incl: row.bid_price_tax_incl ?? null,
-      bid_time: row.bid_time || null
-    }))
-  )
 
 const applySyncStatus = (syncStatus: BmoSyncStatusSummary | null | undefined) => {
   const lastFinishedAt = String(syncStatus?.lastFinishedAt || '').trim()
@@ -1140,39 +1108,6 @@ const loadLatest = async () => {
   }
 }
 
-const refreshAll = async () => {
-  manualRefreshing.value = true
-  try {
-    const previousSnapshot = serializeBmoListForCompare(latestList.value)
-    const res = await getBmoMouldProcurementRefreshApi({
-      pageSize: 200,
-      offset: 0,
-      maxWaitMs: 60000,
-      timeout: 70000
-    })
-    const nextList = res.data?.list || []
-    latestList.value = nextList
-    lastDataSource.value = res.data?.source || null
-    lastConnectionState.value = res.data?.connection?.state || null
-    lastConnectionMessage.value = res.data?.connection?.message || null
-    applySyncStatus(res.data?.syncStatus)
-    if (res.data?.fetchedAt) {
-      lastFetchedAt.value = res.data.fetchedAt
-    }
-    if (!lastPersistedAt.value) {
-      lastPersistedAt.value = res.data?.latestUpdatedAt || null
-    }
-    const changed = previousSnapshot !== serializeBmoListForCompare(nextList)
-    lastRefreshOutcomeText.value = changed ? '本次刷新：发现数据变化' : '本次刷新：未发现数据变化'
-    ElMessage.success('已刷新 BMO 数据')
-  } catch (e: any) {
-    lastRefreshOutcomeText.value = '本次刷新：失败'
-    ElMessage.error(e?.message || '刷新 BMO 数据失败')
-  } finally {
-    manualRefreshing.value = false
-  }
-}
-
 const openBmoDetailDialog = async (row: BmoMouldProcurementRow, mode: 'view' | 'initiate') => {
   const fdId = row.bmo_record_id
   if (!fdId) {
@@ -1334,39 +1269,14 @@ const exportCsv = () => {
   URL.revokeObjectURL(url)
 }
 
-const startPolling = () => {
-  if (pollingTimer.value !== null) return
-  pollingTimer.value = window.setInterval(async () => {
-    if (loadingLatest.value) return
-    await loadLatest()
-  }, 60000)
-}
-
-const stopPolling = () => {
-  if (pollingTimer.value !== null) {
-    window.clearInterval(pollingTimer.value)
-    pollingTimer.value = null
-  }
-}
-
-const handleAutoRefreshToggle = (enabled: boolean) => {
-  if (enabled) {
-    startPolling()
-  } else {
-    stopPolling()
-  }
-}
-
 onMounted(() => {
   updateViewport()
   window.addEventListener('resize', updateViewport, { passive: true })
   void ensureSessionOnOpen()
   void loadLatest()
-  if (autoRefresh.value) startPolling()
 })
 
 onBeforeUnmount(() => {
-  stopPolling()
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateViewport)
   }

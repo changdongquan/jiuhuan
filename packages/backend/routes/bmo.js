@@ -443,6 +443,61 @@ const relayRequestJson = async (pathname, input = {}) => {
   }
 }
 
+const parseMaybeJsonObject = (raw) => {
+  const text = String(raw || '').trim()
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (e) {
+    return null
+  }
+}
+
+const isRelayAuthErrorMessage = (message) => {
+  const text = String(message || '').trim()
+  if (!text) return false
+  return (
+    text.includes('401') ||
+    text.includes('403') ||
+    text.includes('认证') ||
+    text.includes('会话') ||
+    text.includes('token') ||
+    text.includes('Token') ||
+    text.includes('登录') ||
+    text.includes('cookie')
+  )
+}
+
+const getRelayAuthStatusSummary = async (probe = true) => {
+  if (!isRelayEnabled()) return null
+  try {
+    const raw = await relayRequestJson(`/auth/status?probe=${probe ? '1' : '0'}`, {
+      method: 'GET',
+      timeoutMs: 12000
+    })
+    const data = raw?.data && typeof raw.data === 'object' ? raw.data : raw
+    const probeInfo = data?.probe && typeof data.probe === 'object' ? data.probe : null
+    return {
+      source: String(data?.source || '').trim() || null,
+      updatedAt: toIsoFromRelayTime(data?.updatedAt),
+      hasCookie: Boolean(data?.hasCookie),
+      hasToken: Boolean(data?.hasToken),
+      cookiePreview: String(data?.cookiePreview || '').trim() || null,
+      tokenPreview: String(data?.tokenPreview || '').trim() || null,
+      probe: probeInfo
+        ? {
+            ok: probeInfo.ok === true,
+            status: toSafeInt(probeInfo.status, 0),
+            message: String(probeInfo.message || '').trim() || null
+          }
+        : null
+    }
+  } catch (e) {
+    return null
+  }
+}
+
 const getRelaySyncStatusSummary = async () => {
   if (!isRelayEnabled()) return null
   try {
@@ -459,6 +514,218 @@ const getRelaySyncStatusSummary = async () => {
     }
   } catch (e) {
     return null
+  }
+}
+
+const listRecentBmoSyncTaskLogs = async (limit = 20) => {
+  const safeLimit = toSafeLimit(limit, 20, 100)
+  try {
+    const rows = await query(
+      `
+        SELECT TOP (${safeLimit})
+          id,
+          status,
+          triggered_by,
+          rows_fetched,
+          rows_upserted,
+          started_at,
+          finished_at,
+          created_at,
+          error_message,
+          request_json,
+          response_json
+        FROM bmo_sync_task_logs
+        ORDER BY id DESC;
+      `
+    )
+    return (rows || []).map((row) => ({
+      id: Number(row?.id || 0) || 0,
+      status: String(row?.status || '').trim() || 'unknown',
+      triggeredBy: String(row?.triggered_by || '').trim() || null,
+      rowsFetched: Number(row?.rows_fetched || 0) || 0,
+      rowsUpserted: Number(row?.rows_upserted || 0) || 0,
+      startedAt: row?.started_at ? new Date(row.started_at).toISOString() : null,
+      finishedAt: row?.finished_at ? new Date(row.finished_at).toISOString() : null,
+      createdAt: row?.created_at ? new Date(row.created_at).toISOString() : null,
+      errorMessage: String(row?.error_message || '').trim() || null,
+      request: parseMaybeJsonObject(row?.request_json),
+      response: parseMaybeJsonObject(row?.response_json)
+    }))
+  } catch (e) {
+    if (String(e?.message || '').includes("Invalid object name 'bmo_sync_task_logs'")) {
+      return []
+    }
+    throw e
+  }
+}
+
+const buildRelayDashboardData = async () => {
+  const checkedAt = new Date().toISOString()
+  const [relayHealthRaw, authStatus, syncStatus, taskLogs] = await Promise.all([
+    isRelayEnabled()
+      ? relayRequestJson('/health', { method: 'GET', timeoutMs: 8000 }).catch(() => null)
+      : Promise.resolve(null),
+    getRelayAuthStatusSummary(true),
+    getRelaySyncStatusSummary(),
+    listRecentBmoSyncTaskLogs(20)
+  ])
+
+  const relayHealthData =
+    relayHealthRaw?.data && typeof relayHealthRaw.data === 'object' ? relayHealthRaw.data : relayHealthRaw
+  const relayReady = relayHealthData?.ok === true || relayHealthData?.ready === true
+  const authProbeOk = authStatus?.probe?.ok === true
+  const authProbeFailed = authStatus?.probe?.ok === false
+  const syncErrorMessage = String(syncStatus?.lastError || '').trim()
+  const syncErrorAt = String(syncStatus?.lastErrorAt || '').trim() || null
+  const recentSuccessLogs = taskLogs.filter((x) => x.status === 'success')
+  const recentFailureLogs = taskLogs.filter((x) => x.status === 'failed')
+  const latestPersist = recentSuccessLogs[0] || null
+  const latestChangedPersist =
+    recentSuccessLogs.find((x) => {
+      const responseFetched = Number(x.response?.fetched || x.rowsFetched || 0)
+      const responseUpserted = Number(x.response?.upserted || x.rowsUpserted || 0)
+      return responseFetched > 0 || responseUpserted > 0
+    }) || null
+
+  const latestDisconnectAt =
+    (authProbeFailed ? checkedAt : null) ||
+    (isRelayAuthErrorMessage(syncErrorMessage) ? syncErrorAt : null) ||
+    recentFailureLogs.find((x) => isRelayAuthErrorMessage(x.errorMessage))?.finishedAt ||
+    null
+  const latestReconnectAt = authProbeOk ? authStatus?.updatedAt || null : null
+
+  const events = []
+  if (authStatus?.updatedAt) {
+    events.push({
+      time: authStatus.updatedAt,
+      type: 'AUTH_REFRESHED',
+      status: authProbeOk ? 'success' : 'info',
+      title: '会话最近更新',
+      detail: [authStatus.source || '-', authStatus.probe?.status ? `HTTP ${authStatus.probe.status}` : '']
+        .filter(Boolean)
+        .join(' | ')
+    })
+  }
+  if (latestDisconnectAt) {
+    events.push({
+      time: latestDisconnectAt,
+      type: 'AUTH_DISCONNECTED',
+      status: 'danger',
+      title: '最近断开连接',
+      detail:
+        authStatus?.probe?.message ||
+        syncErrorMessage ||
+        recentFailureLogs.find((x) => isRelayAuthErrorMessage(x.errorMessage))?.errorMessage ||
+        '会话探活失败'
+    })
+  }
+  if (latestReconnectAt) {
+    events.push({
+      time: latestReconnectAt,
+      type: 'AUTH_RECONNECTED',
+      status: 'success',
+      title: '最近重连成功',
+      detail: authStatus?.source || 'relay'
+    })
+  }
+  for (const log of taskLogs.slice(0, 12)) {
+    if (log.status === 'success') {
+      events.push({
+        time: log.finishedAt || log.startedAt || log.createdAt,
+        type: 'PERSIST_SUCCESS',
+        status: 'success',
+        title: '入库成功',
+        detail: [`触发=${log.triggeredBy || '-'}`, `抓取=${log.rowsFetched}`, `入库=${log.rowsUpserted}`]
+          .filter(Boolean)
+          .join(' | ')
+      })
+      if (Number(log.rowsFetched || 0) > 0 || Number(log.rowsUpserted || 0) > 0) {
+        events.push({
+          time: log.finishedAt || log.startedAt || log.createdAt,
+          type: 'DATA_CHANGED',
+          status: 'warning',
+          title: '获得新数据',
+          detail: [`抓取=${log.rowsFetched}`, `入库=${log.rowsUpserted}`].join(' | ')
+        })
+      }
+    } else if (log.status === 'failed') {
+      events.push({
+        time: log.finishedAt || log.startedAt || log.createdAt,
+        type: isRelayAuthErrorMessage(log.errorMessage) ? 'AUTH_FAILURE' : 'PERSIST_FAILURE',
+        status: 'danger',
+        title: isRelayAuthErrorMessage(log.errorMessage) ? '连接/认证失败' : '同步/入库失败',
+        detail: log.errorMessage || '-'
+      })
+    }
+  }
+
+  events.sort((a, b) => new Date(String(b.time || 0)).getTime() - new Date(String(a.time || 0)).getTime())
+
+  const recentErrors = [
+    authStatus?.probe?.ok === false
+      ? {
+          time: checkedAt,
+          stage: 'auth_probe',
+          message: authStatus.probe.message || `HTTP ${authStatus.probe.status || 0}`
+        }
+      : null,
+    syncErrorAt && syncErrorMessage
+      ? {
+          time: syncErrorAt,
+          stage: 'sync_status',
+          message: syncErrorMessage
+        }
+      : null,
+    ...recentFailureLogs.slice(0, 5).map((log) => ({
+      time: log.finishedAt || log.startedAt || log.createdAt,
+      stage: isRelayAuthErrorMessage(log.errorMessage) ? 'auth_or_collect' : 'persist',
+      message: log.errorMessage || '任务失败'
+    }))
+  ]
+    .filter(Boolean)
+    .slice(0, 6)
+
+  return {
+    checkedAt,
+    relay: {
+      enabled: isRelayEnabled(),
+      ready: relayReady,
+      message: String(relayHealthData?.error || '').trim() || null
+    },
+    auth: authStatus,
+    sync: syncStatus,
+    summary: {
+      lastCheckedAt: checkedAt,
+      lastPersistAt:
+        latestPersist?.response?.persistedAt ||
+        latestPersist?.finishedAt ||
+        syncStatus?.lastSuccessAt ||
+        null,
+      lastNewDataAt:
+        latestChangedPersist?.response?.persistedAt ||
+        latestChangedPersist?.finishedAt ||
+        latestChangedPersist?.response?.fetchedAt ||
+        null,
+      latestDisconnectAt,
+      latestReconnectAt,
+      latestDisconnectReason:
+        (authProbeFailed ? authStatus?.probe?.message : null) ||
+        (isRelayAuthErrorMessage(syncErrorMessage) ? syncErrorMessage : null) ||
+        recentFailureLogs.find((x) => isRelayAuthErrorMessage(x.errorMessage))?.errorMessage ||
+        null
+    },
+    recentPersists: recentSuccessLogs.slice(0, 8).map((log) => ({
+      id: log.id,
+      time: log.response?.persistedAt || log.finishedAt || log.startedAt || log.createdAt,
+      trigger: log.triggeredBy,
+      fetched: log.rowsFetched,
+      upserted: log.rowsUpserted,
+      fetchedAt: log.response?.fetchedAt || log.request?.fetchedAt || null,
+      traceId: log.response?.traceId || log.request?.traceId || null
+    })),
+    recentEvents: events.slice(0, 20),
+    recentErrors,
+    recentTasks: taskLogs.slice(0, 10)
   }
 }
 
@@ -2044,6 +2311,26 @@ router.get('/relay/sync-status', async (req, res) => {
       code: 500,
       success: false,
       message: '读取 relay 同步状态失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
+router.get('/relay/dashboard', async (req, res) => {
+  try {
+    if (!isRelayEnabled()) {
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '未启用 BMO_RELAY_BASE_URL'
+      })
+    }
+    const data = await buildRelayDashboardData()
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '读取 relay 仪表盘失败: ' + (error?.message || '未知错误')
     })
   }
 })
