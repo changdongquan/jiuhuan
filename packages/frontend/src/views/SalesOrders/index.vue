@@ -116,6 +116,25 @@
       </el-form-item>
       <el-form-item class="query-form__actions">
         <div class="query-actions">
+          <el-tooltip
+            :content="
+              mergeSourceSnapshot
+                ? '将选中的源订单整单并入目标订单（仅同客户）'
+                : '请先在列表中选中源订单'
+            "
+            placement="top"
+            :disabled="!!mergeSourceSnapshot"
+          >
+            <el-button
+              type="warning"
+              plain
+              :loading="mergeTargetsLoading"
+              :disabled="!mergeSourceSnapshot"
+              @click="openMergeDialog"
+            >
+              合并订单
+            </el-button>
+          </el-tooltip>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
           <el-button type="success" @click="handleCreate">新增</el-button>
@@ -322,9 +341,11 @@
         ref="tableRef"
         v-loading="loading"
         :data="tableData"
+        highlight-current-row
         border
         :height="tableHeight"
         row-key="orderNo"
+        @row-click="handleRowClick"
         @row-dblclick="handleRowDblClick"
         :row-class-name="rowClassName"
         class="so-table"
@@ -467,7 +488,16 @@
     <div v-else-if="isMobile && viewMode === 'card'" class="so-mobile-list" v-loading="loading">
       <el-empty v-if="!tableData.length && !loading" description="暂无销售订单" />
       <template v-else>
-        <el-card v-for="row in tableData" :key="row.orderNo" class="so-mobile-card" shadow="hover">
+        <el-card
+          v-for="row in tableData"
+          :key="row.orderNo"
+          :class="[
+            'so-mobile-card',
+            { 'so-mobile-card--selected': mergeSourceOrderNo === row.orderNo }
+          ]"
+          shadow="hover"
+          @click="handleRowClick(row)"
+        >
           <div class="so-mobile-card__header">
             <div>
               <div class="so-mobile-card__order">订单编号：{{ row.orderNo || '-' }}</div>
@@ -517,9 +547,9 @@
             </div>
           </div>
           <div class="so-mobile-card__actions">
-            <el-button type="success" size="small" @click="handleView(row)">查看</el-button>
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="success" size="small" @click.stop="handleView(row)">查看</el-button>
+            <el-button type="primary" size="small" @click.stop="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" size="small" @click.stop="handleDelete(row)">删除</el-button>
           </div>
         </el-card>
       </template>
@@ -1031,6 +1061,196 @@
       </template>
     </el-dialog>
 
+    <el-drawer
+      v-model="mergeDialogVisible"
+      title="合并销售订单"
+      :size="isMobile ? '100%' : '720px'"
+      :with-header="true"
+      :close-on-click-modal="false"
+      :destroy-on-close="false"
+    >
+      <div class="so-merge-panel">
+        <div class="so-merge-panel__hero">
+          <div class="so-merge-panel__eyebrow">页面级整单并入</div>
+          <div class="so-merge-panel__title">先确认源订单，再从同客户订单中选择保留目标。</div>
+          <div class="so-merge-panel__desc">
+            规则：仅支持同客户、整单并入；合并后保留目标订单编号与表头信息，源订单将不再单独存在。
+          </div>
+        </div>
+
+        <section class="so-merge-section">
+          <div class="so-merge-section__header">
+            <span class="so-merge-section__step">01</span>
+            <div>
+              <div class="so-merge-section__title">源订单</div>
+              <div class="so-merge-section__subtitle"
+                >当前页面已选中的订单，将整单并入目标订单。</div
+              >
+            </div>
+          </div>
+          <div class="so-merge-summary-card is-source">
+            <div class="so-merge-summary-card__main">
+              <div class="so-merge-summary-card__order">{{
+                mergeSourceSnapshot?.orderNo || '-'
+              }}</div>
+              <div class="so-merge-summary-card__customer">{{
+                mergeSourceSnapshot?.customerName || '-'
+              }}</div>
+            </div>
+            <div class="so-merge-summary-card__grid">
+              <div>订单日期：{{ formatDate(mergeSourceSnapshot?.orderDate) || '-' }}</div>
+              <div>签订日期：{{ formatDate(mergeSourceSnapshot?.signDate) || '-' }}</div>
+              <div>合同号：{{ mergeSourceSnapshot?.contractNo || '-' }}</div>
+              <div>明细：{{ mergeSourceSnapshot?.details?.length || 0 }}</div>
+              <div>总数量：{{ mergeSourceSnapshot?.totalQuantity || 0 }}</div>
+              <div>总金额：{{ formatAmount(mergeSourceSnapshot?.totalAmount || 0) }}</div>
+            </div>
+            <div v-if="mergeSourceSnapshot?.details?.length" class="so-merge-detail-list">
+              <div
+                v-for="detail in mergeSourceSnapshot.details"
+                :key="detail.id || detail.itemCode || detail.productName"
+                class="so-merge-detail-item"
+              >
+                <div class="so-merge-detail-item__head">
+                  <span class="so-merge-detail-item__code">{{ detail.itemCode || '-' }}</span>
+                  <span class="so-merge-detail-item__qty">数量 {{ detail.quantity || 0 }}</span>
+                </div>
+                <div class="so-merge-detail-item__meta">
+                  <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
+                  <span v-if="detail.productDrawingNo">图号 {{ detail.productDrawingNo }}</span>
+                  <span v-if="detail.productName">{{ detail.productName }}</span>
+                  <span v-if="detail.deliveryDate">交付 {{ formatDate(detail.deliveryDate) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="so-merge-section">
+          <div class="so-merge-section__header">
+            <span class="so-merge-section__step">02</span>
+            <div>
+              <div class="so-merge-section__title">选择目标订单</div>
+              <div class="so-merge-section__subtitle">只展示同客户、且不等于源订单的候选订单。</div>
+            </div>
+          </div>
+
+          <el-input
+            v-model="mergeTargetSearchText"
+            class="so-merge-target-search"
+            placeholder="搜索订单编号 / 合同号 / 项目编号 / 客户模号"
+            clearable
+            :disabled="mergeTargetsLoading"
+          />
+
+          <div v-if="mergeTargetsLoading" class="so-merge-target-state"
+            >正在加载可合并目标订单...</div
+          >
+          <div v-else-if="!mergeTargetCandidates.length" class="so-merge-target-state is-empty">
+            当前客户暂无可合并的目标订单
+          </div>
+          <div v-else class="so-merge-target-list">
+            <button
+              v-for="candidate in mergeTargetCandidates"
+              :key="candidate.orderNo"
+              type="button"
+              class="so-merge-target-card"
+              :class="{ 'is-active': mergeTargetOrderNo === candidate.orderNo }"
+              @click="mergeTargetOrderNo = candidate.orderNo"
+            >
+              <div class="so-merge-target-card__head">
+                <span class="so-merge-target-card__order">{{ candidate.orderNo }}</span>
+                <span class="so-merge-target-card__keep">保留此单</span>
+              </div>
+              <div class="so-merge-target-card__meta">
+                <span>{{ candidate.customerName || '-' }}</span>
+                <span>订单 {{ formatDate(candidate.orderDate) || '-' }}</span>
+                <span>签订 {{ formatDate(candidate.signDate) || '-' }}</span>
+              </div>
+              <div class="so-merge-target-card__grid">
+                <span>合同号：{{ candidate.contractNo || '-' }}</span>
+                <span>明细：{{ candidate.details?.length || 0 }}</span>
+                <span>总数量：{{ candidate.totalQuantity || 0 }}</span>
+                <span>总金额：{{ formatAmount(candidate.totalAmount || 0) }}</span>
+              </div>
+              <div v-if="candidate.details?.length" class="so-merge-target-card__details">
+                <div
+                  v-for="detail in candidate.details.slice(0, 4)"
+                  :key="detail.id || detail.itemCode || detail.productName"
+                  class="so-merge-detail-item is-compact"
+                >
+                  <div class="so-merge-detail-item__head">
+                    <span class="so-merge-detail-item__code">{{ detail.itemCode || '-' }}</span>
+                    <span class="so-merge-detail-item__qty">数量 {{ detail.quantity || 0 }}</span>
+                  </div>
+                  <div class="so-merge-detail-item__meta">
+                    <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
+                    <span v-if="detail.productName">{{ detail.productName }}</span>
+                  </div>
+                </div>
+                <div v-if="candidate.details.length > 4" class="so-merge-target-card__more">
+                  还有 {{ candidate.details.length - 4 }} 条明细
+                </div>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <section class="so-merge-section">
+          <div class="so-merge-section__header">
+            <span class="so-merge-section__step">03</span>
+            <div>
+              <div class="so-merge-section__title">合并后预览</div>
+              <div class="so-merge-section__subtitle"
+                >表头字段以目标订单为准，源订单全部明细与附件并入目标订单。</div
+              >
+            </div>
+          </div>
+
+          <div v-if="mergePreview" class="so-merge-preview-card">
+            <div class="so-merge-preview-card__title">合并结果</div>
+            <div class="so-merge-preview-card__grid">
+              <div>保留订单编号：{{ mergePreview.orderNo }}</div>
+              <div>订单日期：{{ formatDate(mergeTargetRow?.orderDate) || '-' }}</div>
+              <div>签订日期：{{ formatDate(mergeTargetRow?.signDate) || '-' }}</div>
+              <div>合同号：{{ mergeTargetRow?.contractNo || '-' }}</div>
+              <div>合并后明细：{{ mergePreview.detailCount }}</div>
+              <div>合并后总数量：{{ mergePreview.totalQuantity }}</div>
+              <div>合并后总金额：{{ formatAmount(mergePreview.totalAmount) }}</div>
+              <div>源订单将消失：{{ mergeSourceSnapshot?.orderNo || '-' }}</div>
+            </div>
+            <div class="so-merge-preview-card__notice">
+              外部引用会自动改绑到目标订单；附件将随订单编号一并更新。
+            </div>
+          </div>
+          <div v-else class="so-merge-target-state"> 请选择一个目标订单后查看合并结果预览。 </div>
+
+          <label class="so-merge-confirm">
+            <input v-model="mergeConfirmChecked" type="checkbox" />
+            <span>
+              我确认保留目标订单
+              <strong>{{ mergeTargetOrderNo || '—' }}</strong>
+              ，源订单将不再单独存在。
+            </span>
+          </label>
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="so-merge-footer">
+          <el-button @click="mergeDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="mergeSubmitting"
+            :disabled="!canSubmitMerge"
+            @click="confirmMerge"
+          >
+            确认合并
+          </el-button>
+        </div>
+      </template>
+    </el-drawer>
+
     <!-- PC 端“管理附件”弹窗 -->
     <el-dialog
       v-if="!isMobile"
@@ -1489,10 +1709,12 @@ import {
   ElCol,
   ElDatePicker,
   ElDialog,
+  ElDrawer,
   ElForm,
   ElFormItem,
   ElInput,
   ElInputNumber,
+  ElTooltip,
   ElMessage,
   ElMessageBox,
   ElPagination,
@@ -1514,6 +1736,7 @@ import {
   createSalesOrderApi,
   generateOrderNoApi,
   splitSalesOrderApi,
+  mergeSalesOrderApi,
   deleteSalesOrderApi,
   getSalesOrdersStatisticsApi,
   getSalesOrderDetailAttachmentsApi,
@@ -1759,12 +1982,91 @@ const splitSubmitting = ref(false)
 const splitTargetByDetailId = ref<Record<string, string>>({})
 const splitNewGroupCount = ref(1)
 
+const mergeDialogVisible = ref(false)
+const mergeSubmitting = ref(false)
+const mergeTargetsLoading = ref(false)
+const mergeSourceOrderNo = ref<string>('')
+const mergeSourceSnapshot = ref<OrderTableRow | null>(null)
+const mergeTargetOrders = ref<OrderTableRow[]>([])
+const mergeTargetOrderNo = ref<string>('')
+const mergeTargetSearchText = ref<string>('')
+const mergeConfirmChecked = ref(false)
+
 const splitTargetOptions = computed(() => {
   const opts: Array<{ label: string; value: string }> = [{ label: '保留在原订单', value: 'origin' }]
   for (let i = 1; i <= splitNewGroupCount.value; i += 1) {
     opts.push({ label: `新订单${i}`, value: `new-${i}` })
   }
   return opts
+})
+
+const mergeTargetRow = computed<OrderTableRow | null>(() => {
+  const key = String(mergeTargetOrderNo.value || '').trim()
+  if (!key) return null
+  return mergeTargetOrders.value.find((o) => o.orderNo === key) || null
+})
+
+const mergeTargetCandidates = computed(() => {
+  const srcNo = String(mergeSourceSnapshot.value?.orderNo || '').trim()
+  const keyword = mergeTargetSearchText.value.trim().toLowerCase()
+  const list = mergeTargetOrders.value.filter((o) => o.orderNo && o.orderNo !== srcNo)
+  if (!keyword) return list
+  return list.filter((o) => {
+    const detailText = Array.isArray(o.details)
+      ? o.details
+          .flatMap((detail) => [
+            detail?.itemCode,
+            detail?.customerPartNo,
+            detail?.productDrawingNo,
+            detail?.productName
+          ])
+          .filter(Boolean)
+          .join(' ')
+      : ''
+    const haystack = [
+      o.orderNo,
+      o.contractNo,
+      o.customerName,
+      formatDate(o.orderDate),
+      formatDate(o.signDate),
+      detailText
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(keyword)
+  })
+})
+
+const mergePreview = computed(() => {
+  const src = mergeSourceSnapshot.value
+  const tgt = mergeTargetRow.value
+  if (!src?.orderNo || !tgt?.orderNo) return null
+  return {
+    orderNo: tgt.orderNo,
+    detailCount: Number(tgt.details?.length || 0) + Number(src.details?.length || 0),
+    totalQuantity: Number(tgt.totalQuantity || 0) + Number(src.totalQuantity || 0),
+    totalAmount: Number(tgt.totalAmount || 0) + Number(src.totalAmount || 0)
+  }
+})
+
+const canSubmitMerge = computed(() => {
+  const srcNo = String(mergeSourceSnapshot.value?.orderNo || '').trim()
+  if (!srcNo) return false
+  const tgtNo = String(mergeTargetOrderNo.value || '').trim()
+  if (!tgtNo) return false
+  if (tgtNo === srcNo) return false
+  return mergeConfirmChecked.value
+})
+
+watch(mergeTargetOrderNo, () => {
+  mergeConfirmChecked.value = false
+})
+
+watch(mergeDialogVisible, (visible) => {
+  if (visible) return
+  mergeTargetSearchText.value = ''
+  mergeConfirmChecked.value = false
 })
 
 // 记录展开的订单编号集合，用于高亮展开行
@@ -1780,7 +2082,18 @@ const onExpandChange = (row: OrderTableRow, expandedRows: OrderTableRow[]) => {
 }
 
 const rowClassName = ({ row }: { row: OrderTableRow }) => {
-  return expandedOrderNos.value.has(row.orderNo) ? 'so-row--expanded' : ''
+  const cls: string[] = []
+  if (expandedOrderNos.value.has(row.orderNo)) cls.push('so-row--expanded')
+  if (mergeSourceOrderNo.value && row.orderNo === mergeSourceOrderNo.value)
+    cls.push('so-row--merge-source')
+  return cls.join(' ')
+}
+
+const handleRowClick = (row: OrderTableRow) => {
+  if (!row?.orderNo) return
+  mergeSourceOrderNo.value = row.orderNo
+  mergeSourceSnapshot.value = row
+  tableRef.value?.setCurrentRow(row)
 }
 
 const formatAmount = (value: number | null | undefined): string => {
@@ -2420,12 +2733,16 @@ const loadOrderForTimeline = async (orderNo: string) => {
 const handleTimelineOrderClick = async (order: OrderTableRow) => {
   timelineActiveOrderNo.value = order.orderNo
   timelineActiveDetailKey.value = null
+  mergeSourceOrderNo.value = order.orderNo
+  mergeSourceSnapshot.value = order
   await loadOrderForTimeline(order.orderNo)
 }
 
 const handleTimelineDetailClick = async (order: OrderTableRow, detail: any) => {
   timelineActiveOrderNo.value = order.orderNo
   timelineActiveDetailKey.value = makeTimelineDetailKey(order.orderNo, detail)
+  mergeSourceOrderNo.value = order.orderNo
+  mergeSourceSnapshot.value = order
   await loadOrderForTimeline(order.orderNo)
 }
 
@@ -2982,6 +3299,124 @@ const confirmSplit = async () => {
   }
 }
 
+const loadMergeTargets = async () => {
+  const src = mergeSourceSnapshot.value
+  if (!src?.orderNo) return
+  mergeTargetsLoading.value = true
+  try {
+    const params: SalesOrderQueryParams = { page: 1, pageSize: 5000 }
+    if (src.customerId) {
+      params.customerId = src.customerId
+    } else if (src.customerName) {
+      params.customerName = src.customerName
+    }
+    const resp = await getSalesOrdersListApi(params)
+    const raw: any = resp
+    const pr: any = raw?.data ?? raw
+    const list: SalesOrder[] = pr?.data?.list ?? pr?.list ?? []
+    mergeTargetOrders.value = Array.isArray(list) ? list.map(mapOrderToRow) : []
+  } catch (e) {
+    console.error('加载可合并目标订单失败:', e)
+    mergeTargetOrders.value = []
+    ElMessage.error('加载可合并目标订单失败')
+  } finally {
+    mergeTargetsLoading.value = false
+  }
+}
+
+const openMergeDialog = async () => {
+  const src = mergeSourceSnapshot.value
+  if (!src?.orderNo) {
+    ElMessage.warning('请先在列表中选中要合并的源订单')
+    return
+  }
+  mergeTargetOrderNo.value = ''
+  mergeTargetSearchText.value = ''
+  mergeConfirmChecked.value = false
+  mergeDialogVisible.value = true
+  await loadMergeTargets()
+  if (!mergeTargetCandidates.value.length) {
+    ElMessage.warning('当前客户暂无可合并的目标订单')
+    return
+  }
+  if (mergeTargetCandidates.value.length === 1) {
+    mergeTargetOrderNo.value = mergeTargetCandidates.value[0].orderNo
+  }
+}
+
+const confirmMerge = async () => {
+  const src = mergeSourceSnapshot.value
+  const srcNo = String(src?.orderNo || '').trim()
+  const tgtNo = String(mergeTargetOrderNo.value || '').trim()
+  if (!srcNo) {
+    ElMessage.error('源订单不能为空')
+    return
+  }
+  if (!tgtNo) {
+    ElMessage.error('请选择目标订单')
+    return
+  }
+  if (!canSubmitMerge.value) {
+    ElMessage.warning('请先勾选确认后再执行合并')
+    return
+  }
+
+  const confirmed = await ElMessageBox.confirm(
+    `确认将订单「${srcNo}」整单并入「${tgtNo}」吗？合并后将保留目标订单编号与表头信息，源订单将不再单独存在。`,
+    '合并确认',
+    { type: 'warning', confirmButtonText: '确认合并', cancelButtonText: '取消' }
+  )
+    .then(() => true)
+    .catch(() => false)
+  if (!confirmed) return
+
+  try {
+    mergeSubmitting.value = true
+    const resp: any = await mergeSalesOrderApi(srcNo, tgtNo)
+    const payload: any = resp?.data ?? resp
+    const success = payload?.success ?? payload?.code === 0
+    if (!success) {
+      throw new Error(payload?.message || '合并失败')
+    }
+
+    mergeDialogVisible.value = false
+    await Promise.all([loadData(), loadStatistics()])
+
+    // 合并后默认选中目标订单，便于继续操作
+    mergeSourceOrderNo.value = tgtNo
+    const nextRow = tableData.value.find((r) => r.orderNo === tgtNo) || null
+    mergeSourceSnapshot.value = nextRow
+    if (nextRow) {
+      await nextTick()
+      tableRef.value?.setCurrentRow(nextRow)
+    }
+
+    const result = payload?.data || {}
+    const extra = [
+      Number(result.updatedQuotationRefs || 0) > 0
+        ? `报价引用 ${Number(result.updatedQuotationRefs || 0)} 条`
+        : '',
+      Number(result.updatedBmoRefs || 0) > 0
+        ? `BMO 引用 ${Number(result.updatedBmoRefs || 0)} 条`
+        : ''
+    ]
+      .filter(Boolean)
+      .join('，')
+    const successText = extra
+      ? `已将订单「${srcNo}」并入「${tgtNo}」，并同步更新${extra}。`
+      : `已将订单「${srcNo}」并入「${tgtNo}」。`
+    await ElMessageBox.alert(successText, '合并成功', {
+      confirmButtonText: '知道了',
+      closeOnClickModal: false
+    })
+  } catch (error: any) {
+    console.error('合并订单失败:', error)
+    ElMessage.error(error?.message || '合并订单失败')
+  } finally {
+    mergeSubmitting.value = false
+  }
+}
+
 const handleDialogClosed = () => {
   dialogForm.orderNo = ''
   dialogForm.orderDate = ''
@@ -3278,6 +3713,21 @@ onMounted(async () => {
     margin-top: 6px;
   }
 
+  .so-merge-panel__hero {
+    padding: 14px;
+  }
+
+  .so-merge-summary-card__grid,
+  .so-merge-preview-card__grid,
+  .so-merge-target-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .so-merge-target-card__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   :deep(.query-form--mobile .el-form-item .el-form-item__content) {
     width: 100%;
   }
@@ -3383,7 +3833,7 @@ onMounted(async () => {
 
 .query-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
 }
@@ -4167,6 +4617,336 @@ onMounted(async () => {
   margin-top: 12px;
   transform: none;
   justify-content: center;
+}
+
+.so-merge-panel {
+  display: grid;
+  gap: 18px;
+  padding-right: 4px;
+}
+
+.so-merge-panel__hero {
+  padding: 16px 18px;
+  background:
+    radial-gradient(circle at top right, rgb(230 162 60 / 16%), transparent 42%),
+    linear-gradient(145deg, rgb(255 251 244), rgb(255 248 235));
+  border: 1px solid rgb(230 162 60 / 22%);
+  border-radius: 18px;
+}
+
+.so-merge-panel__eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #c47e18;
+  text-transform: uppercase;
+}
+
+.so-merge-panel__title {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #5f3a00;
+}
+
+.so-merge-panel__desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #7b5a1f;
+}
+
+.so-merge-section {
+  display: grid;
+  gap: 12px;
+}
+
+.so-merge-section__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.so-merge-section__step {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: #e6a23c;
+  border-radius: 50%;
+  box-shadow: 0 8px 18px rgb(230 162 60 / 26%);
+  align-items: center;
+  justify-content: center;
+}
+
+.so-merge-section__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.so-merge-section__subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+}
+
+.so-merge-summary-card,
+.so-merge-preview-card {
+  padding: 14px 16px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 5%);
+}
+
+.so-merge-summary-card.is-source {
+  background:
+    linear-gradient(180deg, rgb(255 252 247), rgb(255 255 255)), var(--el-bg-color-overlay);
+  border-color: rgb(230 162 60 / 30%);
+}
+
+.so-merge-summary-card__main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.so-merge-summary-card__order {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.so-merge-summary-card__customer {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.so-merge-summary-card__grid,
+.so-merge-preview-card__grid,
+.so-merge-target-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+}
+
+.so-merge-detail-list {
+  padding-top: 12px;
+  margin-top: 14px;
+  border-top: 1px dashed var(--el-border-color);
+}
+
+.so-merge-detail-list__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--el-text-color-secondary);
+}
+
+.so-merge-target-search {
+  margin-bottom: 4px;
+}
+
+.so-merge-target-list {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.so-merge-target-card {
+  display: grid;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgb(255 255 255), rgb(250 250 250));
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+  gap: 10px;
+}
+
+.so-merge-target-card:hover {
+  border-color: rgb(230 162 60 / 48%);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgb(230 162 60 / 12%);
+}
+
+.so-merge-target-card.is-active {
+  background:
+    radial-gradient(circle at top right, rgb(230 162 60 / 12%), transparent 36%),
+    linear-gradient(180deg, rgb(255 251 244), rgb(255 255 255));
+  border-color: #e6a23c;
+  box-shadow: 0 14px 28px rgb(230 162 60 / 16%);
+}
+
+.so-merge-target-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.so-merge-target-card__order {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.so-merge-target-card__keep {
+  display: inline-flex;
+  min-width: 68px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c47e18;
+  background: rgb(230 162 60 / 14%);
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+}
+
+.so-merge-target-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.so-merge-target-card__details {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--el-border-color);
+}
+
+.so-merge-target-card__more {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.so-merge-detail-item {
+  display: grid;
+  padding: 10px 12px;
+  background: rgb(248 250 252 / 90%);
+  border-radius: 12px;
+  gap: 4px;
+}
+
+.so-merge-detail-item.is-compact {
+  padding: 8px 10px;
+}
+
+.so-merge-detail-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.so-merge-detail-item__code {
+  display: inline-flex;
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #8a5808;
+  background: rgb(230 162 60 / 14%);
+  border-radius: 999px;
+  align-items: center;
+}
+
+.so-merge-detail-item__qty {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.so-merge-detail-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.so-merge-target-state {
+  padding: 18px 16px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-blank);
+  border: 1px dashed var(--el-border-color);
+  border-radius: 14px;
+}
+
+.so-merge-target-state.is-empty {
+  text-align: center;
+}
+
+.so-merge-preview-card__title {
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.so-merge-preview-card__notice {
+  padding-top: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+  border-top: 1px dashed var(--el-border-color);
+}
+
+.so-merge-confirm {
+  display: flex;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color-light);
+  border-radius: 12px;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.so-merge-confirm input {
+  margin-top: 2px;
+  accent-color: #e6a23c;
+}
+
+.so-merge-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.so-row--merge-source {
+  background: rgb(230 162 60 / 10%) !important;
+}
+
+.so-mobile-card--selected {
+  outline: 2px solid var(--el-color-warning);
+  outline-offset: 2px;
 }
 
 /* 查询表单垂直居中对齐 */
