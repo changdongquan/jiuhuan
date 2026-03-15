@@ -854,8 +854,8 @@ const executeSalesOrderMerge = async ({
     req.input('source', sql.NVarChar(100), sourceOrderNo)
     req.input('target', sql.NVarChar(100), targetOrderNo)
     req.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
-    req.input('orderDate', sql.NVarChar(20), targetOrder.orderDate || null)
-    req.input('signDate', sql.NVarChar(20), targetOrder.signDate || null)
+    req.input('orderDate', sql.NVarChar(20), toYYYYMMDD(targetOrder.orderDate))
+    req.input('signDate', sql.NVarChar(20), toYYYYMMDD(targetOrder.signDate))
     req.input('contractNo', sql.NVarChar(100), targetOrder.contractNo || null)
     await req.query(`
       UPDATE 销售订单
