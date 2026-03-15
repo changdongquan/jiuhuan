@@ -379,7 +379,7 @@ router.delete('/delete/:id', requireSupplierDelete, async (req, res) => {
     const actor = resolveActorFromReq(req) || 'system'
     
     // 检查记录是否存在
-    const checkQuery = `SELECT 供方ID, 供方名称 FROM 供方信息 WHERE 供方ID = @id AND 是否删除 = 0`
+    const checkQuery = `SELECT TOP 1 *, 供方ID, 供方名称 FROM 供方信息 WHERE 供方ID = @id AND 是否删除 = 0`
     const checkRequest = pool.request()
     checkRequest.input('id', sql.BigInt, id)
     const checkResult = await checkRequest.query(checkQuery)
@@ -414,6 +414,7 @@ router.delete('/delete/:id', requireSupplierDelete, async (req, res) => {
         entityKey: String(id),
         displayCode: String(id),
         displayName: String(checkResult.recordset?.[0]?.供方名称 || ''),
+        requestSnapshot: checkResult.recordset?.[0] || null,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

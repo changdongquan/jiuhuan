@@ -1095,7 +1095,7 @@ router.delete('/invoices/:invoiceId', requireBillingDelete, async (req, res) => 
     const infoReq = new sql.Request(tx)
     infoReq.input('invoiceId', sql.Int, invoiceId)
     const infoRows = await infoReq.query(`
-      SELECT TOP 1 发票ID as invoiceId, 单据编号 as documentNo, 发票号码 as invoiceNo
+      SELECT TOP 1 *, 发票ID as invoiceId, 单据编号 as documentNo, 发票号码 as invoiceNo
       FROM 开票单据
       WHERE 发票ID = @invoiceId AND ISNULL(是否删除, 0) = 0
     `)
@@ -1121,6 +1121,7 @@ router.delete('/invoices/:invoiceId', requireBillingDelete, async (req, res) => 
       entityKey: String(invoiceId),
       displayCode: String(info.documentNo || info.invoiceNo || invoiceId),
       displayName: String(info.invoiceNo || info.documentNo || ''),
+      requestSnapshot: info,
       requesterName: actor,
       requestSource: 'SOFT_DELETE_AUTO',
       requestReason: '软删除后系统自动发起硬删除审核'
@@ -1368,7 +1369,7 @@ router.delete('/receipts/:documentNo', requireReceivableDelete, async (req, res)
       const checkReq = new sql.Request(tx)
       checkReq.input('documentNo', sql.NVarChar(100), documentNo)
       const exists = await checkReq.query(`
-        SELECT TOP 1 单据编号 as documentNo
+        SELECT TOP 1 *, 单据编号 as documentNo
         FROM 回款单据
         WHERE 单据编号 = @documentNo AND ISNULL(是否删除, 0) = 0
       `)
@@ -1393,6 +1394,7 @@ router.delete('/receipts/:documentNo', requireReceivableDelete, async (req, res)
         entityKey: documentNo,
         displayCode: documentNo,
         displayName: documentNo,
+        requestSnapshot: exists.recordset?.[0] || null,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

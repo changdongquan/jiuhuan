@@ -103,6 +103,7 @@ export interface HardDeleteReviewTask {
   entityKey?: string | null
   displayCode?: string | null
   displayName?: string | null
+  requestSnapshot?: Record<string, any> | null
   productName: string | null
   productDrawing: string | null
   category: string | null

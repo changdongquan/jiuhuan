@@ -2790,6 +2790,15 @@ router.delete('/delete', requireProjectDelete, async (req, res) => {
     const tx = new sql.Transaction(pool)
     await tx.begin()
     try {
+      const snapshotReq = new sql.Request(tx)
+      snapshotReq.input('projectCode', sql.NVarChar(100), code)
+      const snapshotResult = await snapshotReq.query(`
+        SELECT TOP 1 *
+        FROM 项目管理
+        WHERE 项目编号 = @projectCode
+      `)
+      const requestSnapshot = snapshotResult.recordset?.[0] || { projectCode: code }
+
       await softDeleteByProjectCode({ pool, tx, projectCode: code, actor })
       await ensurePendingHardDeleteReviewRequest({
         tx,
@@ -2797,6 +2806,7 @@ router.delete('/delete', requireProjectDelete, async (req, res) => {
         moduleCode: 'PROJECT_INFO',
         entityKey: code,
         displayCode: code,
+        requestSnapshot,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

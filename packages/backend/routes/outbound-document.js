@@ -1734,12 +1734,26 @@ router.delete('/delete', requireOutboundDelete, async (req, res) => {
         await updateProjectMoveState(tx, code, moved ? '已经移模' : '待移模', null)
       }
 
+      const snapshotReq = new sql.Request(tx)
+      snapshotReq.input('documentNo', sql.NVarChar(100), documentNo)
+      const snapshotResult = await snapshotReq.query(`
+        SELECT TOP 50 *
+        FROM 出库单明细
+        WHERE 出库单号 = @documentNo
+      `)
+      const requestSnapshot = {
+        documentNo,
+        detailCount: Number(snapshotResult.recordset?.length || 0),
+        details: snapshotResult.recordset || []
+      }
+
       await ensurePendingHardDeleteReviewRequest({
         tx,
         projectCode: documentNo,
         moduleCode: 'OUTBOUND_DOCUMENT',
         entityKey: documentNo,
         displayCode: documentNo,
+        requestSnapshot,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

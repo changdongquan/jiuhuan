@@ -1093,7 +1093,7 @@ router.delete('/:id', requireSalaryDelete, async (req, res) => {
     const existedReq = new sql.Request(transaction)
     existedReq.input('id', sql.Int, id)
     const existed = await existedReq.query(`
-      SELECT TOP 1 月份 as month
+      SELECT TOP 1 *, 月份 as month
       FROM ${TABLE_SUMMARY}
       WHERE ID = @id AND ISNULL(是否删除, 0) = 0
     `)
@@ -1132,6 +1132,7 @@ router.delete('/:id', requireSalaryDelete, async (req, res) => {
       entityKey: String(id),
       displayCode: month,
       displayName: month,
+      requestSnapshot: existed.recordset?.[0] || { id, month },
       requesterName: actor,
       requestSource: 'SOFT_DELETE_AUTO',
       requestReason: '软删除后系统自动发起硬删除审核'

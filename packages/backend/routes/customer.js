@@ -759,7 +759,7 @@ router.delete('/:id', requireCustomerDelete, async (req, res) => {
       const checkReq = new sql.Request(tx)
       checkReq.input('id', sql.Int, customerId)
       const checkRows = await checkReq.query(`
-        SELECT TOP 1 客户ID as id, 客户名称 as customerName
+        SELECT TOP 1 *, 客户ID as id, 客户名称 as customerName
         FROM 客户信息
         WHERE 客户ID = @id AND ISNULL(是否删除, 0) = 0
       `)
@@ -785,6 +785,7 @@ router.delete('/:id', requireCustomerDelete, async (req, res) => {
         entityKey: String(customerId),
         displayCode: String(customerId),
         displayName: String(row.customerName || ''),
+        requestSnapshot: row,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

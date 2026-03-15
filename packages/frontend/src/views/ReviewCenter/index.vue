@@ -795,6 +795,47 @@
             hardDeleteViewRow.executionError || '-'
           }}</el-descriptions-item>
         </el-descriptions>
+
+        <el-card shadow="never" class="hard-delete-snapshot">
+          <template #header>
+            <span>删除原单内容快照</span>
+          </template>
+          <template v-if="hardDeleteSnapshotRows.length || hardDeleteSnapshotTables.length">
+            <el-table
+              v-if="hardDeleteSnapshotRows3Col.length"
+              :data="hardDeleteSnapshotRows3Col"
+              border
+              size="small"
+              class="snapshot-kv-table"
+            >
+              <el-table-column prop="col1" label="字段1" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="col2" label="字段2" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="col3" label="字段3" min-width="220" show-overflow-tooltip />
+            </el-table>
+
+            <div
+              v-for="table in hardDeleteSnapshotTables"
+              :key="table.title"
+              class="snapshot-table-block"
+            >
+              <div class="snapshot-table-title">{{ table.title }}</div>
+              <el-table :data="table.rows" border size="small" max-height="320">
+                <el-table-column
+                  v-for="col in table.columns"
+                  :key="col"
+                  :label="col"
+                  :min-width="getSnapshotColMinWidth(col, table.rows)"
+                  show-overflow-tooltip
+                >
+                  <template #default="{ row }">
+                    {{ formatSnapshotCell(row[col]) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+          <div v-else class="snapshot-empty">-</div>
+        </el-card>
       </div>
       <template #footer>
         <el-button @click="hardDeleteViewDialogVisible = false">关闭</el-button>
@@ -1028,6 +1069,182 @@ const formatAmount = (value: number | null | undefined) => {
   const amount = Number(value)
   return Number.isFinite(amount) ? amount.toLocaleString('zh-CN') : '-'
 }
+
+const formatSnapshotCell = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return '-'
+  if (value instanceof Date) return value.toISOString()
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(', ')
+  if (typeof value === 'object') {
+    const maybeBuffer = value as { type?: string; data?: unknown[] }
+    if (maybeBuffer?.type === 'Buffer' && Array.isArray(maybeBuffer?.data)) {
+      return `[二进制 ${maybeBuffer.data.length} bytes]`
+    }
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return '[对象]'
+    }
+  }
+  return String(value)
+}
+
+const getSnapshotColMinWidth = (column: string, rows: Record<string, any>[]) => {
+  const headerLen = String(column || '').length
+  const sampleMax = rows.slice(0, 20).reduce((max, row) => {
+    const text = formatSnapshotCell(row?.[column])
+    return Math.max(max, String(text || '').length)
+  }, 0)
+  const estimated = Math.max(headerLen, sampleMax)
+  return Math.min(320, Math.max(100, estimated * 14 + 28))
+}
+
+const hardDeleteSnapshotObject = computed<Record<string, any> | null>(() => {
+  const snapshot = hardDeleteViewRow.value?.requestSnapshot
+  return snapshot && typeof snapshot === 'object' ? (snapshot as Record<string, any>) : null
+})
+
+const SNAPSHOT_FIELD_LABEL_MAP: Record<string, string> = {
+  id: 'ID',
+  invoiceId: '发票ID',
+  documentNo: '单据编号',
+  invoiceNo: '发票号码',
+  receiptNo: '回款单号',
+  receiptDate: '回款日期',
+  customerName: '客户名称',
+  contractNo: '合同号',
+  projectCode: '项目编号',
+  productName: '产品名称',
+  productDrawing: '产品图号',
+  amountReceivable: '应收金额',
+  amountReceived: '实收金额',
+  discountAmount: '贴息金额',
+  totalAmount: '合计金额',
+  paymentMethod: '回款方式',
+  remark: '备注',
+  month: '月份',
+  orderNo: '订单编号'
+}
+
+const SNAPSHOT_HIDDEN_KEYS = new Set([
+  'SSMA_TimeStamp',
+  '是否删除',
+  '删除时间',
+  '删除人',
+  '创建时间',
+  '创建人',
+  '更新时间',
+  '更新人'
+])
+
+const SNAPSHOT_PREFERRED_ORDER = [
+  'documentNo',
+  '单据编号',
+  'invoiceNo',
+  '发票号码',
+  'receiptNo',
+  'customerName',
+  '客户名称',
+  'contractNo',
+  '合同号',
+  'projectCode',
+  '项目编号',
+  'productName',
+  '产品名称',
+  'productDrawing',
+  '产品图号',
+  'receiptDate',
+  '回款日期',
+  'amountReceivable',
+  '应收金额',
+  'amountReceived',
+  '实收金额',
+  'discountAmount',
+  '贴息金额',
+  'totalAmount',
+  '合计金额',
+  'paymentMethod',
+  '回款方式',
+  'month',
+  '月份',
+  'remark',
+  '备注'
+]
+
+const formatSnapshotFieldValue = (key: string, value: unknown) => {
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  const keyText = String(key || '')
+  if (typeof value === 'string' && /(时间|日期|At|Date)/i.test(keyText)) {
+    const t = formatTime(value)
+    return t === '-' ? value : t
+  }
+  return formatSnapshotCell(value)
+}
+
+const hardDeleteSnapshotRows = computed<Array<{ key: string; label: string; value: string }>>(
+  () => {
+    const snapshot = hardDeleteSnapshotObject.value
+    if (!snapshot) return []
+    const rows = Object.entries(snapshot)
+      .filter(
+        ([key, value]) => !Array.isArray(value) && !SNAPSHOT_HIDDEN_KEYS.has(String(key || ''))
+      )
+      .map(([key, value]) => {
+        const formatted = formatSnapshotFieldValue(key, value)
+        return {
+          key,
+          label: SNAPSHOT_FIELD_LABEL_MAP[key] || key,
+          value: formatted
+        }
+      })
+      .filter((row) => row.value !== '-')
+
+    const orderIndex = (key: string) => {
+      const idx = SNAPSHOT_PREFERRED_ORDER.indexOf(key)
+      return idx < 0 ? Number.MAX_SAFE_INTEGER : idx
+    }
+    return rows.sort((a, b) => {
+      const oa = orderIndex(a.key)
+      const ob = orderIndex(b.key)
+      if (oa !== ob) return oa - ob
+      return a.label.localeCompare(b.label, 'zh-CN')
+    })
+  }
+)
+
+const hardDeleteSnapshotRows3Col = computed<Array<{ col1: string; col2: string; col3: string }>>(
+  () => {
+    const rows = hardDeleteSnapshotRows.value.map((item) => `${item.label}：${item.value}`)
+    const result: Array<{ col1: string; col2: string; col3: string }> = []
+    for (let i = 0; i < rows.length; i += 3) {
+      result.push({
+        col1: rows[i] || '-',
+        col2: rows[i + 1] || '-',
+        col3: rows[i + 2] || '-'
+      })
+    }
+    return result
+  }
+)
+
+const hardDeleteSnapshotTables = computed<
+  Array<{ title: string; columns: string[]; rows: Record<string, any>[] }>
+>(() => {
+  const snapshot = hardDeleteSnapshotObject.value
+  if (!snapshot) return []
+  const tables: Array<{ title: string; columns: string[]; rows: Record<string, any>[] }> = []
+  Object.entries(snapshot).forEach(([key, value]) => {
+    if (!Array.isArray(value) || !value.length) return
+    const rows = value.filter((item) => item && typeof item === 'object') as Record<string, any>[]
+    if (!rows.length) return
+    const colSet = new Set<string>()
+    rows.forEach((row) => {
+      Object.keys(row || {}).forEach((col) => colSet.add(col))
+    })
+    const columns = [...colSet]
+    tables.push({ title: key, columns, rows })
+  })
+  return tables
+})
 
 const updateViewport = () => {
   if (typeof window === 'undefined') return
@@ -1920,6 +2137,30 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
     gap: 10px;
     margin-top: 8px;
+  }
+
+  .hard-delete-snapshot {
+    :deep(.el-card__body) {
+      padding: 10px 12px;
+    }
+  }
+
+  .snapshot-kv-table {
+    margin-bottom: 10px;
+  }
+
+  .snapshot-table-block {
+    margin-top: 10px;
+  }
+
+  .snapshot-table-title {
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .snapshot-empty {
+    color: var(--el-text-color-secondary);
   }
 }
 

@@ -30,6 +30,7 @@ const ensureHardDeleteReviewTable = async (poolOrTx) => {
         entity_key NVARCHAR(200) NULL,
         display_code NVARCHAR(200) NULL,
         display_name NVARCHAR(300) NULL,
+        request_snapshot_json NVARCHAR(MAX) NULL,
         request_source NVARCHAR(40) NOT NULL,
         request_reason NVARCHAR(1000) NULL,
         status NVARCHAR(20) NOT NULL,
@@ -60,7 +61,39 @@ const ensureHardDeleteReviewTable = async (poolOrTx) => {
       ALTER TABLE dbo.${HARD_DELETE_REVIEW_TABLE} ADD display_code NVARCHAR(200) NULL;
     IF COL_LENGTH(N'dbo.${HARD_DELETE_REVIEW_TABLE}', N'display_name') IS NULL
       ALTER TABLE dbo.${HARD_DELETE_REVIEW_TABLE} ADD display_name NVARCHAR(300) NULL;
+    IF COL_LENGTH(N'dbo.${HARD_DELETE_REVIEW_TABLE}', N'request_snapshot_json') IS NULL
+      ALTER TABLE dbo.${HARD_DELETE_REVIEW_TABLE} ADD request_snapshot_json NVARCHAR(MAX) NULL;
   `)
+}
+
+const normalizeSnapshot = (snapshot) => {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
+  const normalized = {}
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (!key) continue
+    if (value === undefined) continue
+    if (value === null) {
+      normalized[key] = null
+      continue
+    }
+    if (value instanceof Date) {
+      normalized[key] = value.toISOString()
+      continue
+    }
+    const t = typeof value
+    if (t === 'string' || t === 'number' || t === 'boolean') {
+      normalized[key] = value
+      continue
+    }
+    if (Array.isArray(value)) {
+      normalized[key] = value.slice(0, 50)
+      continue
+    }
+    if (t === 'object') {
+      normalized[key] = value
+    }
+  }
+  return Object.keys(normalized).length ? normalized : null
 }
 
 const ensurePendingHardDeleteReviewRequest = async ({
@@ -73,7 +106,8 @@ const ensurePendingHardDeleteReviewRequest = async ({
   moduleCode = 'GOODS',
   entityKey = null,
   displayCode = null,
-  displayName = null
+  displayName = null,
+  requestSnapshot = null
 }) => {
   if (!tx || !projectCode) return null
   await ensureHardDeleteReviewTable(tx)
@@ -97,7 +131,22 @@ const ensurePendingHardDeleteReviewRequest = async ({
     ORDER BY id DESC
   `)
   const pendingId = Number(existsResult.recordset?.[0]?.id || 0)
-  if (pendingId > 0) return pendingId
+  const normalizedSnapshot = normalizeSnapshot(requestSnapshot)
+  const snapshotJson = normalizedSnapshot ? JSON.stringify(normalizedSnapshot) : null
+  if (pendingId > 0) {
+    if (snapshotJson) {
+      const updateReq = new sql.Request(tx)
+      updateReq.input('id', sql.BigInt, pendingId)
+      updateReq.input('snapshotJson', sql.NVarChar(sql.MAX), snapshotJson)
+      await updateReq.query(`
+        UPDATE dbo.${HARD_DELETE_REVIEW_TABLE}
+        SET request_snapshot_json = COALESCE(NULLIF(request_snapshot_json, N''), @snapshotJson),
+            updated_at = SYSDATETIME()
+        WHERE id = @id
+      `)
+    }
+    return pendingId
+  }
 
   const insertReq = new sql.Request(tx)
   insertReq.input('projectCode', sql.NVarChar(100), projectCode)
@@ -106,6 +155,7 @@ const ensurePendingHardDeleteReviewRequest = async ({
   insertReq.input('entityKey', sql.NVarChar(200), effectiveEntityKey)
   insertReq.input('displayCode', sql.NVarChar(200), displayCode || projectCode)
   insertReq.input('displayName', sql.NVarChar(300), displayName || null)
+  insertReq.input('requestSnapshotJson', sql.NVarChar(sql.MAX), snapshotJson)
   insertReq.input('requestSource', sql.NVarChar(40), requestSource)
   insertReq.input('requestReason', sql.NVarChar(1000), requestReason || null)
   insertReq.input('status', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
@@ -118,6 +168,7 @@ const ensurePendingHardDeleteReviewRequest = async ({
       entity_key,
       display_code,
       display_name,
+      request_snapshot_json,
       request_source,
       request_reason,
       status,
@@ -130,6 +181,7 @@ const ensurePendingHardDeleteReviewRequest = async ({
       @entityKey,
       @displayCode,
       @displayName,
+      @requestSnapshotJson,
       @requestSource,
       @requestReason,
       @status,
@@ -201,6 +253,18 @@ const toHardDeleteReviewTaskData = (row) => {
     id: Number(row.id || 0),
     projectCode: row.projectCode || null,
     goodsId: row.goodsId ? Number(row.goodsId) : null,
+    displayCode: row.displayCode || null,
+    displayName: row.displayName || null,
+    requestSnapshot: (() => {
+      const raw = row.requestSnapshotJson
+      if (!raw || typeof raw !== 'string') return null
+      try {
+        const parsed = JSON.parse(raw)
+        return parsed && typeof parsed === 'object' ? parsed : null
+      } catch {
+        return null
+      }
+    })(),
     productName: row.productName || row.displayName || null,
     productDrawing: row.productDrawing || row.displayCode || null,
     category: row.category || row.moduleCode || null,

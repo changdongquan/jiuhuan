@@ -145,59 +145,36 @@
           </div>
           <div class="qt-mobile-card__actions">
             <el-button
-              v-if="canShowInitiateAction(row)"
-              type="warning"
+              v-if="getPrimaryInitiationAction(row)"
+              :type="getPrimaryInitiationAction(row)?.type"
+              :plain="Boolean(getPrimaryInitiationAction(row)?.plain)"
               size="small"
-              @click="handleInitiate(row)"
-              >立项</el-button
+              @click="handlePrimaryInitiationAction(row)"
             >
-            <el-button
-              v-if="canShowViewInitiationAction(row)"
-              type="warning"
-              plain
-              size="small"
-              @click="handleViewInitiation(row)"
-              >查看立项</el-button
-            >
-            <el-button
-              v-if="canShowEditInitiationAction(row)"
-              type="primary"
-              plain
-              size="small"
-              @click="handleEditInitiation(row)"
-              >编辑立项</el-button
-            >
-            <el-button
-              v-if="canShowRestartInitiationAction(row)"
-              type="primary"
-              plain
-              size="small"
-              @click="handleRestartInitiation(row)"
-              >重新发起</el-button
-            >
-            <el-button
-              v-if="canShowWithdrawInitiationAction(row)"
-              type="danger"
-              plain
-              size="small"
-              @click="handleWithdrawInitiation(row)"
-              >撤回申请</el-button
-            >
+              {{ getPrimaryInitiationAction(row)?.label }}
+            </el-button>
             <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
-            <el-button
-              v-if="canShowQuotationEditAction(row)"
-              type="primary"
-              size="small"
-              @click="handleEdit(row)"
-              >编辑</el-button
+            <el-dropdown
+              v-if="getSecondaryActions(row).length"
+              trigger="click"
+              popper-class="quotation-action-menu"
+              @command="(key) => handleActionCommand(key, row)"
             >
-            <el-button
-              v-if="canShowQuotationDeleteAction(row)"
-              type="danger"
-              size="small"
-              @click="handleDelete(row)"
-              >删除</el-button
-            >
+              <el-button size="small">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    v-for="action in getSecondaryActions(row)"
+                    :key="action.key"
+                    :command="action.key"
+                    :divided="Boolean(action.divided)"
+                    :class="{ 'is-danger': action.danger }"
+                  >
+                    {{ action.label }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </el-card>
       </template>
@@ -214,7 +191,7 @@
         v-loading="loading"
         :data="pagedQuotations"
         border
-        :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+        :height="isMobile ? undefined : 'calc(100vh - 280px)'"
         class="qt-table"
         row-key="id"
         @row-dblclick="handleRowDblClick"
@@ -311,63 +288,40 @@
             {{ formatAmount(calcTaxIncludedPrice(row)) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="360" fixed="right" align="center">
+        <el-table-column label="操作" width="280" fixed="right" align="center">
           <template #default="{ row }">
             <div class="operation-buttons">
               <el-button
-                v-if="canShowInitiateAction(row)"
-                type="warning"
+                v-if="getPrimaryInitiationAction(row)"
+                :type="getPrimaryInitiationAction(row)?.type"
+                :plain="Boolean(getPrimaryInitiationAction(row)?.plain)"
                 size="small"
-                @click="handleInitiate(row)"
-                >立项</el-button
+                @click="handlePrimaryInitiationAction(row)"
               >
-              <el-button
-                v-if="canShowViewInitiationAction(row)"
-                type="warning"
-                plain
-                size="small"
-                @click="handleViewInitiation(row)"
-                >查看立项</el-button
-              >
-              <el-button
-                v-if="canShowEditInitiationAction(row)"
-                type="primary"
-                plain
-                size="small"
-                @click="handleEditInitiation(row)"
-                >编辑立项</el-button
-              >
-              <el-button
-                v-if="canShowRestartInitiationAction(row)"
-                type="primary"
-                plain
-                size="small"
-                @click="handleRestartInitiation(row)"
-                >重新发起</el-button
-              >
-              <el-button
-                v-if="canShowWithdrawInitiationAction(row)"
-                type="danger"
-                plain
-                size="small"
-                @click="handleWithdrawInitiation(row)"
-                >撤回申请</el-button
-              >
+                {{ getPrimaryInitiationAction(row)?.label }}
+              </el-button>
               <el-button type="success" size="small" @click="handleView(row)">查看报价单</el-button>
-              <el-button
-                v-if="canShowQuotationEditAction(row)"
-                type="primary"
-                size="small"
-                @click="handleEdit(row)"
-                >编辑</el-button
+              <el-dropdown
+                v-if="getSecondaryActions(row).length"
+                trigger="click"
+                popper-class="quotation-action-menu"
+                @command="(key) => handleActionCommand(key, row)"
               >
-              <el-button
-                v-if="canShowQuotationDeleteAction(row)"
-                type="danger"
-                size="small"
-                @click="handleDelete(row)"
-                >删除</el-button
-              >
+                <el-button size="small">更多</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="action in getSecondaryActions(row)"
+                      :key="action.key"
+                      :command="action.key"
+                      :divided="Boolean(action.divided)"
+                      :class="{ 'is-danger': action.danger }"
+                    >
+                      {{ action.label }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
@@ -2455,6 +2409,24 @@ const getCategoryFromProjectCode = (projectCode: string) => {
 
 const normalizeInitiationStatus = (value: unknown) => String(value || '').trim() || '未发起'
 
+type RowActionKey =
+  | 'initiate'
+  | 'viewInitiation'
+  | 'editInitiation'
+  | 'restartInitiation'
+  | 'withdrawInitiation'
+  | 'editQuotation'
+  | 'deleteQuotation'
+
+interface RowAction {
+  key: RowActionKey
+  label: string
+  type: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+  plain?: boolean
+  divided?: boolean
+  danger?: boolean
+}
+
 const formatFinalProjectCodeDisplay = (
   quotationType: QuotationRecord['quotationType'] | string | null | undefined,
   finalProjectCodeInput: string | null | undefined,
@@ -2498,22 +2470,89 @@ const canShowQuotationEditAction = (row: QuotationRecord) =>
 const canShowQuotationDeleteAction = (row: QuotationRecord) =>
   ['未发起', '草稿', '已驳回', '已撤回'].includes(normalizeInitiationStatus(row.initiationStatus))
 
-const canShowInitiateAction = (row: QuotationRecord) =>
-  normalizeInitiationStatus(row.initiationStatus) === '未发起'
-
-const canShowViewInitiationAction = (row: QuotationRecord) =>
-  !['未发起', '草稿', '待客户审核', '已驳回', '已撤回'].includes(
-    normalizeInitiationStatus(row.initiationStatus)
-  )
-
-const canShowEditInitiationAction = (row: QuotationRecord) =>
-  normalizeInitiationStatus(row.initiationStatus) === '已驳回'
-
 const canShowWithdrawInitiationAction = (row: QuotationRecord) =>
   ['草稿', '待客户审核', '审核中'].includes(normalizeInitiationStatus(row.initiationStatus))
 
-const canShowRestartInitiationAction = (row: QuotationRecord) =>
-  normalizeInitiationStatus(row.initiationStatus) === '已撤回'
+const getPrimaryInitiationAction = (row: QuotationRecord): RowAction | null => {
+  const status = normalizeInitiationStatus(row.initiationStatus)
+  if (status === '未发起') return { key: 'initiate', label: '立项', type: 'warning' }
+  if (status === '草稿') return { key: 'editInitiation', label: '继续立项', type: 'primary' }
+  if (status === '待客户审核' || status === '审核中' || status === '已通过') {
+    return { key: 'viewInitiation', label: '查看立项', type: 'warning', plain: true }
+  }
+  if (status === '已驳回') return { key: 'editInitiation', label: '编辑立项', type: 'primary' }
+  if (status === '已撤回') return { key: 'restartInitiation', label: '重新发起', type: 'primary' }
+  return null
+}
+
+const getSecondaryActions = (row: QuotationRecord): RowAction[] => {
+  const status = normalizeInitiationStatus(row.initiationStatus)
+  const primaryAction = getPrimaryInitiationAction(row)
+  const actions: RowAction[] = []
+
+  if (status !== '未发起' && primaryAction?.key !== 'viewInitiation') {
+    actions.push({ key: 'viewInitiation', label: '查看立项', type: 'warning', plain: true })
+  }
+  if (canShowWithdrawInitiationAction(row)) {
+    actions.push({ key: 'withdrawInitiation', label: '撤回申请', type: 'danger', plain: true })
+  }
+  if (canShowQuotationEditAction(row)) {
+    actions.push({ key: 'editQuotation', label: '编辑', type: 'primary' })
+  }
+  if (canShowQuotationDeleteAction(row)) {
+    actions.push({
+      key: 'deleteQuotation',
+      label: '删除',
+      type: 'danger',
+      divided: true,
+      danger: true
+    })
+  }
+
+  return actions
+}
+
+const executeRowAction = async (actionKey: RowActionKey, row: QuotationRecord) => {
+  if (actionKey === 'initiate') {
+    await handleInitiate(row)
+    return
+  }
+  if (actionKey === 'viewInitiation') {
+    await handleViewInitiation(row)
+    return
+  }
+  if (actionKey === 'editInitiation') {
+    await handleEditInitiation(row)
+    return
+  }
+  if (actionKey === 'restartInitiation') {
+    await handleRestartInitiation(row)
+    return
+  }
+  if (actionKey === 'withdrawInitiation') {
+    await handleWithdrawInitiation(row)
+    return
+  }
+  if (actionKey === 'editQuotation') {
+    await handleEdit(row)
+    return
+  }
+  if (actionKey === 'deleteQuotation') {
+    await handleDelete(row)
+  }
+}
+
+const handlePrimaryInitiationAction = async (row: QuotationRecord) => {
+  const action = getPrimaryInitiationAction(row)
+  if (!action) return
+  await executeRowAction(action.key, row)
+}
+
+const handleActionCommand = async (command: string | number | object, row: QuotationRecord) => {
+  const actionKey = String(command || '') as RowActionKey
+  if (!actionKey) return
+  await executeRowAction(actionKey, row)
+}
 
 const todayText = () => {
   const now = new Date()
@@ -4474,14 +4513,29 @@ onMounted(() => {
 .qt-mobile-card__actions {
   display: flex;
   gap: 8px;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   margin-top: 12px;
 }
 
 .operation-buttons {
   display: flex;
-  gap: 4px;
-  justify-content: center;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.qt-mobile-card__actions :deep(.el-button),
+.operation-buttons :deep(.el-button) {
+  min-width: 72px;
+  border-radius: 999px;
+}
+
+:deep(.quotation-action-menu .el-dropdown-menu__item.is-danger) {
+  color: var(--el-color-danger);
 }
 
 .pagination-footer {

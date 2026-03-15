@@ -322,7 +322,7 @@ router.delete('/:id', requireEmployeeDelete, async (req, res) => {
       const checkReq = new sql.Request(tx)
       checkReq.input('id', sql.Int, employeeId)
       const checkResult = await checkReq.query(`
-        SELECT TOP 1 ID as id, 姓名 as employeeName
+        SELECT TOP 1 *, ID as id, 姓名 as employeeName
         FROM 员工信息
         WHERE ID = @id AND ISNULL(是否删除, 0) = 0
       `)
@@ -348,6 +348,7 @@ router.delete('/:id', requireEmployeeDelete, async (req, res) => {
         entityKey: String(employeeId),
         displayCode: String(employeeId),
         displayName: String(row.employeeName || ''),
+        requestSnapshot: row,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

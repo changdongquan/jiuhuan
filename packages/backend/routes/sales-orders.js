@@ -1449,6 +1449,15 @@ router.delete('/delete/:orderNo', requireSalesOrderDelete, async (req, res) => {
     const tx = new sql.Transaction(pool)
     await tx.begin()
     try {
+      const snapshotReq = new sql.Request(tx)
+      snapshotReq.input('orderNo', sql.NVarChar(100), orderNo)
+      const snapshotResult = await snapshotReq.query(`
+        SELECT TOP 1 *
+        FROM 销售订单
+        WHERE 订单编号 = @orderNo
+      `)
+      const requestSnapshot = snapshotResult.recordset?.[0] || { orderNo }
+
       const softDeleteReq = new sql.Request(tx)
       softDeleteReq.input('orderNo', sql.NVarChar(100), orderNo)
       softDeleteReq.input('actor', sql.NVarChar(100), actor || null)
@@ -1485,6 +1494,7 @@ router.delete('/delete/:orderNo', requireSalesOrderDelete, async (req, res) => {
         moduleCode: 'SALES_ORDER',
         entityKey: orderNo,
         displayCode: orderNo,
+        requestSnapshot,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'

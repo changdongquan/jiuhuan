@@ -22,6 +22,137 @@ const router = express.Router()
 const resolveRequestId = (req) =>
   String(req.headers['x-request-id'] || req.headers['x-correlation-id'] || '').trim() || null
 
+const loadFallbackHardDeleteSnapshot = async (pool, row) => {
+  const moduleCode = String(row?.moduleCode || 'GOODS')
+    .trim()
+    .toUpperCase()
+  const entityKey = String(row?.entityKey || '').trim()
+  const projectCode = String(row?.projectCode || '').trim()
+
+  try {
+    if (moduleCode === 'SALES_ORDER') {
+      const req = pool.request()
+      req.input('orderNo', sql.NVarChar(100), entityKey || projectCode)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 销售订单
+        WHERE 订单编号 = @orderNo
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'FINANCE_INVOICE') {
+      const invoiceId = parseInt(entityKey, 10)
+      if (!Number.isInteger(invoiceId) || invoiceId <= 0) return null
+      const req = pool.request()
+      req.input('invoiceId', sql.Int, invoiceId)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 开票单据
+        WHERE 发票ID = @invoiceId
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'FINANCE_RECEIPT') {
+      const req = pool.request()
+      req.input('documentNo', sql.NVarChar(100), entityKey || projectCode)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 回款单据
+        WHERE 单据编号 = @documentNo
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'SALARY') {
+      const summaryId = parseInt(entityKey, 10)
+      if (!Number.isInteger(summaryId) || summaryId <= 0) return null
+      const req = pool.request()
+      req.input('id', sql.Int, summaryId)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 工资汇总
+        WHERE ID = @id
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'OUTBOUND_DOCUMENT') {
+      const req = pool.request()
+      req.input('documentNo', sql.NVarChar(100), entityKey || projectCode)
+      const result = await req.query(`
+        SELECT TOP 50 *
+        FROM 出库单明细
+        WHERE 出库单号 = @documentNo
+      `)
+      return {
+        documentNo: entityKey || projectCode,
+        detailCount: Number(result.recordset?.length || 0),
+        details: result.recordset || []
+      }
+    }
+    if (moduleCode === 'PROJECT_INFO') {
+      const req = pool.request()
+      req.input('projectCode', sql.NVarChar(100), entityKey || projectCode)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 项目管理
+        WHERE 项目编号 = @projectCode
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'CUSTOMER') {
+      const customerId = parseInt(entityKey, 10)
+      if (!Number.isInteger(customerId) || customerId <= 0) return null
+      const req = pool.request()
+      req.input('id', sql.Int, customerId)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 客户信息
+        WHERE 客户ID = @id
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'SUPPLIER') {
+      const supplierId = parseInt(entityKey, 10)
+      if (!Number.isInteger(supplierId) || supplierId <= 0) return null
+      const req = pool.request()
+      req.input('id', sql.BigInt, supplierId)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 供方信息
+        WHERE 供方ID = @id
+      `)
+      return result.recordset?.[0] || null
+    }
+    if (moduleCode === 'EMPLOYEE') {
+      const employeeId = parseInt(entityKey, 10)
+      if (!Number.isInteger(employeeId) || employeeId <= 0) return null
+      const req = pool.request()
+      req.input('id', sql.Int, employeeId)
+      const result = await req.query(`
+        SELECT TOP 1 *
+        FROM 员工信息
+        WHERE ID = @id
+      `)
+      return result.recordset?.[0] || null
+    }
+
+    const req = pool.request()
+    req.input('projectCode', sql.NVarChar(100), projectCode || entityKey)
+    const result = await req.query(`
+      SELECT TOP 50 *
+      FROM 货物信息
+      WHERE 项目编号 = @projectCode
+      ORDER BY 货物ID ASC
+    `)
+    return {
+      projectCode: projectCode || entityKey,
+      detailCount: Number(result.recordset?.length || 0),
+      details: result.recordset || []
+    }
+  } catch {
+    return null
+  }
+}
+
 const executeHardDeleteByGoodsId = async ({
   pool,
   goodsId,
@@ -735,6 +866,7 @@ router.get('/hard-delete-review/tasks', async (req, res) => {
         ISNULL(r.entity_key, r.project_code) AS entityKey,
         r.display_code AS displayCode,
         r.display_name AS displayName,
+        r.request_snapshot_json AS requestSnapshotJson,
         g.产品名称 AS productName,
         g.产品图号 AS productDrawing,
         g.分类 AS category,
@@ -767,11 +899,26 @@ router.get('/hard-delete-review/tasks', async (req, res) => {
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `)
 
+    const listWithSnapshot = []
+    for (const row of dataResult.recordset || []) {
+      let nextRow = row
+      if (!row?.requestSnapshotJson) {
+        const fallbackSnapshot = await loadFallbackHardDeleteSnapshot(pool, row)
+        if (fallbackSnapshot) {
+          nextRow = {
+            ...row,
+            requestSnapshotJson: JSON.stringify(fallbackSnapshot)
+          }
+        }
+      }
+      listWithSnapshot.push(nextRow)
+    }
+
     return res.json({
       code: 0,
       success: true,
       data: {
-        list: (dataResult.recordset || []).map((row) => toHardDeleteReviewTaskData(row)),
+        list: listWithSnapshot.map((row) => toHardDeleteReviewTaskData(row)),
         total
       }
     })
@@ -1088,6 +1235,19 @@ router.delete('/batch', async (req, res) => {
       for (const row of rows.recordset || []) {
         const projectCode = String(row.projectCode || '').trim()
         if (!projectCode) continue
+        const snapshotReq = new sql.Request(tx)
+        snapshotReq.input('projectCode', sql.NVarChar(100), projectCode)
+        const snapshotResult = await snapshotReq.query(`
+          SELECT TOP 50 *
+          FROM 货物信息
+          WHERE 项目编号 = @projectCode
+          ORDER BY 货物ID ASC
+        `)
+        const requestSnapshot = {
+          projectCode,
+          detailCount: Number(snapshotResult.recordset?.length || 0),
+          details: snapshotResult.recordset || []
+        }
         await softDeleteByProjectCode({ pool, tx, projectCode, actor })
         await ensurePendingHardDeleteReviewRequest({
           tx,
@@ -1097,6 +1257,7 @@ router.delete('/batch', async (req, res) => {
           entityKey: projectCode,
           displayCode: projectCode,
           displayName: null,
+          requestSnapshot,
           requesterName: actor,
           requestSource: 'SOFT_DELETE_AUTO_BATCH',
           requestReason: '批量软删除后系统自动发起硬删除审核'
@@ -1479,7 +1640,7 @@ router.delete('/:id', async (req, res) => {
       const getReq = new sql.Request(tx)
       getReq.input('id', sql.Int, parseInt(id, 10))
       const goodsResult = await getReq.query(`
-        SELECT TOP 1 项目编号, 状态
+        SELECT TOP 1 *
         FROM 货物信息
         WHERE 货物ID = @id
       `)
@@ -1488,7 +1649,8 @@ router.delete('/:id', async (req, res) => {
         return res.status(404).json({ code: 404, success: false, message: '货物信息不存在' })
       }
 
-      const projectCode = String(goodsResult.recordset[0].项目编号 || '').trim()
+      const sourceRow = goodsResult.recordset[0]
+      const projectCode = String(sourceRow.项目编号 || '').trim()
       if (!projectCode) {
         await tx.rollback()
         return res.status(400).json({ code: 400, success: false, message: '记录缺少项目编号，无法删除' })
@@ -1503,6 +1665,7 @@ router.delete('/:id', async (req, res) => {
         entityKey: projectCode,
         displayCode: projectCode,
         displayName: null,
+        requestSnapshot: sourceRow,
         requesterName: actor,
         requestSource: 'SOFT_DELETE_AUTO',
         requestReason: '软删除后系统自动发起硬删除审核'
