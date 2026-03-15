@@ -2110,7 +2110,7 @@ const submitDialogForm = async () => {
   )
 
   if (invalidDetail) {
-    ElMessage.error('请完善产品名称并确保数量大于 0')
+    ElMessage.error('请完善产品名称并确保金额大于 0')
     return
   }
 
