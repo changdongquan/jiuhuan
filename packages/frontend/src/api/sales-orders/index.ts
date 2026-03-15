@@ -315,24 +315,76 @@ export const splitSalesOrderApi = (orderNo: string, data: SplitSalesOrderPayload
   })
 }
 
-export type MergeSalesOrderResponse = {
+export type SubmitSalesOrderMergeReviewResponse = {
   code: number
   success: boolean
   message?: string
   data?: {
+    requestId: number | null
     sourceOrderNo: string
     targetOrderNo: string
-    movedDetailCount: number
-    movedQuantity: number
-    movedAmount: number
-    updatedQuotationRefs?: number
-    updatedBmoRefs?: number
   }
 }
 
 export const mergeSalesOrderApi = (sourceOrderNo: string, targetOrderNo: string) => {
-  return request.post<MergeSalesOrderResponse>({
+  return request.post<SubmitSalesOrderMergeReviewResponse>({
     url: `/api/sales-orders/${encodeURIComponent(sourceOrderNo)}/merge`,
     data: { targetOrderNo }
+  })
+}
+
+export type SalesOrderMergeReviewTask = {
+  id: number
+  sourceOrderNo: string | null
+  targetOrderNo: string | null
+  customerId: number | null
+  customerName: string | null
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | string | null
+  statusText: string
+  requestReason: string | null
+  requesterName: string | null
+  reviewerName: string | null
+  reviewComment: string | null
+  sourceSnapshot: SalesOrder | null
+  targetSnapshot: SalesOrder | null
+  preview: {
+    orderNo: string
+    detailCount: number
+    totalQuantity: number
+    totalAmount: number
+  } | null
+  executionResult?: Record<string, any> | null
+  executionError: string | null
+  approvedAt: string | null
+  rejectedAt: string | null
+  canceledAt: string | null
+  executedAt: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export const getSalesOrderMergeReviewTasksApi = (params: {
+  status?: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) => {
+  return request.get<{ list: SalesOrderMergeReviewTask[]; total: number }>({
+    url: '/api/sales-orders/merge-review/tasks',
+    params
+  })
+}
+
+export const approveSalesOrderMergeReviewApi = (data: { requestId: number }) => {
+  return request.post<{ code: number; success: boolean; message?: string }>({
+    url: '/api/sales-orders/merge-review/approve',
+    data
+  })
+}
+
+export const rejectSalesOrderMergeReviewApi = (data: { requestId: number; reason: string }) => {
+  return request.post<{ code: number; success: boolean; message?: string }>({
+    url: '/api/sales-orders/merge-review/reject',
+    data
   })
 }

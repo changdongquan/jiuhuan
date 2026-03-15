@@ -15,6 +15,7 @@
         <el-select v-model="query.category" :style="{ width: isMobile ? '100%' : '170px' }">
           <el-option label="全部" value="ALL" />
           <el-option label="硬删除审核" value="HARD_DELETE" />
+          <el-option label="销售订单合并审核" value="SALES_ORDER_MERGE" />
           <el-option label="BMO立项审核" value="BMO_INITIATION" />
           <el-option label="报价单立项审核" value="QUOTATION_INITIATION" />
           <el-option label="客户新增审核" value="CUSTOMER_CREATE" />
@@ -81,6 +82,14 @@
               查看详情
             </el-button>
             <el-button
+              v-if="row.category === 'SALES_ORDER_MERGE'"
+              link
+              type="primary"
+              @click="openSalesOrderMergeViewDialog(row)"
+            >
+              查看详情
+            </el-button>
+            <el-button
               v-if="row.category === 'BMO_INITIATION'"
               link
               type="primary"
@@ -142,6 +151,14 @@
               link
               type="primary"
               @click="openHardDeleteViewDialog(row)"
+            >
+              查看详情
+            </el-button>
+            <el-button
+              v-if="row.category === 'SALES_ORDER_MERGE'"
+              link
+              type="primary"
+              @click="openSalesOrderMergeViewDialog(row)"
             >
               查看详情
             </el-button>
@@ -564,6 +581,146 @@
     </el-dialog>
 
     <el-dialog
+      v-model="salesOrderMergeViewDialogVisible"
+      title="销售订单合并审核"
+      :width="isMobile ? '95vw' : '1100px'"
+      destroy-on-close
+    >
+      <div v-if="salesOrderMergeViewRow" class="space-y-3">
+        <el-descriptions :column="descColumn" border size="small" title="审核信息">
+          <el-descriptions-item label="审核状态">{{
+            salesOrderMergeViewRow.statusText || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称">{{
+            salesOrderMergeViewRow.customerName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请人">{{
+            salesOrderMergeViewRow.requesterName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{
+            salesOrderMergeViewRow.reviewerName || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="申请说明" :span="descColumn">{{
+            salesOrderMergeViewRow.requestReason || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="审核意见" :span="descColumn">{{
+            salesOrderMergeViewRow.reviewComment || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="执行错误" :span="descColumn">{{
+            salesOrderMergeViewRow.executionError || '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-row :gutter="12">
+          <el-col :xs="24" :md="12">
+            <el-descriptions :column="1" border size="small" title="源订单">
+              <el-descriptions-item label="订单编号">{{
+                salesOrderMergeViewRow.sourceOrderNo || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="订单日期">{{
+                salesOrderMergeViewRow.sourceSnapshot?.orderDate || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="签订日期">{{
+                salesOrderMergeViewRow.sourceSnapshot?.signDate || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="合同号">{{
+                salesOrderMergeViewRow.sourceSnapshot?.contractNo || '-'
+              }}</el-descriptions-item>
+            </el-descriptions>
+            <el-table
+              :data="salesOrderMergeViewRow.sourceSnapshot?.details || []"
+              border
+              size="small"
+              max-height="280"
+              class="mt-2"
+            >
+              <el-table-column
+                prop="itemCode"
+                label="项目编号"
+                min-width="130"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="customerPartNo"
+                label="客户模号"
+                min-width="130"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="productName"
+                label="产品名称"
+                min-width="150"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="quantity" label="数量" width="90" />
+            </el-table>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-descriptions :column="1" border size="small" title="目标订单">
+              <el-descriptions-item label="订单编号">{{
+                salesOrderMergeViewRow.targetOrderNo || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="订单日期">{{
+                salesOrderMergeViewRow.targetSnapshot?.orderDate || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="签订日期">{{
+                salesOrderMergeViewRow.targetSnapshot?.signDate || '-'
+              }}</el-descriptions-item>
+              <el-descriptions-item label="合同号">{{
+                salesOrderMergeViewRow.targetSnapshot?.contractNo || '-'
+              }}</el-descriptions-item>
+            </el-descriptions>
+            <el-table
+              :data="salesOrderMergeViewRow.targetSnapshot?.details || []"
+              border
+              size="small"
+              max-height="280"
+              class="mt-2"
+            >
+              <el-table-column
+                prop="itemCode"
+                label="项目编号"
+                min-width="130"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="customerPartNo"
+                label="客户模号"
+                min-width="130"
+                show-overflow-tooltip
+              />
+              <el-table-column
+                prop="productName"
+                label="产品名称"
+                min-width="150"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="quantity" label="数量" width="90" />
+            </el-table>
+          </el-col>
+        </el-row>
+
+        <el-descriptions :column="descColumn" border size="small" title="合并预览">
+          <el-descriptions-item label="保留订单编号">{{
+            salesOrderMergeViewRow.preview?.orderNo || salesOrderMergeViewRow.targetOrderNo || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="合并后明细">{{
+            salesOrderMergeViewRow.preview?.detailCount ?? '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="合并后总数量">{{
+            salesOrderMergeViewRow.preview?.totalQuantity ?? '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="合并后总金额">{{
+            salesOrderMergeViewRow.preview?.totalAmount ?? '-'
+          }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="salesOrderMergeViewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="hardDeleteViewDialogVisible"
       title="硬删除审核详情"
       :width="isMobile ? '95vw' : '980px'"
@@ -671,6 +828,12 @@ import {
   type HardDeleteReviewTask
 } from '@/api/goods'
 import {
+  approveSalesOrderMergeReviewApi,
+  getSalesOrderMergeReviewTasksApi,
+  rejectSalesOrderMergeReviewApi,
+  type SalesOrderMergeReviewTask
+} from '@/api/sales-orders'
+import {
   approveCustomerCreateReviewForReviewCenterApi,
   type CustomerCreateReviewTask,
   getCustomerCreateReviewTasksForReviewCenterApi,
@@ -681,6 +844,7 @@ import { refreshBmoMenuBadges } from '@/utils/bmoBadge'
 type ReviewCategory =
   | 'ALL'
   | 'HARD_DELETE'
+  | 'SALES_ORDER_MERGE'
   | 'BMO_INITIATION'
   | 'QUOTATION_INITIATION'
   | 'CUSTOMER_CREATE'
@@ -702,6 +866,7 @@ type UnifiedReviewRow = {
   raw:
     | BmoInitiationReviewTask
     | HardDeleteReviewTask
+    | SalesOrderMergeReviewTask
     | (QuotationInitiationRequestRow & {
         quotation_no?: string | null
         quotation_customer_name?: string | null
@@ -734,6 +899,8 @@ const quotationViewRequest = ref<
 >(null)
 const customerCreateViewDialogVisible = ref(false)
 const customerCreateViewRow = ref<CustomerCreateReviewTask | null>(null)
+const salesOrderMergeViewDialogVisible = ref(false)
+const salesOrderMergeViewRow = ref<SalesOrderMergeReviewTask | null>(null)
 const hardDeleteViewDialogVisible = ref(false)
 const hardDeleteViewRow = ref<HardDeleteReviewTask | null>(null)
 const isMobile = ref(false)
@@ -785,6 +952,16 @@ const normalizeHardDeleteStatus = (status: unknown): Exclude<StandardStatus, 'AL
   return 'CANCELED'
 }
 
+const normalizeSalesOrderMergeStatus = (status: unknown): Exclude<StandardStatus, 'ALL'> => {
+  const s = String(status || '')
+    .trim()
+    .toUpperCase()
+  if (s === 'PENDING') return 'PENDING'
+  if (s === 'APPROVED') return 'APPROVED'
+  if (s === 'REJECTED') return 'REJECTED'
+  return 'CANCELED'
+}
+
 const mapStatusForBmoApi = (
   status: StandardStatus
 ): 'ALL' | 'DRAFT' | 'PM_CONFIRMED' | 'APPLIED' | 'REJECTED' | null => {
@@ -817,6 +994,17 @@ const mapStatusForCustomerApi = (
 }
 
 const mapStatusForHardDeleteApi = (
+  status: StandardStatus
+): 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | null => {
+  if (status === 'DRAFT') return null
+  if (status === 'PENDING') return 'PENDING'
+  if (status === 'APPROVED') return 'APPROVED'
+  if (status === 'REJECTED') return 'REJECTED'
+  if (status === 'CANCELED') return 'CANCELED'
+  return 'ALL'
+}
+
+const mapStatusForSalesOrderMergeApi = (
   status: StandardStatus
 ): 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | null => {
   if (status === 'DRAFT') return null
@@ -881,6 +1069,34 @@ const mapHardDeleteRows = (hardDeleteRows: HardDeleteReviewTask[]): UnifiedRevie
       applicant: String(row.requesterName || ''),
       reviewer: String(row.reviewerName || ''),
       reason: String(row.requestReason || row.reviewComment || ''),
+      updatedAt: row.updatedAt || row.createdAt || null,
+      raw: row
+    }
+  })
+}
+
+const mapSalesOrderMergeRows = (rows: SalesOrderMergeReviewTask[]): UnifiedReviewRow[] => {
+  return rows.map((row) => {
+    const status = normalizeSalesOrderMergeStatus(row.status)
+    const sourceText = row.targetOrderNo ? `并入 ${row.targetOrderNo}` : '销售订单合并'
+    const subject =
+      [row.sourceOrderNo, row.targetOrderNo, row.customerName].filter(Boolean).join(' / ') || '-'
+    return {
+      id: `sales-order-merge-${row.id}`,
+      category: 'SALES_ORDER_MERGE',
+      categoryText: '销售订单合并审核',
+      sourceText,
+      status,
+      statusText: normalizeStatusText(status),
+      projectCode: String(
+        row.sourceSnapshot?.details?.[0]?.itemCode ||
+          row.targetSnapshot?.details?.[0]?.itemCode ||
+          ''
+      ),
+      subject,
+      applicant: String(row.requesterName || ''),
+      reviewer: String(row.reviewerName || ''),
+      reason: String(row.reviewComment || row.requestReason || ''),
       updatedAt: row.updatedAt || row.createdAt || null,
       raw: row
     }
@@ -996,8 +1212,12 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   const quotationStatus = mapStatusForQuotationApi(query.status)
   const customerStatus = mapStatusForCustomerApi(query.status)
   const hardDeleteStatus = mapStatusForHardDeleteApi(query.status)
+  const salesOrderMergeStatus = mapStatusForSalesOrderMergeApi(query.status)
   const includeHardDelete =
     (query.category === 'ALL' || query.category === 'HARD_DELETE') && hardDeleteStatus !== null
+  const includeSalesOrderMerge =
+    (query.category === 'ALL' || query.category === 'SALES_ORDER_MERGE') &&
+    salesOrderMergeStatus !== null
   const includeBmo =
     (query.category === 'ALL' || query.category === 'BMO_INITIATION') && bmoStatus !== null
   const includeQuotation = query.category === 'ALL' || query.category === 'QUOTATION_INITIATION'
@@ -1017,6 +1237,21 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     })
     total.value = Number(res.data?.total || 0) || 0
     return mapHardDeleteRows((res.data?.list || []) as HardDeleteReviewTask[])
+  }
+
+  if (query.category === 'SALES_ORDER_MERGE') {
+    if (!includeSalesOrderMerge) {
+      total.value = 0
+      return []
+    }
+    const res = await getSalesOrderMergeReviewTasksApi({
+      status: salesOrderMergeStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: query.page,
+      pageSize: query.pageSize
+    })
+    total.value = Number(res.data?.total || 0) || 0
+    return mapSalesOrderMergeRows((res.data?.list || []) as SalesOrderMergeReviewTask[])
   }
 
   if (query.category === 'BMO_INITIATION') {
@@ -1145,13 +1380,48 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       return rows
     }
 
-    const [hardRows, bmoRows, quotationRows, customerRows] = await Promise.all([
-      safeLoadReviewRows(fetchAllHardDelete, '硬删除审核任务', [] as UnifiedReviewRow[]),
-      safeLoadReviewRows(fetchAllBmo, 'BMO立项审核任务', [] as UnifiedReviewRow[]),
-      safeLoadReviewRows(fetchAllQuotation, '报价单立项审核任务', [] as UnifiedReviewRow[]),
-      safeLoadReviewRows(fetchAllCustomer, '客户新增审核任务', [] as UnifiedReviewRow[])
-    ])
-    const mergedRows = [...hardRows, ...bmoRows, ...quotationRows, ...customerRows].sort((a, b) => {
+    const fetchAllSalesOrderMerge = async () => {
+      if (!includeSalesOrderMerge) return [] as UnifiedReviewRow[]
+      const rows: UnifiedReviewRow[] = []
+      const pageSize = 200
+      let page = 1
+      let totalRows = Number.POSITIVE_INFINITY
+      while ((page - 1) * pageSize < totalRows) {
+        const res = await getSalesOrderMergeReviewTasksApi({
+          status: salesOrderMergeStatus,
+          keyword: normalizedKeyword.value || undefined,
+          page,
+          pageSize
+        })
+        const part = mapSalesOrderMergeRows((res.data?.list || []) as SalesOrderMergeReviewTask[])
+        totalRows = Number(res.data?.total || 0) || 0
+        rows.push(...part)
+        if (!part.length) break
+        page += 1
+      }
+      return rows
+    }
+
+    const [hardRows, salesOrderMergeRows, bmoRows, quotationRows, customerRows] = await Promise.all(
+      [
+        safeLoadReviewRows(fetchAllHardDelete, '硬删除审核任务', [] as UnifiedReviewRow[]),
+        safeLoadReviewRows(
+          fetchAllSalesOrderMerge,
+          '销售订单合并审核任务',
+          [] as UnifiedReviewRow[]
+        ),
+        safeLoadReviewRows(fetchAllBmo, 'BMO立项审核任务', [] as UnifiedReviewRow[]),
+        safeLoadReviewRows(fetchAllQuotation, '报价单立项审核任务', [] as UnifiedReviewRow[]),
+        safeLoadReviewRows(fetchAllCustomer, '客户新增审核任务', [] as UnifiedReviewRow[])
+      ]
+    )
+    const mergedRows = [
+      ...hardRows,
+      ...salesOrderMergeRows,
+      ...bmoRows,
+      ...quotationRows,
+      ...customerRows
+    ].sort((a, b) => {
       const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
       const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
       return tb - ta
@@ -1191,6 +1461,12 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
   let customerBuffer: UnifiedReviewRow[] = []
   let customerCursor = 0
 
+  let salesOrderMergePage = 1
+  let salesOrderMergeTotal = 0
+  let salesOrderMergeLoaded = 0
+  let salesOrderMergeBuffer: UnifiedReviewRow[] = []
+  let salesOrderMergeCursor = 0
+
   const fetchHardNext = async () => {
     if (!includeHardDelete) return
     if (hardLoaded >= hardTotal && hardPage > 1) return
@@ -1223,6 +1499,23 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     bmoPage += 1
     bmoBuffer = part
     bmoCursor = 0
+  }
+
+  const fetchSalesOrderMergeNext = async () => {
+    if (!includeSalesOrderMerge) return
+    if (salesOrderMergeLoaded >= salesOrderMergeTotal && salesOrderMergePage > 1) return
+    const res = await getSalesOrderMergeReviewTasksApi({
+      status: salesOrderMergeStatus,
+      keyword: normalizedKeyword.value || undefined,
+      page: salesOrderMergePage,
+      pageSize: mergePageSize
+    })
+    const part = mapSalesOrderMergeRows((res.data?.list || []) as SalesOrderMergeReviewTask[])
+    salesOrderMergeTotal = Number(res.data?.total || 0) || 0
+    salesOrderMergeLoaded += part.length
+    salesOrderMergePage += 1
+    salesOrderMergeBuffer = part
+    salesOrderMergeCursor = 0
   }
 
   const fetchQuotationNext = async () => {
@@ -1261,6 +1554,8 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
 
   while (merged.length < targetCount) {
     const shouldFetchHard = includeHardDelete && hardCursor >= hardBuffer.length
+    const shouldFetchSalesOrderMerge =
+      includeSalesOrderMerge && salesOrderMergeCursor >= salesOrderMergeBuffer.length
     const shouldFetchBmo = includeBmo && bmoCursor >= bmoBuffer.length
     const shouldFetchQuotation = includeQuotation && quotationCursor >= quotationBuffer.length
     const shouldFetchCustomer = includeCustomer && customerCursor >= customerBuffer.length
@@ -1273,6 +1568,16 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
               return null
             },
             '硬删除审核任务',
+            null
+          )
+        : Promise.resolve(null),
+      shouldFetchSalesOrderMerge
+        ? safeLoadReviewRows(
+            async () => {
+              await fetchSalesOrderMergeNext()
+              return null
+            },
+            '销售订单合并审核任务',
             null
           )
         : Promise.resolve(null),
@@ -1309,12 +1614,16 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
     ])
 
     const hardHead = hardCursor < hardBuffer.length ? hardBuffer[hardCursor] : null
+    const salesOrderMergeHead =
+      salesOrderMergeCursor < salesOrderMergeBuffer.length
+        ? salesOrderMergeBuffer[salesOrderMergeCursor]
+        : null
     const bmoHead = bmoCursor < bmoBuffer.length ? bmoBuffer[bmoCursor] : null
     const quotationHead =
       quotationCursor < quotationBuffer.length ? quotationBuffer[quotationCursor] : null
     const customerHead =
       customerCursor < customerBuffer.length ? customerBuffer[customerCursor] : null
-    const heads = [hardHead, bmoHead, quotationHead, customerHead].filter(
+    const heads = [hardHead, salesOrderMergeHead, bmoHead, quotationHead, customerHead].filter(
       Boolean
     ) as UnifiedReviewRow[]
     if (!heads.length) break
@@ -1330,6 +1639,11 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
       bmoCursor += 1
       continue
     }
+    if (pick === salesOrderMergeHead) {
+      merged.push(salesOrderMergeHead as UnifiedReviewRow)
+      salesOrderMergeCursor += 1
+      continue
+    }
     if (pick === quotationHead) {
       merged.push(quotationHead as UnifiedReviewRow)
       quotationCursor += 1
@@ -1341,6 +1655,7 @@ const loadUnifiedRows = async (): Promise<UnifiedReviewRow[]> => {
 
   total.value =
     (includeHardDelete ? hardTotal : 0) +
+    (includeSalesOrderMerge ? salesOrderMergeTotal : 0) +
     (includeBmo ? bmoTotal : 0) +
     (includeQuotation ? quotationTotal : 0) +
     (includeCustomer ? customerTotal : 0)
@@ -1420,6 +1735,12 @@ const openCustomerCreateViewDialog = (row: UnifiedReviewRow) => {
   customerCreateViewDialogVisible.value = true
 }
 
+const openSalesOrderMergeViewDialog = (row: UnifiedReviewRow) => {
+  if (row.category !== 'SALES_ORDER_MERGE') return
+  salesOrderMergeViewRow.value = row.raw as SalesOrderMergeReviewTask
+  salesOrderMergeViewDialogVisible.value = true
+}
+
 const openHardDeleteViewDialog = (row: UnifiedReviewRow) => {
   if (row.category !== 'HARD_DELETE') return
   hardDeleteViewRow.value = row.raw as HardDeleteReviewTask
@@ -1442,6 +1763,9 @@ const handleReject = async (row: UnifiedReviewRow) => {
     if (row.category === 'HARD_DELETE') {
       const data = row.raw as HardDeleteReviewTask
       await rejectHardDeleteReviewApi({ requestId: Number(data.id), reason })
+    } else if (row.category === 'SALES_ORDER_MERGE') {
+      const data = row.raw as SalesOrderMergeReviewTask
+      await rejectSalesOrderMergeReviewApi({ requestId: Number(data.id), reason })
     } else if (row.category === 'BMO_INITIATION') {
       const data = row.raw as BmoInitiationReviewTask
       await rejectBmoInitiationReviewApi({
@@ -1476,6 +1800,10 @@ const handleApprove = async (row: UnifiedReviewRow) => {
       const data = row.raw as HardDeleteReviewTask
       await approveHardDeleteReviewApi({ requestId: Number(data.id) })
       ElMessage.success('审核通过，已执行硬删除')
+    } else if (row.category === 'SALES_ORDER_MERGE') {
+      const data = row.raw as SalesOrderMergeReviewTask
+      await approveSalesOrderMergeReviewApi({ requestId: Number(data.id) })
+      ElMessage.success('销售订单合并审核已通过')
     } else if (row.category === 'BMO_INITIATION') {
       const data = row.raw as BmoInitiationReviewTask
       const res = await approveAndApplyBmoInitiationReviewApi({

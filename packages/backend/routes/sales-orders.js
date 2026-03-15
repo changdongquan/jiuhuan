@@ -12,6 +12,12 @@ const {
   ensureHardDeleteReviewTable,
   HARD_DELETE_REVIEW_STATUS
 } = require('../services/projectHardDeleteReview')
+const {
+  SALES_ORDER_MERGE_REVIEW_STATUS,
+  ensureSalesOrderMergeReviewTable,
+  assertSalesOrderMergeReviewerPermission,
+  toSalesOrderMergeReviewTaskData
+} = require('../services/salesOrderMergeReview')
 const { listCustomerOptions } = require('../services/customerOptions')
 const { requireCapability } = require('../middleware/capability')
 
@@ -31,6 +37,9 @@ const requireSalesOrderCreate = requireCapability('SALES_ORDERS.CREATE')
 const requireSalesOrderUpdate = requireCapability('SALES_ORDERS.UPDATE')
 const requireSalesOrderDelete = requireCapability('SALES_ORDERS.DELETE')
 const requireSalesOrderUpload = requireCapability('SALES_ORDERS.UPLOAD')
+
+const resolveRequestId = (req) =>
+  String(req.headers['x-request-id'] || req.headers['x-correlation-id'] || '').trim() || null
 
 const SALES_ORDER_MERGE_LOG_TABLE = 'sales_order_merge_logs'
 
@@ -128,6 +137,85 @@ const toYYYYMMDD = (val) => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}${m}${day}`
+}
+
+const fetchSalesOrderGroupByOrderNo = async (poolOrTx, orderNo) => {
+  if (!poolOrTx || !orderNo) return null
+  const req = new sql.Request(poolOrTx)
+  req.input('orderNo', sql.NVarChar(100), String(orderNo).trim())
+  const rows = await req.query(`
+    SELECT
+      so.订单ID as id,
+      so.订单编号 as orderNo,
+      so.客户ID as customerId,
+      so.项目编号 as itemCode,
+      so.订单日期 as orderDate,
+      so.交货日期 as deliveryDate,
+      so.签订日期 as signDate,
+      so.合同号 as contractNo,
+      so.总金额 as totalAmount,
+      so.单价 as unitPrice,
+      so.数量 as quantity,
+      so.备注 as remark,
+      so.费用出处 as costSource,
+      so.经办人 as handler,
+      so.是否入库 as isInStock,
+      so.是否出运 as isShipped,
+      so.出运日期 as shippingDate,
+      g.产品名称 as productName,
+      g.产品图号 as productDrawingNo,
+      p.客户模号 as customerPartNo,
+      c.客户名称 as customerName
+    FROM 销售订单 so
+    LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
+    LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
+    LEFT JOIN 客户信息 c ON so.客户ID = c.客户ID
+    WHERE so.订单编号 = @orderNo
+      AND (so.状态 IS NULL OR so.状态 <> N'已删除')
+    ORDER BY so.订单ID
+  `)
+  const allData = rows.recordset || []
+  if (!allData.length) return null
+  const firstRow = allData[0]
+  return {
+    orderNo: firstRow.orderNo,
+    customerId: firstRow.customerId,
+    customerName: firstRow.customerName || null,
+    orderDate: firstRow.orderDate,
+    signDate: firstRow.signDate,
+    contractNo: firstRow.contractNo,
+    details: allData.map((row) => ({
+      id: row.id,
+      itemCode: row.itemCode,
+      productName: row.productName || null,
+      productDrawingNo: row.productDrawingNo || null,
+      customerPartNo: row.customerPartNo || null,
+      deliveryDate: row.deliveryDate,
+      totalAmount: row.totalAmount,
+      unitPrice: row.unitPrice,
+      quantity: row.quantity,
+      remark: row.remark,
+      costSource: row.costSource,
+      handler: row.handler,
+      isInStock: row.isInStock,
+      isShipped: row.isShipped,
+      shippingDate: row.shippingDate
+    })),
+    totalQuantity: allData.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+    totalAmount: allData.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0)
+  }
+}
+
+const buildSalesOrderMergePreview = (sourceOrder, targetOrder) => {
+  if (!sourceOrder || !targetOrder) return null
+  return {
+    orderNo: targetOrder.orderNo,
+    detailCount:
+      Number(targetOrder.details?.length || 0) + Number(sourceOrder.details?.length || 0),
+    totalQuantity:
+      Number(targetOrder.totalQuantity || 0) + Number(sourceOrder.totalQuantity || 0),
+    totalAmount: Number(targetOrder.totalAmount || 0) + Number(sourceOrder.totalAmount || 0)
+  }
 }
 
 // 注意：新的路径结构为 {项目编号}/销售订单/，不包含订单编号和明细ID
@@ -531,43 +619,14 @@ router.get('/list', async (req, res) => {
 router.get('/by-orderNo/:orderNo', async (req, res) => {
   try {
     const { orderNo } = req.params
+    const pool = await getPool()
 
-    // 查询该订单号下的所有记录
-    const allDataQuery = `
-      SELECT 
-        so.订单ID as id,
-        so.订单编号 as orderNo,
-        so.客户ID as customerId,
-        so.项目编号 as itemCode,
-        so.订单日期 as orderDate,
-        so.交货日期 as deliveryDate,
-        so.签订日期 as signDate,
-        so.合同号 as contractNo,
-        so.总金额 as totalAmount,
-        so.单价 as unitPrice,
-        so.数量 as quantity,
-        so.备注 as remark,
-        so.费用出处 as costSource,
-        so.经办人 as handler,
-        so.是否入库 as isInStock,
-        so.是否出运 as isShipped,
-        so.出运日期 as shippingDate,
-        g.产品名称 as productName,
-        g.产品图号 as productDrawingNo,
-        p.客户模号 as customerPartNo
-      FROM 销售订单 so
-      LEFT JOIN 货物信息 g ON so.项目编号 = g.项目编号 AND (g.状态 IS NULL OR g.状态 <> N'已删除')
-      LEFT JOIN 项目管理 p ON so.项目编号 = p.项目编号 AND (p.状态 IS NULL OR p.状态 <> N'已删除')
-      WHERE so.订单编号 = @orderNo
-        AND (so.状态 IS NULL OR so.状态 <> N'已删除')
-      ORDER BY so.订单ID
-    `
-
-    const allData = await query(allDataQuery, { orderNo })
-
-    if (allData.length === 0) {
+    const order = await fetchSalesOrderGroupByOrderNo(pool, orderNo)
+    if (!order) {
       try {
-        const mergedRows = await query(
+        const req2 = new sql.Request(pool)
+        req2.input('orderNo', sql.NVarChar(100), String(orderNo || '').trim())
+        const mergedRows = await req2.query(
           `
           SELECT TOP 1
             target_order_no as targetOrderNo,
@@ -575,11 +634,11 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
           FROM dbo.${SALES_ORDER_MERGE_LOG_TABLE}
           WHERE source_order_no = @orderNo
           ORDER BY id DESC
-        `,
-          { orderNo }
+        `
         )
-        if (mergedRows?.length) {
-          const mergedTo = String(mergedRows[0]?.targetOrderNo || '').trim()
+        const mergedRow = mergedRows.recordset?.[0]
+        if (mergedRow) {
+          const mergedTo = String(mergedRow?.targetOrderNo || '').trim()
           if (mergedTo) {
             return res.status(409).json({
               code: 409,
@@ -599,49 +658,6 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
         success: false,
         message: '销售订单不存在'
       })
-    }
-
-    // 构建订单信息
-    const firstRow = allData[0]
-    const order = {
-      orderNo: firstRow.orderNo,
-      customerId: firstRow.customerId,
-      orderDate: firstRow.orderDate,
-      signDate: firstRow.signDate,
-      contractNo: firstRow.contractNo,
-      customerName: null,
-      details: allData.map((row) => ({
-        id: row.id,
-        itemCode: row.itemCode,
-        productName: row.productName || null,
-        productDrawingNo: row.productDrawingNo || null,
-        customerPartNo: row.customerPartNo || null,
-        deliveryDate: row.deliveryDate,
-        totalAmount: row.totalAmount,
-        unitPrice: row.unitPrice,
-        quantity: row.quantity,
-        remark: row.remark,
-        costSource: row.costSource,
-        handler: row.handler,
-        isInStock: row.isInStock,
-        isShipped: row.isShipped,
-        shippingDate: row.shippingDate
-      })),
-      totalQuantity: allData.reduce((sum, row) => sum + (row.quantity || 0), 0),
-      totalAmount: allData.reduce((sum, row) => sum + (row.totalAmount || 0), 0)
-    }
-
-    // 获取客户名称
-    if (order.customerId) {
-      const customerQuery = `
-        SELECT 客户名称 as customerName
-        FROM 客户信息
-        WHERE 客户ID = @customerId
-      `
-      const customers = await query(customerQuery, { customerId: order.customerId })
-      if (customers.length > 0) {
-        order.customerName = customers[0].customerName
-      }
     }
 
     res.json({
@@ -673,6 +689,33 @@ const hasPendingHardDeleteReviewForSalesOrder = async ({ tx, orderNo }) => {
     WHERE status = @statusPending
       AND ISNULL(module_code, N'GOODS') = @moduleCode
       AND ISNULL(entity_key, project_code) = @entityKey
+    ORDER BY id DESC
+  `)
+  return Number(rows.recordset?.[0]?.id || 0) > 0
+}
+
+const hasPendingSalesOrderMergeReview = async ({ tx, orderNo, excludeRequestId = null }) => {
+  if (!tx || !orderNo) return false
+  await ensureSalesOrderMergeReviewTable(tx)
+  const req = new sql.Request(tx)
+  req.input('orderNo', sql.NVarChar(100), String(orderNo).trim())
+  req.input('statusPending', sql.NVarChar(20), SALES_ORDER_MERGE_REVIEW_STATUS.PENDING)
+  req.input(
+    'excludeRequestId',
+    sql.BigInt,
+    Number.isInteger(Number(excludeRequestId)) && Number(excludeRequestId) > 0
+      ? Number(excludeRequestId)
+      : null
+  )
+  const rows = await req.query(`
+    SELECT TOP 1 id
+    FROM dbo.sales_order_merge_review_requests WITH (UPDLOCK, HOLDLOCK)
+    WHERE status = @statusPending
+      AND (
+        source_order_no = @orderNo
+        OR target_order_no = @orderNo
+      )
+      AND (@excludeRequestId IS NULL OR id <> @excludeRequestId)
     ORDER BY id DESC
   `)
   return Number(rows.recordset?.[0]?.id || 0) > 0
@@ -719,6 +762,171 @@ const updateExternalSalesOrderRefs = async ({ tx, sourceOrderNo, targetOrderNo }
   }
 
   return result
+}
+
+const executeSalesOrderMerge = async ({
+  tx,
+  sourceOrderNo,
+  targetOrderNo,
+  actor,
+  reviewRequestId = null
+}) => {
+  if (!tx) {
+    const err = new Error('缺少数据库事务')
+    err.httpStatus = 500
+    throw err
+  }
+  await ensureSalesOrderMergeLogTable(tx)
+
+  const fail = (httpStatus, message, code = httpStatus) => {
+    const err = new Error(message)
+    err.httpStatus = httpStatus
+    err.code = code
+    throw err
+  }
+
+  if (!sourceOrderNo) fail(400, '源订单编号不能为空')
+  if (!targetOrderNo) fail(400, '目标订单编号不能为空')
+  if (sourceOrderNo === targetOrderNo) fail(400, '源订单与目标订单不能相同')
+
+  const sourcePending = await hasPendingHardDeleteReviewForSalesOrder({ tx, orderNo: sourceOrderNo })
+  if (sourcePending) fail(400, '源订单存在待处理删除审核，禁止合并')
+  const targetPending = await hasPendingHardDeleteReviewForSalesOrder({ tx, orderNo: targetOrderNo })
+  if (targetPending) fail(400, '目标订单存在待处理删除审核，禁止合并')
+
+  const sourceMergePending = await hasPendingSalesOrderMergeReview({
+    tx,
+    orderNo: sourceOrderNo,
+    excludeRequestId: reviewRequestId
+  })
+  if (sourceMergePending) fail(400, '源订单存在待处理合并审核，禁止重复合并')
+  const targetMergePending = await hasPendingSalesOrderMergeReview({
+    tx,
+    orderNo: targetOrderNo,
+    excludeRequestId: reviewRequestId
+  })
+  if (targetMergePending) fail(400, '目标订单存在待处理合并审核，禁止合并')
+
+  const sourceOrder = await fetchSalesOrderGroupByOrderNo(tx, sourceOrderNo)
+  if (!sourceOrder) fail(404, '源订单不存在')
+  const targetOrder = await fetchSalesOrderGroupByOrderNo(tx, targetOrderNo)
+  if (!targetOrder) fail(404, '目标订单不存在')
+
+  const srcCustomerId = sourceOrder.customerId != null ? Number(sourceOrder.customerId) : null
+  const tgtCustomerId = targetOrder.customerId != null ? Number(targetOrder.customerId) : null
+  const srcCustomerName = String(sourceOrder.customerName || '').trim()
+  const tgtCustomerName = String(targetOrder.customerName || '').trim()
+  const sameCustomer =
+    (Number.isFinite(srcCustomerId) &&
+      Number.isFinite(tgtCustomerId) &&
+      srcCustomerId === tgtCustomerId) ||
+    (!Number.isFinite(srcCustomerId) &&
+      !Number.isFinite(tgtCustomerId) &&
+      srcCustomerName &&
+      srcCustomerName === tgtCustomerName)
+  if (!sameCustomer) fail(400, '仅支持同客户销售订单合并')
+
+  const sourceDetailIds = (sourceOrder.details || [])
+    .map((r) => Number(r.id))
+    .filter((n) => Number.isInteger(n) && n > 0)
+  const sourceDetailCount = sourceDetailIds.length
+  if (!sourceDetailCount) fail(400, '源订单无有效明细，无法合并')
+  const sourceTotalQuantity = Number(sourceOrder.totalQuantity || 0)
+  const sourceTotalAmount = Number(sourceOrder.totalAmount || 0)
+
+  {
+    const req = new sql.Request(tx)
+    req.input('source', sql.NVarChar(100), sourceOrderNo)
+    req.input('target', sql.NVarChar(100), targetOrderNo)
+    await req.query(`
+      IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
+      BEGIN
+        UPDATE dbo.销售订单附件
+        SET 订单编号 = @target
+        WHERE 订单编号 = @source
+          AND (状态 IS NULL OR 状态 <> N'已删除')
+      END
+    `)
+  }
+
+  {
+    const req = new sql.Request(tx)
+    req.input('source', sql.NVarChar(100), sourceOrderNo)
+    req.input('target', sql.NVarChar(100), targetOrderNo)
+    req.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
+    req.input('orderDate', sql.NVarChar(20), targetOrder.orderDate || null)
+    req.input('signDate', sql.NVarChar(20), targetOrder.signDate || null)
+    req.input('contractNo', sql.NVarChar(100), targetOrder.contractNo || null)
+    await req.query(`
+      UPDATE 销售订单
+      SET
+        订单编号 = @target,
+        客户ID = COALESCE(@customerId, 客户ID),
+        订单日期 = @orderDate,
+        签订日期 = @signDate,
+        合同号 = @contractNo
+      WHERE 订单编号 = @source
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+    `)
+  }
+
+  const refUpdate = await updateExternalSalesOrderRefs({
+    tx,
+    sourceOrderNo,
+    targetOrderNo
+  })
+
+  {
+    const req2 = new sql.Request(tx)
+    req2.input('source', sql.NVarChar(100), sourceOrderNo)
+    req2.input('target', sql.NVarChar(100), targetOrderNo)
+    req2.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
+    req2.input('sourceDetailCount', sql.Int, sourceDetailCount)
+    req2.input('sourceTotalQuantity', sql.Decimal(18, 2), sourceTotalQuantity)
+    req2.input('sourceTotalAmount', sql.Decimal(18, 2), sourceTotalAmount)
+    req2.input('sourceDetailIdsJson', sql.NVarChar(sql.MAX), JSON.stringify(sourceDetailIds))
+    req2.input('updatedQuotationRefCount', sql.Int, Number(refUpdate.quotation || 0))
+    req2.input('updatedBmoRefCount', sql.Int, Number(refUpdate.bmo || 0))
+    req2.input('mergedBy', sql.NVarChar(200), actor || null)
+    req2.input('remark', sql.NVarChar(500), reviewRequestId ? `reviewRequestId=${reviewRequestId}` : null)
+    await req2.query(`
+      INSERT INTO dbo.${SALES_ORDER_MERGE_LOG_TABLE} (
+        source_order_no,
+        target_order_no,
+        customer_id,
+        source_detail_count,
+        source_total_quantity,
+        source_total_amount,
+        source_detail_ids_json,
+        updated_quotation_ref_count,
+        updated_bmo_ref_count,
+        merged_by,
+        remark
+      ) VALUES (
+        @source,
+        @target,
+        @customerId,
+        @sourceDetailCount,
+        @sourceTotalQuantity,
+        @sourceTotalAmount,
+        @sourceDetailIdsJson,
+        @updatedQuotationRefCount,
+        @updatedBmoRefCount,
+        @mergedBy,
+        @remark
+      )
+    `)
+  }
+
+  return {
+    sourceOrderNo,
+    targetOrderNo,
+    movedDetailCount: sourceDetailCount,
+    movedQuantity: sourceTotalQuantity,
+    movedAmount: sourceTotalAmount,
+    updatedQuotationRefs: refUpdate.quotation || 0,
+    updatedBmoRefs: refUpdate.bmo || 0
+  }
 }
 
 // 获取销售订单统计信息（必须在/:id之前，否则statistics会被当作id）
@@ -1476,12 +1684,19 @@ router.post('/:orderNo/split', requireSalesOrderUpdate, async (req, res) => {
   }
 })
 
-// 合并销售订单（单源整单并入）：将 sourceOrderNo 下的全部明细与附件并入 targetOrderNo（保留目标订单号）
+// 提交销售订单合并审核申请
 router.post('/:orderNo/merge', requireSalesOrderUpdate, async (req, res) => {
-  let transaction = null
+  let tx = null
+  const fail = (httpStatus, message, code = httpStatus) => {
+    const err = new Error(message)
+    err.httpStatus = httpStatus
+    err.code = code
+    throw err
+  }
   try {
     const sourceOrderNo = String(req.params.orderNo || '').trim()
     const targetOrderNo = String(req.body?.targetOrderNo || '').trim()
+    const requestReason = String(req.body?.requestReason || '').trim() || null
     if (!sourceOrderNo) {
       return res.status(400).json({ code: 400, success: false, message: '源订单编号不能为空' })
     }
@@ -1493,203 +1708,365 @@ router.post('/:orderNo/merge', requireSalesOrderUpdate, async (req, res) => {
     }
 
     const pool = await getPool()
-    transaction = new sql.Transaction(pool)
-    await transaction.begin()
-    await ensureSalesOrderMergeLogTable(transaction)
+    tx = new sql.Transaction(pool)
+    await tx.begin()
+    await ensureSalesOrderMergeReviewTable(tx)
 
-    const fail = (httpStatus, message, code = httpStatus) => {
-      const err = new Error(message)
-      err.httpStatus = httpStatus
-      err.code = code
-      throw err
-    }
-
-    // 拦截：待硬删除审核的订单不能参与合并
-    const sourcePending = await hasPendingHardDeleteReviewForSalesOrder({ tx: transaction, orderNo: sourceOrderNo })
-    if (sourcePending) {
+    if (await hasPendingHardDeleteReviewForSalesOrder({ tx, orderNo: sourceOrderNo })) {
       fail(400, '源订单存在待处理删除审核，禁止合并')
     }
-    const targetPending = await hasPendingHardDeleteReviewForSalesOrder({ tx: transaction, orderNo: targetOrderNo })
-    if (targetPending) {
+    if (await hasPendingHardDeleteReviewForSalesOrder({ tx, orderNo: targetOrderNo })) {
       fail(400, '目标订单存在待处理删除审核，禁止合并')
     }
-
-    const headerQuery = `
-      SELECT TOP 1
-        so.客户ID as customerId,
-        c.客户名称 as customerName,
-        so.订单日期 as orderDate,
-        so.签订日期 as signDate,
-        so.合同号 as contractNo
-      FROM 销售订单 so
-      LEFT JOIN 客户信息 c ON so.客户ID = c.客户ID
-      WHERE so.订单编号 = @orderNo
-        AND (so.状态 IS NULL OR so.状态 <> N'已删除')
-      ORDER BY so.订单ID
-    `
-
-    const srcHeaderReq = new sql.Request(transaction)
-    srcHeaderReq.input('orderNo', sql.NVarChar(100), sourceOrderNo)
-    const srcHeaderRows = await srcHeaderReq.query(headerQuery)
-    const srcHeader = srcHeaderRows.recordset?.[0] || null
-    if (!srcHeader) {
-      fail(404, '源订单不存在')
+    if (await hasPendingSalesOrderMergeReview({ tx, orderNo: sourceOrderNo })) {
+      fail(409, '源订单存在待处理合并审核，请勿重复提交')
+    }
+    if (await hasPendingSalesOrderMergeReview({ tx, orderNo: targetOrderNo })) {
+      fail(409, '目标订单存在待处理合并审核，请先处理现有申请')
     }
 
-    const tgtHeaderReq = new sql.Request(transaction)
-    tgtHeaderReq.input('orderNo', sql.NVarChar(100), targetOrderNo)
-    const tgtHeaderRows = await tgtHeaderReq.query(headerQuery)
-    const tgtHeader = tgtHeaderRows.recordset?.[0] || null
-    if (!tgtHeader) {
+    const sourceOrder = await fetchSalesOrderGroupByOrderNo(tx, sourceOrderNo)
+    const targetOrder = await fetchSalesOrderGroupByOrderNo(tx, targetOrderNo)
+    if (!sourceOrder) {
+      fail(404, '源订单不存在')
+    }
+    if (!targetOrder) {
       fail(404, '目标订单不存在')
     }
 
-    const srcCustomerId = srcHeader.customerId != null ? Number(srcHeader.customerId) : null
-    const tgtCustomerId = tgtHeader.customerId != null ? Number(tgtHeader.customerId) : null
-    const srcCustomerName = String(srcHeader.customerName || '').trim()
-    const tgtCustomerName = String(tgtHeader.customerName || '').trim()
-
-    // 仅支持同客户：优先用 customerId；为空时回退到 customerName 严格相等
+    const srcCustomerId = sourceOrder.customerId != null ? Number(sourceOrder.customerId) : null
+    const tgtCustomerId = targetOrder.customerId != null ? Number(targetOrder.customerId) : null
+    const srcCustomerName = String(sourceOrder.customerName || '').trim()
+    const tgtCustomerName = String(targetOrder.customerName || '').trim()
     const sameCustomer =
-      (Number.isFinite(srcCustomerId) && Number.isFinite(tgtCustomerId) && srcCustomerId === tgtCustomerId) ||
-      (!Number.isFinite(srcCustomerId) && !Number.isFinite(tgtCustomerId) && srcCustomerName && srcCustomerName === tgtCustomerName)
+      (Number.isFinite(srcCustomerId) &&
+        Number.isFinite(tgtCustomerId) &&
+        srcCustomerId === tgtCustomerId) ||
+      (!Number.isFinite(srcCustomerId) &&
+        !Number.isFinite(tgtCustomerId) &&
+        srcCustomerName &&
+        srcCustomerName === tgtCustomerName)
     if (!sameCustomer) {
       fail(400, '仅支持同客户销售订单合并')
     }
-
-    const srcDetailsReq = new sql.Request(transaction)
-    srcDetailsReq.input('orderNo', sql.NVarChar(100), sourceOrderNo)
-    const srcDetails = await srcDetailsReq.query(`
-      SELECT
-        订单ID as id,
-        数量 as quantity,
-        总金额 as totalAmount
-      FROM 销售订单
-      WHERE 订单编号 = @orderNo
-        AND (状态 IS NULL OR 状态 <> N'已删除')
-      ORDER BY 订单ID
-    `)
-    const srcDetailRows = srcDetails.recordset || []
-    if (!srcDetailRows.length) {
+    if (!Array.isArray(sourceOrder.details) || !sourceOrder.details.length) {
       fail(400, '源订单无有效明细，无法合并')
     }
 
-    const sourceDetailIds = srcDetailRows.map((r) => Number(r.id)).filter((n) => Number.isInteger(n) && n > 0)
-    const sourceDetailCount = sourceDetailIds.length
-    const sourceTotalQuantity = srcDetailRows.reduce((sum, r) => sum + Number(r.quantity || 0), 0)
-    const sourceTotalAmount = srcDetailRows.reduce((sum, r) => sum + Number(r.totalAmount || 0), 0)
-
-    // 先更新附件表订单编号（新路径结构下不需要移动文件）
-    {
-      const req = new sql.Request(transaction)
-      req.input('source', sql.NVarChar(100), sourceOrderNo)
-      req.input('target', sql.NVarChar(100), targetOrderNo)
-      await req.query(`
-        IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
-        BEGIN
-          UPDATE dbo.销售订单附件
-          SET 订单编号 = @target
-          WHERE 订单编号 = @source
-            AND (状态 IS NULL OR 状态 <> N'已删除')
-        END
-      `)
-    }
-
-    // 再更新销售订单明细订单编号，并统一表头字段为目标订单表头
-    {
-      const req = new sql.Request(transaction)
-      req.input('source', sql.NVarChar(100), sourceOrderNo)
-      req.input('target', sql.NVarChar(100), targetOrderNo)
-      req.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
-      req.input('orderDate', sql.NVarChar(20), tgtHeader.orderDate || null)
-      req.input('signDate', sql.NVarChar(20), tgtHeader.signDate || null)
-      req.input('contractNo', sql.NVarChar(100), tgtHeader.contractNo || null)
-      await req.query(`
-        UPDATE 销售订单
-        SET
-          订单编号 = @target,
-          客户ID = COALESCE(@customerId, 客户ID),
-          订单日期 = @orderDate,
-          签订日期 = @signDate,
-          合同号 = @contractNo
-        WHERE 订单编号 = @source
-          AND (状态 IS NULL OR 状态 <> N'已删除')
-      `)
-    }
-
-    const refUpdate = await updateExternalSalesOrderRefs({
-      tx: transaction,
-      sourceOrderNo,
-      targetOrderNo
-    })
-
-    const actor = resolveActorFromReq(req)
-    {
-      const req2 = new sql.Request(transaction)
-      req2.input('source', sql.NVarChar(100), sourceOrderNo)
-      req2.input('target', sql.NVarChar(100), targetOrderNo)
-      req2.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
-      req2.input('sourceDetailCount', sql.Int, sourceDetailCount)
-      req2.input('sourceTotalQuantity', sql.Decimal(18, 2), Number(sourceTotalQuantity || 0))
-      req2.input('sourceTotalAmount', sql.Decimal(18, 2), Number(sourceTotalAmount || 0))
-      req2.input('sourceDetailIdsJson', sql.NVarChar(sql.MAX), JSON.stringify(sourceDetailIds))
-      req2.input('updatedQuotationRefCount', sql.Int, Number(refUpdate.quotation || 0))
-      req2.input('updatedBmoRefCount', sql.Int, Number(refUpdate.bmo || 0))
-      req2.input('mergedBy', sql.NVarChar(200), actor || null)
-      await req2.query(`
-        INSERT INTO dbo.${SALES_ORDER_MERGE_LOG_TABLE} (
-          source_order_no,
-          target_order_no,
-          customer_id,
-          source_detail_count,
-          source_total_quantity,
-          source_total_amount,
-          source_detail_ids_json,
-          updated_quotation_ref_count,
-          updated_bmo_ref_count,
-          merged_by
-        ) VALUES (
-          @source,
-          @target,
-          @customerId,
-          @sourceDetailCount,
-          @sourceTotalQuantity,
-          @sourceTotalAmount,
-          @sourceDetailIdsJson,
-          @updatedQuotationRefCount,
-          @updatedBmoRefCount,
-          @mergedBy
-        )
-      `)
-    }
-
-    await transaction.commit()
-    res.json({
+    const preview = buildSalesOrderMergePreview(sourceOrder, targetOrder)
+    const insertReq = new sql.Request(tx)
+    insertReq.input('sourceOrderNo', sql.NVarChar(100), sourceOrderNo)
+    insertReq.input('targetOrderNo', sql.NVarChar(100), targetOrderNo)
+    insertReq.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
+    insertReq.input('customerName', sql.NVarChar(200), targetOrder.customerName || null)
+    insertReq.input('status', sql.NVarChar(20), SALES_ORDER_MERGE_REVIEW_STATUS.PENDING)
+    insertReq.input('requestReason', sql.NVarChar(1000), requestReason)
+    insertReq.input('requesterName', sql.NVarChar(200), resolveActorFromReq(req) || null)
+    insertReq.input('sourceSnapshotJson', sql.NVarChar(sql.MAX), JSON.stringify(sourceOrder))
+    insertReq.input('targetSnapshotJson', sql.NVarChar(sql.MAX), JSON.stringify(targetOrder))
+    insertReq.input('previewJson', sql.NVarChar(sql.MAX), JSON.stringify(preview))
+    const inserted = await insertReq.query(`
+      INSERT INTO dbo.sales_order_merge_review_requests (
+        source_order_no,
+        target_order_no,
+        customer_id,
+        customer_name,
+        status,
+        request_reason,
+        requester_name,
+        source_snapshot_json,
+        target_snapshot_json,
+        preview_json
+      ) VALUES (
+        @sourceOrderNo,
+        @targetOrderNo,
+        @customerId,
+        @customerName,
+        @status,
+        @requestReason,
+        @requesterName,
+        @sourceSnapshotJson,
+        @targetSnapshotJson,
+        @previewJson
+      );
+      SELECT CAST(SCOPE_IDENTITY() AS BIGINT) AS requestId;
+    `)
+    await tx.commit()
+    return res.json({
       code: 0,
       success: true,
-      message: '合并成功',
+      message: '已提交合并审核申请',
       data: {
+        requestId: Number(inserted.recordset?.[0]?.requestId || 0) || null,
         sourceOrderNo,
-        targetOrderNo,
-        movedDetailCount: sourceDetailCount,
-        movedQuantity: sourceTotalQuantity,
-        movedAmount: sourceTotalAmount,
-        updatedQuotationRefs: refUpdate.quotation || 0,
-        updatedBmoRefs: refUpdate.bmo || 0
+        targetOrderNo
       }
     })
   } catch (error) {
-    if (transaction) {
+    if (tx) {
       try {
-        await transaction.rollback()
-      } catch (e) {
+        await tx.rollback()
+      } catch (_e) {
         /* ignore */
       }
     }
-    console.error('合并销售订单失败:', error)
+    console.error('提交销售订单合并审核失败:', error)
     const httpStatus = Number(error?.httpStatus || 0) || 500
-    const code = Number(error?.code || 0) || httpStatus
-    res.status(httpStatus).json({ code, success: false, message: error?.message || '合并销售订单失败' })
+    return res.status(httpStatus).json({
+      code: httpStatus,
+      success: false,
+      message: error?.message || '提交销售订单合并审核失败'
+    })
+  }
+})
+
+router.get('/merge-review/tasks', async (req, res) => {
+  try {
+    await assertSalesOrderMergeReviewerPermission(req, resolveActorFromReq)
+    const { status = 'PENDING', keyword = '', page = 1, pageSize = 20 } = req.query
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1)
+    const size = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
+    const offset = (pageNumber - 1) * size
+    const statusText = String(status || 'PENDING').trim().toUpperCase()
+    const keywordText = String(keyword || '').trim()
+
+    const pool = await getPool()
+    await ensureSalesOrderMergeReviewTable(pool)
+    const where = []
+    if (statusText && statusText !== 'ALL') where.push('status = @status')
+    if (keywordText) {
+      where.push(`(
+        source_order_no LIKE @keyword
+        OR target_order_no LIKE @keyword
+        OR ISNULL(customer_name, N'') LIKE @keyword
+        OR ISNULL(requester_name, N'') LIKE @keyword
+        OR ISNULL(reviewer_name, N'') LIKE @keyword
+      )`)
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    const countReq = pool.request()
+    if (statusText && statusText !== 'ALL') countReq.input('status', sql.NVarChar(20), statusText)
+    if (keywordText) countReq.input('keyword', sql.NVarChar(200), `%${keywordText}%`)
+    const countRows = await countReq.query(`
+      SELECT COUNT(1) AS total
+      FROM dbo.sales_order_merge_review_requests
+      ${whereSql}
+    `)
+
+    const dataReq = pool.request()
+    if (statusText && statusText !== 'ALL') dataReq.input('status', sql.NVarChar(20), statusText)
+    if (keywordText) dataReq.input('keyword', sql.NVarChar(200), `%${keywordText}%`)
+    dataReq.input('offset', sql.Int, offset)
+    dataReq.input('pageSize', sql.Int, size)
+    const rows = await dataReq.query(`
+      SELECT
+        id,
+        source_order_no AS sourceOrderNo,
+        target_order_no AS targetOrderNo,
+        customer_id AS customerId,
+        customer_name AS customerName,
+        status,
+        request_reason AS requestReason,
+        requester_name AS requesterName,
+        reviewer_name AS reviewerName,
+        review_comment AS reviewComment,
+        source_snapshot_json AS sourceSnapshotJson,
+        target_snapshot_json AS targetSnapshotJson,
+        preview_json AS previewJson,
+        execution_result AS executionResult,
+        execution_error AS executionError,
+        approved_at AS approvedAt,
+        rejected_at AS rejectedAt,
+        canceled_at AS canceledAt,
+        executed_at AS executedAt,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM dbo.sales_order_merge_review_requests
+      ${whereSql}
+      ORDER BY
+        CASE WHEN status = N'${SALES_ORDER_MERGE_REVIEW_STATUS.PENDING}' THEN 0 ELSE 1 END,
+        created_at DESC,
+        id DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+    `)
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: (rows.recordset || []).map((row) => toSalesOrderMergeReviewTaskData(row)),
+        total: Number(countRows.recordset?.[0]?.total || 0) || 0
+      }
+    })
+  } catch (error) {
+    const status = Number(error?.statusCode || error?.httpStatus) || 500
+    console.error('获取销售订单合并审核任务失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message: status === 403 ? '当前用户没有审核权限' : '获取销售订单合并审核任务失败'
+    })
+  }
+})
+
+router.post('/merge-review/reject', async (req, res) => {
+  let tx = null
+  const fail = (httpStatus, message, code = httpStatus) => {
+    const err = new Error(message)
+    err.httpStatus = httpStatus
+    err.code = code
+    throw err
+  }
+  try {
+    await assertSalesOrderMergeReviewerPermission(req, resolveActorFromReq)
+    const requestId = parseInt(req.body?.requestId, 10)
+    const reason = String(req.body?.reason || '').trim()
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'requestId 无效' })
+    }
+    if (!reason) {
+      return res.status(400).json({ code: 400, success: false, message: '请填写驳回原因' })
+    }
+    const pool = await getPool()
+    tx = new sql.Transaction(pool)
+    await tx.begin()
+    await ensureSalesOrderMergeReviewTable(tx)
+    const req2 = new sql.Request(tx)
+    req2.input('requestId', sql.BigInt, requestId)
+    const rowResult = await req2.query(`
+      SELECT TOP 1 id, status
+      FROM dbo.sales_order_merge_review_requests WITH (UPDLOCK, HOLDLOCK)
+      WHERE id = @requestId
+    `)
+    const row = rowResult.recordset?.[0]
+    if (!row) {
+      fail(404, '审核申请不存在')
+    }
+    if (String(row.status || '').trim() !== SALES_ORDER_MERGE_REVIEW_STATUS.PENDING) {
+      fail(409, '仅待审核状态可以驳回')
+    }
+    const updateReq = new sql.Request(tx)
+    updateReq.input('requestId', sql.BigInt, requestId)
+    updateReq.input('statusRejected', sql.NVarChar(20), SALES_ORDER_MERGE_REVIEW_STATUS.REJECTED)
+    updateReq.input('reviewerName', sql.NVarChar(200), resolveActorFromReq(req) || null)
+    updateReq.input('reviewComment', sql.NVarChar(1000), reason)
+    await updateReq.query(`
+      UPDATE dbo.sales_order_merge_review_requests
+      SET
+        status = @statusRejected,
+        reviewer_name = @reviewerName,
+        review_comment = @reviewComment,
+        rejected_at = SYSDATETIME(),
+        updated_at = SYSDATETIME()
+      WHERE id = @requestId
+    `)
+    await tx.commit()
+    return res.json({ code: 0, success: true, message: '已驳回' })
+  } catch (error) {
+    if (tx) {
+      try {
+        await tx.rollback()
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    const status = Number(error?.statusCode || error?.httpStatus) || 500
+    console.error('驳回销售订单合并审核失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message: error?.message || '驳回销售订单合并审核失败'
+    })
+  }
+})
+
+router.post('/merge-review/approve', async (req, res) => {
+  let tx = null
+  const fail = (httpStatus, message, code = httpStatus) => {
+    const err = new Error(message)
+    err.httpStatus = httpStatus
+    err.code = code
+    throw err
+  }
+  try {
+    await assertSalesOrderMergeReviewerPermission(req, resolveActorFromReq)
+    const requestId = parseInt(req.body?.requestId, 10)
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: 'requestId 无效' })
+    }
+    const pool = await getPool()
+    tx = new sql.Transaction(pool)
+    await tx.begin()
+    await ensureSalesOrderMergeReviewTable(tx)
+
+    const req2 = new sql.Request(tx)
+    req2.input('requestId', sql.BigInt, requestId)
+    const rowResult = await req2.query(`
+      SELECT TOP 1
+        id,
+        status,
+        source_order_no AS sourceOrderNo,
+        target_order_no AS targetOrderNo
+      FROM dbo.sales_order_merge_review_requests WITH (UPDLOCK, HOLDLOCK)
+      WHERE id = @requestId
+    `)
+    const row = rowResult.recordset?.[0]
+    if (!row) {
+      fail(404, '审核申请不存在')
+    }
+    if (String(row.status || '').trim() !== SALES_ORDER_MERGE_REVIEW_STATUS.PENDING) {
+      fail(409, '仅待审核状态可以通过')
+    }
+
+    const reviewer = resolveActorFromReq(req)
+    const result = await executeSalesOrderMerge({
+      tx,
+      sourceOrderNo: String(row.sourceOrderNo || '').trim(),
+      targetOrderNo: String(row.targetOrderNo || '').trim(),
+      actor: reviewer,
+      reviewRequestId: requestId
+    })
+
+    const updateReq = new sql.Request(tx)
+    updateReq.input('requestId', sql.BigInt, requestId)
+    updateReq.input('statusApproved', sql.NVarChar(20), SALES_ORDER_MERGE_REVIEW_STATUS.APPROVED)
+    updateReq.input('reviewerName', sql.NVarChar(200), reviewer || null)
+    updateReq.input('executionResult', sql.NVarChar(sql.MAX), JSON.stringify(result))
+    await updateReq.query(`
+      UPDATE dbo.sales_order_merge_review_requests
+      SET
+        status = @statusApproved,
+        reviewer_name = @reviewerName,
+        approved_at = SYSDATETIME(),
+        executed_at = SYSDATETIME(),
+        execution_result = @executionResult,
+        execution_error = NULL,
+        updated_at = SYSDATETIME()
+      WHERE id = @requestId
+    `)
+
+    await tx.commit()
+    return res.json({
+      code: 0,
+      success: true,
+      message: '审核通过，已执行合并',
+      data: result
+    })
+  } catch (error) {
+    if (tx) {
+      try {
+        await tx.rollback()
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    const status = Number(error?.statusCode || error?.httpStatus) || 500
+    console.error('审核通过销售订单合并失败:', error)
+    return res.status(status).json({
+      code: status,
+      success: false,
+      message: error?.message || '审核通过销售订单合并失败'
+    })
   }
 })
 

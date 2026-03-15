@@ -41,6 +41,11 @@ const DEFAULT_REVIEW_ACTIONS = [
     actionKey: 'HARD_DELETE.REVIEW',
     actionName: '硬删除审核',
     moduleCode: 'HARD_DELETE'
+  },
+  {
+    actionKey: 'SALES_ORDER_MERGE.REVIEW',
+    actionName: '销售订单合并审核',
+    moduleCode: 'SALES_ORDER_MERGE'
   }
 ]
 

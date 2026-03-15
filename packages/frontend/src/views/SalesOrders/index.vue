@@ -3362,9 +3362,9 @@ const confirmMerge = async () => {
   }
 
   const confirmed = await ElMessageBox.confirm(
-    `确认将订单「${srcNo}」整单并入「${tgtNo}」吗？合并后将保留目标订单编号与表头信息，源订单将不再单独存在。`,
-    '合并确认',
-    { type: 'warning', confirmButtonText: '确认合并', cancelButtonText: '取消' }
+    `确认提交订单「${srcNo}」并入「${tgtNo}」的审核申请吗？审核通过后才会真正执行合并。`,
+    '提交合并审核',
+    { type: 'warning', confirmButtonText: '提交申请', cancelButtonText: '取消' }
   )
     .then(() => true)
     .catch(() => false)
@@ -3380,32 +3380,7 @@ const confirmMerge = async () => {
     }
 
     mergeDialogVisible.value = false
-    await Promise.all([loadData(), loadStatistics()])
-
-    // 合并后默认选中目标订单，便于继续操作
-    mergeSourceOrderNo.value = tgtNo
-    const nextRow = tableData.value.find((r) => r.orderNo === tgtNo) || null
-    mergeSourceSnapshot.value = nextRow
-    if (nextRow) {
-      await nextTick()
-      tableRef.value?.setCurrentRow(nextRow)
-    }
-
-    const result = payload?.data || {}
-    const extra = [
-      Number(result.updatedQuotationRefs || 0) > 0
-        ? `报价引用 ${Number(result.updatedQuotationRefs || 0)} 条`
-        : '',
-      Number(result.updatedBmoRefs || 0) > 0
-        ? `BMO 引用 ${Number(result.updatedBmoRefs || 0)} 条`
-        : ''
-    ]
-      .filter(Boolean)
-      .join('，')
-    const successText = extra
-      ? `已将订单「${srcNo}」并入「${tgtNo}」，并同步更新${extra}。`
-      : `已将订单「${srcNo}」并入「${tgtNo}」。`
-    await ElMessageBox.alert(successText, '合并成功', {
+    await ElMessageBox.alert(`已提交订单「${srcNo}」并入「${tgtNo}」的审核申请。`, '提交成功', {
       confirmButtonText: '知道了',
       closeOnClickModal: false
     })
