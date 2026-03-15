@@ -7,7 +7,11 @@ const sql = require('mssql')
 const router = express.Router()
 const fsp = fs.promises
 const { resolveActorFromReq } = require('../utils/actor')
-const { ensurePendingHardDeleteReviewRequest } = require('../services/projectHardDeleteReview')
+const {
+  ensurePendingHardDeleteReviewRequest,
+  ensureHardDeleteReviewTable,
+  HARD_DELETE_REVIEW_STATUS
+} = require('../services/projectHardDeleteReview')
 const { listCustomerOptions } = require('../services/customerOptions')
 const { requireCapability } = require('../middleware/capability')
 
@@ -28,12 +32,45 @@ const requireSalesOrderUpdate = requireCapability('SALES_ORDERS.UPDATE')
 const requireSalesOrderDelete = requireCapability('SALES_ORDERS.DELETE')
 const requireSalesOrderUpload = requireCapability('SALES_ORDERS.UPLOAD')
 
+const SALES_ORDER_MERGE_LOG_TABLE = 'sales_order_merge_logs'
+
+const ensureSalesOrderMergeLogTable = async (poolOrTx) => {
+  const req = new sql.Request(poolOrTx)
+  await req.batch(`
+    IF OBJECT_ID(N'dbo.${SALES_ORDER_MERGE_LOG_TABLE}', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.${SALES_ORDER_MERGE_LOG_TABLE} (
+        id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        source_order_no NVARCHAR(100) NOT NULL,
+        target_order_no NVARCHAR(100) NOT NULL,
+        customer_id INT NULL,
+        source_detail_count INT NOT NULL,
+        source_total_quantity DECIMAL(18, 2) NOT NULL,
+        source_total_amount DECIMAL(18, 2) NOT NULL,
+        source_detail_ids_json NVARCHAR(MAX) NULL,
+        updated_quotation_ref_count INT NOT NULL CONSTRAINT DF_so_merge_log_updated_quotation_ref_count DEFAULT (0),
+        updated_bmo_ref_count INT NOT NULL CONSTRAINT DF_so_merge_log_updated_bmo_ref_count DEFAULT (0),
+        merged_by NVARCHAR(200) NULL,
+        merged_at DATETIME2 NOT NULL CONSTRAINT DF_so_merge_log_merged_at DEFAULT (SYSDATETIME()),
+        remark NVARCHAR(500) NULL
+      );
+      CREATE INDEX IX_so_merge_log_source_order_no
+        ON dbo.${SALES_ORDER_MERGE_LOG_TABLE}(source_order_no, merged_at DESC, id DESC);
+      CREATE INDEX IX_so_merge_log_target_order_no
+        ON dbo.${SALES_ORDER_MERGE_LOG_TABLE}(target_order_no, merged_at DESC, id DESC);
+      CREATE INDEX IX_so_merge_log_merged_at
+        ON dbo.${SALES_ORDER_MERGE_LOG_TABLE}(merged_at DESC, id DESC);
+    END
+  `)
+}
+
 // 处理上传文件名中的中文乱码（multipart 默认按 latin1 解码）
 const normalizeAttachmentFileName = (name) => {
   if (!name) return name
   try {
     return Buffer.from(name, 'latin1').toString('utf8')
-  } catch {
+  } catch (e) {
+    /* ignore */
     return name
   }
 }
@@ -529,6 +566,34 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
     const allData = await query(allDataQuery, { orderNo })
 
     if (allData.length === 0) {
+      try {
+        const mergedRows = await query(
+          `
+          SELECT TOP 1
+            target_order_no as targetOrderNo,
+            merged_at as mergedAt
+          FROM dbo.${SALES_ORDER_MERGE_LOG_TABLE}
+          WHERE source_order_no = @orderNo
+          ORDER BY id DESC
+        `,
+          { orderNo }
+        )
+        if (mergedRows?.length) {
+          const mergedTo = String(mergedRows[0]?.targetOrderNo || '').trim()
+          if (mergedTo) {
+            return res.status(409).json({
+              code: 409,
+              success: false,
+              message: `销售订单已合并至：${mergedTo}`,
+              data: { mergedTo }
+            })
+          }
+        }
+      } catch (e) {
+        if (!String(e?.message || '').includes(`Invalid object name 'dbo.${SALES_ORDER_MERGE_LOG_TABLE}'`)) {
+          console.warn('查询合并日志失败:', e?.message || e)
+        }
+      }
       return res.status(404).json({
         code: 404,
         success: false,
@@ -594,6 +659,67 @@ router.get('/by-orderNo/:orderNo', async (req, res) => {
     })
   }
 })
+
+const hasPendingHardDeleteReviewForSalesOrder = async ({ tx, orderNo }) => {
+  if (!tx || !orderNo) return false
+  await ensureHardDeleteReviewTable(tx)
+  const req = new sql.Request(tx)
+  req.input('statusPending', sql.NVarChar(20), HARD_DELETE_REVIEW_STATUS.PENDING)
+  req.input('moduleCode', sql.NVarChar(40), 'SALES_ORDER')
+  req.input('entityKey', sql.NVarChar(200), String(orderNo).trim())
+  const rows = await req.query(`
+    SELECT TOP 1 id
+    FROM dbo.project_hard_delete_review_requests WITH (UPDLOCK, HOLDLOCK)
+    WHERE status = @statusPending
+      AND ISNULL(module_code, N'GOODS') = @moduleCode
+      AND ISNULL(entity_key, project_code) = @entityKey
+    ORDER BY id DESC
+  `)
+  return Number(rows.recordset?.[0]?.id || 0) > 0
+}
+
+const updateExternalSalesOrderRefs = async ({ tx, sourceOrderNo, targetOrderNo }) => {
+  const result = { quotation: 0, bmo: 0 }
+  if (!tx || !sourceOrderNo || !targetOrderNo) return result
+
+  // quotation_initiation_requests.sales_order_no
+  try {
+    const req = new sql.Request(tx)
+    req.input('source', sql.NVarChar(100), sourceOrderNo)
+    req.input('target', sql.NVarChar(100), targetOrderNo)
+    const r = await req.query(`
+      UPDATE dbo.quotation_initiation_requests
+      SET sales_order_no = @target,
+          updated_at = SYSDATETIME()
+      WHERE sales_order_no = @source
+    `)
+    result.quotation = Number(r?.rowsAffected?.[0] || 0) || 0
+  } catch (e) {
+    if (!String(e?.message || '').includes("Invalid object name 'dbo.quotation_initiation_requests'")) {
+      throw e
+    }
+  }
+
+  // bmo_initiation_requests.sales_order_no
+  try {
+    const req = new sql.Request(tx)
+    req.input('source', sql.NVarChar(100), sourceOrderNo)
+    req.input('target', sql.NVarChar(100), targetOrderNo)
+    const r = await req.query(`
+      UPDATE dbo.bmo_initiation_requests
+      SET sales_order_no = @target,
+          updated_at = SYSDATETIME()
+      WHERE sales_order_no = @source
+    `)
+    result.bmo = Number(r?.rowsAffected?.[0] || 0) || 0
+  } catch (e) {
+    if (!String(e?.message || '').includes("Invalid object name 'dbo.bmo_initiation_requests'")) {
+      throw e
+    }
+  }
+
+  return result
+}
 
 // 获取销售订单统计信息（必须在/:id之前，否则statistics会被当作id）
 router.get('/statistics', async (req, res) => {
@@ -1347,6 +1473,223 @@ router.post('/:orderNo/split', requireSalesOrderUpdate, async (req, res) => {
       success: false,
       message: error?.message || '拆分销售订单失败'
     })
+  }
+})
+
+// 合并销售订单（单源整单并入）：将 sourceOrderNo 下的全部明细与附件并入 targetOrderNo（保留目标订单号）
+router.post('/:orderNo/merge', requireSalesOrderUpdate, async (req, res) => {
+  let transaction = null
+  try {
+    const sourceOrderNo = String(req.params.orderNo || '').trim()
+    const targetOrderNo = String(req.body?.targetOrderNo || '').trim()
+    if (!sourceOrderNo) {
+      return res.status(400).json({ code: 400, success: false, message: '源订单编号不能为空' })
+    }
+    if (!targetOrderNo) {
+      return res.status(400).json({ code: 400, success: false, message: '目标订单编号不能为空' })
+    }
+    if (sourceOrderNo === targetOrderNo) {
+      return res.status(400).json({ code: 400, success: false, message: '源订单与目标订单不能相同' })
+    }
+
+    const pool = await getPool()
+    transaction = new sql.Transaction(pool)
+    await transaction.begin()
+    await ensureSalesOrderMergeLogTable(transaction)
+
+    const fail = (httpStatus, message, code = httpStatus) => {
+      const err = new Error(message)
+      err.httpStatus = httpStatus
+      err.code = code
+      throw err
+    }
+
+    // 拦截：待硬删除审核的订单不能参与合并
+    const sourcePending = await hasPendingHardDeleteReviewForSalesOrder({ tx: transaction, orderNo: sourceOrderNo })
+    if (sourcePending) {
+      fail(400, '源订单存在待处理删除审核，禁止合并')
+    }
+    const targetPending = await hasPendingHardDeleteReviewForSalesOrder({ tx: transaction, orderNo: targetOrderNo })
+    if (targetPending) {
+      fail(400, '目标订单存在待处理删除审核，禁止合并')
+    }
+
+    const headerQuery = `
+      SELECT TOP 1
+        so.客户ID as customerId,
+        c.客户名称 as customerName,
+        so.订单日期 as orderDate,
+        so.签订日期 as signDate,
+        so.合同号 as contractNo
+      FROM 销售订单 so
+      LEFT JOIN 客户信息 c ON so.客户ID = c.客户ID
+      WHERE so.订单编号 = @orderNo
+        AND (so.状态 IS NULL OR so.状态 <> N'已删除')
+      ORDER BY so.订单ID
+    `
+
+    const srcHeaderReq = new sql.Request(transaction)
+    srcHeaderReq.input('orderNo', sql.NVarChar(100), sourceOrderNo)
+    const srcHeaderRows = await srcHeaderReq.query(headerQuery)
+    const srcHeader = srcHeaderRows.recordset?.[0] || null
+    if (!srcHeader) {
+      fail(404, '源订单不存在')
+    }
+
+    const tgtHeaderReq = new sql.Request(transaction)
+    tgtHeaderReq.input('orderNo', sql.NVarChar(100), targetOrderNo)
+    const tgtHeaderRows = await tgtHeaderReq.query(headerQuery)
+    const tgtHeader = tgtHeaderRows.recordset?.[0] || null
+    if (!tgtHeader) {
+      fail(404, '目标订单不存在')
+    }
+
+    const srcCustomerId = srcHeader.customerId != null ? Number(srcHeader.customerId) : null
+    const tgtCustomerId = tgtHeader.customerId != null ? Number(tgtHeader.customerId) : null
+    const srcCustomerName = String(srcHeader.customerName || '').trim()
+    const tgtCustomerName = String(tgtHeader.customerName || '').trim()
+
+    // 仅支持同客户：优先用 customerId；为空时回退到 customerName 严格相等
+    const sameCustomer =
+      (Number.isFinite(srcCustomerId) && Number.isFinite(tgtCustomerId) && srcCustomerId === tgtCustomerId) ||
+      (!Number.isFinite(srcCustomerId) && !Number.isFinite(tgtCustomerId) && srcCustomerName && srcCustomerName === tgtCustomerName)
+    if (!sameCustomer) {
+      fail(400, '仅支持同客户销售订单合并')
+    }
+
+    const srcDetailsReq = new sql.Request(transaction)
+    srcDetailsReq.input('orderNo', sql.NVarChar(100), sourceOrderNo)
+    const srcDetails = await srcDetailsReq.query(`
+      SELECT
+        订单ID as id,
+        数量 as quantity,
+        总金额 as totalAmount
+      FROM 销售订单
+      WHERE 订单编号 = @orderNo
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+      ORDER BY 订单ID
+    `)
+    const srcDetailRows = srcDetails.recordset || []
+    if (!srcDetailRows.length) {
+      fail(400, '源订单无有效明细，无法合并')
+    }
+
+    const sourceDetailIds = srcDetailRows.map((r) => Number(r.id)).filter((n) => Number.isInteger(n) && n > 0)
+    const sourceDetailCount = sourceDetailIds.length
+    const sourceTotalQuantity = srcDetailRows.reduce((sum, r) => sum + Number(r.quantity || 0), 0)
+    const sourceTotalAmount = srcDetailRows.reduce((sum, r) => sum + Number(r.totalAmount || 0), 0)
+
+    // 先更新附件表订单编号（新路径结构下不需要移动文件）
+    {
+      const req = new sql.Request(transaction)
+      req.input('source', sql.NVarChar(100), sourceOrderNo)
+      req.input('target', sql.NVarChar(100), targetOrderNo)
+      await req.query(`
+        IF OBJECT_ID(N'dbo.销售订单附件', N'U') IS NOT NULL
+        BEGIN
+          UPDATE dbo.销售订单附件
+          SET 订单编号 = @target
+          WHERE 订单编号 = @source
+            AND (状态 IS NULL OR 状态 <> N'已删除')
+        END
+      `)
+    }
+
+    // 再更新销售订单明细订单编号，并统一表头字段为目标订单表头
+    {
+      const req = new sql.Request(transaction)
+      req.input('source', sql.NVarChar(100), sourceOrderNo)
+      req.input('target', sql.NVarChar(100), targetOrderNo)
+      req.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
+      req.input('orderDate', sql.NVarChar(20), tgtHeader.orderDate || null)
+      req.input('signDate', sql.NVarChar(20), tgtHeader.signDate || null)
+      req.input('contractNo', sql.NVarChar(100), tgtHeader.contractNo || null)
+      await req.query(`
+        UPDATE 销售订单
+        SET
+          订单编号 = @target,
+          客户ID = COALESCE(@customerId, 客户ID),
+          订单日期 = @orderDate,
+          签订日期 = @signDate,
+          合同号 = @contractNo
+        WHERE 订单编号 = @source
+          AND (状态 IS NULL OR 状态 <> N'已删除')
+      `)
+    }
+
+    const refUpdate = await updateExternalSalesOrderRefs({
+      tx: transaction,
+      sourceOrderNo,
+      targetOrderNo
+    })
+
+    const actor = resolveActorFromReq(req)
+    {
+      const req2 = new sql.Request(transaction)
+      req2.input('source', sql.NVarChar(100), sourceOrderNo)
+      req2.input('target', sql.NVarChar(100), targetOrderNo)
+      req2.input('customerId', sql.Int, Number.isFinite(tgtCustomerId) ? tgtCustomerId : null)
+      req2.input('sourceDetailCount', sql.Int, sourceDetailCount)
+      req2.input('sourceTotalQuantity', sql.Decimal(18, 2), Number(sourceTotalQuantity || 0))
+      req2.input('sourceTotalAmount', sql.Decimal(18, 2), Number(sourceTotalAmount || 0))
+      req2.input('sourceDetailIdsJson', sql.NVarChar(sql.MAX), JSON.stringify(sourceDetailIds))
+      req2.input('updatedQuotationRefCount', sql.Int, Number(refUpdate.quotation || 0))
+      req2.input('updatedBmoRefCount', sql.Int, Number(refUpdate.bmo || 0))
+      req2.input('mergedBy', sql.NVarChar(200), actor || null)
+      await req2.query(`
+        INSERT INTO dbo.${SALES_ORDER_MERGE_LOG_TABLE} (
+          source_order_no,
+          target_order_no,
+          customer_id,
+          source_detail_count,
+          source_total_quantity,
+          source_total_amount,
+          source_detail_ids_json,
+          updated_quotation_ref_count,
+          updated_bmo_ref_count,
+          merged_by
+        ) VALUES (
+          @source,
+          @target,
+          @customerId,
+          @sourceDetailCount,
+          @sourceTotalQuantity,
+          @sourceTotalAmount,
+          @sourceDetailIdsJson,
+          @updatedQuotationRefCount,
+          @updatedBmoRefCount,
+          @mergedBy
+        )
+      `)
+    }
+
+    await transaction.commit()
+    res.json({
+      code: 0,
+      success: true,
+      message: '合并成功',
+      data: {
+        sourceOrderNo,
+        targetOrderNo,
+        movedDetailCount: sourceDetailCount,
+        movedQuantity: sourceTotalQuantity,
+        movedAmount: sourceTotalAmount,
+        updatedQuotationRefs: refUpdate.quotation || 0,
+        updatedBmoRefs: refUpdate.bmo || 0
+      }
+    })
+  } catch (error) {
+    if (transaction) {
+      try {
+        await transaction.rollback()
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    console.error('合并销售订单失败:', error)
+    const httpStatus = Number(error?.httpStatus || 0) || 500
+    const code = Number(error?.code || 0) || httpStatus
+    res.status(httpStatus).json({ code, success: false, message: error?.message || '合并销售订单失败' })
   }
 })
 

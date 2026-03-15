@@ -314,3 +314,25 @@ export const splitSalesOrderApi = (orderNo: string, data: SplitSalesOrderPayload
     data
   })
 }
+
+export type MergeSalesOrderResponse = {
+  code: number
+  success: boolean
+  message?: string
+  data?: {
+    sourceOrderNo: string
+    targetOrderNo: string
+    movedDetailCount: number
+    movedQuantity: number
+    movedAmount: number
+    updatedQuotationRefs?: number
+    updatedBmoRefs?: number
+  }
+}
+
+export const mergeSalesOrderApi = (sourceOrderNo: string, targetOrderNo: string) => {
+  return request.post<MergeSalesOrderResponse>({
+    url: `/api/sales-orders/${encodeURIComponent(sourceOrderNo)}/merge`,
+    data: { targetOrderNo }
+  })
+}
