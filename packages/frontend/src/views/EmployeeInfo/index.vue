@@ -108,7 +108,7 @@
         v-loading="loading"
         :data="tableData"
         border
-        :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+        :height="isMobile ? undefined : 'calc(100vh - 270px)'"
         row-key="id"
         @row-dblclick="handleRowDblClick"
         class="ei-table"

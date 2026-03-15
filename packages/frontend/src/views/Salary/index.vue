@@ -92,7 +92,7 @@
           :data="tableData"
           border
           v-loading="loading"
-          :height="isMobile ? undefined : 'calc(100vh - 320px)'"
+          :height="isMobile ? undefined : 'calc(100vh - 270px)'"
           row-key="id"
           style="width: 100%"
         >
@@ -3839,11 +3839,20 @@ onMounted(() => {
 }
 
 .pagination-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  z-index: 10;
   display: flex;
+  transform: translateX(-50%);
   justify-content: center;
 }
 
 .pagination-footer--mobile {
+  position: static;
+  left: auto;
+  margin-top: 12px;
+  transform: none;
   justify-content: center;
 }
 
