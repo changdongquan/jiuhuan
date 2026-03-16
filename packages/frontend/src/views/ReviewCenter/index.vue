@@ -68,7 +68,7 @@
             border
             stripe
             size="default"
-            max-height="720"
+            height="100%"
             empty-text="当前条件下没有审核任务"
           >
             <el-table-column type="index" label="#" width="58" />
@@ -2460,10 +2460,16 @@ onBeforeUnmount(() => {
   --review-accent: #9d4b20;
   --review-shadow: 0 8px 24px rgb(15 23 42 / 6%);
 
+  display: flex;
+  height: 100%;
   min-height: 100%;
   padding: 16px;
+  overflow: hidden;
   color: var(--review-ink);
   background: var(--review-bg);
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 12px;
 
   :deep(.el-button--primary) {
     --el-button-bg-color: #9d4b20;
@@ -2572,7 +2578,6 @@ onBeforeUnmount(() => {
 
 .review-filter-panel {
   padding: 12px 14px 10px;
-  margin-top: 12px;
 }
 
 .review-board__head {
@@ -2635,12 +2640,31 @@ onBeforeUnmount(() => {
 }
 
 .review-board {
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   padding: 16px;
-  margin-top: 12px;
+  overflow: hidden;
 }
 
 .review-feed {
-  margin-top: 12px;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.review-feed :deep(.el-table),
+.review-feed :deep(.el-table__inner-wrapper),
+.review-feed :deep(.el-table__body-wrapper) {
+  height: 100%;
+  min-height: 0;
+}
+
+.review-feed :deep(.el-table__body-wrapper) {
+  overflow-y: auto;
 }
 
 .review-empty {
@@ -2648,6 +2672,9 @@ onBeforeUnmount(() => {
 }
 
 .review-table {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   border-radius: 10px;
 }
@@ -2831,8 +2858,8 @@ onBeforeUnmount(() => {
 
 .review-pagination {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
-  margin-top: 18px;
 }
 
 .dialog-head {
@@ -2937,7 +2964,11 @@ onBeforeUnmount(() => {
 
 @media (width <= 900px) {
   .review-center-page {
+    height: auto;
+    min-height: 100%;
+    gap: 10px;
     padding: 10px;
+    overflow: visible;
   }
 
   .review-filter-panel,
@@ -2952,6 +2983,14 @@ onBeforeUnmount(() => {
   .review-filter-panel,
   .review-board {
     padding: 14px;
+  }
+
+  .review-board,
+  .review-feed {
+    display: block;
+    min-height: auto;
+    flex: initial;
+    overflow: visible;
   }
 
   .dialog-head__title {
