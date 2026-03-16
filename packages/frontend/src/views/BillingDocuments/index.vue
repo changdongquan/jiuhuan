@@ -858,12 +858,12 @@
           v-model="invoiceCandidateFilterType"
           clearable
           :style="{ width: isMobile ? '100%' : '180px' }"
-          placeholder="全部候选"
+          placeholder="全部"
           @change="loadInvoiceCandidates(true)"
         >
+          <el-option label="全部" value="all" />
           <el-option label="未开票" value="no_invoice" />
           <el-option label="仅开部分发票" value="prepaid_pending" />
-          <el-option label="已开全额发票" value="full" />
         </el-select>
         <el-select
           v-model="invoiceCandidateCustomerName"
@@ -1788,6 +1788,7 @@ const loadInvoiceCandidates = async (resetPage = false) => {
 
 const openInvoiceCandidateDialog = async () => {
   invoiceCandidateDialogVisible.value = true
+  invoiceCandidateFilterType.value = 'all'
   await nextTick()
   invoiceCandidateTableRef.value?.clearSelection()
   await loadInvoiceCandidates()

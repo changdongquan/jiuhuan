@@ -401,6 +401,7 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
         FROM base
         WHERE (
           @filterType IN (N'', N'all')
+          AND ${invoiceDocumentStatusSql} IN (N'未开票', N'仅开部分发票')
         ) OR (
           @filterType = N'no_invoice' AND ${invoiceDocumentStatusSql} = N'未开票'
         ) OR (
