@@ -946,11 +946,25 @@
             :value="item"
           />
         </el-select>
+        <el-select
+          v-model="receiptCandidateCategory"
+          placeholder="分类"
+          clearable
+          :style="{ width: isMobile ? '100%' : '150px' }"
+          @change="loadReceiptCandidates(true)"
+        >
+          <el-option
+            v-for="item in receiptCandidateCategoryOptions"
+            :key="item"
+            :label="item"
+            :value="item"
+          />
+        </el-select>
         <el-input
           v-model="receiptCandidateKeyword"
           placeholder="明细ID/项目编号/产品名称/图号/模号/合同号"
           clearable
-          :style="{ width: isMobile ? '100%' : '360px' }"
+          :style="{ width: isMobile ? '100%' : '280px' }"
           @keydown.enter.prevent="loadReceiptCandidates(true)"
         />
         <el-button type="primary" @click="loadReceiptCandidates(true)">查询</el-button>
@@ -1313,6 +1327,8 @@ const receiptCandidateLoading = ref(false)
 const receiptCandidateSourceType = ref<'all' | 'invoice_detail' | 'prepayment_order'>('all')
 const receiptCandidateCustomerName = ref('')
 const receiptCandidateCustomerOptions = ref<string[]>([])
+const receiptCandidateCategory = ref('')
+const receiptCandidateCategoryOptions = ['塑胶模具', '零件加工', '修改模具']
 const receiptCandidateKeyword = ref('')
 const receiptCandidatePage = ref(1)
 const receiptCandidatePageSize = ref(50)
@@ -1339,6 +1355,9 @@ const restoreReceiptCandidatePrefs = () => {
     if (typeof parsed?.customerName === 'string') {
       receiptCandidateCustomerName.value = parsed.customerName
     }
+    if (typeof parsed?.category === 'string') {
+      receiptCandidateCategory.value = parsed.category
+    }
     if (typeof parsed?.keyword === 'string') {
       receiptCandidateKeyword.value = parsed.keyword
     }
@@ -1357,6 +1376,7 @@ const persistReceiptCandidatePrefs = () => {
       RECEIPT_CANDIDATE_PREF_KEY,
       JSON.stringify({
         customerName: receiptCandidateCustomerName.value,
+        category: receiptCandidateCategory.value,
         sourceType: receiptCandidateSourceType.value,
         keyword: receiptCandidateKeyword.value,
         pageSize: receiptCandidatePageSize.value
@@ -1807,6 +1827,7 @@ const loadReceiptCandidates = async (resetPage = false) => {
       sourceType: receiptCandidateSourceType.value,
       keyword: receiptCandidateKeyword.value.trim() || undefined,
       customerName: selectedCustomerName || undefined,
+      category: receiptCandidateCategory.value.trim() || undefined,
       page: receiptCandidatePage.value,
       pageSize: receiptCandidatePageSize.value
     })

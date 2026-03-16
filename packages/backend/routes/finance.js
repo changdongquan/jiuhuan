@@ -581,7 +581,14 @@ router.get('/receipts/list', requireReceivableRead, async (req, res) => {
 
 router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
   try {
-    const { keyword, customerName, page = 1, pageSize = 50, sourceType = 'all' } = req.query
+    const {
+      keyword,
+      customerName,
+      category,
+      page = 1,
+      pageSize = 50,
+      sourceType = 'all'
+    } = req.query
     const sourceFilter = String(sourceType || 'all').trim()
     const baseParams = {}
     const pageNum = Math.max(1, parseInt(page, 10) || 1)
@@ -590,6 +597,9 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
 
     if (keyword) {
       baseParams.keyword = `%${String(keyword).trim()}%`
+    }
+    if (category) {
+      baseParams.category = String(category).trim()
     }
 
     const params = { ...baseParams }
@@ -621,6 +631,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
         FROM 发票明细 f
         LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
         LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
+        LEFT JOIN 货物信息 h ON h.项目编号 = f.项目编号
         OUTER APPLY (
           SELECT TOP 1
             so.数量,
@@ -653,6 +664,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
             OR CONVERT(NVARCHAR(50), f.明细ID) LIKE @keyword
           ))
           AND (@customerName IS NULL OR c.客户名称 = @customerName)
+          AND (@category IS NULL OR h.分类 = @category)
       ),
       prepayment_candidates AS (
         SELECT
@@ -711,6 +723,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
             OR s.合同号 LIKE @keyword
           ))
           AND (@customerName IS NULL OR c.客户名称 = @customerName)
+          AND (@category IS NULL OR h.分类 = @category)
       ),
       candidates AS (
         SELECT * FROM invoice_candidates
@@ -723,6 +736,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
 
     params.keyword = baseParams.keyword || null
     params.customerName = params.customerName || null
+    params.category = baseParams.category || null
     params.sourceType = sourceFilter
 
     const customerOptionRows = await query(

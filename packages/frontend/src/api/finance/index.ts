@@ -39,6 +39,7 @@ export interface FinanceReceiptCandidateQueryParams {
   sourceType?: 'all' | 'invoice_detail' | 'prepayment_order'
   keyword?: string
   customerName?: string
+  category?: string
   page?: number
   pageSize?: number
 }
