@@ -302,19 +302,19 @@
         <section class="detail-section">
           <div class="detail-section__title">来源信息</div>
           <el-table
-            :data="toDetailTableRows(getBmoSourceFields())"
+            :data="toDetailTableRows(getBmoSourceFields().concat(getBmoTechFields()))"
             border
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
+            <el-table-column prop="label1" width="140" />
+            <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
             <el-table-column prop="label2" width="100" />
             <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
             <el-table-column prop="label3" width="100" />
             <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
             <el-table-column prop="label4" width="100" />
-            <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
+            <el-table-column prop="value4" min-width="128" show-overflow-tooltip />
           </el-table>
         </section>
 
@@ -326,8 +326,8 @@
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
+            <el-table-column prop="label1" width="220" />
+            <el-table-column prop="value1" min-width="220" show-overflow-tooltip />
             <el-table-column prop="label2" width="100" />
             <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
             <el-table-column prop="label3" width="100" />
@@ -357,7 +357,7 @@
         </section>
 
         <section class="detail-section">
-          <div class="detail-section__title">销售订单表头</div>
+          <div class="detail-section__title">销售订单</div>
           <el-table
             :data="toDetailTableRows(getBmoSalesFields())"
             border
@@ -373,10 +373,6 @@
             <el-table-column prop="label4" width="100" />
             <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
           </el-table>
-        </section>
-
-        <section class="detail-section">
-          <div class="detail-section__title">销售订单明细</div>
           <el-table
             :data="viewRequest?.sales_order_draft?.details || []"
             border
@@ -408,25 +404,6 @@
             <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
             <el-table-column prop="handler" label="经办人" width="120" show-overflow-tooltip />
             <el-table-column prop="costSource" label="费用出处" width="120" show-overflow-tooltip />
-          </el-table>
-        </section>
-
-        <section class="detail-section">
-          <div class="detail-section__title">技术快照</div>
-          <el-table
-            :data="toDetailTableRows(getBmoTechFields())"
-            border
-            size="small"
-            class="detail-kv-table"
-          >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label2" width="100" />
-            <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label3" width="100" />
-            <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label4" width="100" />
-            <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
           </el-table>
         </section>
       </div>
@@ -480,8 +457,8 @@
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
+            <el-table-column prop="label1" width="160" />
+            <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
             <el-table-column prop="label2" width="100" />
             <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
             <el-table-column prop="label3" width="100" />
@@ -897,14 +874,20 @@
             class="snapshot-space"
           >
             <el-table
-              v-if="hardDeleteSnapshotRows3Col.length"
-              :data="hardDeleteSnapshotRows3Col"
+              v-if="hardDeleteSnapshotFieldItems.length"
+              :data="toDetailTableRows(hardDeleteSnapshotFieldItems)"
               border
               size="small"
+              class="detail-kv-table"
             >
-              <el-table-column prop="col1" label="字段 1" min-width="220" show-overflow-tooltip />
-              <el-table-column prop="col2" label="字段 2" min-width="220" show-overflow-tooltip />
-              <el-table-column prop="col3" label="字段 3" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="label1" width="80" />
+              <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
+              <el-table-column prop="label2" width="80" />
+              <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
+              <el-table-column prop="label3" width="80" />
+              <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
+              <el-table-column prop="label4" width="80" />
+              <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
             </el-table>
 
             <div
@@ -1438,19 +1421,8 @@ const hardDeleteSnapshotRows = computed<Array<{ key: string; label: string; valu
   }
 )
 
-const hardDeleteSnapshotRows3Col = computed<Array<{ col1: string; col2: string; col3: string }>>(
-  () => {
-    const rows = hardDeleteSnapshotRows.value.map((item) => `${item.label}：${item.value}`)
-    const result: Array<{ col1: string; col2: string; col3: string }> = []
-    for (let i = 0; i < rows.length; i += 3) {
-      result.push({
-        col1: rows[i] || '-',
-        col2: rows[i + 1] || '-',
-        col3: rows[i + 2] || '-'
-      })
-    }
-    return result
-  }
+const hardDeleteSnapshotFieldItems = computed<FieldItem[]>(() =>
+  hardDeleteSnapshotRows.value.map((item) => buildField(item.label, item.value))
 )
 
 const hardDeleteSnapshotTables = computed<
@@ -2645,19 +2617,21 @@ onBeforeUnmount(() => {
 }
 
 .review-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   margin-top: 10px;
 }
 
 .review-filter-form__actions {
   display: flex;
-  width: 100%;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .review-filter-form :deep(.el-form-item:last-child) {
-  flex: 1 1 auto;
+  margin-left: auto;
 }
 
 .review-board {
