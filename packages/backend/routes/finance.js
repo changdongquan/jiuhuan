@@ -61,6 +61,34 @@ const buildPrepaymentSourceKeySql = (alias = 's', customerAlias = 'p') =>
     ISNULL(NULLIF(LTRIM(RTRIM(h.产品名称)), N''), N'')
   )`
 
+const buildRoundedAmountSql = (alias, field) => `ROUND(ISNULL(${alias}.${field}, 0), 2)`
+
+const buildRoundedReceiptTotalSql = (alias) =>
+  `ROUND(ISNULL(${alias}.receiptAmount, 0) + ISNULL(${alias}.discountAmount, 0), 2)`
+
+const buildInvoiceDocumentStatusSql = (alias = 'base') => {
+  const salesAmount = buildRoundedAmountSql(alias, 'salesAmount')
+  const invoiceAmount = buildRoundedAmountSql(alias, 'invoiceAmount')
+  return `CASE
+    WHEN ${salesAmount} <= 0 AND ${invoiceAmount} <= 0 THEN N''
+    WHEN ${invoiceAmount} <= 0 THEN N'未开票'
+    WHEN ${salesAmount} > 0 AND ${invoiceAmount} < ${salesAmount} THEN N'仅开部分发票'
+    WHEN ${invoiceAmount} > 0 THEN N'已开全额发票'
+    ELSE N''
+  END`
+}
+
+const buildReceiptDocumentStatusSql = (alias = 'base') => {
+  const invoiceAmount = buildRoundedAmountSql(alias, 'invoiceAmount')
+  const receiptTotal = buildRoundedReceiptTotalSql(alias)
+  return `CASE
+    WHEN ${invoiceAmount} <= 0 THEN N''
+    WHEN ${receiptTotal} <= 0 THEN N'待回款'
+    WHEN ${receiptTotal} < ${invoiceAmount} THEN N'部分回款'
+    ELSE N'已结清'
+  END`
+}
+
 const ensureFinanceSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
   await req.batch(`
@@ -278,91 +306,146 @@ router.get('/invoices/list', requireBillingRead, async (req, res) => {
 
 router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
   try {
-    const { filterType = 'no_invoice', keyword, customerName, page = 1, pageSize = 50 } = req.query
+    const {
+      filterType = 'all',
+      keyword,
+      customerName,
+      category,
+      page = 1,
+      pageSize = 50
+    } = req.query
     const baseParams = {}
-    const baseWhere = []
     const pageNum = Math.max(1, parseInt(page, 10) || 1)
     const sizeNum = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 50))
     const offset = (pageNum - 1) * sizeNum
 
-    if (filterType === 'no_invoice') {
-      baseWhere.push('f.项目编号 IS NULL')
-    } else if (filterType === 'prepaid_pending') {
-      baseWhere.push(
-        'ISNULL(f.是否已开预付发票, 0) = 1 AND ISNULL(f.是否已开验收发票, 0) = 0 AND ISNULL(f.是否已开全额发票, 0) = 0'
-      )
-      baseWhere.push(
-        's.项目编号 NOT IN (SELECT DISTINCT 项目编号 FROM 发票明细 WHERE ISNULL(是否已开全额发票, 0) = 1)'
-      )
-    } else if (filterType === 'full') {
-      baseWhere.push('ISNULL(f.是否已开全额发票, 0) = 1')
-    }
-
     if (keyword) {
-      baseWhere.push(
-        '(s.项目编号 LIKE @keyword OR h.产品名称 LIKE @keyword OR h.产品图号 LIKE @keyword OR p.客户模号 LIKE @keyword OR s.合同号 LIKE @keyword)'
-      )
       baseParams.keyword = `%${String(keyword).trim()}%`
+    }
+    if (category) {
+      baseParams.category = String(category).trim()
     }
 
     const params = { ...baseParams }
-    const where = [...baseWhere]
     if (customerName) {
-      where.push('c.客户名称 = @customerName')
       params.customerName = String(customerName).trim()
     }
-
-    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
-    const baseSql = `
-      SELECT DISTINCT
-        s.项目编号 as itemCode,
-        h.产品名称 as productName,
-        h.产品图号 as productDrawingNo,
-        p.客户模号 as customerPartNo,
-        c.客户名称 as customerName,
-        s.单价 as unitPrice,
-        ISNULL(s.数量, 0) as orderQuantity,
-        ISNULL(s.总金额, 0) as orderAmount,
-        s.合同号 as contractNo
-      FROM 销售订单 s
-      INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
-      INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
-      LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
-      LEFT JOIN 发票明细 f ON s.项目编号 = f.项目编号
-      ${whereClause}
+    const invoiceDocumentStatusSql = buildInvoiceDocumentStatusSql('base')
+    const candidateSql = `
+      WITH base AS (
+        SELECT
+          s.项目编号 as itemCode,
+          h.产品名称 as productName,
+          h.产品图号 as productDrawingNo,
+          p.客户模号 as customerPartNo,
+          c.客户ID as customerId,
+          c.客户名称 as customerName,
+          ISNULL(c.SeqNumber, 2147483647) as seqNumber,
+          s.单价 as unitPrice,
+          ISNULL(s.数量, 0) as orderQuantity,
+          ISNULL(s.总金额, 0) as orderAmount,
+          ISNULL(s.总金额, 0) as salesAmount,
+          s.合同号 as contractNo,
+          ISNULL(inv.invoiceAmount, 0) as invoiceAmount,
+          CASE
+            WHEN ISNULL(s.总金额, 0) > ISNULL(inv.invoiceAmount, 0)
+            THEN ISNULL(s.总金额, 0) - ISNULL(inv.invoiceAmount, 0)
+            ELSE 0
+          END as uninvoicedAmount,
+          ISNULL(rcv.receiptAmount, 0) as receiptAmount,
+          ISNULL(rcv.discountAmount, 0) as discountAmount
+        FROM 销售订单 s
+        INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
+        INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
+        LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+        OUTER APPLY (
+          SELECT
+            ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as invoiceAmount
+          FROM 发票明细 fd
+          INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
+          WHERE fd.项目编号 = s.项目编号
+            AND ISNULL(inv.是否删除, 0) = 0
+            AND ISNULL(fd.是否已红冲, 0) = 0
+            AND (
+              NULLIF(s.合同号, N'') IS NULL
+              OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+            )
+        ) inv
+        OUTER APPLY (
+          SELECT
+            ISNULL(SUM(ISNULL(r.实收金额, 0)), 0) as receiptAmount,
+            ISNULL(SUM(ISNULL(r.贴息金额, 0)), 0) as discountAmount
+          FROM 回款单据 r
+          WHERE r.项目编号 = s.项目编号
+            AND ISNULL(r.是否删除, 0) = 0
+            AND (
+              NULLIF(s.合同号, N'') IS NULL
+              OR NULLIF(r.合同号, N'') = NULLIF(s.合同号, N'')
+            )
+        ) rcv
+        WHERE (s.状态 IS NULL OR s.状态 <> N'已删除')
+          AND (@keyword IS NULL OR (
+            s.项目编号 LIKE @keyword
+            OR h.产品名称 LIKE @keyword
+            OR h.产品图号 LIKE @keyword
+            OR p.客户模号 LIKE @keyword
+            OR s.合同号 LIKE @keyword
+          ))
+          AND (@customerName IS NULL OR c.客户名称 = @customerName)
+          AND (@category IS NULL OR h.分类 = @category)
+      ),
+      candidates AS (
+        SELECT
+          base.*,
+          ${invoiceDocumentStatusSql} as invoiceDocumentStatus
+        FROM base
+        WHERE (
+          @filterType IN (N'', N'all')
+        ) OR (
+          @filterType = N'no_invoice' AND ${invoiceDocumentStatusSql} = N'未开票'
+        ) OR (
+          @filterType = N'prepaid_pending' AND ${invoiceDocumentStatusSql} = N'仅开部分发票'
+        ) OR (
+          @filterType = N'full' AND ${invoiceDocumentStatusSql} = N'已开全额发票'
+        )
+      )
     `
-    const optionWhere = [
-      ...baseWhere,
-      "c.客户名称 IS NOT NULL",
-      "LTRIM(RTRIM(c.客户名称)) <> ''"
-    ]
-    const optionWhereClause = optionWhere.length > 0 ? `WHERE ${optionWhere.join(' AND ')}` : ''
+    params.keyword = baseParams.keyword || null
+    params.customerName = params.customerName || null
+    params.category = baseParams.category || null
+    params.filterType = String(filterType || 'all').trim()
+
     const customerOptionRows = await query(
       `
+      ${candidateSql}
       SELECT DISTINCT
-        c.客户ID as customerId,
-        c.客户名称 as customerName,
-        ISNULL(c.SeqNumber, 2147483647) as seqNumber
-      FROM 销售订单 s
-      INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
-      INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
-      LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
-      LEFT JOIN 发票明细 f ON s.项目编号 = f.项目编号
-      ${optionWhereClause}
-      ORDER BY ISNULL(c.SeqNumber, 2147483647) ASC, c.客户ID ASC
+        customerId,
+        customerName,
+        seqNumber
+      FROM candidates
+      WHERE customerName IS NOT NULL
+        AND LTRIM(RTRIM(customerName)) <> ''
+      ORDER BY seqNumber ASC, customerId ASC
       `,
-      baseParams
+      params
     )
     const customerOptions = customerOptionRows.map((r) => String(r.customerName || '').trim()).filter(Boolean)
 
-    const countRows = await query(`SELECT COUNT(1) as total FROM (${baseSql}) t`, params)
+    const countRows = await query(
+      `
+      ${candidateSql}
+      SELECT COUNT(1) as total FROM candidates
+      `,
+      params
+    )
     const total = Number(countRows?.[0]?.total || 0)
 
     const rows = await query(
       `
+      ${candidateSql}
       SELECT *
-      FROM (${baseSql}) t
-      ORDER BY t.itemCode ASC
+      FROM candidates
+      ORDER BY itemCode ASC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
       `,
       { ...params, offset, pageSize: sizeNum }
@@ -607,10 +690,10 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
       params.customerName = String(customerName).trim()
     }
 
+    const receiptDocumentStatusSql = buildReceiptDocumentStatusSql('invoice_base')
     const candidateSql = `
-      WITH invoice_candidates AS (
+      WITH invoice_base AS (
         SELECT
-          N'${RECEIPT_SOURCE_TYPES.invoice}' as sourceType,
           CONVERT(NVARCHAR(100), f.明细ID) as sourceKey,
           f.明细ID as detailId,
           f.项目编号 as itemCode,
@@ -625,9 +708,8 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
           c.客户名称 as customerName,
           ISNULL(c.SeqNumber, 2147483647) as seqNumber,
           ISNULL(f.金额, 0) as invoiceAmount,
-          ISNULL(r.totalReceived, 0) as receivedAmount,
-          ISNULL(r.totalDiscount, 0) as discountAmount,
-          ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount
+          ISNULL(r.totalReceived, 0) as receiptAmount,
+          ISNULL(r.totalDiscount, 0) as discountAmount
         FROM 发票明细 f
         LEFT JOIN 开票单据 i ON i.发票ID = f.发票ID
         LEFT JOIN 客户信息 c ON c.客户ID = i.客户ID
@@ -654,7 +736,6 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
         ) r ON r.明细ID = f.明细ID
         WHERE ISNULL(i.是否删除, 0) = 0
           AND ISNULL(f.是否已红冲, 0) = 0
-          AND ISNULL(f.金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0
           AND (@keyword IS NULL OR (
             f.项目编号 LIKE @keyword
             OR f.产品名称 LIKE @keyword
@@ -665,6 +746,30 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
           ))
           AND (@customerName IS NULL OR c.客户名称 = @customerName)
           AND (@category IS NULL OR h.分类 = @category)
+      ),
+      invoice_candidates AS (
+        SELECT
+          N'${RECEIPT_SOURCE_TYPES.invoice}' as sourceType,
+          sourceKey,
+          detailId,
+          itemCode,
+          productName,
+          productDrawingNo,
+          customerPartNo,
+          contractNo,
+          orderQuantity,
+          orderUnitPrice,
+          orderAmount,
+          customerId,
+          customerName,
+          seqNumber,
+          invoiceAmount,
+          receiptAmount as receivedAmount,
+          discountAmount,
+          invoiceAmount - receiptAmount - discountAmount as receivableAmount,
+          ${receiptDocumentStatusSql} as receiptDocumentStatus
+        FROM invoice_base
+        WHERE ${receiptDocumentStatusSql} IN (N'待回款', N'部分回款')
       ),
       prepayment_candidates AS (
         SELECT
@@ -685,11 +790,25 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
           CAST(0 AS DECIMAL(18, 2)) as invoiceAmount,
           ISNULL(r.totalReceived, 0) as receivedAmount,
           ISNULL(r.totalDiscount, 0) as discountAmount,
-          ISNULL(s.总金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount
+          ISNULL(s.总金额, 0) - ISNULL(inv.totalInvoiced, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) as receivableAmount,
+          N'' as receiptDocumentStatus
         FROM 销售订单 s
         INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
         INNER JOIN 货物信息 h ON h.项目编号 = s.项目编号
         LEFT JOIN 客户信息 c ON c.客户ID = p.客户ID
+        OUTER APPLY (
+          SELECT
+            ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as totalInvoiced
+          FROM 发票明细 fd
+          INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
+          WHERE ISNULL(inv.是否删除, 0) = 0
+            AND ISNULL(fd.是否已红冲, 0) = 0
+            AND fd.项目编号 = s.项目编号
+            AND (
+              NULLIF(s.合同号, N'') IS NULL
+              OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+            )
+        ) inv
         LEFT JOIN (
           SELECT
             来源键,
@@ -703,18 +822,7 @@ router.get('/receipts/candidates', requireReceivableRead, async (req, res) => {
         ) r ON r.来源键 = ${buildPrepaymentSourceKeySql('s', 'p')}
         WHERE (s.状态 IS NULL OR s.状态 <> N'已删除')
           AND c.客户名称 IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM 发票明细 fd
-            INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
-            WHERE ISNULL(inv.是否删除, 0) = 0
-              AND fd.项目编号 = s.项目编号
-              AND (
-                NULLIF(s.合同号, N'') IS NULL
-                OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
-              )
-          )
-          AND ISNULL(s.总金额, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0
+          AND ISNULL(s.总金额, 0) - ISNULL(inv.totalInvoiced, 0) - ISNULL(r.totalReceived, 0) - ISNULL(r.totalDiscount, 0) > 0
           AND (@keyword IS NULL OR (
             s.项目编号 LIKE @keyword
             OR h.产品名称 LIKE @keyword

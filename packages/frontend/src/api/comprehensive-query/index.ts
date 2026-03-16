@@ -6,6 +6,7 @@ export interface ComprehensiveQueryListParams {
   category?: string
   settlementStatus?: string
   invoiceStatus?: string
+  receiptStatus?: string
   startDate?: string
   endDate?: string
   anomalyType?: string
@@ -45,10 +46,13 @@ export interface ComprehensiveQueryRow {
   invoiceCount: number
   invoiceAmount: number
   invoiceProgress: number
+  invoiceDocumentStatus: string
   receiptCount: number
   receiptAmount: number
   discountAmount: number
   receiptProgress: number
+  receiptInvoiceProgress: number
+  receiptDocumentStatus: string
   settlementStatus: string
   settlementSource?: string
   uninvoicedAmount: number

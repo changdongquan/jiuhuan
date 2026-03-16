@@ -846,7 +846,7 @@
     <el-dialog
       v-model="invoiceCandidateDialogVisible"
       title="选择开票明细"
-      :width="isMobile ? '100%' : '1350px'"
+      :width="isMobile ? '100%' : '1450px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
     >
@@ -856,11 +856,14 @@
       >
         <el-select
           v-model="invoiceCandidateFilterType"
+          clearable
           :style="{ width: isMobile ? '100%' : '180px' }"
+          placeholder="全部候选"
+          @change="loadInvoiceCandidates(true)"
         >
           <el-option label="未开票" value="no_invoice" />
-          <el-option label="预付已开待后续" value="prepaid_pending" />
-          <el-option label="全额发票" value="full" />
+          <el-option label="仅开部分发票" value="prepaid_pending" />
+          <el-option label="已开全额发票" value="full" />
         </el-select>
         <el-select
           v-model="invoiceCandidateCustomerName"
@@ -873,6 +876,20 @@
         >
           <el-option
             v-for="item in invoiceCandidateCustomerSelectOptions"
+            :key="item"
+            :label="item"
+            :value="item"
+          />
+        </el-select>
+        <el-select
+          v-model="invoiceCandidateCategory"
+          placeholder="分类"
+          clearable
+          :style="{ width: isMobile ? '100%' : '150px' }"
+          @change="loadInvoiceCandidates(true)"
+        >
+          <el-option
+            v-for="item in invoiceCandidateCategoryOptions"
             :key="item"
             :label="item"
             :value="item"
@@ -940,14 +957,18 @@
           show-overflow-tooltip
           sortable
         />
-        <el-table-column label="单价" width="120" align="right">
+        <el-table-column label="单价" width="96" align="right">
           <template #default="{ row }">{{ formatAmount(row.unitPrice || 0) }}</template>
         </el-table-column>
-        <el-table-column label="数量" width="100" align="right">
+        <el-table-column label="数量" width="75" align="right">
           <template #default="{ row }">{{ row.orderQuantity || 0 }}</template>
         </el-table-column>
-        <el-table-column label="订单金额" width="130" align="right">
+        <el-table-column label="订单金额" width="100" align="right">
           <template #default="{ row }">{{ formatAmount(row.orderAmount || 0) }}</template>
+        </el-table-column>
+        <el-table-column prop="invoiceDocumentStatus" label="开票状态" width="120" />
+        <el-table-column label="未开票金额" width="100" align="right">
+          <template #default="{ row }">{{ formatAmount(row.uninvoicedAmount || 0) }}</template>
         </el-table-column>
       </el-table>
       <div class="finance-candidate-pagination">
@@ -1077,6 +1098,8 @@ interface InvoiceCandidate {
   unitPrice: number
   orderQuantity: number
   orderAmount: number
+  invoiceDocumentStatus: string
+  uninvoicedAmount: number
 }
 
 type InvoicePayload = Omit<Invoice, 'id'> & { documentNo: string }
@@ -1232,9 +1255,13 @@ const customerOptions = ref<string[]>([])
 const showMobileFilters = ref(false)
 const invoiceCandidateDialogVisible = ref(false)
 const invoiceCandidateLoading = ref(false)
-const invoiceCandidateFilterType = ref<'no_invoice' | 'prepaid_pending' | 'full'>('no_invoice')
+const invoiceCandidateFilterType = ref<'' | 'all' | 'no_invoice' | 'prepaid_pending' | 'full'>(
+  'all'
+)
 const invoiceCandidateCustomerName = ref('')
 const invoiceCandidateCustomerOptions = ref<string[]>([])
+const invoiceCandidateCategory = ref('')
+const invoiceCandidateCategoryOptions = ['塑胶模具', '零件加工', '修改模具']
 const invoiceCandidateKeyword = ref('')
 const invoiceCandidatePage = ref(1)
 const invoiceCandidatePageSize = ref(50)
@@ -1252,6 +1279,8 @@ const restoreInvoiceCandidatePrefs = () => {
     if (!raw) return
     const parsed = JSON.parse(raw)
     if (
+      parsed?.filterType === '' ||
+      parsed?.filterType === 'all' ||
       parsed?.filterType === 'no_invoice' ||
       parsed?.filterType === 'prepaid_pending' ||
       parsed?.filterType === 'full'
@@ -1263,6 +1292,9 @@ const restoreInvoiceCandidatePrefs = () => {
     }
     if (typeof parsed?.customerName === 'string') {
       invoiceCandidateCustomerName.value = parsed.customerName
+    }
+    if (typeof parsed?.category === 'string') {
+      invoiceCandidateCategory.value = parsed.category
     }
     const size = Number(parsed?.pageSize)
     if (Number.isFinite(size) && size >= 1) {
@@ -1280,6 +1312,7 @@ const persistInvoiceCandidatePrefs = () => {
       JSON.stringify({
         filterType: invoiceCandidateFilterType.value,
         customerName: invoiceCandidateCustomerName.value,
+        category: invoiceCandidateCategory.value,
         keyword: invoiceCandidateKeyword.value,
         pageSize: invoiceCandidatePageSize.value
       })
@@ -1717,6 +1750,7 @@ const loadInvoiceCandidates = async (resetPage = false) => {
       filterType: invoiceCandidateFilterType.value,
       keyword: invoiceCandidateKeyword.value.trim() || undefined,
       customerName: selectedCustomerName || undefined,
+      category: invoiceCandidateCategory.value.trim() || undefined,
       page: invoiceCandidatePage.value,
       pageSize: invoiceCandidatePageSize.value
     })
@@ -1740,7 +1774,9 @@ const loadInvoiceCandidates = async (resetPage = false) => {
       contractNo: String(it.contractNo || ''),
       unitPrice: Number(it.unitPrice) || 0,
       orderQuantity: Number(it.orderQuantity) || 0,
-      orderAmount: Number(it.orderAmount) || 0
+      orderAmount: Number(it.orderAmount) || 0,
+      invoiceDocumentStatus: String(it.invoiceDocumentStatus || ''),
+      uninvoicedAmount: Number(it.uninvoicedAmount) || 0
     }))
     await nextTick()
     await syncInvoiceCandidateSelection()

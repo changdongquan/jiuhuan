@@ -59,8 +59,16 @@
 
       <div v-if="tableMode !== 'overview'" class="cq-mobile-card__finance">
         <div class="cq-mobile-pair">
+          <span>开票状态</span>
+          <strong>{{ row.invoiceDocumentStatus || '-' }}</strong>
+        </div>
+        <div class="cq-mobile-pair">
           <span>开票金额</span>
           <strong>{{ formatAmount(row.invoiceAmount) }}</strong>
+        </div>
+        <div class="cq-mobile-pair">
+          <span>发票回款状态</span>
+          <strong>{{ row.receiptDocumentStatus || '-' }}</strong>
         </div>
         <div class="cq-mobile-pair">
           <span>回款金额</span>

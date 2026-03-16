@@ -138,6 +138,18 @@
             <el-option label="已开全额发票" value="已开全额发票" />
           </el-select>
         </el-form-item>
+        <el-form-item label="发票回款状态">
+          <el-select
+            :model-value="queryForm.receiptStatus"
+            clearable
+            placeholder="全部"
+            @update:model-value="patchQueryForm({ receiptStatus: normalizeText($event) })"
+          >
+            <el-option label="待回款" value="待回款" />
+            <el-option label="部分回款" value="部分回款" />
+            <el-option label="已结清" value="已结清" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="执行进度">
           <div class="cq-progress-range">
             <el-select

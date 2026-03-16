@@ -266,6 +266,16 @@
                           formatAmount(row.invoiceAmount)
                         }}</template>
                       </el-table-column>
+                      <el-table-column label="开票状态" width="120" align="center">
+                        <template #default="{ row }">
+                          <el-tag
+                            :type="getInvoiceDocumentStatusTagType(row.invoiceDocumentStatus)"
+                            class="cq-status-tag--fixed"
+                          >
+                            {{ row.invoiceDocumentStatus || '-' }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
                       <el-table-column label="开票比例" width="96" align="right">
                         <template #default="{ row }">{{
                           formatPercent(row.invoiceProgress)
@@ -281,7 +291,17 @@
                           formatAmount(row.unreceivedAmount)
                         }}</template>
                       </el-table-column>
-                      <el-table-column label="结清状态" width="120" align="center">
+                      <el-table-column label="发票回款状态" width="120" align="center">
+                        <template #default="{ row }">
+                          <el-tag
+                            :type="getReceiptDocumentStatusTagType(row.receiptDocumentStatus)"
+                            class="cq-status-tag--fixed"
+                          >
+                            {{ row.receiptDocumentStatus || '-' }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="订单结清状态" width="120" align="center">
                         <template #default="{ row }">
                           <el-tag
                             :type="getSettlementStatusTagType(row.settlementStatus)"
@@ -580,6 +600,7 @@ const createEmptyQueryForm = (): QueryForm => ({
   category: '',
   settlementStatus: '',
   invoiceStatus: '',
+  receiptStatus: '',
   progressType: '',
   progressMin: '',
   progressMax: '',
@@ -623,9 +644,9 @@ const tableSort = reactive<{
   order: '' | 'asc' | 'desc'
   defaultOrder: '' | 'ascending' | 'descending'
 }>({
-  prop: '',
-  order: '',
-  defaultOrder: ''
+  prop: 'projectCode',
+  order: 'asc',
+  defaultOrder: 'ascending'
 })
 
 const anomalyLabelMap: Record<string, string> = {
@@ -656,6 +677,7 @@ const cloneQuerySnapshot = (source: QueryForm): QuerySnapshot => ({
   category: source.category,
   settlementStatus: source.settlementStatus,
   invoiceStatus: source.invoiceStatus,
+  receiptStatus: source.receiptStatus,
   progressType: source.progressType,
   progressMin: source.progressMin,
   progressMax: source.progressMax,
@@ -668,6 +690,7 @@ const assignQueryForm = (target: QueryForm, source: QuerySnapshot | QueryForm) =
   target.category = source.category
   target.settlementStatus = source.settlementStatus
   target.invoiceStatus = source.invoiceStatus
+  target.receiptStatus = source.receiptStatus
   target.progressType = source.progressType
   target.progressMin = source.progressMin
   target.progressMax = source.progressMax
@@ -688,6 +711,7 @@ const buildListParamsFromSnapshot = (
   category: source.category || undefined,
   settlementStatus: source.settlementStatus || undefined,
   invoiceStatus: source.invoiceStatus || undefined,
+  receiptStatus: source.receiptStatus || undefined,
   progressType: source.progressType || undefined,
   progressMin: normalizePercentValue(source.progressMin),
   progressMax: normalizePercentValue(source.progressMax),
@@ -811,6 +835,20 @@ const getSettlementStatusTagType = (status?: string) => {
   return 'warning'
 }
 
+const getInvoiceDocumentStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  if (status === '已开全额发票') return 'success'
+  if (status === '仅开部分发票') return 'warning'
+  return 'info'
+}
+
+const getReceiptDocumentStatusTagType = (status?: string) => {
+  if (!status) return 'info'
+  if (status === '已结清') return 'success'
+  if (status === '部分回款') return 'warning'
+  return 'info'
+}
+
 const formatAmount = (value: number) => {
   const amount = Number(value || 0)
   if (!Number.isFinite(amount) || amount === 0) return '-'
@@ -918,6 +956,7 @@ const suggestTableMode = (source: QueryForm): TableMode => {
   if (
     source.settlementStatus ||
     source.invoiceStatus ||
+    source.receiptStatus ||
     source.progressType ||
     source.progressMin ||
     source.progressMax ||

@@ -28,9 +28,10 @@ export interface FinanceReceiptQueryParams {
 }
 
 export interface FinanceInvoiceCandidateQueryParams {
-  filterType?: 'no_invoice' | 'prepaid_pending' | 'full'
+  filterType?: '' | 'all' | 'no_invoice' | 'prepaid_pending' | 'full'
   keyword?: string
   customerName?: string
+  category?: string
   page?: number
   pageSize?: number
 }

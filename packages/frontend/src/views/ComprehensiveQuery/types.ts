@@ -4,6 +4,7 @@ export interface QueryForm {
   category: string
   settlementStatus: string
   invoiceStatus: string
+  receiptStatus: string
   progressType: string
   progressMin: string
   progressMax: string

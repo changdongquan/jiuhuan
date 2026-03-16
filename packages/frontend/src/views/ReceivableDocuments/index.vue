@@ -926,9 +926,9 @@
           :style="{ width: isMobile ? '100%' : '180px' }"
           @change="loadReceiptCandidates(true)"
         >
-          <el-option label="全部应收" value="all" />
-          <el-option label="已开票欠款" value="invoice_detail" />
-          <el-option label="未开票预付款" value="prepayment_order" />
+          <el-option label="全部候选" value="all" />
+          <el-option label="发票未结清" value="invoice_detail" />
+          <el-option label="订单未开票余额" value="prepayment_order" />
         </el-select>
         <el-select
           v-model="receiptCandidateCustomerName"
@@ -984,7 +984,7 @@
         @selection-change="handleReceiptCandidateSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="sourceLabel" label="应收来源" width="120" show-overflow-tooltip />
+        <el-table-column prop="sourceLabel" label="来源口径" width="130" show-overflow-tooltip />
         <el-table-column prop="detailId" label="明细ID" width="90" />
         <el-table-column
           prop="itemCode"
@@ -1017,7 +1017,7 @@
           min-width="160"
           show-overflow-tooltip
         />
-        <el-table-column :label="receiptCandidateAmountLabel" width="120" align="right">
+        <el-table-column :label="receiptCandidateAmountLabel" width="130" align="right">
           <template #default="{ row }">{{ formatAmount(row.receivableAmount || 0) }}</template>
         </el-table-column>
       </el-table>
@@ -1397,7 +1397,7 @@ const receiptCandidateCustomerSelectOptions = computed(() => {
 })
 
 const receiptCandidateAmountLabel = computed(() =>
-  receiptCandidateSourceType.value === 'prepayment_order' ? '订单金额' : '应收金额'
+  receiptCandidateSourceType.value === 'prepayment_order' ? '未开票金额' : '待回款金额'
 )
 
 const getReceiptCandidateKey = (item: ReceiptCandidate) => String(item.sourceKey || '')
@@ -1847,7 +1847,7 @@ const loadReceiptCandidates = async (resetPage = false) => {
       sourceType: String(it.sourceType || 'invoice_detail') as ReceiptCandidate['sourceType'],
       sourceKey: String(it.sourceKey || ''),
       sourceLabel:
-        String(it.sourceType || '') === 'prepayment_order' ? '未开票预付款' : '已开票欠款',
+        String(it.sourceType || '') === 'prepayment_order' ? '订单未开票余额' : '发票未结清',
       itemCode: String(it.itemCode || ''),
       productName: String(it.productName || ''),
       productDrawingNo: String(it.productDrawingNo || ''),

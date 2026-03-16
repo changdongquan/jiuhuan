@@ -314,8 +314,10 @@ const buildExportRows = (rows) => {
     remark: row.remark || '',
     costSource: row.costSource || '',
     invoiceAmount: amount(row.invoiceAmount),
+    invoiceDocumentStatus: row.invoiceDocumentStatus || '',
     receiptAmount: amount(row.receiptAmount),
     discountAmount: amount(row.discountAmount),
+    receiptDocumentStatus: row.receiptDocumentStatus || '',
     uninvoicedAmount: amount(row.uninvoicedAmount),
     unreceivedAmount: amount(row.unreceivedAmount),
     orderArrearsAmount: amount(row.orderArrearsAmount),
@@ -348,8 +350,10 @@ const getExportColumns = () => {
     { header: '备注', key: 'remark' },
     { header: '费用出处', key: 'costSource' },
     { header: '开票金额', key: 'invoiceAmount' },
+    { header: '开票状态', key: 'invoiceDocumentStatus' },
     { header: '回款金额', key: 'receiptAmount' },
     { header: '贴息金额', key: 'discountAmount' },
+    { header: '发票回款状态', key: 'receiptDocumentStatus' },
     { header: '未开票金额', key: 'uninvoicedAmount' },
     { header: '开票欠款', key: 'unreceivedAmount' },
     { header: '订单欠款', key: 'orderArrearsAmount' },
@@ -447,6 +451,29 @@ const buildSettlementSourceSql = (alias = 'base') => {
   END`
 }
 
+const buildInvoiceDocumentStatusSql = (alias = 'base') => {
+  const salesAmount = buildRoundedAmountSql(alias, 'salesAmount')
+  const invoiceAmount = buildRoundedAmountSql(alias, 'invoiceAmount')
+  return `CASE
+    WHEN ${salesAmount} <= 0 AND ${invoiceAmount} <= 0 THEN N''
+    WHEN ${invoiceAmount} <= 0 THEN N'未开票'
+    WHEN ${salesAmount} > 0 AND ${invoiceAmount} < ${salesAmount} THEN N'仅开部分发票'
+    WHEN ${invoiceAmount} > 0 THEN N'已开全额发票'
+    ELSE N''
+  END`
+}
+
+const buildReceiptDocumentStatusSql = (alias = 'base') => {
+  const invoiceAmount = buildRoundedAmountSql(alias, 'invoiceAmount')
+  const receiptTotal = buildRoundedReceiptTotalSql(alias)
+  return `CASE
+    WHEN ${invoiceAmount} <= 0 THEN N''
+    WHEN ${receiptTotal} <= 0 THEN N'待回款'
+    WHEN ${receiptTotal} < ${invoiceAmount} THEN N'部分回款'
+    ELSE N'已结清'
+  END`
+}
+
 const buildAnomalyTypeSql = (alias = 'base') => {
   const settlementStatusSql = buildSettlementStatusSql(alias)
   const salesAmount = buildRoundedAmountSql(alias, 'salesAmount')
@@ -541,6 +568,8 @@ const buildListFilters = (inputQuery) => {
   const progressMax = Number(inputQuery.progressMax)
   const anomalyTypes = parseAnomalyTypes(inputQuery.anomalyType)
   const settlementStatusSql = buildSettlementStatusSql('base')
+  const invoiceDocumentStatusSql = buildInvoiceDocumentStatusSql('base')
+  const receiptDocumentStatusSql = buildReceiptDocumentStatusSql('base')
   const anomalyTypeSql = buildAnomalyTypeSql('base')
 
   if (keyword) {
@@ -622,17 +651,20 @@ const buildListFilters = (inputQuery) => {
   }
 
   if (invoiceStatus === '未开票') {
-    baseWhere.push(
-      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} <= 0)`
-    )
+    baseWhere.push(`(${invoiceDocumentStatusSql} = N'未开票')`)
   } else if (invoiceStatus === '仅开部分发票') {
-    baseWhere.push(
-      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} < ${buildRoundedAmountSql('base', 'salesAmount')})`
-    )
+    baseWhere.push(`(${invoiceDocumentStatusSql} = N'仅开部分发票')`)
   } else if (invoiceStatus === '已开全额发票') {
-    baseWhere.push(
-      `(${buildRoundedAmountSql('base', 'salesAmount')} > 0 AND ${buildRoundedAmountSql('base', 'invoiceAmount')} >= ${buildRoundedAmountSql('base', 'salesAmount')})`
-    )
+    baseWhere.push(`(${invoiceDocumentStatusSql} = N'已开全额发票')`)
+  }
+
+  const receiptStatus = String(inputQuery.receiptStatus || '').trim()
+  if (receiptStatus === '待回款') {
+    baseWhere.push(`(${receiptDocumentStatusSql} = N'待回款')`)
+  } else if (receiptStatus === '部分回款') {
+    baseWhere.push(`(${receiptDocumentStatusSql} = N'部分回款')`)
+  } else if (receiptStatus === '已结清') {
+    baseWhere.push(`(${receiptDocumentStatusSql} = N'已结清')`)
   }
 
   if (anomalyTypes.length > 0) {
@@ -727,9 +759,6 @@ const buildBaseCteSql = (sourceWhereSql) => {
         ISNULL(fr.receiptAmount, 0) as receiptAmount,
         ISNULL(fr.discountAmount, 0) as discountAmount,
         msl.manualSettlementStatus as manualSettlementStatus,
-        pss.projectSettlementStatus as projectSettlementStatus,
-        pss.projectReceiptStatus as projectReceiptStatus,
-        ISNULL(rcv.receivableAllSettled, 0) as receivableAllSettled,
         s.latestOrderDate as latestOrderDate,
         od.latestOutboundDate as latestOutboundDate,
         fi.latestInvoiceDate as latestInvoiceDate,
@@ -870,25 +899,6 @@ const buildBaseCteSql = (sourceWhereSql) => {
           AND ISNULL(l.enabled, 0) = 1
         ORDER BY l.updated_at DESC, l.id DESC
       ) msl
-      OUTER APPLY (
-        SELECT TOP 1
-          q.项目结清状态 as projectSettlementStatus,
-          q.回款状态 as projectReceiptStatus
-        FROM dbo.项目汇总查询 q
-        WHERE q.项目编号 = p.项目编号
-      ) pss
-      OUTER APPLY (
-        SELECT
-          CASE
-            WHEN COUNT(1) > 0
-              AND COUNT(1) = SUM(CASE WHEN LTRIM(RTRIM(rq.是否结清)) = N'已结清' THEN 1 ELSE 0 END)
-            THEN 1
-            ELSE 0
-          END as receivableAllSettled
-        FROM dbo.应收金额和结清状态查询 rq
-        WHERE rq.项目编号 = p.项目编号
-          AND NULLIF(LTRIM(RTRIM(rq.是否结清)), N'') IS NOT NULL
-      ) rcv
       ${sourceWhereSql}
     )
   `
@@ -1239,6 +1249,8 @@ router.get('/list', async (req, res) => {
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
     const settlementStatusSql = buildSettlementStatusSql('base')
     const settlementSourceSql = buildSettlementSourceSql('base')
+    const invoiceDocumentStatusSql = buildInvoiceDocumentStatusSql('base')
+    const receiptDocumentStatusSql = buildReceiptDocumentStatusSql('base')
     const anomalyTypeSql = buildAnomalyTypeSql('base')
     const orderBySql = buildListOrderBySql(req.query)
 
@@ -1281,10 +1293,13 @@ router.get('/list', async (req, res) => {
         base.invoiceCount,
         base.invoiceAmount,
         base.invoiceProgress,
+        ${invoiceDocumentStatusSql} as invoiceDocumentStatus,
         base.receiptCount,
         base.receiptAmount,
         base.discountAmount,
         base.receiptProgress,
+        base.receiptInvoiceProgress,
+        ${receiptDocumentStatusSql} as receiptDocumentStatus,
         ${settlementStatusSql} as settlementStatus,
         ${settlementSourceSql} as settlementSource,
         base.uninvoicedAmount,
@@ -1329,6 +1344,8 @@ router.get('/export', requireComprehensiveExport, async (req, res) => {
     const baseCteSql = buildBaseCteSql(sourceWhereSql)
     const settlementStatusSql = buildSettlementStatusSql('base')
     const settlementSourceSql = buildSettlementSourceSql('base')
+    const invoiceDocumentStatusSql = buildInvoiceDocumentStatusSql('base')
+    const receiptDocumentStatusSql = buildReceiptDocumentStatusSql('base')
     const anomalyTypeSql = buildAnomalyTypeSql('base')
     const orderBySql = buildListOrderBySql(req.query)
 
@@ -1356,9 +1373,12 @@ router.get('/export', requireComprehensiveExport, async (req, res) => {
         base.outboundQty,
         base.invoiceCount,
         base.invoiceAmount,
+        ${invoiceDocumentStatusSql} as invoiceDocumentStatus,
         base.receiptCount,
         base.receiptAmount,
         base.discountAmount,
+        base.receiptInvoiceProgress,
+        ${receiptDocumentStatusSql} as receiptDocumentStatus,
         ${settlementStatusSql} as settlementStatus,
         ${settlementSourceSql} as settlementSource,
         base.uninvoicedAmount,
