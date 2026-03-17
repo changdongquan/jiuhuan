@@ -1208,16 +1208,54 @@
           </div>
 
           <div v-if="mergePreview" class="so-merge-preview-card">
-            <div class="so-merge-preview-card__title">合并结果</div>
-            <div class="so-merge-preview-card__grid">
-              <div>保留订单编号：{{ mergePreview.orderNo }}</div>
-              <div>订单日期：{{ formatDate(mergeTargetRow?.orderDate) || '-' }}</div>
-              <div>签订日期：{{ formatDate(mergeTargetRow?.signDate) || '-' }}</div>
-              <div>合同号：{{ mergeTargetRow?.contractNo || '-' }}</div>
-              <div>合并后明细：{{ mergePreview.detailCount }}</div>
-              <div>合并后总数量：{{ mergePreview.totalQuantity }}</div>
-              <div>合并后总金额：{{ formatAmount(mergePreview.totalAmount) }}</div>
-              <div>源订单将消失：{{ mergeSourceSnapshot?.orderNo || '-' }}</div>
+            <div class="so-merge-preview-card__title">合并后订单</div>
+            <div class="so-merge-summary-card">
+              <div class="so-merge-summary-card__main">
+                <div class="so-merge-summary-card__order">{{ mergePreview.orderNo }}</div>
+                <div class="so-merge-summary-card__customer">
+                  {{ mergeTargetRow?.customerName || '-' }}
+                </div>
+              </div>
+              <div class="so-merge-summary-card__grid">
+                <div>订单日期：{{ formatDate(mergeTargetRow?.orderDate) || '-' }}</div>
+                <div>签订日期：{{ formatDate(mergeTargetRow?.signDate) || '-' }}</div>
+                <div>合同号：{{ mergeTargetRow?.contractNo || '-' }}</div>
+                <div>源订单将消失：{{ mergeSourceSnapshot?.orderNo || '-' }}</div>
+                <div>合并后明细：{{ mergePreview.detailCount }}</div>
+                <div>合并后总数量：{{ mergePreview.totalQuantity }}</div>
+                <div>合并后总金额：{{ formatAmount(mergePreview.totalAmount) }}</div>
+              </div>
+              <div v-if="mergePreview.details.length" class="so-merge-detail-list">
+                <div class="so-merge-detail-list__title">合并后明细</div>
+                <div
+                  v-for="(detail, index) in mergePreview.details"
+                  :key="`${detail.source}-${detail.id || detail.itemCode || detail.productName || index}`"
+                  class="so-merge-detail-item"
+                >
+                  <div class="so-merge-detail-item__head">
+                    <span class="so-merge-detail-item__code">{{ detail.itemCode || '-' }}</span>
+                    <span class="so-merge-detail-item__qty">数量 {{ detail.quantity || 0 }}</span>
+                  </div>
+                  <div class="so-merge-detail-item__meta">
+                    <span
+                      class="so-merge-detail-item__source"
+                      :class="
+                        detail.source === 'target'
+                          ? 'so-merge-detail-item__source--target'
+                          : 'so-merge-detail-item__source--source'
+                      "
+                    >
+                      {{ detail.source === 'target' ? '原目标订单' : '源订单并入' }}
+                    </span>
+                    <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
+                    <span v-if="detail.productDrawingNo">图号 {{ detail.productDrawingNo }}</span>
+                    <span v-if="detail.productName">{{ detail.productName }}</span>
+                    <span v-if="detail.deliveryDate"
+                      >交付 {{ formatDate(detail.deliveryDate) }}</span
+                    >
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="so-merge-preview-card__notice">
               外部引用会自动改绑到目标订单；附件将随订单编号一并更新。
@@ -1773,6 +1811,10 @@ interface OrderTableRow extends SalesOrder {
   totalAmount: number
 }
 
+type MergePreviewDetail = SalesOrderDetail & {
+  source: 'source' | 'target'
+}
+
 type ViewMode = 'table' | 'card' | 'timeline'
 
 interface TimelineGroup {
@@ -2042,9 +2084,18 @@ const mergePreview = computed(() => {
   const src = mergeSourceSnapshot.value
   const tgt = mergeTargetRow.value
   if (!src?.orderNo || !tgt?.orderNo) return null
+  const details: MergePreviewDetail[] = [
+    ...(Array.isArray(tgt.details)
+      ? tgt.details.map((detail) => ({ ...detail, source: 'target' as const }))
+      : []),
+    ...(Array.isArray(src.details)
+      ? src.details.map((detail) => ({ ...detail, source: 'source' as const }))
+      : [])
+  ]
   return {
     orderNo: tgt.orderNo,
-    detailCount: Number(tgt.details?.length || 0) + Number(src.details?.length || 0),
+    details,
+    detailCount: details.length,
     totalQuantity: Number(tgt.totalQuantity || 0) + Number(src.totalQuantity || 0),
     totalAmount: Number(tgt.totalAmount || 0) + Number(src.totalAmount || 0)
   }
@@ -4861,6 +4912,27 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.5;
   color: var(--el-text-color-secondary);
+}
+
+.so-merge-detail-item__source {
+  display: inline-flex;
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  border-radius: 999px;
+  align-items: center;
+}
+
+.so-merge-detail-item__source--target {
+  color: #5b8a12;
+  background: rgb(103 194 58 / 12%);
+}
+
+.so-merge-detail-item__source--source {
+  color: #8a5808;
+  background: rgb(230 162 60 / 14%);
 }
 
 .so-merge-target-state {
