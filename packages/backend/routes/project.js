@@ -248,6 +248,25 @@ const resolveFirstProductWeight = (row) => {
   return toNumber(row?.产品重量)
 }
 
+const parseCorePullQtyMap = (row) => {
+  const result = {}
+  try {
+    const raw = row?.抽芯明细
+    if (!raw) return result
+    const parsed = JSON.parse(String(raw))
+    if (!Array.isArray(parsed)) return result
+    return parsed.reduce((acc, item) => {
+      if (!item || typeof item !== 'object') return acc
+      const key = String(item.方式 || '').trim()
+      if (!key) return acc
+      acc[key] = item.数量
+      return acc
+    }, {})
+  } catch {
+    return result
+  }
+}
+
 const buildTripartiteAgreementContext = (row) => {
   const runnerType = String(row?.流道类型 || '').trim()
   const gateType = String(row?.浇口类型 || '').trim()
@@ -262,22 +281,7 @@ const buildTripartiteAgreementContext = (row) => {
   const runnerQty =
     row?.流道数量 === null || row?.流道数量 === undefined ? '' : String(row.流道数量)
 
-  let corePullMap = {}
-  try {
-    const raw = row?.抽芯明细
-    if (raw) {
-      const parsed = JSON.parse(String(raw))
-      if (Array.isArray(parsed)) {
-        corePullMap = parsed.reduce((acc, item) => {
-          if (!item || typeof item !== 'object') return acc
-          const key = String(item.方式 || '').trim()
-          if (!key) return acc
-          acc[key] = item.数量
-          return acc
-        }, {})
-      }
-    }
-  } catch (e) { /* ignore */ }
+  const corePullMap = parseCorePullQtyMap(row)
 
   const corePullMarkQty = (methodLabel) => {
     const qty = corePullMap[methodLabel]
@@ -586,9 +590,31 @@ const validateTripartiteAgreementRow = (row) => {
   if (isEmpty(row?.产品材质)) add('part_material', '产品材质', '不能为空')
   if (isEmpty(row?.前模材质)) add('cavity_material', '前模材质', '不能为空')
   if (isEmpty(row?.后模材质)) add('core_material', '后模材质', '不能为空')
-  if (isEmpty(row?.滑块材质)) add('slider_material', '滑块材质', '不能为空')
   if (isEmpty(row?.模具穴数)) add('cavity_count', '模具穴数', '不能为空')
   if (isEmpty(row?.首次送样日期)) add('first_sample_date', '首次送样日期', '不能为空')
+
+  const sliderMaterial = String(row?.滑块材质 || '').trim()
+  const corePullMap = parseCorePullQtyMap(row)
+  const hasAnyCorePullQty = ['斜导柱', '斜滑块', '油缸'].some((method) => {
+    const raw = corePullMap[method]
+    if (raw === null || raw === undefined || String(raw).trim() === '') return false
+    const qty = Number(raw)
+    return Number.isFinite(qty) && qty > 0
+  })
+  if (sliderMaterial && !hasAnyCorePullQty) {
+    add(
+      'slider_material_core_pull_lock',
+      '滑块材质/抽芯互锁',
+      '已填写滑块材质时，抽芯方式（斜导柱/斜滑块/油缸）至少一项数量需大于 0'
+    )
+  }
+  if (!sliderMaterial && hasAnyCorePullQty) {
+    add(
+      'slider_material_core_pull_lock',
+      '滑块材质/抽芯互锁',
+      '抽芯方式（斜导柱/斜滑块/油缸）存在数量时，滑块材质不能为空'
+    )
+  }
 
   // 3.1.1 流道/浇口：唯一且数量为正整数
   const runnerType = String(row?.流道类型 || '').trim()
