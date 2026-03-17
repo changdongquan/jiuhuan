@@ -254,7 +254,7 @@ const applyExcelAccountingFormat = (worksheet, key, rowStart = 2) => {
 const applyExcelHeaderStyle = (worksheet, colStart, colEnd) => {
   for (let c = colStart; c <= colEnd; c += 1) {
     const cell = worksheet.getCell(1, c)
-    cell.font = { bold: true, color: { argb: 'FF243447' } }
+    cell.font = { ...(cell.font || {}), bold: true, size: 10, color: { argb: 'FF243447' } }
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
@@ -269,6 +269,14 @@ const applyExcelDataAreaStyle = (worksheet, keys, rows) => {
   if (colCount <= 0) return
   const rowStart = 1
   const rowEnd = Math.max(rows.length + 1, 2)
+  for (let r = rowStart; r <= rowEnd; r += 1) {
+    const row = worksheet.getRow(r)
+    row.height = 20
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = { ...(cell.font || {}), size: 10 }
+      cell.alignment = { ...(cell.alignment || {}), vertical: 'middle' }
+    })
+  }
   applyExcelHeaderStyle(worksheet, 1, colCount)
   applyExcelDataBorders(worksheet, rowStart, rowEnd, 1, colCount)
   if (!rows.length) return
@@ -297,7 +305,8 @@ const buildExportRows = (rows) => {
     overdue: '订单超期未回款'
   }
   const amount = (v) => Number(safeNumber(v).toFixed(2))
-  return (rows || []).map((row) => ({
+  return (rows || []).map((row, idx) => ({
+    seq: idx + 1,
     projectCode: row.projectCode || '',
     customerName: row.customerName || '',
     productName: row.productName || '',
@@ -334,6 +343,7 @@ const buildExportRows = (rows) => {
 
 const getExportColumns = () => {
   return [
+    { header: '序号', key: 'seq' },
     { header: '项目编号', key: 'projectCode' },
     { header: '客户名称', key: 'customerName' },
     { header: '产品名称', key: 'productName' },
@@ -384,6 +394,7 @@ const buildExportWorkbookBuffer = async (rows) => {
       maxWidth: 72,
       extraPadding: 4,
       minWidthMap: {
+        seq: 8,
         orderQuantity: 12,
         salesAmount: 20,
         unitPrice: 18,
