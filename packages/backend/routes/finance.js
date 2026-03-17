@@ -50,6 +50,10 @@ const RECEIPT_SOURCE_TYPES = {
   prepayment: 'prepayment_order'
 }
 
+const INVOICE_SOURCE_TYPES = {
+  salesOrder: 'sales_order'
+}
+
 const buildPrepaymentSourceKeySql = (alias = 's', customerAlias = 'p') =>
   `CONCAT(
     ISNULL(NULLIF(LTRIM(RTRIM(${alias}.项目编号)), N''), N''),
@@ -60,6 +64,9 @@ const buildPrepaymentSourceKeySql = (alias = 's', customerAlias = 'p') =>
     N'|',
     ISNULL(NULLIF(LTRIM(RTRIM(h.产品名称)), N''), N'')
   )`
+
+const buildInvoiceSourceKeySql = (alias = 's') =>
+  `CONVERT(NVARCHAR(100), ISNULL(${alias}.订单ID, 0))`
 
 const buildRoundedAmountSql = (alias, field) => `ROUND(ISNULL(${alias}.${field}, 0), 2)`
 
@@ -89,9 +96,173 @@ const buildReceiptDocumentStatusSql = (alias = 'base') => {
   END`
 }
 
+const buildInvoiceSourceToken = (detail = {}) => {
+  const sourceType = String(detail.sourceType || '').trim()
+  const sourceKey = String(detail.sourceKey || '').trim()
+  if (sourceType && sourceKey) {
+    return `source|${sourceType}|${sourceKey}`
+  }
+  return [
+    'legacy',
+    String(detail.itemCode || '').trim(),
+    String(detail.productName || '').trim(),
+    String(detail.productDrawingNo || '').trim(),
+    String(detail.customerPartNo || '').trim(),
+    String(detail.contractNo || '').trim()
+  ].join('|')
+}
+
+const buildReceiptSourceToken = (detail = {}) => {
+  const sourceType = String(detail.sourceType || '').trim()
+  const sourceKey = String(detail.sourceKey || '').trim()
+  if (sourceType && sourceKey) {
+    return `source|${sourceType}|${sourceKey}`
+  }
+  return [
+    'legacy',
+    String(detail.detailId ?? ''),
+    String(detail.itemCode || '').trim(),
+    String(detail.productName || '').trim(),
+    String(detail.productDrawingNo || '').trim(),
+    String(detail.customerPartNo || '').trim(),
+    String(detail.contractNo || '').trim()
+  ].join('|')
+}
+
+const buildSortedTokens = (items, tokenBuilder) =>
+  items.map((item) => tokenBuilder(item)).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+
+const sameSortedTokens = (a, b) => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+const assertUniqueSourceKeys = (details, message) => {
+  const seen = new Set()
+  for (const detail of details) {
+    const sourceType = String(detail.sourceType || '').trim()
+    const sourceKey = String(detail.sourceKey || '').trim()
+    if (!sourceType || !sourceKey) continue
+    const token = `${sourceType}|${sourceKey}`
+    if (seen.has(token)) {
+      const error = new Error(message)
+      error.statusCode = 400
+      throw error
+    }
+    seen.add(token)
+  }
+}
+
+const ensurePositiveReceiptAmounts = (details) => {
+  for (const detail of details) {
+    if (toNum(detail.amount) <= 0) {
+      const error = new Error('回款明细的实收金额必须大于 0')
+      error.statusCode = 400
+      throw error
+    }
+    if (toNum(detail.amount) + toNum(detail.discountAmount) > toNum(detail.receivableAmount)) {
+      const error = new Error('回款明细的实收金额与贴息金额之和不能超过应收金额')
+      error.statusCode = 400
+      throw error
+    }
+  }
+}
+
+const throwHttpError = (message, statusCode = 400) => {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  throw error
+}
+
+const getReceiptCapacityForSource = async (tx, sourceType, sourceKey, excludeDocumentNo = null) => {
+  if (!sourceType || !sourceKey) return null
+  if (sourceType === RECEIPT_SOURCE_TYPES.invoice) {
+    const reqTx = new sql.Request(tx)
+    reqTx.input('detailId', sql.Int, Number(sourceKey))
+    reqTx.input('excludeDocumentNo', sql.NVarChar, excludeDocumentNo || null)
+    const rows = await reqTx.query(`
+      SELECT
+        ISNULL(f.金额, 0) as invoiceAmount,
+        ISNULL((
+          SELECT SUM(ISNULL(r.实收金额, 0) + ISNULL(r.贴息金额, 0))
+          FROM 回款单据 r
+          WHERE ISNULL(r.是否删除, 0) = 0
+            AND r.来源类型 = N'${RECEIPT_SOURCE_TYPES.invoice}'
+            AND r.来源键 = CONVERT(NVARCHAR(100), f.明细ID)
+            AND (@excludeDocumentNo IS NULL OR r.单据编号 <> @excludeDocumentNo)
+        ), 0) as alreadyReceived
+      FROM 发票明细 f
+      INNER JOIN 开票单据 i ON i.发票ID = f.发票ID
+      WHERE f.明细ID = @detailId
+        AND ISNULL(i.是否删除, 0) = 0
+        AND ISNULL(f.是否已红冲, 0) = 0
+    `)
+    const row = rows.recordset?.[0]
+    if (!row) return null
+    return Math.max(0, toNum(row.invoiceAmount) - toNum(row.alreadyReceived))
+  }
+
+  if (sourceType === RECEIPT_SOURCE_TYPES.prepayment) {
+    const reqTx = new sql.Request(tx)
+    reqTx.input('sourceKey', sql.NVarChar, sourceKey)
+    reqTx.input('excludeDocumentNo', sql.NVarChar, excludeDocumentNo || null)
+    const rows = await reqTx.query(`
+      SELECT TOP 1
+        ISNULL(s.总金额, 0) as orderAmount,
+        ISNULL(inv.totalInvoiced, 0) as totalInvoiced,
+        ISNULL(rcv.totalReceived, 0) as totalReceived
+      FROM 销售订单 s
+      INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
+      OUTER APPLY (
+        SELECT TOP 1 h.产品名称
+        FROM 货物信息 h
+        WHERE h.项目编号 = s.项目编号
+        ORDER BY
+          CASE WHEN NULLIF(LTRIM(RTRIM(h.产品名称)), N'') IS NULL THEN 1 ELSE 0 END ASC,
+          h.产品名称 ASC,
+          h.产品图号 ASC
+      ) h
+      OUTER APPLY (
+        SELECT ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as totalInvoiced
+        FROM 发票明细 fd
+        INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
+        WHERE ISNULL(inv.是否删除, 0) = 0
+          AND ISNULL(fd.是否已红冲, 0) = 0
+          AND fd.项目编号 = s.项目编号
+          AND (
+            NULLIF(s.合同号, N'') IS NULL
+            OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+          )
+      ) inv
+      OUTER APPLY (
+        SELECT ISNULL(SUM(ISNULL(r.实收金额, 0) + ISNULL(r.贴息金额, 0)), 0) as totalReceived
+        FROM 回款单据 r
+        WHERE ISNULL(r.是否删除, 0) = 0
+          AND r.来源类型 = N'${RECEIPT_SOURCE_TYPES.prepayment}'
+          AND r.来源键 = @sourceKey
+          AND (@excludeDocumentNo IS NULL OR r.单据编号 <> @excludeDocumentNo)
+      ) rcv
+      WHERE ${buildPrepaymentSourceKeySql('s', 'p')} = @sourceKey
+        AND (s.状态 IS NULL OR s.状态 <> N'已删除')
+    `)
+    const row = rows.recordset?.[0]
+    if (!row) return null
+    return Math.max(0, toNum(row.orderAmount) - toNum(row.totalInvoiced) - toNum(row.totalReceived))
+  }
+
+  return null
+}
+
 const ensureFinanceSoftDeleteColumns = async (poolOrTx) => {
   const req = new sql.Request(poolOrTx)
   await req.batch(`
+    IF COL_LENGTH(N'发票明细', N'来源类型') IS NULL
+      ALTER TABLE 发票明细 ADD 来源类型 NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'发票明细', N'来源键') IS NULL
+      ALTER TABLE 发票明细 ADD 来源键 NVARCHAR(300) NULL;
     IF COL_LENGTH(N'开票单据', N'是否删除') IS NULL
       ALTER TABLE 开票单据 ADD 是否删除 BIT NOT NULL CONSTRAINT DF_开票单据_是否删除 DEFAULT(0);
     IF COL_LENGTH(N'开票单据', N'删除时间') IS NULL
@@ -109,6 +280,18 @@ const ensureFinanceSoftDeleteColumns = async (poolOrTx) => {
       ALTER TABLE 回款单据 ADD 来源类型 NVARCHAR(50) NULL;
     IF COL_LENGTH(N'回款单据', N'来源键') IS NULL
       ALTER TABLE 回款单据 ADD 来源键 NVARCHAR(300) NULL;
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = N'IX_发票明细_发票来源'
+        AND object_id = OBJECT_ID(N'发票明细')
+    )
+      CREATE INDEX IX_发票明细_发票来源 ON 发票明细 (发票ID, 来源类型, 来源键);
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = N'IX_回款单据_来源'
+        AND object_id = OBJECT_ID(N'回款单据')
+    )
+      CREATE INDEX IX_回款单据_来源 ON 回款单据 (来源类型, 来源键);
   `)
 }
 
@@ -217,6 +400,8 @@ router.get('/invoices/list', requireBillingRead, async (req, res) => {
         d.单价 as unitPrice,
         d.金额 as amount,
         d.备注 as remark,
+        d.来源类型 as sourceType,
+        d.来源键 as sourceKey,
         d.是否已开全额发票 as fullIssued,
         d.是否已开预付发票 as prepaidIssued,
         d.是否已开验收发票 as acceptanceIssued,
@@ -262,6 +447,8 @@ router.get('/invoices/list', requireBillingRead, async (req, res) => {
           productDrawingNo: String(row.productDrawingNo || ''),
           customerPartNo: String(row.customerPartNo || ''),
           contractNo: String(row.contractNo || ''),
+          sourceType: String(row.sourceType || ''),
+          sourceKey: String(row.sourceKey || ''),
           quantity: toNum(row.quantity),
           unitPrice: toNum(row.unitPrice),
           amount: toNum(row.amount),
@@ -334,9 +521,11 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
     const candidateSql = `
       WITH base AS (
         SELECT
+          N'${INVOICE_SOURCE_TYPES.salesOrder}' as sourceType,
+          ${buildInvoiceSourceKeySql('s')} as sourceKey,
           s.项目编号 as itemCode,
-          h.产品名称 as productName,
-          h.产品图号 as productDrawingNo,
+          goods.产品名称 as productName,
+          goods.产品图号 as productDrawingNo,
           p.客户模号 as customerPartNo,
           c.客户ID as customerId,
           c.客户名称 as customerName,
@@ -356,19 +545,39 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
           ISNULL(rcv.discountAmount, 0) as discountAmount
         FROM 销售订单 s
         INNER JOIN 项目管理 p ON s.项目编号 = p.项目编号
-        INNER JOIN 货物信息 h ON s.项目编号 = h.项目编号
         LEFT JOIN 客户信息 c ON p.客户ID = c.客户ID
+        OUTER APPLY (
+          SELECT TOP 1
+            h.产品名称,
+            h.产品图号,
+            h.分类
+          FROM 货物信息 h
+          WHERE h.项目编号 = s.项目编号
+          ORDER BY
+            CASE WHEN NULLIF(LTRIM(RTRIM(h.产品名称)), N'') IS NULL THEN 1 ELSE 0 END ASC,
+            h.产品名称 ASC,
+            h.产品图号 ASC
+        ) goods
         OUTER APPLY (
           SELECT
             ISNULL(SUM(ISNULL(fd.金额, 0)), 0) as invoiceAmount
           FROM 发票明细 fd
           INNER JOIN 开票单据 inv ON inv.发票ID = fd.发票ID
-          WHERE fd.项目编号 = s.项目编号
-            AND ISNULL(inv.是否删除, 0) = 0
+          WHERE ISNULL(inv.是否删除, 0) = 0
             AND ISNULL(fd.是否已红冲, 0) = 0
             AND (
-              NULLIF(s.合同号, N'') IS NULL
-              OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+              (
+                NULLIF(fd.来源类型, N'') = N'${INVOICE_SOURCE_TYPES.salesOrder}'
+                AND NULLIF(fd.来源键, N'') = ${buildInvoiceSourceKeySql('s')}
+              )
+              OR (
+                NULLIF(fd.来源类型, N'') IS NULL
+                AND fd.项目编号 = s.项目编号
+                AND (
+                  NULLIF(s.合同号, N'') IS NULL
+                  OR NULLIF(fd.合同号, N'') = NULLIF(s.合同号, N'')
+                )
+              )
             )
         ) inv
         OUTER APPLY (
@@ -386,13 +595,13 @@ router.get('/invoices/candidates', requireBillingRead, async (req, res) => {
         WHERE (s.状态 IS NULL OR s.状态 <> N'已删除')
           AND (@keyword IS NULL OR (
             s.项目编号 LIKE @keyword
-            OR h.产品名称 LIKE @keyword
-            OR h.产品图号 LIKE @keyword
+            OR goods.产品名称 LIKE @keyword
+            OR goods.产品图号 LIKE @keyword
             OR p.客户模号 LIKE @keyword
             OR s.合同号 LIKE @keyword
           ))
           AND (@customerName IS NULL OR c.客户名称 = @customerName)
-          AND (@category IS NULL OR h.分类 = @category)
+          AND (@category IS NULL OR goods.分类 = @category)
       ),
       candidates AS (
         SELECT
@@ -942,6 +1151,8 @@ router.post('/invoices', requireBillingCreate, async (req, res) => {
     const unitPrice = toNum(d.unitPrice)
     const amount = toNum(d.amount) || Number((quantity * unitPrice).toFixed(2))
     return {
+      sourceType: String(d.sourceType || '').trim() || null,
+      sourceKey: String(d.sourceKey || '').trim() || null,
       itemCode: String(d.itemCode || '').trim(),
       productName: String(d.productName || '').trim(),
       quantity,
@@ -1013,6 +1224,8 @@ router.post('/invoices', requireBillingCreate, async (req, res) => {
       const detailReq = new sql.Request(tx)
       detailReq.input('invoiceId', sql.Int, invoiceId)
       detailReq.input('itemCode', sql.NVarChar, d.itemCode)
+      detailReq.input('sourceType', sql.NVarChar, d.sourceType)
+      detailReq.input('sourceKey', sql.NVarChar, d.sourceKey)
       detailReq.input('productName', sql.NVarChar, d.productName)
       detailReq.input('quantity', sql.Float, d.quantity)
       detailReq.input('unitPrice', sql.Money, d.unitPrice)
@@ -1029,12 +1242,12 @@ router.post('/invoices', requireBillingCreate, async (req, res) => {
 
       await detailReq.query(`
         INSERT INTO 发票明细 (
-          发票ID, 项目编号, 产品名称, 数量, 单价, 金额, 备注,
+          发票ID, 来源类型, 来源键, 项目编号, 产品名称, 数量, 单价, 金额, 备注,
           是否已开全额发票, 产品图号, 客户模号, 合同号,
           是否已开预付发票, 是否已开验收发票, 是否已红冲, 是否结清
         )
         VALUES (
-          @invoiceId, @itemCode, @productName, @quantity, @unitPrice, @amount, @remark,
+          @invoiceId, @sourceType, @sourceKey, @itemCode, @productName, @quantity, @unitPrice, @amount, @remark,
           @fullIssued, @productDrawingNo, @customerPartNo, @contractNo,
           @prepaidIssued, @acceptanceIssued, @detailIsRed, @detailIsSettled
         )
@@ -1079,6 +1292,8 @@ router.put('/invoices/:invoiceId', requireBillingUpdate, async (req, res) => {
     const unitPrice = toNum(d.unitPrice)
     const amount = toNum(d.amount) || Number((quantity * unitPrice).toFixed(2))
     return {
+      sourceType: String(d.sourceType || '').trim() || null,
+      sourceKey: String(d.sourceKey || '').trim() || null,
       itemCode: String(d.itemCode || '').trim(),
       productName: String(d.productName || '').trim(),
       quantity,
@@ -1131,6 +1346,43 @@ router.put('/invoices/:invoiceId', requireBillingUpdate, async (req, res) => {
       return res.status(404).json({ code: 404, success: false, message: '发票不存在' })
     }
 
+    const existingDetailReq = new sql.Request(tx)
+    existingDetailReq.input('invoiceId', sql.Int, invoiceId)
+    const existingDetailRows = await existingDetailReq.query(`
+      SELECT
+        明细ID as detailId,
+        项目编号 as itemCode,
+        产品名称 as productName,
+        产品图号 as productDrawingNo,
+        客户模号 as customerPartNo,
+        合同号 as contractNo,
+        来源类型 as sourceType,
+        来源键 as sourceKey
+      FROM 发票明细
+      WHERE 发票ID = @invoiceId
+      ORDER BY 明细ID ASC
+    `)
+    const existingDetailList = existingDetailRows.recordset || []
+    const existingTokens = buildSortedTokens(existingDetailList, buildInvoiceSourceToken)
+    const incomingTokens = buildSortedTokens(normalizedDetails, buildInvoiceSourceToken)
+    if (!sameSortedTokens(existingTokens, incomingTokens)) {
+      await tx.rollback()
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '编辑不允许替换来源，请仅修改金额、备注等非来源字段'
+      })
+    }
+
+    try {
+      assertUniqueSourceKeys(normalizedDetails, '同一开票单据中不能重复选择相同来源')
+    } catch (error) {
+      await tx.rollback()
+      return res
+        .status(error.statusCode || 400)
+        .json({ code: error.statusCode || 400, success: false, message: error.message })
+    }
+
     const headReq = new sql.Request(tx)
     headReq.input('invoiceId', sql.Int, invoiceId)
     headReq.input('documentNo', sql.NVarChar, documentNo)
@@ -1163,6 +1415,8 @@ router.put('/invoices/:invoiceId', requireBillingUpdate, async (req, res) => {
       const detailReq = new sql.Request(tx)
       detailReq.input('invoiceId', sql.Int, invoiceId)
       detailReq.input('itemCode', sql.NVarChar, d.itemCode)
+      detailReq.input('sourceType', sql.NVarChar, d.sourceType)
+      detailReq.input('sourceKey', sql.NVarChar, d.sourceKey)
       detailReq.input('productName', sql.NVarChar, d.productName)
       detailReq.input('quantity', sql.Float, d.quantity)
       detailReq.input('unitPrice', sql.Money, d.unitPrice)
@@ -1179,12 +1433,12 @@ router.put('/invoices/:invoiceId', requireBillingUpdate, async (req, res) => {
 
       await detailReq.query(`
         INSERT INTO 发票明细 (
-          发票ID, 项目编号, 产品名称, 数量, 单价, 金额, 备注,
+          发票ID, 来源类型, 来源键, 项目编号, 产品名称, 数量, 单价, 金额, 备注,
           是否已开全额发票, 产品图号, 客户模号, 合同号,
           是否已开预付发票, 是否已开验收发票, 是否已红冲, 是否结清
         )
         VALUES (
-          @invoiceId, @itemCode, @productName, @quantity, @unitPrice, @amount, @remark,
+          @invoiceId, @sourceType, @sourceKey, @itemCode, @productName, @quantity, @unitPrice, @amount, @remark,
           @fullIssued, @productDrawingNo, @customerPartNo, @contractNo,
           @prepaidIssued, @acceptanceIssued, @detailIsRed, @detailIsSettled
         )
@@ -1312,11 +1566,30 @@ router.post('/receipts', requireReceivableCreate, async (req, res) => {
     customerName: String(d.customerName || customerName)
   }))
 
+  try {
+    assertUniqueSourceKeys(normalizedDetails, '同一回款单据中不能重复选择相同来源')
+    ensurePositiveReceiptAmounts(normalizedDetails)
+  } catch (error) {
+    return res
+      .status(error.statusCode || 400)
+      .json({ code: error.statusCode || 400, success: false, message: error.message })
+  }
+
   const totalAmount = normalizedDetails.reduce((sum, d) => sum + d.amount, 0)
   const pool = await getPool()
   const tx = new sql.Transaction(pool)
   try {
     await tx.begin()
+    for (const d of normalizedDetails) {
+      if (!d.sourceType || !d.sourceKey) continue
+      const capacity = await getReceiptCapacityForSource(tx, d.sourceType, d.sourceKey)
+      if (capacity == null) {
+        throwHttpError('回款来源不存在或已失效')
+      }
+      if (toNum(d.amount) + toNum(d.discountAmount) > capacity) {
+        throwHttpError('实收金额与贴息金额之和不能超过当前来源可回款金额')
+      }
+    }
     const insertedIds = []
     for (const d of normalizedDetails) {
       const reqTx = new sql.Request(tx)
@@ -1362,7 +1635,15 @@ router.post('/receipts', requireReceivableCreate, async (req, res) => {
       await tx.rollback()
     } catch {}
     console.error('新增回款单据失败:', error)
-    res.status(500).json({ code: 500, success: false, message: '新增回款单据失败', error: error.message })
+    const statusCode = Number(error?.statusCode) || 500
+    res
+      .status(statusCode)
+      .json({
+        code: statusCode,
+        success: false,
+        message: statusCode >= 500 ? '新增回款单据失败' : error.message,
+        error: error.message
+      })
   }
 })
 
@@ -1405,6 +1686,15 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
     customerName: String(d.customerName || customerName)
   }))
 
+  try {
+    assertUniqueSourceKeys(normalizedDetails, '同一回款单据中不能重复选择相同来源')
+    ensurePositiveReceiptAmounts(normalizedDetails)
+  } catch (error) {
+    return res
+      .status(error.statusCode || 400)
+      .json({ code: error.statusCode || 400, success: false, message: error.message })
+  }
+
   const totalAmount = normalizedDetails.reduce((sum, d) => sum + d.amount, 0)
   const pool = await getPool()
   const tx = new sql.Transaction(pool)
@@ -1419,6 +1709,52 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
     if (!existsResult.recordset?.length) {
       await tx.rollback()
       return res.status(404).json({ code: 404, success: false, message: '回款单据不存在' })
+    }
+
+    const existingDetailReq = new sql.Request(tx)
+    existingDetailReq.input('sourceDocumentNo', sql.NVarChar, sourceDocumentNo)
+    const existingDetailRows = await existingDetailReq.query(`
+      SELECT
+        回款ID as receiptId,
+        明细ID as detailId,
+        项目编号 as itemCode,
+        产品名称 as productName,
+        产品图号 as productDrawingNo,
+        客户模号 as customerPartNo,
+        合同号 as contractNo,
+        来源类型 as sourceType,
+        来源键 as sourceKey
+      FROM 回款单据
+      WHERE 单据编号 = @sourceDocumentNo
+      ORDER BY 回款ID ASC
+    `)
+    const existingDetailList = existingDetailRows.recordset || []
+    const existingTokens = buildSortedTokens(existingDetailList, buildReceiptSourceToken)
+    const incomingTokens = buildSortedTokens(normalizedDetails, buildReceiptSourceToken)
+    if (!sameSortedTokens(existingTokens, incomingTokens)) {
+      await tx.rollback()
+      return res.status(400).json({
+        code: 400,
+        success: false,
+        message: '编辑不允许替换来源，请仅修改金额、贴息、备注、方式等非来源字段'
+      })
+    }
+
+    for (const d of normalizedDetails) {
+      if (!d.sourceType || !d.sourceKey) continue
+      const capacity = await getReceiptCapacityForSource(tx, d.sourceType, d.sourceKey, sourceDocumentNo)
+      if (capacity == null) {
+        await tx.rollback()
+        return res.status(400).json({ code: 400, success: false, message: '回款来源不存在或已失效' })
+      }
+      if (toNum(d.amount) + toNum(d.discountAmount) > capacity) {
+        await tx.rollback()
+        return res.status(400).json({
+          code: 400,
+          success: false,
+          message: '实收金额与贴息金额之和不能超过当前来源可回款金额'
+        })
+      }
     }
 
     const deleteReq = new sql.Request(tx)
@@ -1471,7 +1807,15 @@ router.put('/receipts/:documentNo', requireReceivableUpdate, async (req, res) =>
       await tx.rollback()
     } catch {}
     console.error('更新回款单据失败:', error)
-    res.status(500).json({ code: 500, success: false, message: '更新回款单据失败', error: error.message })
+    const statusCode = Number(error?.statusCode) || 500
+    res
+      .status(statusCode)
+      .json({
+        code: statusCode,
+        success: false,
+        message: statusCode >= 500 ? '更新回款单据失败' : error.message,
+        error: error.message
+      })
   }
 })
 

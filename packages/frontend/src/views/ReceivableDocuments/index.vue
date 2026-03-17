@@ -637,8 +637,21 @@
               >
                 应用到勾选项
               </el-button>
-              <el-button type="primary" @click="openReceiptCandidateDialog">从应收池选择</el-button>
-              <el-button type="primary" plain @click="addDetailRow">新增明细</el-button>
+              <el-button
+                type="primary"
+                :disabled="receiptSourceReadOnly"
+                @click="openReceiptCandidateDialog"
+              >
+                从应收池选择
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                :disabled="receiptSourceReadOnly"
+                @click="addDetailRow"
+              >
+                新增明细
+              </el-button>
             </div>
           </div>
           <div class="finance-dialog-detail-scroll">
@@ -664,27 +677,47 @@
                 sortable
               >
                 <template #default="{ row }">
-                  <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                  <el-input
+                    v-model="row.itemCode"
+                    placeholder="请输入项目编号"
+                    :disabled="receiptSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="产品名称" min-width="150">
                 <template #default="{ row }">
-                  <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                  <el-input
+                    v-model="row.productName"
+                    placeholder="请输入产品名称"
+                    :disabled="receiptSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="产品图号" min-width="140">
                 <template #default="{ row }">
-                  <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                  <el-input
+                    v-model="row.productDrawingNo"
+                    placeholder="请输入产品图号"
+                    :disabled="receiptSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="customerPartNo" label="客户模号" min-width="130" sortable>
                 <template #default="{ row }">
-                  <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                  <el-input
+                    v-model="row.customerPartNo"
+                    placeholder="请输入客户模号"
+                    :disabled="receiptSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="contractNo" label="合同号" min-width="130" sortable>
                 <template #default="{ row }">
-                  <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                  <el-input
+                    v-model="row.contractNo"
+                    placeholder="请输入合同号"
+                    :disabled="receiptSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="订单数量" width="90" align="right">
@@ -696,6 +729,7 @@
                     :precision="0"
                     :controls="false"
                     style="width: 100%"
+                    :disabled="receiptSourceReadOnly"
                   />
                 </template>
               </el-table-column>
@@ -708,6 +742,7 @@
                     :precision="2"
                     :controls="false"
                     style="width: 100%"
+                    :disabled="receiptSourceReadOnly"
                   />
                 </template>
               </el-table-column>
@@ -720,6 +755,7 @@
                     :precision="2"
                     :controls="false"
                     style="width: 100%"
+                    :disabled="receiptSourceReadOnly"
                   />
                 </template>
               </el-table-column>
@@ -732,6 +768,7 @@
                     :precision="2"
                     :controls="false"
                     style="width: 100%"
+                    :disabled="receiptSourceReadOnly"
                   />
                 </template>
               </el-table-column>
@@ -773,13 +810,21 @@
                     :precision="0"
                     :controls="false"
                     style="width: 100%"
+                    :disabled="receiptSourceReadOnly"
                     @update:model-value="row.detailId = $event == null ? null : Number($event)"
                   />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="55" fixed="right">
                 <template #default="{ $index }">
-                  <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
+                  <el-button
+                    type="danger"
+                    link
+                    :disabled="receiptSourceReadOnly"
+                    @click="removeDetailRow($index)"
+                  >
+                    删除
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -791,28 +836,55 @@
               >
                 <div class="dialog-mobile-detail-header">
                   <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
-                  <el-button type="danger" link @click="removeDetailRow(index)">删除</el-button>
+                  <el-button
+                    type="danger"
+                    link
+                    :disabled="receiptSourceReadOnly"
+                    @click="removeDetailRow(index)"
+                  >
+                    删除
+                  </el-button>
                 </div>
                 <div class="dialog-mobile-detail-body">
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">项目编号</div>
-                    <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                    <el-input
+                      v-model="row.itemCode"
+                      placeholder="请输入项目编号"
+                      :disabled="receiptSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">产品名称</div>
-                    <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                    <el-input
+                      v-model="row.productName"
+                      placeholder="请输入产品名称"
+                      :disabled="receiptSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">产品图号</div>
-                    <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                    <el-input
+                      v-model="row.productDrawingNo"
+                      placeholder="请输入产品图号"
+                      :disabled="receiptSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">客户模号</div>
-                    <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                    <el-input
+                      v-model="row.customerPartNo"
+                      placeholder="请输入客户模号"
+                      :disabled="receiptSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">合同号</div>
-                    <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                    <el-input
+                      v-model="row.contractNo"
+                      placeholder="请输入合同号"
+                      :disabled="receiptSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">订单数量</div>
@@ -823,6 +895,7 @@
                       :precision="0"
                       :controls="false"
                       style="width: 100%"
+                      :disabled="receiptSourceReadOnly"
                     />
                   </div>
                   <div class="dialog-mobile-detail-field">
@@ -834,6 +907,7 @@
                       :precision="2"
                       :controls="false"
                       style="width: 100%"
+                      :disabled="receiptSourceReadOnly"
                     />
                   </div>
                   <div class="dialog-mobile-detail-field">
@@ -845,6 +919,7 @@
                       :precision="2"
                       :controls="false"
                       style="width: 100%"
+                      :disabled="receiptSourceReadOnly"
                     />
                   </div>
                   <div class="dialog-mobile-detail-field">
@@ -856,6 +931,7 @@
                       :precision="2"
                       :controls="false"
                       style="width: 100%"
+                      :disabled="receiptSourceReadOnly"
                     />
                   </div>
                   <div class="dialog-mobile-detail-field">
@@ -889,6 +965,7 @@
                       :precision="0"
                       :controls="false"
                       style="width: 100%"
+                      :disabled="receiptSourceReadOnly"
                       @update:model-value="row.detailId = $event == null ? null : Number($event)"
                     />
                   </div>
@@ -1402,6 +1479,9 @@ const receiptCandidateAmountLabel = computed(() =>
 
 const getReceiptCandidateKey = (item: ReceiptCandidate) => String(item.sourceKey || '')
 
+const isEditingReceipt = computed(() => currentReceiptNo.value !== null)
+const receiptSourceReadOnly = computed(() => isEditingReceipt.value)
+
 const rebuildSelectedReceiptCandidates = () => {
   selectedReceiptCandidates.value = Object.values(selectedReceiptCandidateMap.value)
 }
@@ -1868,6 +1948,10 @@ const loadReceiptCandidates = async (resetPage = false) => {
 }
 
 const openReceiptCandidateDialog = async () => {
+  if (receiptSourceReadOnly.value) {
+    ElMessage.warning('编辑态不允许替换来源，请仅修改金额、贴息、备注、方式等非来源字段')
+    return
+  }
   receiptCandidateDialogVisible.value = true
   await nextTick()
   receiptCandidateTableRef.value?.clearSelection()
@@ -2050,6 +2134,10 @@ const removeDetailRow = (index: number) => {
     ElMessage.warning('至少保留一条产品明细')
     return
   }
+  if (receiptSourceReadOnly.value) {
+    ElMessage.warning('编辑态不允许删除或替换来源明细')
+    return
+  }
   dialogForm.details.splice(index, 1)
 }
 
@@ -2071,13 +2159,13 @@ const applyReceiptRatioToSelectedDetails = () => {
   let appliedCount = 0
   let skippedCount = 0
   selectedDialogDetails.value.forEach((detail) => {
-    const orderAmount = Number(detail.orderAmount)
-    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+    const receivableAmount = Number(detail.receivableAmount)
+    if (!Number.isFinite(receivableAmount) || receivableAmount <= 0) {
       skippedCount += 1
       return
     }
-    detail.amount = roundCurrency(orderAmount * ratio * 0.97)
-    detail.discountAmount = roundCurrency(orderAmount * ratio * 0.03)
+    detail.amount = roundCurrency(receivableAmount * ratio * 0.97)
+    detail.discountAmount = roundCurrency(receivableAmount * ratio * 0.03)
     detail.remark = mergeRemarkWithReceiptRatio(detail.remark, ratio)
     appliedCount += 1
   })
@@ -2135,6 +2223,34 @@ const submitDialogForm = async () => {
     return
   }
 
+  const hasDuplicateSource = (() => {
+    const seen = new Set<string>()
+    return dialogForm.details.some((detail) => {
+      const sourceType = String(detail.sourceType || '').trim()
+      const sourceKey = String(detail.sourceKey || '').trim()
+      if (!sourceType || !sourceKey) return false
+      const token = `${sourceType}|${sourceKey}`
+      if (seen.has(token)) return true
+      seen.add(token)
+      return false
+    })
+  })()
+  if (hasDuplicateSource) {
+    ElMessage.error('同一回款单据中不能重复选择相同来源')
+    return
+  }
+
+  const overLimitDetail = dialogForm.details.find((detail) => {
+    const receivableAmount = Number(detail.receivableAmount) || 0
+    const amount = Number(detail.amount) || 0
+    const discountAmount = Number(detail.discountAmount) || 0
+    return amount + discountAmount > receivableAmount
+  })
+  if (overLimitDetail) {
+    ElMessage.error('实收金额与贴息金额之和不能超过应收金额')
+    return
+  }
+
   const payload = cloneReceiptPayload(dialogForm)
   payload.details = payload.details.map((detail) => ({
     ...detail,
@@ -2154,6 +2270,9 @@ const submitDialogForm = async () => {
     }
     dialogVisible.value = false
     await loadData()
+    if (receiptCandidateDialogVisible.value) {
+      await loadReceiptCandidates()
+    }
   } catch (error) {
     ElMessage.error((error as Error).message || '保存失败')
   } finally {
@@ -2187,6 +2306,9 @@ const handleDelete = async (row: ReceiptTableRow) => {
         pagination.page -= 1
       }
       await loadData()
+      if (receiptCandidateDialogVisible.value) {
+        await loadReceiptCandidates()
+      }
       ElMessage.success('删除成功')
     }
   } catch (error: any) {

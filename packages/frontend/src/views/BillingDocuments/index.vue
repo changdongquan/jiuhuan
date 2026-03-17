@@ -686,8 +686,21 @@
               <span class="finance-dialog-summary__item"
                 >金额合计 {{ formatAmount(dialogTotals.totalAmount) }}</span
               >
-              <el-button type="primary" @click="openInvoiceCandidateDialog">从候选池选择</el-button>
-              <el-button type="primary" plain @click="addDetailRow">新增明细</el-button>
+              <el-button
+                type="primary"
+                :disabled="invoiceSourceReadOnly"
+                @click="openInvoiceCandidateDialog"
+              >
+                从候选池选择
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                :disabled="invoiceSourceReadOnly"
+                @click="addDetailRow"
+              >
+                新增明细
+              </el-button>
             </div>
           </div>
 
@@ -705,27 +718,47 @@
               <el-table-column type="index" label="序号" width="45" />
               <el-table-column prop="itemCode" label="项目编号" min-width="140" sortable>
                 <template #default="{ row }">
-                  <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                  <el-input
+                    v-model="row.itemCode"
+                    placeholder="请输入项目编号"
+                    :disabled="invoiceSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="产品名称" min-width="150">
                 <template #default="{ row }">
-                  <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                  <el-input
+                    v-model="row.productName"
+                    placeholder="请输入产品名称"
+                    :disabled="invoiceSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="产品图号" min-width="140">
                 <template #default="{ row }">
-                  <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                  <el-input
+                    v-model="row.productDrawingNo"
+                    placeholder="请输入产品图号"
+                    :disabled="invoiceSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="customerPartNo" label="客户模号" min-width="130" sortable>
                 <template #default="{ row }">
-                  <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                  <el-input
+                    v-model="row.customerPartNo"
+                    placeholder="请输入客户模号"
+                    :disabled="invoiceSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="contractNo" label="合同号" min-width="130" sortable>
                 <template #default="{ row }">
-                  <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                  <el-input
+                    v-model="row.contractNo"
+                    placeholder="请输入合同号"
+                    :disabled="invoiceSourceReadOnly"
+                  />
                 </template>
               </el-table-column>
               <el-table-column label="单价(元)" width="120" align="right">
@@ -764,7 +797,14 @@
               </el-table-column>
               <el-table-column label="操作" width="55" fixed="right">
                 <template #default="{ $index }">
-                  <el-button type="danger" link @click="removeDetailRow($index)">删除</el-button>
+                  <el-button
+                    type="danger"
+                    link
+                    :disabled="invoiceSourceReadOnly"
+                    @click="removeDetailRow($index)"
+                  >
+                    删除
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -776,28 +816,55 @@
               >
                 <div class="dialog-mobile-detail-header">
                   <span class="dialog-mobile-detail-title">明细 {{ index + 1 }}</span>
-                  <el-button type="danger" link @click="removeDetailRow(index)">删除</el-button>
+                  <el-button
+                    type="danger"
+                    link
+                    :disabled="invoiceSourceReadOnly"
+                    @click="removeDetailRow(index)"
+                  >
+                    删除
+                  </el-button>
                 </div>
                 <div class="dialog-mobile-detail-body">
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">项目编号</div>
-                    <el-input v-model="row.itemCode" placeholder="请输入项目编号" />
+                    <el-input
+                      v-model="row.itemCode"
+                      placeholder="请输入项目编号"
+                      :disabled="invoiceSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">产品名称</div>
-                    <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                    <el-input
+                      v-model="row.productName"
+                      placeholder="请输入产品名称"
+                      :disabled="invoiceSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">产品图号</div>
-                    <el-input v-model="row.productDrawingNo" placeholder="请输入产品图号" />
+                    <el-input
+                      v-model="row.productDrawingNo"
+                      placeholder="请输入产品图号"
+                      :disabled="invoiceSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">客户模号</div>
-                    <el-input v-model="row.customerPartNo" placeholder="请输入客户模号" />
+                    <el-input
+                      v-model="row.customerPartNo"
+                      placeholder="请输入客户模号"
+                      :disabled="invoiceSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">合同号</div>
-                    <el-input v-model="row.contractNo" placeholder="请输入合同号" />
+                    <el-input
+                      v-model="row.contractNo"
+                      placeholder="请输入合同号"
+                      :disabled="invoiceSourceReadOnly"
+                    />
                   </div>
                   <div class="dialog-mobile-detail-field">
                     <div class="dialog-mobile-detail-label">单价(元)</div>
@@ -914,7 +981,7 @@
         :data="invoiceCandidates"
         border
         :height="isMobile ? undefined : 460"
-        row-key="itemCode"
+        row-key="sourceKey"
         class="finance-candidate-table"
         @selection-change="handleInvoiceCandidateSelectionChange"
       >
@@ -1031,6 +1098,8 @@ type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
 interface InvoiceLine {
   id: number
   invoiceId?: number
+  sourceType?: string
+  sourceKey?: string
   itemCode: string
   productName: string
   productDrawingNo: string
@@ -1089,6 +1158,8 @@ interface InvoiceTableRow extends Invoice {
 }
 
 interface InvoiceCandidate {
+  sourceType: string
+  sourceKey: string
   itemCode: string
   productName: string
   productDrawingNo: string
@@ -1217,6 +1288,8 @@ const createDetailId = () => detailIdSeed.value++
 const createEmptyDetail = (): InvoiceLine => ({
   id: createDetailId(),
   invoiceId: 0,
+  sourceType: '',
+  sourceKey: '',
   itemCode: '',
   productName: '',
   productDrawingNo: '',
@@ -1331,7 +1404,11 @@ const invoiceCandidateCustomerSelectOptions = computed(() => {
   return invoiceCandidateCustomerOptions.value
 })
 
-const getInvoiceCandidateKey = (item: InvoiceCandidate) => String(item.itemCode || '').trim()
+const getInvoiceCandidateKey = (item: InvoiceCandidate) =>
+  String(item.sourceKey || '').trim() || String(item.itemCode || '').trim()
+
+const isEditingInvoice = computed(() => currentInvoiceId.value !== null)
+const invoiceSourceReadOnly = computed(() => isEditingInvoice.value)
 
 const rebuildSelectedInvoiceCandidates = () => {
   selectedInvoiceCandidates.value = Object.values(selectedInvoiceCandidateMap.value)
@@ -1766,6 +1843,8 @@ const loadInvoiceCandidates = async (resetPage = false) => {
     invoiceCandidatePage.value = Number(data?.page || invoiceCandidatePage.value)
     invoiceCandidatePageSize.value = Number(data?.pageSize || invoiceCandidatePageSize.value)
     invoiceCandidates.value = list.map((it: any) => ({
+      sourceType: String(it.sourceType || 'sales_order'),
+      sourceKey: String(it.sourceKey || ''),
       itemCode: String(it.itemCode || ''),
       productName: String(it.productName || ''),
       productDrawingNo: String(it.productDrawingNo || ''),
@@ -1787,6 +1866,10 @@ const loadInvoiceCandidates = async (resetPage = false) => {
 }
 
 const openInvoiceCandidateDialog = async () => {
+  if (invoiceSourceReadOnly.value) {
+    ElMessage.warning('编辑态不允许替换来源，请仅修改金额、备注等非来源字段')
+    return
+  }
   invoiceCandidateDialogVisible.value = true
   invoiceCandidateFilterType.value = 'all'
   await nextTick()
@@ -1886,9 +1969,15 @@ const applyInvoiceCandidates = () => {
     dialogForm.details.splice(0, 1)
   }
   const existingCodes = new Set(dialogForm.details.map((d) => d.itemCode))
+  const existingSourceKeys = new Set(
+    dialogForm.details.map((d) => String(d.sourceKey || '').trim())
+  )
   selectedInvoiceCandidates.value.forEach((it) => {
-    if (existingCodes.has(it.itemCode)) return
+    if (existingSourceKeys.has(String(it.sourceKey || '').trim())) return
+    if (!it.sourceKey && existingCodes.has(it.itemCode)) return
     const detail = createEmptyDetail()
+    detail.sourceType = it.sourceType
+    detail.sourceKey = it.sourceKey
     detail.itemCode = it.itemCode
     detail.productName = it.productName
     detail.productDrawingNo = it.productDrawingNo
@@ -1968,6 +2057,10 @@ const removeDetailRow = (index: number) => {
     ElMessage.warning('至少保留一条产品明细')
     return
   }
+  if (invoiceSourceReadOnly.value) {
+    ElMessage.warning('编辑态不允许删除或替换来源明细')
+    return
+  }
   dialogForm.details.splice(index, 1)
 }
 
@@ -2019,6 +2112,21 @@ const submitDialogForm = async () => {
     return
   }
 
+  const duplicateSource = new Set<string>()
+  const hasDuplicateSource = dialogForm.details.some((detail) => {
+    const sourceType = String(detail.sourceType || '').trim()
+    const sourceKey = String(detail.sourceKey || '').trim()
+    if (!sourceType || !sourceKey) return false
+    const token = `${sourceType}|${sourceKey}`
+    if (duplicateSource.has(token)) return true
+    duplicateSource.add(token)
+    return false
+  })
+  if (hasDuplicateSource) {
+    ElMessage.error('同一开票单据中不能重复选择相同来源')
+    return
+  }
+
   const payload = cloneInvoicePayload(dialogForm)
   dialogSubmitting.value = true
 
@@ -2033,6 +2141,9 @@ const submitDialogForm = async () => {
     }
     dialogVisible.value = false
     await loadData()
+    if (invoiceCandidateDialogVisible.value) {
+      await loadInvoiceCandidates()
+    }
   } catch (error) {
     ElMessage.error((error as Error).message || '保存失败')
   } finally {
@@ -2066,6 +2177,9 @@ const handleDelete = async (row: InvoiceTableRow) => {
         pagination.page -= 1
       }
       await loadData()
+      if (invoiceCandidateDialogVisible.value) {
+        await loadInvoiceCandidates()
+      }
       ElMessage.success('删除成功')
     }
   } catch (error: any) {
