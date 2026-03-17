@@ -989,9 +989,11 @@
       <template #header>
         <div class="so-split-header">
           <div class="so-split-header__eyebrow">Split Workspace</div>
-          <div class="so-split-header__title">先分配明细，再确认拆分后保留与生成的订单。</div>
-          <div class="so-split-header__desc">
-            这里不会直接改正式订单编号。新订单编号会在提交后由系统生成。
+          <div class="so-split-header__main">
+            <div class="so-split-header__title">先分配明细，再确认拆分后保留与生成的订单。</div>
+            <div class="so-split-header__desc">
+              这里不会直接改正式订单编号。新订单编号会在提交后由系统生成。
+            </div>
           </div>
         </div>
       </template>
@@ -3979,6 +3981,17 @@ onMounted(async () => {
   }
 }
 
+@media (width <= 768px) {
+  .so-split-header__main {
+    display: grid;
+    gap: 4px;
+  }
+
+  .so-split-header__desc {
+    text-align: left;
+  }
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -5207,6 +5220,13 @@ onMounted(async () => {
   gap: 4px;
 }
 
+.so-split-header__main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px 20px;
+  align-items: baseline;
+}
+
 .so-split-header__eyebrow {
   font-size: 11px;
   font-weight: 700;
@@ -5226,6 +5246,8 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.7;
   color: #7b5a1f;
+  text-align: right;
+  flex: 0 1 520px;
 }
 
 .so-split-dialog {
