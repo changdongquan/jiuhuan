@@ -8,7 +8,7 @@
       <div class="relay-hero__main">
         <div class="relay-hero__eyebrow">
           <span class="relay-hero__eyebrow-line"></span>
-          <span>Administrator Console</span>
+          <span>Relay Operations Console</span>
         </div>
         <h1 class="relay-hero__title">BMO中转管理</h1>
         <p class="relay-hero__subtitle">
@@ -25,6 +25,7 @@
             刷新面板
           </el-button>
           <el-switch v-model="autoPolling" active-text="自动轮询" inactive-text="手动" />
+          <div class="relay-hero__refresh-text">最近检查：{{ checkedAtText }}</div>
         </div>
 
         <div class="relay-hero__summary">
@@ -42,7 +43,9 @@
         <div class="hero-status-card">
           <div class="hero-status-card__head">
             <span class="hero-status-card__label">运行态势</span>
-            <span class="hero-status-card__score">{{ healthScore }}</span>
+            <span class="hero-status-card__score" :class="`is-${healthTone}`">{{
+              healthLabel
+            }}</span>
           </div>
           <div class="hero-status-card__headline">
             <el-tag :type="relayReadyTagType" effect="dark">{{ relayReadyText }}</el-tag>
@@ -63,13 +66,21 @@
             </div>
             <div class="hero-status-card__row">
               <span>Checked</span>
-              <strong>{{
-                formatTime(dashboard?.summary?.lastCheckedAt || dashboard?.checkedAt)
-              }}</strong>
+              <strong>{{ checkedAtText }}</strong>
             </div>
           </div>
+          <div class="hero-status-card__chips">
+            <span
+              v-for="item in healthSignals"
+              :key="item.label"
+              class="hero-status-card__chip"
+              :class="`is-${item.tone}`"
+            >
+              {{ item.label }}
+            </span>
+          </div>
           <div class="hero-status-card__foot">
-            {{ dashboardMessage || '当前未发现新的告警摘要' }}
+            {{ healthSummaryText }}
           </div>
         </div>
 
@@ -107,14 +118,14 @@
           <template #header>
             <div class="console-card__header">
               <div>
-                <div class="console-card__eyebrow">Timeline</div>
+                <div class="console-card__eyebrow">Monitoring Timeline</div>
                 <div class="console-card__title">事件时间线</div>
               </div>
               <div class="console-card__hint">最近 20 条系统事件</div>
             </div>
           </template>
 
-          <div class="event-stream">
+          <div v-if="(dashboard?.recentEvents || []).length" class="event-stream">
             <div
               v-for="event in dashboard?.recentEvents || []"
               :key="`${event.type}-${event.time}-${event.detail}`"
@@ -138,6 +149,7 @@
               </div>
             </div>
           </div>
+          <el-empty v-else description="最近没有新的系统事件" :image-size="72" />
         </el-card>
 
         <div class="operations-grid__split">
@@ -145,13 +157,19 @@
             <template #header>
               <div class="console-card__header">
                 <div>
-                  <div class="console-card__eyebrow">Persist</div>
+                  <div class="console-card__eyebrow">Persistence</div>
                   <div class="console-card__title">最近入库记录</div>
                 </div>
                 <div class="console-card__hint">成功写入 craftsys 的最近批次</div>
               </div>
             </template>
-            <el-table :data="dashboard?.recentPersists || []" border size="small" max-height="320">
+            <el-table
+              :data="dashboard?.recentPersists || []"
+              border
+              size="small"
+              max-height="320"
+              empty-text="最近没有成功入库记录"
+            >
               <el-table-column prop="id" label="ID" width="70" />
               <el-table-column label="入库时间" width="170">
                 <template #default="{ row }">{{ formatTime(row.time) }}</template>
@@ -175,13 +193,19 @@
             <template #header>
               <div class="console-card__header">
                 <div>
-                  <div class="console-card__eyebrow">Faults</div>
+                  <div class="console-card__eyebrow">Fault Review</div>
                   <div class="console-card__title">异常与断连记录</div>
                 </div>
                 <div class="console-card__hint">最近识别到的失败与断开</div>
               </div>
             </template>
-            <el-table :data="dashboard?.recentErrors || []" border size="small" max-height="320">
+            <el-table
+              :data="dashboard?.recentErrors || []"
+              border
+              size="small"
+              max-height="320"
+              empty-text="最近没有异常或断连记录"
+            >
               <el-table-column label="时间" width="170">
                 <template #default="{ row }">{{ formatTime(row.time) }}</template>
               </el-table-column>
@@ -198,11 +222,19 @@
       </div>
 
       <aside class="operations-grid__rail">
-        <el-card shadow="never" class="console-card control-card">
+        <div class="operations-rail__intro">
+          <div class="operations-rail__eyebrow">Manual Actions</div>
+          <div class="operations-rail__title">操作区</div>
+          <div class="operations-rail__text">
+            以下动作会直接影响 relay 会话、任务执行或 worker 文件流，适合在监控判断后再执行。
+          </div>
+        </div>
+
+        <el-card shadow="never" class="console-card control-card console-card--operation">
           <template #header>
             <div class="console-card__header">
               <div>
-                <div class="console-card__eyebrow">Session Dock</div>
+                <div class="console-card__eyebrow">Session Control</div>
                 <div class="console-card__title">会话控制舱</div>
               </div>
             </div>
@@ -236,6 +268,9 @@
             :class="authStatus.probeOk === false ? 'is-danger' : 'is-info'"
           >
             {{ authProbeText || '当前尚未单独执行会话探活' }}
+          </div>
+          <div class="control-card__note">
+            建议优先使用“探活检查”确认状态，只有在会话失效或服务端配置异常时再手工写入。
           </div>
 
           <el-form label-position="top" class="control-form">
@@ -281,15 +316,19 @@
           </el-form>
         </el-card>
 
-        <el-card shadow="never" class="console-card action-card">
+        <el-card shadow="never" class="console-card action-card console-card--operation">
           <template #header>
             <div class="console-card__header">
               <div>
-                <div class="console-card__eyebrow">Action Lab</div>
+                <div class="console-card__eyebrow">Job Control</div>
                 <div class="console-card__title">任务实验台</div>
               </div>
             </div>
           </template>
+
+          <div class="action-card__note">
+            这里只放一次性人工任务。批量采集、附件上下行和回填都应先确认参数与影响范围。
+          </div>
 
           <el-form :model="createForm" label-position="top" class="control-form">
             <el-form-item label="任务类型">
@@ -371,7 +410,7 @@
         <template #header>
           <div class="console-card__header">
             <div>
-              <div class="console-card__eyebrow">Workspace</div>
+              <div class="console-card__eyebrow">Task Workspace</div>
               <div class="console-card__title">任务工作区</div>
             </div>
             <div class="console-card__hint">查询、刷新、重试和下载 relay 任务文件</div>
@@ -388,7 +427,14 @@
           <el-button :loading="queryingJob" @click="querySingleJob">查询任务</el-button>
         </div>
 
-        <el-table :data="jobs" border size="small" max-height="440" v-loading="tableLoading">
+        <el-table
+          :data="jobs"
+          border
+          size="small"
+          max-height="440"
+          v-loading="tableLoading"
+          empty-text="还没有查询或创建过任务"
+        >
           <el-table-column prop="id" label="任务ID" min-width="220" show-overflow-tooltip />
           <el-table-column prop="type" label="类型" width="170" />
           <el-table-column label="状态" width="120">
@@ -556,6 +602,10 @@ const dashboardMessage = computed(() => {
   )
 })
 
+const checkedAtText = computed(() => {
+  return formatTime(dashboard.value?.summary?.lastCheckedAt || dashboard.value?.checkedAt)
+})
+
 const syncRunningTagType = computed(() => {
   if (dashboard.value?.sync?.running) return 'warning'
   if (dashboard.value?.sync?.enabled) return 'success'
@@ -614,7 +664,67 @@ const healthScore = computed(() => {
   if (authStatus.probeOk === false) score -= 30
   if (dashboard.value?.sync?.lastError) score -= 15
   if (latestIncident.value) score -= 10
-  return String(Math.max(0, score)).padStart(2, '0')
+  return Math.max(0, score)
+})
+
+const healthTone = computed<'success' | 'warning' | 'danger'>(() => {
+  if (healthScore.value >= 85) return 'success'
+  if (healthScore.value >= 60) return 'warning'
+  return 'danger'
+})
+
+const healthLabel = computed(() => {
+  if (healthTone.value === 'success') return '健康'
+  if (healthTone.value === 'warning') return '需关注'
+  return '阻塞'
+})
+
+const healthSignals = computed(() => {
+  return [
+    {
+      label: dashboard.value?.relay?.ready ? 'Relay在线' : 'Relay异常',
+      tone: dashboard.value?.relay?.ready ? 'success' : 'danger'
+    },
+    {
+      label:
+        authStatus.probeOk === true
+          ? '会话已连接'
+          : authStatus.probeOk === false
+            ? '会话失效'
+            : '会话未探活',
+      tone:
+        authStatus.probeOk === true
+          ? 'success'
+          : authStatus.probeOk === false
+            ? 'danger'
+            : 'warning'
+    },
+    {
+      label: dashboard.value?.sync?.running
+        ? '同步执行中'
+        : dashboard.value?.sync?.enabled
+          ? '同步待命'
+          : '同步关闭',
+      tone: dashboard.value?.sync?.running
+        ? 'warning'
+        : dashboard.value?.sync?.enabled
+          ? 'success'
+          : 'danger'
+    },
+    {
+      label: latestIncident.value ? '存在近期异常' : '近期无异常',
+      tone: latestIncident.value ? 'warning' : 'success'
+    }
+  ]
+})
+
+const healthSummaryText = computed(() => {
+  const summary = dashboardMessage.value
+  if (summary) return `当前结论：${healthLabel.value}。${summary}`
+  if (healthTone.value === 'success') return '当前结论：健康。近一次检查未发现新的告警摘要。'
+  if (healthTone.value === 'warning')
+    return '当前结论：需关注。建议查看时间线和异常记录确认影响范围。'
+  return '当前结论：阻塞。建议先处理 Relay 或会话异常，再执行手工任务。'
 })
 
 const summaryTiles = computed(() => {
@@ -1142,6 +1252,11 @@ onBeforeUnmount(() => {
     border-color: transparent;
   }
 
+  .relay-hero__refresh-text {
+    font-size: 12px;
+    color: var(--relay-muted);
+  }
+
   .relay-hero__summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1218,9 +1333,21 @@ onBeforeUnmount(() => {
 
   .hero-status-card__score {
     font-family: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', serif;
-    font-size: 32px;
+    font-size: 28px;
     line-height: 1;
     color: #f5c27c;
+  }
+
+  .hero-status-card__score.is-success {
+    color: #92d0a7;
+  }
+
+  .hero-status-card__score.is-warning {
+    color: #f5c27c;
+  }
+
+  .hero-status-card__score.is-danger {
+    color: #ff9f8e;
   }
 
   .hero-status-card__headline {
@@ -1239,6 +1366,36 @@ onBeforeUnmount(() => {
     padding-top: 12px;
     margin-top: 18px;
     border-top: 1px solid rgb(239 228 213 / 12%);
+  }
+
+  .hero-status-card__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .hero-status-card__chip {
+    display: inline-flex;
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 999px;
+    align-items: center;
+  }
+
+  .hero-status-card__chip.is-success {
+    color: #b5e4c3;
+  }
+
+  .hero-status-card__chip.is-warning {
+    color: #f5d499;
+  }
+
+  .hero-status-card__chip.is-danger {
+    color: #ffc0b5;
   }
 
   .hero-status-card__row {
@@ -1356,6 +1513,32 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .operations-rail__intro {
+    padding: 18px 18px 4px;
+    color: var(--relay-ink);
+  }
+
+  .operations-rail__eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--relay-muted);
+    text-transform: uppercase;
+  }
+
+  .operations-rail__title {
+    margin-top: 6px;
+    font-family: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .operations-rail__text {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--relay-muted);
+  }
+
   .console-card {
     overflow: hidden;
     background: var(--relay-paper-strong);
@@ -1372,6 +1555,12 @@ onBeforeUnmount(() => {
 
   .console-card :deep(.el-card__body) {
     padding: 18px 20px 20px;
+  }
+
+  .console-card--operation {
+    background: linear-gradient(180deg, rgb(255 248 240 / 98%), rgb(251 240 228 / 96%));
+    border-color: rgb(179 118 47 / 16%);
+    box-shadow: 0 18px 38px rgb(121 78 29 / 10%);
   }
 
   .console-card__eyebrow {
@@ -1530,6 +1719,18 @@ onBeforeUnmount(() => {
   .control-card__alert.is-info {
     color: #83551f;
     background: rgb(179 118 47 / 8%);
+  }
+
+  .control-card__note,
+  .action-card__note {
+    padding: 12px 14px;
+    margin-top: 14px;
+    font-size: 12px;
+    line-height: 1.65;
+    color: #7c5632;
+    background: rgb(179 118 47 / 9%);
+    border: 1px dashed rgb(179 118 47 / 20%);
+    border-radius: 16px;
   }
 
   .control-form {
