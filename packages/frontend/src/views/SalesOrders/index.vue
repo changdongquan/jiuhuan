@@ -979,78 +979,194 @@
     <!-- 拆分订单弹窗（PC/手机端共用） -->
     <el-dialog
       v-model="splitDialogVisible"
-      title="拆分订单"
       :width="isMobile ? '100%' : 'min(1500px, calc(100vw - 48px))'"
+      :top="isMobile ? '0' : '4vh'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
+      modal-class="so-split-dialog-overlay"
+      class="so-split-dialog-modal"
     >
-      <div class="so-split-dialog">
-        <div class="so-split-dialog__toolbar">
-          <div class="so-split-dialog__meta">
-            <div>原订单：{{ dialogForm.orderNo || '-' }}</div>
-            <div>订单日期：{{ formatDate(dialogForm.orderDate) || '-' }}</div>
+      <template #header>
+        <div class="so-split-header">
+          <div class="so-split-header__eyebrow">Split Workspace</div>
+          <div class="so-split-header__title">先分配明细，再确认拆分后保留与生成的订单。</div>
+          <div class="so-split-header__desc">
+            这里不会直接改正式订单编号。新订单编号会在提交后由系统生成。
           </div>
-          <el-button type="primary" plain size="small" @click="addSplitGroup">
-            新增一份订单
-          </el-button>
+        </div>
+      </template>
+      <div class="so-split-dialog">
+        <div class="so-split-hero">
+          <div class="so-split-hero__metrics">
+            <div class="so-split-hero__metric">
+              <span class="so-split-hero__metric-label">原订单</span>
+              <strong>{{ dialogForm.orderNo || '-' }}</strong>
+            </div>
+            <div class="so-split-hero__metric">
+              <span class="so-split-hero__metric-label">订单日期</span>
+              <strong>{{ formatDate(dialogForm.orderDate) || '-' }}</strong>
+            </div>
+            <div class="so-split-hero__metric">
+              <span class="so-split-hero__metric-label">总明细</span>
+              <strong>{{ splitDialogTotals.detailCount }}</strong>
+            </div>
+            <div class="so-split-hero__metric">
+              <span class="so-split-hero__metric-label">总金额</span>
+              <strong>{{ formatAmount(splitDialogTotals.totalAmount) }}</strong>
+            </div>
+          </div>
         </div>
 
-        <el-table :data="dialogForm.details" border height="520" style="width: 100%">
-          <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
-          <el-table-column
-            prop="itemCode"
-            label="项目编号"
-            min-width="140"
-            show-overflow-tooltip
-            fixed="left"
-          />
-          <el-table-column
-            prop="productName"
-            label="产品名称"
-            min-width="160"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="productDrawingNo"
-            label="产品图号"
-            min-width="140"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="customerPartNo"
-            label="客户模号"
-            min-width="140"
-            show-overflow-tooltip
-          />
-          <el-table-column prop="quantity" label="数量" width="90" align="right">
-            <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="unitPrice" label="单价(元)" width="110" align="right">
-            <template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template>
-          </el-table-column>
-          <el-table-column prop="totalAmount" label="金额(元)" width="120" align="right">
-            <template #default="{ row }">{{ formatAmount(row.totalAmount) }}</template>
-          </el-table-column>
-          <el-table-column label="附件" width="90" align="center">
-            <template #default="{ row }">{{ getDetailAttachmentCount(row.id) }}</template>
-          </el-table-column>
-          <el-table-column label="拆分到" min-width="180">
-            <template #default="{ row }">
-              <el-select
-                v-model="splitTargetByDetailId[row.id]"
-                placeholder="请选择"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="opt in splitTargetOptions"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="so-split-dialog__toolbar">
+          <div class="so-split-dialog__meta">
+            <div class="so-split-dialog__meta-title">分配区</div>
+            <div>逐条选择每条明细保留在原订单，或拆分到某个新订单组。</div>
+          </div>
+          <div class="so-split-dialog__actions">
+            <div class="so-split-dialog__status">
+              将生成 {{ splitPreviewCreatedCount }} 张新订单，已拆出
+              {{ splitPreviewMovedCount }} 条明细
+            </div>
+            <el-button type="primary" plain size="small" @click="addSplitGroup">
+              新增一份订单
+            </el-button>
+          </div>
+        </div>
+
+        <div class="so-split-table-wrap">
+          <el-table
+            :data="dialogForm.details"
+            border
+            :height="splitTableHeight"
+            style="width: 100%"
+          >
+            <el-table-column type="index" label="序号" width="60" align="center" fixed="left" />
+            <el-table-column
+              prop="itemCode"
+              label="项目编号"
+              min-width="140"
+              show-overflow-tooltip
+              fixed="left"
+            />
+            <el-table-column
+              prop="productName"
+              label="产品名称"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productDrawingNo"
+              label="产品图号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerPartNo"
+              label="客户模号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column prop="quantity" label="数量" width="90" align="right">
+              <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="unitPrice" label="单价(元)" width="110" align="right">
+              <template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template>
+            </el-table-column>
+            <el-table-column prop="totalAmount" label="金额(元)" width="120" align="right">
+              <template #default="{ row }">{{ formatAmount(row.totalAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="附件" width="90" align="center">
+              <template #default="{ row }">{{ getDetailAttachmentCount(row.id) }}</template>
+            </el-table-column>
+            <el-table-column label="分配到订单组" min-width="200">
+              <template #default="{ row }">
+                <el-select
+                  v-model="splitTargetByDetailId[row.id]"
+                  placeholder="请选择"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="opt in splitTargetOptions"
+                    :key="opt.value"
+                    :label="splitOptionLabelMap[opt.value] || opt.label"
+                    :value="opt.value"
+                  />
+                </el-select>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div class="so-split-preview">
+          <div class="so-split-preview__header">
+            <div>
+              <div class="so-merge-section__title">拆分后订单预览</div>
+              <div class="so-merge-section__subtitle">
+                下方展示原订单最终保留内容，以及每张新订单将生成的明细结果。
+              </div>
+            </div>
+            <div class="so-split-preview__summary">
+              <span>将生成 {{ splitPreviewCreatedCount }} 张新订单</span>
+              <span>已拆出 {{ splitPreviewMovedCount }} 条明细</span>
+            </div>
+          </div>
+
+          <div class="so-split-preview__grid">
+            <div
+              v-for="group in splitPreviewGroups"
+              :key="group.key"
+              class="so-merge-summary-card"
+              :class="{ 'is-source': group.key === 'origin' }"
+            >
+              <div class="so-merge-summary-card__main">
+                <div class="so-merge-summary-card__order">{{ group.label }}</div>
+                <div class="so-merge-summary-card__customer">{{ group.subtitle }}</div>
+              </div>
+              <div class="so-split-group-stats">
+                <div class="so-split-group-stats__item">明细：{{ group.detailCount }}</div>
+                <div class="so-split-group-stats__item">总数量：{{ group.totalQuantity }}</div>
+                <div class="so-split-group-stats__item">附件：{{ group.attachmentCount }}</div>
+                <div class="so-split-group-stats__item">
+                  总金额：{{ formatAmount(group.totalAmount) }}
+                </div>
+              </div>
+              <div v-if="group.details.length" class="so-merge-detail-list">
+                <div class="so-merge-detail-list__title">
+                  {{ group.key === 'origin' ? '保留明细' : '新订单明细' }}
+                </div>
+                <div
+                  v-for="(detail, index) in group.details"
+                  :key="`${group.key}-${detail.id || detail.itemCode || detail.productName || index}`"
+                  class="so-merge-detail-item"
+                >
+                  <div class="so-merge-detail-item__head">
+                    <span class="so-merge-detail-item__code">{{ detail.itemCode || '-' }}</span>
+                    <span class="so-merge-detail-item__qty">数量 {{ detail.quantity || 0 }}</span>
+                  </div>
+                  <div class="so-merge-detail-item__meta">
+                    <span
+                      class="so-merge-detail-item__source"
+                      :class="
+                        group.key === 'origin'
+                          ? 'so-merge-detail-item__source--target'
+                          : 'so-merge-detail-item__source--source'
+                      "
+                    >
+                      {{ group.key === 'origin' ? '保留在原订单' : '拆分到新订单' }}
+                    </span>
+                    <span v-if="detail.customerPartNo">客户模号 {{ detail.customerPartNo }}</span>
+                    <span v-if="detail.productDrawingNo">图号 {{ detail.productDrawingNo }}</span>
+                    <span v-if="detail.productName">{{ detail.productName }}</span>
+                    <span v-if="detail.deliveryDate"
+                      >交付 {{ formatDate(detail.deliveryDate) }}</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div v-else class="so-merge-target-state is-empty">当前没有分配明细</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <template #footer>
@@ -1852,6 +1968,7 @@ const paginationLayout = computed(() =>
 
 // 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
+const splitTableHeight = computed(() => (isMobile.value ? 220 : 260))
 
 // 日期格式化
 const formatDate = (date: string | Date | null | undefined): string => {
@@ -2041,6 +2158,59 @@ const splitTargetOptions = computed(() => {
   }
   return opts
 })
+
+const splitOptionLabelMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = { origin: '保留在原订单' }
+  for (let i = 1; i <= splitNewGroupCount.value; i += 1) {
+    map[`new-${i}`] = `拆分到新订单 ${i}`
+  }
+  return map
+})
+
+const splitDialogTotals = computed(() => {
+  const details = Array.isArray(dialogForm.details) ? dialogForm.details : []
+  return {
+    detailCount: details.length,
+    totalQuantity: details.reduce((sum, detail) => sum + Number(detail.quantity || 0), 0),
+    totalAmount: details.reduce((sum, detail) => sum + Number(detail.totalAmount || 0), 0)
+  }
+})
+
+const splitPreviewGroups = computed(() => {
+  const detailList = Array.isArray(dialogForm.details) ? dialogForm.details : []
+  const targetMap = splitTargetByDetailId.value || {}
+  const groups = splitTargetOptions.value.map((opt) => {
+    const details = detailList.filter((detail) => {
+      const key = targetMap[String(detail.id)] || 'origin'
+      return key === opt.value
+    })
+    const attachmentCount = details.reduce(
+      (sum, detail) => sum + Number(getDetailAttachmentCount(detail.id) || 0),
+      0
+    )
+    return {
+      key: opt.value,
+      label: opt.label,
+      subtitle: opt.value === 'origin' ? dialogForm.orderNo || '-' : '正式订单编号将在提交后生成',
+      details,
+      detailCount: details.length,
+      attachmentCount,
+      totalQuantity: details.reduce((sum, detail) => sum + Number(detail.quantity || 0), 0),
+      totalAmount: details.reduce((sum, detail) => sum + Number(detail.totalAmount || 0), 0)
+    }
+  })
+  return groups.filter((group) => group.key === 'origin' || group.detailCount > 0)
+})
+
+const splitPreviewCreatedCount = computed(
+  () => splitPreviewGroups.value.filter((group) => group.key !== 'origin').length
+)
+
+const splitPreviewMovedCount = computed(() =>
+  splitPreviewGroups.value
+    .filter((group) => group.key !== 'origin')
+    .reduce((sum, group) => sum + group.detailCount, 0)
+)
 
 const mergeTargetRow = computed<OrderTableRow | null>(() => {
   const key = String(mergeTargetOrderNo.value || '').trim()
@@ -3799,6 +3969,16 @@ onMounted(async () => {
   }
 }
 
+@media (width <= 768px) {
+  .so-split-dialog__toolbar {
+    align-items: stretch;
+  }
+
+  .so-split-dialog__actions {
+    justify-items: stretch;
+  }
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -4985,6 +5165,200 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+:global(.so-split-dialog-overlay) {
+  overflow: hidden;
+}
+
+:global(.so-split-dialog-overlay .el-overlay-dialog) {
+  display: flex;
+  justify-content: center;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+:deep(.el-dialog.so-split-dialog-modal) {
+  display: flex;
+  width: min(1500px, calc(100vw - 24px));
+  height: min(92vh, 980px);
+  max-width: 100%;
+  max-height: min(92vh, 980px);
+  margin: 0 !important;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+:deep(.el-dialog.so-split-dialog-modal .el-dialog__body) {
+  min-height: 0;
+  padding-top: 10px;
+  padding-bottom: 12px;
+  overflow: hidden auto;
+  flex: 1;
+}
+
+:deep(.el-dialog.so-split-dialog-modal .el-dialog__header),
+:deep(.el-dialog.so-split-dialog-modal .el-dialog__footer) {
+  flex: 0 0 auto;
+}
+
+.so-split-header {
+  display: grid;
+  gap: 4px;
+}
+
+.so-split-header__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #c47e18;
+  text-transform: uppercase;
+}
+
+.so-split-header__title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #5f3a00;
+}
+
+.so-split-header__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #7b5a1f;
+}
+
+.so-split-dialog {
+  display: grid;
+  height: auto;
+  gap: 16px;
+}
+
+.so-split-hero {
+  display: grid;
+  padding: 16px 18px;
+  background:
+    radial-gradient(circle at top right, rgb(230 162 60 / 15%), transparent 36%),
+    linear-gradient(145deg, rgb(255 251 244), rgb(255 255 255));
+  border: 1px solid rgb(230 162 60 / 24%);
+  border-radius: 18px;
+}
+
+.so-split-hero__metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.so-split-hero__metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgb(255 255 255 / 78%);
+  border: 1px solid rgb(230 162 60 / 14%);
+  border-radius: 14px;
+}
+
+.so-split-hero__metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+}
+
+.so-split-hero__metric strong {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--el-text-color-primary);
+}
+
+.so-split-dialog__toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 2px 2px 0;
+}
+
+.so-split-dialog__meta {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.so-split-dialog__meta-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.so-split-dialog__actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.so-split-dialog__status {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.so-split-table-wrap {
+  padding: 12px;
+  overflow: auto;
+  background: linear-gradient(180deg, rgb(255 255 255), rgb(250 250 250));
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 4%);
+}
+
+.so-split-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgb(250 251 252), rgb(255 255 255));
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 18px;
+}
+
+.so-split-preview__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  align-items: flex-end;
+}
+
+.so-split-preview__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.so-split-preview__grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.so-split-group-stats {
+  display: flex;
+  padding: 2px 0;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+
+.so-split-group-stats__item {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .so-row--merge-source {
