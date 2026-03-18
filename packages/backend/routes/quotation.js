@@ -708,6 +708,32 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     if (!Number.isFinite(p) || p <= 0) return 64
     return Math.floor((p * 4) / 3)
   }
+  const getVisualCharUnits = (text) => {
+    const source = String(text || '')
+    let total = 0
+    for (const ch of source) {
+      if (ch === '\r') continue
+      if (ch === '\n') {
+        total += 0
+        continue
+      }
+      total += /[ -~]/.test(ch) ? 1 : 2
+    }
+    return total
+  }
+  const estimateWrappedLineCount = (text, columnWidthPx) => {
+    const source = String(text || '')
+    if (!source) return 1
+    const widthPx = Number(columnWidthPx)
+    const safeWidthPx = Number.isFinite(widthPx) && widthPx > 0 ? widthPx : 80
+    // 11px 字号下按 7px 近似 1 个英文字符宽，中文按 2 个单位计
+    const unitsPerLine = Math.max(4, Math.floor((safeWidthPx - 12) / 7))
+    const segments = source.replace(/\r/g, '').split('\n')
+    return segments.reduce((sum, segment) => {
+      const units = getVisualCharUnits(segment)
+      return sum + Math.max(1, Math.ceil(units / unitsPerLine))
+    }, 0)
+  }
   const getImageDimensions = (buffer) => {
     if (!buffer || buffer.length < 24) return null
     if (
@@ -808,11 +834,11 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const firstDetailRow = headerRow + 1
   // 启用图示：提高行高，避免 PDF 转换后图示过小
   const detailRowHeight = isEnabled ? 60 : 22
+  const detailTextColIndexes = [2, 3, 4, 5]
 
   partItems.forEach((item, idx) => {
     const r = firstDetailRow + idx
     const rowObj = sheet.getRow(r)
-    rowObj.height = detailRowHeight
     rowObj.font = { size: 11 }
     rowObj.alignment = { vertical: 'middle', wrapText: true }
 
@@ -834,6 +860,14 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       ? [...base, '', safeQty ?? '', safeUnitPrice ?? '', amount ?? '']
       : [...base, safeQty ?? '', safeUnitPrice ?? '', amount ?? '']
     rowObj.values = values
+
+    const wrappedLineCount = detailTextColIndexes.reduce((maxLines, colIndex) => {
+      const columnWidthPx = excelColumnWidthToPixels(sheet.getColumn(colIndex).width)
+      const lineCount = estimateWrappedLineCount(rowObj.getCell(colIndex).value, columnWidthPx)
+      return Math.max(maxLines, lineCount)
+    }, 1)
+    const dynamicHeight = Math.max(detailRowHeight, wrappedLineCount * 18 + 4)
+    rowObj.height = dynamicHeight
 
     // Alignments
     rowObj.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
