@@ -5617,6 +5617,45 @@ const getSealSampleDownloadFileName = (): string => {
   return `${safe(drawing)}_${safe(name)}_封样单.xlsx`
 }
 
+const getDrawingDownloadFileName = (row: ProjectAttachment): string => {
+  const rawName = row.storedFileName || row.originalName || `附件_${row.id}`
+  const customerModelNo = String(editForm.客户模号 ?? '').trim()
+  if (!customerModelNo) return rawName
+
+  const safe = (s: string) => s.replace(/[/\\:*?"<>|]/g, '_')
+  const ext = rawName.split('.').pop()?.toLowerCase() || ''
+  const safeCustomerModelNo = safe(customerModelNo)
+  const threeDExts = new Set([
+    'prt',
+    'x_t',
+    'x_b',
+    'stp',
+    'step',
+    'igs',
+    'iges',
+    'sldprt',
+    'sldasm',
+    'asm',
+    'par',
+    'psm',
+    'catpart',
+    'catproduct'
+  ])
+
+  if (ext === 'pdf') return `${safeCustomerModelNo}_2D.${ext}`
+  if (ext === 'dwg') return `${safeCustomerModelNo}_2D_CAD.${ext}`
+  if (threeDExts.has(ext)) return `${safeCustomerModelNo}_3D.${ext}`
+
+  const projectCode = String(editForm.项目编号 ?? '').trim()
+  if (projectCode) {
+    const prefix = `${projectCode}_`
+    if (rawName.startsWith(prefix)) {
+      return `${safeCustomerModelNo}_${rawName.slice(prefix.length)}`
+    }
+  }
+  return rawName
+}
+
 // 下载附件
 const downloadAttachment = async (row: ProjectAttachment) => {
   try {
@@ -5625,10 +5664,12 @@ const downloadAttachment = async (row: ProjectAttachment) => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const downloadName =
-      row.type === 'seal-sample'
-        ? getSealSampleDownloadFileName()
-        : row.storedFileName || row.originalName || `附件_${row.id}`
+    let downloadName = row.storedFileName || row.originalName || `附件_${row.id}`
+    if (row.type === 'seal-sample') {
+      downloadName = getSealSampleDownloadFileName()
+    } else if (row.type === 'drawing') {
+      downloadName = getDrawingDownloadFileName(row)
+    }
     a.download = downloadName
     document.body.appendChild(a)
     a.click()

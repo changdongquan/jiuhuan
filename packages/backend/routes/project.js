@@ -1061,9 +1061,10 @@ const generateAttachmentFileName = (projectCode, customerModelNo, type, original
     fileName = `${projectCode}_技术规格表${safeExt}`
   } else if (type === 'drawing') {
     // 图档：根据扩展名决定命名规则
-    // .pdf  => 项目编号_2D.pdf
-    // .dwg  => 项目编号_2D_CAD.dwg
-    // 3D（.prt .x_t .stp 等）=> 项目编号_3D.{扩展名}
+    // .pdf  => 客户模号_2D.pdf
+    // .dwg  => 客户模号_2D_CAD.dwg
+    // 3D（.prt .x_t .stp 等）=> 客户模号_3D.{扩展名}
+    const drawingPrefix = customerModelNo || projectCode || 'UNKNOWN'
     const extLower = ext.toLowerCase()
     const threeDExts = new Set([
       'prt',
@@ -1082,11 +1083,11 @@ const generateAttachmentFileName = (projectCode, customerModelNo, type, original
       'catproduct'
     ])
     if (extLower === 'pdf') {
-      fileName = `${projectCode}_2D${safeExt}`
+      fileName = `${drawingPrefix}_2D${safeExt}`
     } else if (extLower === 'dwg') {
-      fileName = `${projectCode}_2D_CAD${safeExt}`
+      fileName = `${drawingPrefix}_2D_CAD${safeExt}`
     } else if (threeDExts.has(extLower)) {
-      fileName = `${projectCode}_3D${safeExt}`
+      fileName = `${drawingPrefix}_3D${safeExt}`
     } else {
       fileName = originalFileName
     }
