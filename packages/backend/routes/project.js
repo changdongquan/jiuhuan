@@ -22,11 +22,15 @@ const { getPool } = require('../database')
 const { requireCapability } = require('../middleware/capability')
 
 const execFileAsync = promisify(execFile)
+const requireProjectRead = requireCapability('PROJECT_MANAGEMENT.READ', {
+  fallbackRoute: 'ProjectManagementIndex'
+})
 const requireProjectCreate = requireCapability('PROJECT_MANAGEMENT.CREATE')
 const requireProjectUpdate = requireCapability('PROJECT_MANAGEMENT.UPDATE')
 const requireProjectDelete = requireCapability('PROJECT_MANAGEMENT.DELETE')
 const requireProjectUpload = requireCapability('PROJECT_MANAGEMENT.UPLOAD')
 const requireProjectExport = requireCapability('PROJECT_MANAGEMENT.EXPORT')
+const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 // 项目管理附件存储配置
 // 使用与销售订单相同的路径配置
@@ -977,6 +981,47 @@ const uploadPartImage = multer({
 
 const getFileFullPath = (relativePath, storedFileName) => {
   return path.join(FILE_ROOT, relativePath, storedFileName)
+}
+
+const hasProductionTaskAttachmentTable = async () => {
+  const rows = await query(`
+    SELECT CASE WHEN OBJECT_ID(N'dbo.生产任务附件', N'U') IS NULL THEN 0 ELSE 1 END AS existsFlag
+  `)
+  return !!rows?.[0]?.existsFlag
+}
+
+const convertDocxToPdfBuffer = async (docxFullPath) => {
+  const tmpBase = path.join(os.tmpdir(), 'jh-project-attachment2-pdf-')
+  const tmpDir = await fsp.mkdtemp(tmpBase)
+  const sofficePath = process.env.LIBREOFFICE_PATH || 'soffice'
+  let loUserDir
+
+  try {
+    loUserDir = await mkLibreOfficeProfileDir(tmpDir)
+    const loUserDirUrl = `file://${loUserDir.replace(/\\/g, '/')}`
+    const env = { ...process.env, HOME: loUserDir }
+    await execFileAsync(
+      sofficePath,
+      [
+        '--headless',
+        `-env:UserInstallation=${loUserDirUrl}`,
+        '--convert-to',
+        'pdf',
+        '--outdir',
+        tmpDir,
+        docxFullPath
+      ],
+      { env, timeout: 120000 }
+    )
+
+    const files = await fsp.readdir(tmpDir)
+    const pdfName = files.find((name) => /\.pdf$/i.test(name))
+    if (!pdfName) throw new Error('PDF 转换失败：未生成 PDF 文件')
+    return await fsp.readFile(path.join(tmpDir, pdfName))
+  } finally {
+    await rmDirRecursive(loUserDir)
+    await rmDirRecursive(tmpDir)
+  }
 }
 
 // 根据项目编号查询客户模号
@@ -3528,6 +3573,184 @@ router.get('/:projectCode(*)/attachments', async (req, res) => {
       code: 500,
       success: false,
       message: '获取项目管理附件列表失败',
+      error: error.message
+    })
+  }
+})
+
+// 附件 2 左侧容器：聚合生产任务侧的只读附件，供项目管理页面查看/预览/下载
+router.get('/:projectCode(*)/attachments-2/files', requireProjectRead, async (req, res) => {
+  try {
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const tableExists = await hasProductionTaskAttachmentTable()
+    if (!tableExists) {
+      return res.json({ code: 0, success: true, data: [] })
+    }
+
+    const rows = await query(
+      `
+      SELECT
+        附件ID as id,
+        项目编号 as projectCode,
+        附件类型 as type,
+        附件标签 as tag,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        文件大小 as fileSize,
+        内容类型 as contentType,
+        上传时间 as uploadedAt,
+        上传人 as uploadedBy
+      FROM 生产任务附件
+      WHERE 项目编号 = @projectCode
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+        AND (
+          (附件类型 = N'photo' AND 附件标签 IN (N'appearance', N'nameplate', N'counter'))
+          OR 附件类型 = N'inspection'
+        )
+      ORDER BY 上传时间 DESC, 附件ID DESC
+      `,
+      { projectCode }
+    )
+
+    return res.json({ code: 0, success: true, data: rows || [] })
+  } catch (error) {
+    console.error('获取附件 2 文件列表失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取附件 2 文件列表失败',
+      error: error.message
+    })
+  }
+})
+
+router.get('/attachments-2/:attachmentId/download', requireProjectRead, async (req, res) => {
+  try {
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const tableExists = await hasProductionTaskAttachmentTable()
+    if (!tableExists) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath
+      FROM 生产任务附件
+      WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+        AND (
+          (附件类型 = N'photo' AND 附件标签 IN (N'appearance', N'nameplate', N'counter'))
+          OR 附件类型 = N'inspection'
+        )
+      `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    return res.download(fullPath, attachment.originalName)
+  } catch (error) {
+    console.error('下载附件 2 文件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载附件 2 文件失败',
+      error: error.message
+    })
+  }
+})
+
+router.get('/attachments-2/:attachmentId/preview-pdf', requireProjectRead, async (req, res) => {
+  try {
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const tableExists = await hasProductionTaskAttachmentTable()
+    if (!tableExists) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1
+        附件ID as id,
+        原始文件名 as originalName,
+        存储文件名 as storedFileName,
+        相对路径 as relativePath,
+        内容类型 as contentType
+      FROM 生产任务附件
+      WHERE 附件ID = @attachmentId
+        AND (状态 IS NULL OR 状态 <> N'已删除')
+        AND (
+          (附件类型 = N'photo' AND 附件标签 IN (N'appearance', N'nameplate', N'counter'))
+          OR 附件类型 = N'inspection'
+        )
+      `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    const fileName = String(attachment.originalName || attachment.storedFileName || '').toLowerCase()
+    const contentType = String(attachment.contentType || '').toLowerCase()
+    const isDocx = contentType === DOCX_CONTENT_TYPE.toLowerCase() || fileName.endsWith('.docx')
+    if (!isDocx) {
+      return res.status(400).json({ code: 400, success: false, message: '仅支持 docx 转 PDF 预览' })
+    }
+
+    let pdfBuffer = null
+    try {
+      pdfBuffer = await convertDocxToPdfBuffer(fullPath)
+    } catch (e) {
+      const msg = String(e?.message || e || '')
+      if (msg.includes('spawn soffice') || msg.includes('ENOENT')) {
+        return res.status(500).json({
+          code: 500,
+          success: false,
+          message: '服务器未安装 LibreOffice（soffice），无法转换 PDF'
+        })
+      }
+      throw e
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'inline; filename=\"preview.pdf\"')
+    return res.send(pdfBuffer)
+  } catch (error) {
+    console.error('预览附件 2 文件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '预览附件 2 文件失败',
       error: error.message
     })
   }

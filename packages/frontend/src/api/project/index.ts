@@ -179,6 +179,22 @@ export interface ProjectAttachment {
   drawing?: string | null // 零件图纸、检验报告等绑定产品图号
 }
 
+export type ProjectAttachment2FileType = 'photo' | 'inspection'
+
+export interface ProjectAttachment2File {
+  id: number
+  projectCode: string
+  type: ProjectAttachment2FileType
+  tag?: 'appearance' | 'nameplate' | 'counter' | null
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+}
+
 // 获取项目管理附件列表
 export const getProjectAttachmentsApi = (projectCode: string, type?: ProjectAttachmentType) => {
   return request.get<{
@@ -195,6 +211,30 @@ export const getProjectAttachmentsApi = (projectCode: string, type?: ProjectAtta
 export const downloadProjectAttachmentApi = (attachmentId: number) => {
   return request.get<Blob>({
     url: `/api/project/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+export const getProjectAttachment2FilesApi = (projectCode: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectAttachment2File[]
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/attachments-2/files`
+  })
+}
+
+export const downloadProjectAttachment2FileApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/attachments-2/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+export const previewProjectAttachment2PdfApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/attachments-2/${attachmentId}/preview-pdf`,
     responseType: 'blob'
   })
 }

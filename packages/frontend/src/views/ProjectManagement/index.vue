@@ -1930,7 +1930,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isProductionTaskPdfFile(row)"
+                                v-if="isProductionTaskPdfFile(row) || isProductionTaskDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -1979,7 +1979,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isProductionTaskPdfFile(row)"
+                                v-if="isProductionTaskPdfFile(row) || isProductionTaskDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -2028,7 +2028,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isProductionTaskPdfFile(row)"
+                                v-if="isProductionTaskPdfFile(row) || isProductionTaskDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -2077,7 +2077,7 @@
                                 预览
                               </el-button>
                               <el-button
-                                v-if="isProductionTaskPdfFile(row)"
+                                v-if="isProductionTaskPdfFile(row) || isProductionTaskDocxFile(row)"
                                 type="primary"
                                 link
                                 size="small"
@@ -2343,29 +2343,27 @@ import {
   getProjectRelocationStatusCheckApi,
   getProjectStatisticsApi,
   getProjectAttachmentsApi,
+  getProjectAttachment2FilesApi,
   getProjectInspectionReportsApi,
   moveProjectInspectionReportsApi,
   orphanProjectInspectionReportsApi,
   downloadProjectAttachmentApi,
+  downloadProjectAttachment2FileApi,
   deleteProjectAttachmentApi,
   generateTripartiteAgreementPdfApi,
+  previewProjectAttachment2PdfApi,
   validateSealSampleApi,
   generateSealSampleXlsxApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
   type ProjectInfo,
   type ProjectAttachment,
+  type ProjectAttachment2File,
   type ProjectAttachmentType,
   type ProjectInspectionReportAttachment
 } from '@/api/project'
-import {
-  getProductionTaskAttachmentsApi,
-  downloadProductionTaskAttachmentApi,
-  type ProductionTaskAttachment
-} from '@/api/production-task'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
-import { useUserStoreWithOut } from '@/store/modules/user'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 import { createImageViewer } from '@/components/ImageViewer'
@@ -2400,19 +2398,12 @@ interface ProjectGroup {
 }
 
 const appStore = useAppStore()
-const userStore = useUserStoreWithOut()
 const uploadAuthHeaders = useUploadAuthHeaders()
 const route = useRoute()
 const router = useRouter()
 const isMobile = computed(() => appStore.getMobile)
 const externalImportVisible = ref(false)
 const projectManagementFilterCategory = computed(() => appStore.getProjectManagementFilterCategory)
-const hasProductionTaskPermission = computed(() => {
-  const userInfo: any = userStore.getUserInfo || {}
-  if (String(userInfo?.username || '').trim() === 'admin') return true
-  const permissions = Array.isArray(userInfo?.permissions) ? userInfo.permissions : []
-  return permissions.includes('ProductionTasksIndex')
-})
 
 const resolvePcViewModeFromRoute = (): ViewMode => {
   const v = route.query.view
@@ -5353,8 +5344,8 @@ const cleanupTempPartImage = async () => {
 
 // 生产任务附件相关状态
 const productionTaskAttachmentLoading = ref(false)
-const productionTaskPhotoAttachments = ref<ProductionTaskAttachment[]>([])
-const productionTaskInspectionAttachments = ref<ProductionTaskAttachment[]>([])
+const productionTaskPhotoAttachments = ref<ProjectAttachment2File[]>([])
+const productionTaskInspectionAttachments = ref<ProjectAttachment2File[]>([])
 
 const productionTaskPhotoAppearanceAttachments = computed(() =>
   productionTaskPhotoAttachments.value.filter((a) => a.tag === 'appearance')
@@ -5399,12 +5390,6 @@ const loadAttachments = async () => {
 
 // 加载生产任务附件列表
 const loadProductionTaskAttachments = async () => {
-  if (!hasProductionTaskPermission.value) {
-    productionTaskPhotoAttachments.value = []
-    productionTaskInspectionAttachments.value = []
-    return
-  }
-
   const projectCode = editForm.项目编号 || currentProjectCode.value
   if (!projectCode) {
     productionTaskPhotoAttachments.value = []
@@ -5414,12 +5399,12 @@ const loadProductionTaskAttachments = async () => {
 
   productionTaskAttachmentLoading.value = true
   try {
-    const [photoResp, inspectionResp]: any[] = await Promise.all([
-      getProductionTaskAttachmentsApi(projectCode, 'photo'),
-      getProductionTaskAttachmentsApi(projectCode, 'inspection')
-    ])
-    productionTaskPhotoAttachments.value = photoResp?.data || []
-    productionTaskInspectionAttachments.value = inspectionResp?.data || []
+    const response: any = await getProjectAttachment2FilesApi(projectCode)
+    const allFiles: ProjectAttachment2File[] = Array.isArray(response?.data) ? response.data : []
+    productionTaskPhotoAttachments.value = allFiles.filter((item) => item.type === 'photo')
+    productionTaskInspectionAttachments.value = allFiles.filter(
+      (item) => item.type === 'inspection'
+    )
   } catch (error) {
     console.error('加载生产任务附件失败:', error)
     productionTaskPhotoAttachments.value = []
@@ -6271,7 +6256,7 @@ const formatFileSize = (size?: number | null): string => {
 }
 
 // 判断生产任务附件是否为图片
-const isProductionTaskImageFile = (attachment: ProductionTaskAttachment): boolean => {
+const isProductionTaskImageFile = (attachment: ProjectAttachment2File): boolean => {
   if (attachment.contentType?.startsWith('image/')) {
     return true
   }
@@ -6282,7 +6267,7 @@ const isProductionTaskImageFile = (attachment: ProductionTaskAttachment): boolea
 }
 
 // 判断生产任务附件是否为 PDF
-const isProductionTaskPdfFile = (attachment: ProductionTaskAttachment): boolean => {
+const isProductionTaskPdfFile = (attachment: ProjectAttachment2File): boolean => {
   if (attachment.contentType === 'application/pdf') {
     return true
   }
@@ -6291,8 +6276,18 @@ const isProductionTaskPdfFile = (attachment: ProductionTaskAttachment): boolean 
   return ext === 'pdf'
 }
 
+const isProductionTaskDocxFile = (attachment: ProjectAttachment2File): boolean => {
+  const contentType = String(attachment.contentType || '').toLowerCase()
+  if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return true
+  }
+  const fileName = attachment.storedFileName || attachment.originalName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return ext === 'docx'
+}
+
 // 预览生产任务图片附件
-const handleProductionTaskAttachmentPreview = async (attachment: ProductionTaskAttachment) => {
+const handleProductionTaskAttachmentPreview = async (attachment: ProjectAttachment2File) => {
   if (!isProductionTaskImageFile(attachment)) {
     ElMessage.warning('该文件不是图片格式')
     return
@@ -6300,7 +6295,7 @@ const handleProductionTaskAttachmentPreview = async (attachment: ProductionTaskA
 
   try {
     // 获取同类型的所有图片附件
-    let allAttachments: ProductionTaskAttachment[] = []
+    let allAttachments: ProjectAttachment2File[] = []
     if (attachment.type === 'photo') {
       allAttachments = productionTaskPhotoAttachments.value
     } else if (attachment.type === 'inspection') {
@@ -6321,7 +6316,7 @@ const handleProductionTaskAttachmentPreview = async (attachment: ProductionTaskA
     try {
       const blobPromises = imageAttachments.map(async (item) => {
         try {
-          const resp = await downloadProductionTaskAttachmentApi(item.id)
+          const resp = await downloadProjectAttachment2FileApi(item.id)
           const blob = (resp as any)?.data ?? resp
           const url = window.URL.createObjectURL(blob as Blob)
           blobUrls.push(url)
@@ -6359,14 +6354,16 @@ const handleProductionTaskAttachmentPreview = async (attachment: ProductionTaskA
 }
 
 // 预览生产任务 PDF 附件
-const handleProductionTaskAttachmentPdfPreview = async (attachment: ProductionTaskAttachment) => {
-  if (!isProductionTaskPdfFile(attachment)) {
-    ElMessage.warning('该文件不是 PDF 格式')
+const handleProductionTaskAttachmentPdfPreview = async (attachment: ProjectAttachment2File) => {
+  if (!isProductionTaskPdfFile(attachment) && !isProductionTaskDocxFile(attachment)) {
+    ElMessage.warning('该文件暂不支持 PDF 预览')
     return
   }
 
   try {
-    const resp = await downloadProductionTaskAttachmentApi(attachment.id)
+    const resp = isProductionTaskPdfFile(attachment)
+      ? await downloadProjectAttachment2FileApi(attachment.id)
+      : await previewProjectAttachment2PdfApi(attachment.id)
     const blob = (resp as any)?.data ?? resp
     const url = window.URL.createObjectURL(blob as Blob)
 
@@ -6389,9 +6386,9 @@ const handleProductionTaskAttachmentPdfPreview = async (attachment: ProductionTa
 }
 
 // 下载生产任务附件
-const downloadProductionTaskAttachment = async (row: ProductionTaskAttachment) => {
+const downloadProductionTaskAttachment = async (row: ProjectAttachment2File) => {
   try {
-    const resp: any = await downloadProductionTaskAttachmentApi(row.id)
+    const resp: any = await downloadProjectAttachment2FileApi(row.id)
     const blob = ((resp as any)?.data ?? resp) as Blob
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
