@@ -135,22 +135,24 @@
                   {{ displayData.machineTonnage ? String(displayData.machineTonnage) + 'T' : 'T' }}
                 </td>
                 <td colspan="2" class="trial-form-label-cell">预计用料重量</td>
-                <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
-                <td class="trial-form-label-cell">KG</td>
+                <td colspan="2" class="trial-form-value-cell trial-form-value-cell--merge-unit"
+                  >&nbsp;</td
+                >
+                <td class="trial-form-label-cell trial-form-unit-cell--merge-value">KG</td>
                 <td colspan="5" class="trial-form-value-cell"></td>
               </tr>
 
               <!-- 模板第9行 (20pt): 实际领料重量 / 返还材料重量 / 实际用料重量 -->
               <tr class="trial-form-row" style="height: 20pt">
                 <td colspan="2" class="trial-form-label-cell">实际领料重量</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
-                <td class="trial-form-label-cell">KG</td>
+                <td class="trial-form-value-cell trial-form-value-cell--merge-unit">&nbsp;</td>
+                <td class="trial-form-label-cell trial-form-unit-cell--merge-value">KG</td>
                 <td colspan="2" class="trial-form-label-cell">返还材料重量</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
-                <td class="trial-form-label-cell">KG</td>
+                <td class="trial-form-value-cell trial-form-value-cell--merge-unit">&nbsp;</td>
+                <td class="trial-form-label-cell trial-form-unit-cell--merge-value">KG</td>
                 <td colspan="2" class="trial-form-label-cell">实际用料重量</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
-                <td class="trial-form-label-cell">KG</td>
+                <td class="trial-form-value-cell trial-form-value-cell--merge-unit">&nbsp;</td>
+                <td class="trial-form-label-cell trial-form-unit-cell--merge-value">KG</td>
               </tr>
 
               <!-- 模板第10行 (20pt): 仓库确认 / 试模工时 -->
@@ -160,8 +162,10 @@
                 <td colspan="2" class="trial-form-label-cell">仓库确认</td>
                 <td colspan="2" class="trial-form-value-cell">&nbsp;</td>
                 <td colspan="2" class="trial-form-label-cell">试模工时</td>
-                <td class="trial-form-value-cell">{{ displayData.trialDuration || '' }}</td>
-                <td class="trial-form-label-cell">H</td>
+                <td class="trial-form-value-cell trial-form-value-cell--merge-unit">
+                  {{ displayData.trialDuration || '' }}
+                </td>
+                <td class="trial-form-label-cell trial-form-unit-cell--merge-value">H</td>
               </tr>
 
               <!-- 模板第11行 (20pt): 注塑成型工艺参数 -->
@@ -204,8 +208,12 @@
                 <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-value-cell">&nbsp;</td>
                 <td class="trial-form-label-cell">{{ row.other }}</td>
-                <td class="trial-form-value-cell">{{ row.otherLeft ?? '' }}</td>
-                <td class="trial-form-value-cell">{{ row.otherRight ?? '' }}</td>
+                <td class="trial-form-value-cell trial-form-value-cell--merge-unit">
+                  {{ row.otherLeft ?? '' }}
+                </td>
+                <td class="trial-form-value-cell trial-form-unit-cell--merge-value">
+                  {{ row.otherRight ?? '' }}
+                </td>
               </tr>
 
               <!-- 模板第21行 (20pt): 温控部分参数（℃） -->
@@ -290,11 +298,15 @@
                 class="trial-form-row"
                 style="height: 20pt"
               >
-                <td colspan="2" class="trial-form-value-cell">{{ row.left }}</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="2" class="trial-form-value-cell trial-form-value-cell--merge-unit">
+                  {{ row.left }}
+                </td>
+                <td class="trial-form-value-cell trial-form-unit-cell--merge-value">&nbsp;</td>
                 <td colspan="3" class="trial-form-value-cell">&nbsp;</td>
-                <td colspan="2" class="trial-form-value-cell">{{ row.right }}</td>
-                <td class="trial-form-value-cell">&nbsp;</td>
+                <td colspan="2" class="trial-form-value-cell trial-form-value-cell--merge-unit">
+                  {{ row.right }}
+                </td>
+                <td class="trial-form-value-cell trial-form-unit-cell--merge-value">&nbsp;</td>
                 <td colspan="3" class="trial-form-value-cell">&nbsp;</td>
               </tr>
 
@@ -690,6 +702,14 @@ onUnmounted(() => {
     line-height: inherit;
   }
 
+  .trial-form-value-cell--merge-unit {
+    border-right: none !important;
+  }
+
+  .trial-form-unit-cell--merge-value {
+    border-left: none !important;
+  }
+
   .trial-form-signature {
     padding: 3px !important;
     font-size: inherit;
@@ -813,6 +833,14 @@ onUnmounted(() => {
 .trial-form-value-cell {
   padding: 1px 3px;
   font-size: 12px;
+}
+
+.trial-form-value-cell--merge-unit {
+  border-right: none !important;
+}
+
+.trial-form-unit-cell--merge-value {
+  border-left: none !important;
 }
 
 .trial-form-signature {
