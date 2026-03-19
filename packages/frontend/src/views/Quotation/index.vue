@@ -1,21 +1,5 @@
 <template>
   <div class="quotation-page p-4 space-y-4">
-    <section class="qt-workbench" :class="{ 'qt-workbench--mobile': isMobile }">
-      <div class="qt-workbench__hero">
-        <div class="qt-workbench__hero-copy">
-          <div class="qt-workbench__eyebrow">Quotation Workspace</div>
-          <div class="qt-workbench__title-row">
-            <h2 class="qt-workbench__title">报价工作台</h2>
-            <el-tag type="warning" effect="dark" round>报价 / 立项 / 跟进</el-tag>
-          </div>
-        </div>
-
-        <div class="qt-workbench__hero-actions">
-          <el-button type="primary" size="large" @click="handleCreate()">新增报价单</el-button>
-        </div>
-      </div>
-    </section>
-
     <div v-if="isMobile" class="mobile-top-bar">
       <div class="mobile-top-bar-left">
         <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
@@ -93,6 +77,7 @@
           <div class="query-actions">
             <el-button type="primary" @click="handleSearch">查询</el-button>
             <el-button @click="handleReset">重置</el-button>
+            <el-button type="success" @click="handleCreate()">新增报价单</el-button>
           </div>
         </el-form-item>
       </el-form>
@@ -378,8 +363,9 @@
       :width="isMobile ? '98%' : '1330px'"
       :fullscreen="isMobile"
       destroy-on-close
+      class="qt-initiation-dialog"
     >
-      <div v-loading="initiationDialogLoading" class="space-y-4">
+      <div v-loading="initiationDialogLoading" class="qt-initiation-dialog__content space-y-4">
         <el-descriptions
           :column="isMobile ? 1 : 5"
           border
@@ -416,7 +402,7 @@
           <el-descriptions-item label="客户审核驳回原因" :span="isMobile ? 1 : 2">{{
             initiationRequestRow?.customer_review_rejected_reason || '-'
           }}</el-descriptions-item>
-          <el-descriptions-item label="撤回原因" :span="isMobile ? 1 : 4">{{
+          <el-descriptions-item label="撤回原因" :span="isMobile ? 1 : 2">{{
             initiationRequestRow?.withdraw_reason || '-'
           }}</el-descriptions-item>
           <el-descriptions-item label="草稿保存时间">{{
@@ -444,17 +430,38 @@
 
         <el-card shadow="never">
           <template #header>
-            <div class="flex items-center justify-between gap-3">
+            <div class="qt-initiation-card-header">
               <span>项目信息</span>
-              <el-button
-                v-if="!isInitiationViewMode"
-                type="primary"
-                link
-                :loading="initiationRecommendingCode"
-                @click="recommendInitiationProjectCode"
-              >
-                推荐项目编号
-              </el-button>
+              <div class="qt-initiation-card-header__actions">
+                <div class="qt-initiation-card-header__meta">
+                  <span class="qt-initiation-card-header__label">客户名称</span>
+                  <el-input
+                    v-model="initiationForm.customerName"
+                    class="qt-initiation-card-header__customer"
+                    size="small"
+                    :disabled="isInitiationViewMode || initiationCustomerLocked"
+                    placeholder="请输入客户名称"
+                    @blur="handleInitiationCustomerBlur"
+                  />
+                </div>
+                <div
+                  class="qt-initiation-card-header__meta qt-initiation-card-header__meta--status"
+                >
+                  <span class="qt-initiation-card-header__label">客户状态</span>
+                  <el-tag size="small" :type="initiationCustomerMatched ? 'success' : 'warning'">
+                    {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
+                  </el-tag>
+                </div>
+                <el-button
+                  v-if="!isInitiationViewMode"
+                  type="primary"
+                  link
+                  :loading="initiationRecommendingCode"
+                  @click="recommendInitiationProjectCode"
+                >
+                  推荐项目编号
+                </el-button>
+              </div>
             </div>
           </template>
           <el-form :inline="false" label-width="100px">
@@ -484,23 +491,6 @@
                   >
                     {{ initiationProjectCodeError }}
                   </div>
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="客户名称" required>
-                  <el-input
-                    v-model="initiationForm.customerName"
-                    :disabled="isInitiationViewMode || initiationCustomerLocked"
-                    placeholder="请输入客户名称"
-                    @blur="handleInitiationCustomerBlur"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="客户状态">
-                  <el-tag :type="initiationCustomerMatched ? 'success' : 'warning'">
-                    {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
-                  </el-tag>
                 </el-form-item>
               </el-col>
               <template
@@ -565,6 +555,18 @@
                         />
                       </template>
                     </el-table-column>
+                    <el-table-column
+                      v-if="!isInitiationViewMode"
+                      label="操作"
+                      width="90"
+                      fixed="right"
+                    >
+                      <template #default="{ $index }">
+                        <el-button type="danger" link @click="removeInitiationProjectDetail($index)"
+                          >删除</el-button
+                        >
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </el-col>
               </template>
@@ -603,57 +605,55 @@
 
         <el-card shadow="never">
           <template #header>
-            <div class="flex items-center justify-between gap-3">
+            <div class="qt-initiation-card-header">
               <span>销售订单</span>
-              <el-button
-                v-if="!isInitiationViewMode"
-                type="primary"
-                plain
-                size="small"
-                @click="addInitiationDetail"
-                >新增明细</el-button
-              >
-            </div>
-          </template>
-          <el-form label-width="100px">
-            <el-row :gutter="12">
-              <el-col :xs="24" :md="8">
-                <el-form-item label="订单日期" required>
+              <div class="qt-initiation-card-header__actions">
+                <div class="qt-initiation-card-header__meta">
+                  <span class="qt-initiation-card-header__label">订单日期</span>
                   <el-date-picker
                     v-model="initiationSalesForm.orderDate"
+                    class="qt-initiation-card-header__date"
                     type="date"
                     value-format="YYYY-MM-DD"
+                    size="small"
                     :disabled="isInitiationViewMode"
                     placeholder="请选择订单日期"
-                    style="width: 100%"
                   />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="签订日期">
+                </div>
+                <div class="qt-initiation-card-header__meta">
+                  <span class="qt-initiation-card-header__label">签订日期</span>
                   <el-date-picker
                     v-model="initiationSalesForm.signDate"
+                    class="qt-initiation-card-header__date"
                     type="date"
                     value-format="YYYY-MM-DD"
+                    size="small"
                     :disabled="isInitiationViewMode"
                     placeholder="可为空"
-                    style="width: 100%"
                   />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :md="8">
-                <el-form-item label="合同号">
+                </div>
+                <div class="qt-initiation-card-header__meta">
+                  <span class="qt-initiation-card-header__label">合同号</span>
                   <el-input
                     v-model="initiationSalesForm.contractNo"
+                    class="qt-initiation-card-header__contract"
+                    size="small"
                     :disabled="isInitiationViewMode"
                     placeholder="可为空"
                   />
-                </el-form-item>
-              </el-col>
-            </el-row>
-          </el-form>
-
-          <el-table :data="initiationSalesForm.details" border size="small" class="mt-2">
+                </div>
+                <el-button
+                  v-if="!isInitiationViewMode"
+                  type="primary"
+                  plain
+                  size="small"
+                  @click="addInitiationDetail"
+                  >新增明细</el-button
+                >
+              </div>
+            </div>
+          </template>
+          <el-table :data="initiationSalesForm.details" border size="small">
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column label="项目编号" min-width="140">
               <template #default="{ row }">
@@ -703,7 +703,7 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="数量" width="110">
+            <el-table-column label="数量" width="70">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.quantity"
@@ -716,7 +716,7 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="单价(元)" width="120">
+            <el-table-column label="单价(元)" width="100">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.unitPrice"
@@ -729,7 +729,7 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="金额(元)" width="100">
+            <el-table-column label="金额(元)" width="90">
               <template #default="{ row }">
                 <span>{{ formatAmount(row.totalAmount) }}</span>
               </template>
@@ -762,13 +762,6 @@
                   :disabled="isInitiationViewMode"
                   placeholder="选填"
                 />
-              </template>
-            </el-table-column>
-            <el-table-column v-if="!isInitiationViewMode" label="操作" width="90" fixed="right">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeInitiationDetail($index)"
-                  >删除</el-button
-                >
               </template>
             </el-table-column>
           </el-table>
@@ -2882,10 +2875,15 @@ const syncProjectDetailsToSalesDetails = () => {
     if (!projectDetail) return detail
     return {
       ...detail,
-      itemCode: String(projectDetail.projectCode || '').trim(),
-      productName: String(projectDetail.productName || '').trim() || '',
-      productDrawingNo: String(projectDetail.productDrawing || '').trim() || null,
-      customerPartNo: String(projectDetail.customerModelNo || '').trim() || null
+      itemCode: String(detail.itemCode || projectDetail.projectCode || '').trim(),
+      productName:
+        String(detail.productName || projectDetail.productName || '').trim() ||
+        String(detail.name || '').trim() ||
+        '',
+      productDrawingNo:
+        String(detail.productDrawingNo || projectDetail.productDrawing || '').trim() || null,
+      customerPartNo:
+        String(detail.customerPartNo || projectDetail.customerModelNo || '').trim() || null
     }
   })
 }
@@ -3054,20 +3052,20 @@ const buildInitiationPayload = () => {
     details: initiationSalesForm.details.map((detail, index) => {
       const projectDetail = initiationProjectDetails.value[index]
       const itemCode =
-        String(projectDetail?.projectCode || detail.itemCode || '').trim() ||
+        String(detail.itemCode || projectDetail?.projectCode || '').trim() ||
         primaryProjectCode ||
         null
       return {
         ...detail,
         itemCode,
         productName:
-          String(projectDetail?.productName || detail.productName || '').trim() ||
+          String(detail.productName || projectDetail?.productName || '').trim() ||
           String(detail.name || '').trim() ||
           null,
         productDrawingNo:
-          String(projectDetail?.productDrawing || detail.productDrawingNo || '').trim() || null,
+          String(detail.productDrawingNo || projectDetail?.productDrawing || '').trim() || null,
         customerPartNo:
-          String(projectDetail?.customerModelNo || detail.customerPartNo || '').trim() || null
+          String(detail.customerPartNo || projectDetail?.customerModelNo || '').trim() || null
       }
     })
   }
@@ -3476,16 +3474,6 @@ const validateInitiationProjectCode = async () => {
     ...detail,
     itemCode: String(detail.itemCode || '').trim()
   }))
-  if (isPart) {
-    const projectCodeSet = new Set(projectCodes)
-    const missingReferencedCode = initiationSalesForm.details.find(
-      (detail) => !projectCodeSet.has(String(detail.itemCode || '').trim())
-    )
-    if (missingReferencedCode) {
-      initiationProjectCodeError.value = `销售订单项目编号未在项目信息中创建：${String(missingReferencedCode.itemCode || '').trim()}`
-      return false
-    }
-  }
   syncInitiationDetailItemCodes(row.quotationType, projectCodes[0] || '')
   initiationProjectCodeChecking.value = true
   try {
@@ -3693,18 +3681,16 @@ const addInitiationDetail = () => {
   }
 }
 
-const removeInitiationDetail = (index: number) => {
+const removeInitiationProjectDetail = async (index: number) => {
+  initiationProjectDetails.value.splice(index, 1)
   initiationSalesForm.details.splice(index, 1)
-  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工') {
-    initiationProjectDetails.value.splice(index, 1)
-    syncProjectDetailsToSalesDetails()
-  } else {
-    syncInitiationDetailItemCodes(
-      initiationSourceQuotation.value?.quotationType,
-      initiationForm.projectCode
-    )
-  }
   initiationForm.projectCode = getInitiationPrimaryProjectCode()
+  if (
+    resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工' &&
+    initiationProjectDetails.value.length
+  ) {
+    await recommendInitiationProjectCode()
+  }
 }
 
 const recalcInitiationDetailTotal = (detail: QuotationInitiationSalesOrderDetailDraft) => {
@@ -4623,6 +4609,13 @@ onMounted(() => {
   }
 }
 
+@media (width <= 768px) {
+  :deep(.qt-initiation-dialog.el-dialog .el-dialog__body),
+  :deep(.qt-initiation-dialog .el-dialog__body) {
+    overflow: visible;
+  }
+}
+
 .quotation-page {
   position: relative;
 }
@@ -4689,6 +4682,50 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.7;
   color: #596273;
+}
+
+.qt-initiation-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.qt-initiation-card-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.qt-initiation-card-header__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qt-initiation-card-header__meta--status {
+  min-height: 24px;
+}
+
+.qt-initiation-card-header__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.qt-initiation-card-header__customer {
+  width: 240px;
+}
+
+.qt-initiation-card-header__date {
+  width: 148px;
+}
+
+.qt-initiation-card-header__contract {
+  width: 160px;
 }
 
 .qt-workbench__hero-actions {
@@ -6163,5 +6200,27 @@ onMounted(() => {
 .initiation-basic-descriptions
   :deep(.el-descriptions__content.el-descriptions__cell.is-bordered-content) {
   padding: 8px 10px;
+}
+
+:deep(.qt-initiation-dialog.el-dialog),
+:deep(.qt-initiation-dialog .el-dialog) {
+  display: flex;
+  height: min(88vh, 900px);
+  max-height: min(88vh, 900px);
+  margin-top: 4vh;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+:deep(.qt-initiation-dialog.el-dialog .el-dialog__body),
+:deep(.qt-initiation-dialog .el-dialog__body) {
+  min-height: 0;
+  padding: 0 16px 16px;
+  overflow: hidden auto;
+  flex: 1 1 auto;
+}
+
+.qt-initiation-dialog__content {
+  display: block;
 }
 </style>
