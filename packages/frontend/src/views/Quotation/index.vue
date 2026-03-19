@@ -1063,10 +1063,47 @@
                       <el-tag type="warning" effect="dark" round>修改模具</el-tag>
                     </div>
                   </div>
+                  <div class="qm-action-cluster qm-action-cluster--inline">
+                    <el-button size="small" @click="handleCancelQuotationDialog">取消</el-button>
+                    <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit"
+                      >保存</el-button
+                    >
+                    <el-button
+                      v-if="!isViewMode"
+                      size="small"
+                      type="primary"
+                      plain
+                      :loading="importingProject"
+                      :disabled="importingProject"
+                      @click="handleImportFromProject"
+                    >
+                      项目代入
+                    </el-button>
+                    <el-button
+                      v-if="isViewMode && quotationForm.id"
+                      size="small"
+                      type="success"
+                      :loading="downloading"
+                      :disabled="downloading"
+                      @click="handleDownloadQuotationPdf"
+                    >
+                      {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
+                    </el-button>
+                    <el-button
+                      v-if="isViewMode && quotationForm.id"
+                      size="small"
+                      type="primary"
+                      :loading="downloading"
+                      :disabled="downloading"
+                      @click="handleDownloadCompletionPdf"
+                    >
+                      完工单下载
+                    </el-button>
+                  </div>
                 </div>
 
                 <div class="qm-topbar__meta-grid">
-                  <div class="qm-meta-card qm-meta-card--wide">
+                  <div class="qm-meta-card qm-meta-card--customer">
                     <div class="qm-meta-card__label">客户名称</div>
                     <el-form-item
                       prop="customerName"
@@ -1091,7 +1128,7 @@
                     </el-form-item>
                   </div>
 
-                  <div class="qm-meta-card">
+                  <div class="qm-meta-card qm-meta-card--project">
                     <div class="qm-meta-card__label">来源项目编号</div>
                     <div class="qm-meta-card__field">
                       <el-input
@@ -1102,14 +1139,14 @@
                     </div>
                   </div>
 
-                  <div class="qm-meta-card qm-meta-card--compact">
+                  <div class="qm-meta-card qm-meta-card--quotation-no">
                     <div class="qm-meta-card__label">报价单号</div>
                     <div class="qm-meta-card__field">
                       <el-input v-model="quotationForm.quotationNo" :disabled="true" />
                     </div>
                   </div>
 
-                  <div class="qm-meta-card qm-meta-card--compact">
+                  <div class="qm-meta-card qm-meta-card--half">
                     <div class="qm-meta-card__label">报价日期</div>
                     <el-form-item
                       prop="quotationDate"
@@ -1128,7 +1165,7 @@
                     </el-form-item>
                   </div>
 
-                  <div class="qm-meta-card qm-meta-card--compact">
+                  <div class="qm-meta-card qm-meta-card--half">
                     <div class="qm-meta-card__label">经办人</div>
                     <div class="qm-meta-card__field">
                       <el-input
@@ -1140,43 +1177,6 @@
                   </div>
                 </div>
               </div>
-
-              <aside class="qm-topbar__aside">
-                <div class="qm-action-cluster">
-                  <el-button @click="handleCancelQuotationDialog">取消</el-button>
-                  <el-button v-if="!isViewMode" type="primary" @click="handleSubmit"
-                    >保存</el-button
-                  >
-                  <el-button
-                    v-if="!isViewMode"
-                    type="primary"
-                    plain
-                    :loading="importingProject"
-                    :disabled="importingProject"
-                    @click="handleImportFromProject"
-                  >
-                    项目代入
-                  </el-button>
-                  <el-button
-                    v-if="isViewMode && quotationForm.id"
-                    type="success"
-                    :loading="downloading"
-                    :disabled="downloading"
-                    @click="handleDownloadQuotationPdf"
-                  >
-                    {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
-                  </el-button>
-                  <el-button
-                    v-if="isViewMode && quotationForm.id"
-                    type="primary"
-                    :loading="downloading"
-                    :disabled="downloading"
-                    @click="handleDownloadCompletionPdf"
-                  >
-                    完工单下载
-                  </el-button>
-                </div>
-              </aside>
             </div>
           </template>
           <!-- 操作按钮 -->
@@ -1227,7 +1227,6 @@
                   <div class="qm-panel__eyebrow">Change Info</div>
                   <div class="qm-panel__title">变更信息与申请备注</div>
                 </div>
-                <div class="qm-panel__badge">定位改模背景、申请来源与补充说明</div>
               </div>
               <div class="qm-fields">
                 <div class="qm-field qm-field--half">
@@ -1293,44 +1292,60 @@
                   <div class="qm-panel__eyebrow">Material</div>
                   <div class="qm-panel__title">单位材料费</div>
                 </div>
-                <div class="qm-panel__badge">总计 ¥{{ formatAmount(materialsTotal) }}</div>
+                <div class="qm-panel__badge">材料费 ¥{{ formatAmount(materialsTotal) }}</div>
               </div>
-              <el-table :data="quotationForm.materials" border class="qm-cost-table" size="small">
-                <el-table-column prop="name" label="材料名称" min-width="120">
-                  <template #default="{ row }">
-                    <el-input v-model="row.name" :disabled="isViewMode" placeholder="材料名称" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="单价" width="96" align="right">
-                  <template #default="{ row }">
-                    <el-input-number
-                      v-model="row.unitPrice"
-                      :disabled="isViewMode"
-                      :min="0"
-                      :precision="2"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="用量" width="88" align="right">
-                  <template #default="{ row }">
-                    <el-input-number
-                      v-model="row.quantity"
-                      :disabled="isViewMode"
-                      :min="0"
-                      :precision="0"
-                      :controls="false"
-                      style="width: 100%"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="费用" width="100" align="right">
-                  <template #default="{ row }">
-                    {{ formatAmount(row.unitPrice * row.quantity) }}
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div class="qm-material-grid">
+                <div
+                  v-for="(row, rowIndex) in quotationForm.materials"
+                  :key="`material-${rowIndex}`"
+                  class="qm-material-card"
+                >
+                  <table class="qm-material-table">
+                    <thead>
+                      <tr>
+                        <th class="qm-material-table__name">材料名称</th>
+                        <th class="qm-material-table__price">单价</th>
+                        <th class="qm-material-table__qty">用量</th>
+                        <th class="qm-material-table__total">费用</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="qm-material-table__name">
+                          <el-input
+                            v-model="row.name"
+                            :disabled="isViewMode"
+                            placeholder="材料名称"
+                          />
+                        </td>
+                        <td class="qm-material-table__price">
+                          <el-input-number
+                            v-model="row.unitPrice"
+                            :disabled="isViewMode"
+                            :min="0"
+                            :precision="2"
+                            :controls="false"
+                            style="width: 100%"
+                          />
+                        </td>
+                        <td class="qm-material-table__qty">
+                          <el-input-number
+                            v-model="row.quantity"
+                            :disabled="isViewMode"
+                            :min="0"
+                            :precision="0"
+                            :controls="false"
+                            style="width: 100%"
+                          />
+                        </td>
+                        <td class="qm-material-table__total">
+                          {{ formatFilledAmount((row.unitPrice || 0) * (row.quantity || 0)) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             <div class="qm-panel">
@@ -1343,6 +1358,24 @@
               </div>
               <div class="qm-process-table-shell">
                 <table class="qm-process-compact-table">
+                  <thead>
+                    <tr>
+                      <template v-for="colIndex in 3" :key="`process-head-${colIndex}`">
+                        <th class="qm-process-compact-table__head qm-process-compact-table__name">
+                          加工工序
+                        </th>
+                        <th class="qm-process-compact-table__head qm-process-compact-table__unit">
+                          含税单价
+                        </th>
+                        <th class="qm-process-compact-table__head qm-process-compact-table__hours">
+                          用时（H）
+                        </th>
+                        <th class="qm-process-compact-table__head qm-process-compact-table__total">
+                          合计费用
+                        </th>
+                      </template>
+                    </tr>
+                  </thead>
                   <tbody>
                     <tr v-for="(row, rowIndex) in moldProcessTableRows" :key="`row-${rowIndex}`">
                       <template
@@ -1363,7 +1396,7 @@
                             />
                           </td>
                           <td class="qm-process-compact-table__total">
-                            {{ formatAmount(item.unitPrice * item.hours) }}
+                            {{ formatFilledAmount((item.unitPrice || 0) * (item.hours || 0)) }}
                           </td>
                         </template>
                         <template v-else>
@@ -1377,29 +1410,37 @@
             </div>
 
             <div class="qm-panel qm-panel--summary">
-              <div class="qm-panel__header">
+              <div class="qm-panel__header qm-panel__header--summary">
                 <div>
                   <div class="qm-panel__eyebrow">Total</div>
-                  <div class="qm-panel__title">总价</div>
+                  <div class="qm-panel__title-row">
+                    <div class="qm-panel__title">总价</div>
+                    <div class="qm-panel__hint qm-panel__hint--inline"
+                      >汇总材料、加工及附加费用</div
+                    >
+                  </div>
                 </div>
-                <div class="qm-panel__badge"
-                  >含税 ¥{{ formatAmount(effectiveTaxIncludedPrice) }}</div
-                >
               </div>
               <div class="qm-summary-list">
-                <div class="qm-summary-row">
-                  <div class="qm-summary-item qm-summary-item--inline">
-                    <span class="qm-summary-item__label">材料费</span>
-                    <strong>{{ formatAmount(materialsTotal) }}</strong>
+                <div class="qm-summary-main-row">
+                  <div class="qm-summary-kpi">
+                    <span class="qm-summary-kpi__label">材料费</span>
+                    <strong>{{
+                      formatFilledAmount(materialsTotal) === '-'
+                        ? '-'
+                        : `¥${formatFilledAmount(materialsTotal)}`
+                    }}</strong>
                   </div>
-                  <div class="qm-summary-item qm-summary-item--inline">
-                    <span class="qm-summary-item__label">加工费</span>
-                    <strong>{{ formatAmount(processingTotal) }}</strong>
+                  <div class="qm-summary-kpi">
+                    <span class="qm-summary-kpi__label">加工费</span>
+                    <strong>{{
+                      formatFilledAmount(processingTotal) === '-'
+                        ? '-'
+                        : `¥${formatFilledAmount(processingTotal)}`
+                    }}</strong>
                   </div>
-                </div>
-                <div class="qm-summary-row qm-summary-row--triple">
-                  <div class="qm-summary-item">
-                    <span class="qm-summary-item__label">其他费用</span>
+                  <div class="qm-summary-edit-card">
+                    <span class="qm-summary-edit-card__label">其他费用</span>
                     <el-input-number
                       v-model="quotationForm.otherFee"
                       :disabled="isViewMode"
@@ -1409,8 +1450,8 @@
                       style="width: 100%"
                     />
                   </div>
-                  <div class="qm-summary-item">
-                    <span class="qm-summary-item__label">运输费用</span>
+                  <div class="qm-summary-edit-card">
+                    <span class="qm-summary-edit-card__label">运输费用</span>
                     <el-input-number
                       v-model="quotationForm.transportFee"
                       :disabled="isViewMode"
@@ -1420,8 +1461,8 @@
                       style="width: 100%"
                     />
                   </div>
-                  <div class="qm-summary-item">
-                    <span class="qm-summary-item__label">加工数量</span>
+                  <div class="qm-summary-edit-card">
+                    <span class="qm-summary-edit-card__label">加工数量</span>
                     <el-input-number
                       v-model="quotationForm.quantity"
                       :disabled="isViewMode"
@@ -1433,8 +1474,12 @@
                   </div>
                 </div>
                 <div class="qm-summary-total">
-                  <span>含税价格</span>
-                  <strong>¥{{ formatAmount(effectiveTaxIncludedPrice) }}</strong>
+                  <span class="qm-summary-total__label">含税价格</span>
+                  <strong>{{
+                    formatFilledAmount(effectiveTaxIncludedPrice) === '-'
+                      ? '-'
+                      : `¥${formatFilledAmount(effectiveTaxIncludedPrice)}`
+                  }}</strong>
                 </div>
               </div>
             </div>
@@ -1496,7 +1541,7 @@
               <el-table-column
                 v-if="quotationForm.enableImage"
                 label="图示"
-                width="140"
+                width="176"
                 align="center"
               >
                 <template #default="{ row }">
@@ -1564,7 +1609,8 @@
                       </template>
                       <template v-else>
                         <div class="qt-part-image-empty">
-                          <div class="qt-part-image-empty__text">粘贴/拖拽</div>
+                          <div class="qt-part-image-empty__text">粘贴 / 拖拽 / 上传</div>
+                          <div class="qt-part-image-empty__hint">支持截图粘贴与本地图片选择</div>
                         </div>
                         <button
                           v-if="!isViewMode"
@@ -2146,7 +2192,7 @@ const createEmptyForm = (): QuotationFormModel => ({
   ],
   processes: [
     { key: 'nc', name: '数控', unitPriceLabel: '35元/小时', unitPrice: 35, hours: 0 },
-    { key: 'fastCut', name: '快速切割', unitPriceLabel: '12元/小时', unitPrice: 12, hours: 0 },
+    { key: 'fastCut', name: '快丝切割', unitPriceLabel: '12元/小时', unitPrice: 12, hours: 0 },
     { key: 'middleCut', name: '中丝切割', unitPriceLabel: '30元/小时', unitPrice: 30, hours: 0 },
     { key: 'slowCut', name: '慢丝切割', unitPriceLabel: '70元/小时', unitPrice: 70, hours: 0 },
     { key: 'cnc', name: 'CNC', unitPriceLabel: '70元/小时', unitPrice: 70, hours: 0 },
@@ -2438,6 +2484,12 @@ const formatAmount = (value: number | null | undefined) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   })
+}
+
+const formatFilledAmount = (value: number | null | undefined) => {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '-'
+  return formatAmount(numericValue)
 }
 
 const formatMoneyDisplay = (value: number | null | undefined) => {
@@ -4459,12 +4511,20 @@ onMounted(() => {
     flex-direction: column;
   }
 
-  .qm-topbar,
   .qm-grid,
   .qm-grid--intro,
   .qm-fields,
   .qm-topbar__meta-grid {
     grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .qm-topbar {
+    padding: 10px;
+  }
+
+  .qm-topbar__header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .qm-field--wide {
@@ -4473,16 +4533,24 @@ onMounted(() => {
 
   .qm-field--half,
   .qm-field--remark,
-  .qm-meta-card--wide {
+  .qm-meta-card--customer,
+  .qm-meta-card--project,
+  .qm-meta-card--quotation-no,
+  .qm-meta-card--half {
     grid-column: span 1;
   }
 
-  .qm-topbar__aside {
+  .qm-action-cluster {
     width: 100%;
-    min-width: 0;
+    justify-content: flex-start;
   }
 
-  .qm-summary-row {
+  .qm-action-cluster :deep(.el-button) {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .qm-summary-main-row,
+  .qm-material-grid {
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 
@@ -4521,6 +4589,31 @@ onMounted(() => {
 
   .query-form__actions {
     margin-top: 8px;
+  }
+}
+
+@media (width <= 1280px) {
+  .qm-topbar__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .qm-topbar__meta-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .qm-action-cluster {
+    justify-content: flex-start;
+  }
+
+  .qm-meta-card--customer,
+  .qm-meta-card--half {
+    grid-column: span 6;
+  }
+
+  .qm-meta-card--project,
+  .qm-meta-card--quotation-no {
+    grid-column: span 3;
   }
 }
 
@@ -4947,7 +5040,7 @@ onMounted(() => {
 /* 报价单顶部字段样式 */
 .quotation-top-fields {
   display: flex;
-  padding: 0 12px 12px;
+  padding: 0 0 12px;
   margin-top: -8px;
   margin-bottom: 8px;
   background-color: var(--el-bg-color-overlay);
@@ -5133,25 +5226,27 @@ onMounted(() => {
 }
 
 .qm-topbar {
-  display: grid;
+  display: block;
   width: 100%;
-  grid-template-columns: minmax(0, 1.95fr) 220px;
-  gap: 12px;
-  align-items: stretch;
-}
-
-.qm-topbar__intro {
-  padding: 14px 16px;
+  padding: 12px;
   background:
-    radial-gradient(circle at top left, rgb(255 206 129 / 22%), transparent 28%),
-    linear-gradient(135deg, #fffdf8 0%, #fff 55%, #f6f8fc 100%);
+    radial-gradient(circle at top left, rgb(255 206 129 / 18%), transparent 24%),
+    linear-gradient(135deg, #fffdf8 0%, #fff 58%, #f6f8fc 100%);
   border: 1px solid rgb(214 187 136 / 40%);
-  border-radius: 20px;
+  border-radius: 22px;
   box-shadow: 0 12px 28px rgb(116 99 59 / 8%);
 }
 
+.qm-topbar__intro {
+  min-width: 0;
+  padding: 10px 10px 0;
+}
+
 .qm-topbar__header {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .qm-topbar__eyebrow {
@@ -5182,23 +5277,32 @@ onMounted(() => {
 .qm-topbar__meta-grid {
   display: grid;
   margin-top: 12px;
-  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 0.88fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 10px;
 }
 
 .qm-meta-card {
+  min-width: 0;
   padding: 10px 12px;
   background: rgb(255 255 255 / 76%);
   border: 1px solid rgb(219 224 236 / 80%);
   border-radius: 16px;
 }
 
-.qm-meta-card--wide {
+.qm-meta-card--customer {
+  grid-column: span 4;
+}
+
+.qm-meta-card--project {
   grid-column: span 2;
 }
 
-.qm-meta-card--compact {
-  min-width: 0;
+.qm-meta-card--quotation-no {
+  grid-column: span 2;
+}
+
+.qm-meta-card--half {
+  grid-column: span 2;
 }
 
 .qm-meta-card__label {
@@ -5216,27 +5320,19 @@ onMounted(() => {
   margin-left: 0 !important;
 }
 
-.qm-topbar__aside {
-  display: flex;
-  padding: 12px;
-  background: linear-gradient(180deg, rgb(255 251 244 / 98%), rgb(255 255 255 / 98%));
-  border: 1px solid rgb(227 205 166 / 70%);
-  border-radius: 20px;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 12px 28px rgb(116 99 59 / 6%);
-  justify-content: center;
-}
-
 .qm-action-cluster {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .qm-action-cluster :deep(.el-button) {
-  width: 100%;
   margin-left: 0;
+}
+
+.qm-action-cluster--inline {
+  flex: 0 0 auto;
 }
 
 .qm-sheet {
@@ -5298,6 +5394,26 @@ onMounted(() => {
   color: #243244;
 }
 
+.qm-panel__title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qm-panel__hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #768397;
+}
+
+.qm-panel__hint--inline {
+  margin-top: 0;
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .qm-panel__badge {
   display: inline-flex;
   padding: 8px 12px;
@@ -5318,7 +5434,7 @@ onMounted(() => {
 
 .qm-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -5351,56 +5467,65 @@ onMounted(() => {
   gap: 8px;
 }
 
-.qm-summary-row {
+.qm-summary-main-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
-.qm-summary-row--triple {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.qm-summary-item {
-  display: grid;
-  grid-template-columns: 86px 1fr;
-  align-items: center;
-  gap: 10px;
-}
-
-.qm-summary-item--inline {
-  grid-template-columns: 56px 1fr;
-  padding: 10px 12px;
-  background: #f8f9fc;
+.qm-summary-kpi {
+  display: flex;
+  padding: 9px 10px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f5f7fb 100%);
   border: 1px solid #e2e7f0;
   border-radius: 12px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.qm-summary-item__label {
+.qm-summary-kpi strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: #203044;
+}
+
+.qm-summary-kpi__label,
+.qm-summary-edit-card__label {
   font-size: 12px;
   font-weight: 600;
   color: #657183;
 }
 
+.qm-summary-edit-card {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e7f0;
+  border-radius: 12px;
+}
+
 .qm-summary-total {
   display: flex;
-  padding: 10px 12px;
+  padding: 11px 12px;
   margin-top: 2px;
   color: #1f2d3d;
   background: linear-gradient(135deg, #fff2cb 0%, #fff8ea 100%);
   border: 1px solid #edd9a5;
-  border-radius: 14px;
+  border-radius: 12px;
   align-items: center;
   justify-content: space-between;
 }
 
 .qm-summary-total strong {
-  font-size: 18px;
+  font-size: 19px;
 }
 
-.qm-panel--summary {
-  position: sticky;
-  top: 0;
+.qm-summary-total__label {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .qm-process-table-shell {
@@ -5415,26 +5540,35 @@ onMounted(() => {
   table-layout: fixed;
 }
 
+.qm-process-compact-table th,
 .qm-process-compact-table td {
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid #e2e7f0;
   box-sizing: border-box;
 }
 
+.qm-process-compact-table__head {
+  font-size: 12px;
+  font-weight: 700;
+  color: #556274;
+  text-align: left;
+  background: #f7f9fd;
+}
+
 .qm-process-compact-table__name {
-  width: 12%;
+  width: 14%;
   font-weight: 700;
   color: #2a3748;
   background: #fafbfd;
 }
 
 .qm-process-compact-table__unit {
-  width: 16%;
+  width: 15%;
   color: #6f7b8d;
 }
 
 .qm-process-compact-table__hours {
-  width: 16%;
+  width: 14%;
 }
 
 .qm-process-compact-table__hours :deep(.el-input-number .el-input__inner) {
@@ -5442,7 +5576,7 @@ onMounted(() => {
 }
 
 .qm-process-compact-table__total {
-  width: 12%;
+  width: 15%;
   font-weight: 600;
   color: #223044;
   text-align: right;
@@ -5476,6 +5610,68 @@ onMounted(() => {
 }
 
 .qm-cost-table :deep(.el-input-number .el-input__inner) {
+  text-align: right;
+}
+
+.qm-material-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qm-material-card {
+  overflow: hidden;
+  border: 1px solid #e2e7f0;
+  border-radius: 14px;
+}
+
+.qm-material-table {
+  width: 100%;
+  background: #fff;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.qm-material-table th,
+.qm-material-table td {
+  padding: 8px 10px;
+  border: 1px solid #e2e7f0;
+  box-sizing: border-box;
+}
+
+.qm-material-table th {
+  font-size: 12px;
+  font-weight: 700;
+  color: #556274;
+  text-align: left;
+  background: #f7f9fd;
+}
+
+.qm-material-table__name {
+  width: 50%;
+}
+
+.qm-material-table__price {
+  width: 22%;
+}
+
+.qm-material-table__qty {
+  width: 16%;
+}
+
+.qm-material-table__total {
+  width: 12%;
+  color: #223044;
+  text-align: right;
+  background: #fffdf5;
+}
+
+.qm-material-table td.qm-material-table__price,
+.qm-material-table td.qm-material-table__qty {
+  text-align: right;
+}
+
+.qm-material-table :deep(.el-input-number .el-input__inner) {
   text-align: right;
 }
 
@@ -5532,13 +5728,13 @@ onMounted(() => {
 }
 
 .qt-part-items-table--with-image :deep(.el-table__cell) {
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: 6px;
+  padding-bottom: 6px;
   vertical-align: middle;
 }
 
 .qt-part-items-table--with-image :deep(.el-table__row) {
-  height: 64px;
+  height: 92px;
 }
 
 .qt-part-image-file-input {
@@ -5549,7 +5745,8 @@ onMounted(() => {
   position: relative;
   display: flex;
   width: 100%;
-  height: 64px;
+  min-height: 80px;
+  padding: 4px;
   outline: none;
   box-sizing: border-box;
   align-items: center;
@@ -5563,12 +5760,13 @@ onMounted(() => {
 .qt-part-image-cell__loading {
   display: flex;
   width: 100%;
-  height: 64px;
+  min-height: 80px;
   font-size: 12px;
+  letter-spacing: 0.02em;
   color: #909399;
-  background: #f5f7fa;
-  border: 1px dashed #dcdfe6;
-  border-radius: 6px;
+  background: linear-gradient(180deg, #f8fafc, #f2f5fa);
+  border: 1px dashed #cfd8e3;
+  border-radius: 12px;
   box-sizing: border-box;
   align-items: center;
   justify-content: center;
@@ -5577,36 +5775,50 @@ onMounted(() => {
 .qt-part-image-empty {
   display: flex;
   width: 100%;
-  height: 64px;
+  min-height: 80px;
+  padding: 8px 10px;
   font-size: 11px;
-  color: #909399;
-  background: #fafafa;
-  border: 1px dashed #dcdfe6;
-  border-radius: 6px;
+  color: #7a8698;
+  background: linear-gradient(180deg, rgb(249 251 254 / 98%), rgb(244 247 251 / 98%)), #fafafa;
+  border: 1px dashed #cfd8e3;
+  border-radius: 12px;
   box-sizing: border-box;
   align-items: center;
+  flex-direction: column;
+  gap: 4px;
   justify-content: center;
 }
 
 .qt-part-image-empty__text {
-  line-height: 1.1;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  user-select: none;
+}
+
+.qt-part-image-empty__hint {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #9aa6b6;
   text-align: center;
   user-select: none;
 }
 
 .qt-part-image-thumb {
   width: 100%;
-  height: 64px;
+  height: 80px;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 100%), rgb(247 249 252 / 100%)), #fff;
+  border: 1px solid #dfe5ef;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
   box-sizing: border-box;
 }
 
 .qt-part-image-thumb :deep(.el-image__inner) {
   width: 100%;
-  height: 64px;
+  height: 80px;
   object-fit: contain;
   transform: scale(var(--img-scale, 1));
   transform-origin: center;
@@ -5614,21 +5826,23 @@ onMounted(() => {
 
 .qt-part-image-scale {
   position: absolute;
-  right: 2px;
-  bottom: 2px;
+  right: 10px;
+  bottom: 10px;
 }
 
 .qt-part-image-scale-badge {
   display: inline-flex;
-  height: 18px;
-  min-width: 34px;
-  padding: 0 4px;
+  height: 22px;
+  min-width: 42px;
+  padding: 0 7px;
   font-size: 11px;
-  color: #303133;
+  font-weight: 600;
+  color: #435066;
   cursor: pointer;
-  background: rgb(255 255 255 / 90%);
-  border: 1px solid #dcdfe6;
-  border-radius: 10px;
+  background: rgb(255 255 255 / 94%);
+  border: 1px solid #d6dde8;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgb(109 126 154 / 12%);
   user-select: none;
   align-items: center;
   justify-content: center;
@@ -5636,34 +5850,46 @@ onMounted(() => {
 
 .qt-part-image-remove {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
+  top: 10px;
+  left: 10px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  line-height: 14px;
-  color: #606266;
+  font-size: 14px;
+  line-height: 20px;
+  color: #5f6c80;
   text-align: center;
   cursor: pointer;
-  background: rgb(255 255 255 / 90%);
-  border: 1px solid #dcdfe6;
+  background: rgb(255 255 255 / 94%);
+  border: 1px solid #d6dde8;
   border-radius: 50%;
+  box-shadow: 0 6px 16px rgb(109 126 154 / 12%);
 }
 
 .qt-part-image-pick {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 16px;
-  height: 16px;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  line-height: 14px;
-  color: #606266;
+  font-size: 13px;
+  line-height: 20px;
+  color: #5f6c80;
   text-align: center;
   cursor: pointer;
-  background: rgb(255 255 255 / 90%);
-  border: 1px solid #dcdfe6;
+  background: rgb(255 255 255 / 94%);
+  border: 1px solid #d6dde8;
   border-radius: 50%;
+  box-shadow: 0 6px 16px rgb(109 126 154 / 12%);
+}
+
+.qt-part-image-remove:hover,
+.qt-part-image-pick:hover,
+.qt-part-image-scale-badge:hover {
+  color: #1f2d3d;
+  background: #fff;
+  border-color: #c2ccd9;
 }
 
 .qt-part-items-table :deep(.el-input-number .el-input__inner) {
