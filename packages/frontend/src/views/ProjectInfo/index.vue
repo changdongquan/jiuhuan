@@ -32,6 +32,24 @@
           @keyup.enter="handleQuery"
         />
       </el-form-item>
+      <el-form-item label="客户名称">
+        <el-select
+          v-model="queryForm.customerName"
+          placeholder="请选择客户名称"
+          clearable
+          filterable
+          :reserve-keyword="false"
+          :loading="customerLoading"
+          :style="{ width: isMobile ? '100%' : '220px' }"
+        >
+          <el-option
+            v-for="customer in customerList"
+            :key="customer.id"
+            :label="customer.customerName"
+            :value="customer.customerName"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="分类">
         <el-select
           v-model="queryForm.category"
@@ -473,6 +491,7 @@ const paginationPagerCount = computed(() => (isMobile.value || viewMode.value ==
 // 查询表单
 const queryForm = reactive({
   keyword: '',
+  customerName: '',
   category: '',
   status: ''
 })
@@ -645,6 +664,7 @@ const fetchData = async () => {
     loading.value = true
     const params: GoodsQueryParams = {
       keyword: queryForm.keyword || undefined,
+      customerName: queryForm.customerName || undefined,
       category: queryForm.category || undefined,
       status: queryForm.status || undefined,
       page: currentPage.value,
@@ -722,6 +742,7 @@ const handleQuery = () => {
 // 重置
 const handleReset = () => {
   queryForm.keyword = ''
+  queryForm.customerName = ''
   queryForm.category = ''
   queryForm.status = ''
   currentPage.value = 1

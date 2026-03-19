@@ -186,6 +186,57 @@ router.get('/customer-options', async (req, res) => {
   }
 })
 
+router.get('/query-customer-options', async (_req, res) => {
+  try {
+    await ensureTables()
+    const rows = await query(`
+      WITH outbound_customers AS (
+        SELECT
+          LTRIM(RTRIM(od.客户名称)) as customerName
+        FROM 出库单明细 od
+        WHERE (od.状态 IS NULL OR od.状态 <> N'已删除')
+          AND od.客户名称 IS NOT NULL
+          AND LTRIM(RTRIM(od.客户名称)) <> N''
+        GROUP BY LTRIM(RTRIM(od.客户名称))
+      ),
+      customer_master AS (
+        SELECT
+          LTRIM(RTRIM(c.客户名称)) as customerName,
+          MIN(ISNULL(c.SeqNumber, 2147483647)) as seqNumber,
+          MIN(c.客户ID) as customerId
+        FROM 客户信息 c
+        WHERE ISNULL(c.是否删除, 0) = 0
+          AND c.客户名称 IS NOT NULL
+          AND LTRIM(RTRIM(c.客户名称)) <> N''
+        GROUP BY LTRIM(RTRIM(c.客户名称))
+      )
+      SELECT
+        oc.customerName
+      FROM outbound_customers oc
+      LEFT JOIN customer_master cm ON cm.customerName = oc.customerName
+      ORDER BY
+        ISNULL(cm.seqNumber, 2147483647) ASC,
+        ISNULL(cm.customerId, 2147483647) ASC,
+        oc.customerName ASC
+    `)
+
+    return res.json({
+      code: 0,
+      success: true,
+      data: {
+        list: (rows || []).map((row) => row.customerName).filter(Boolean)
+      }
+    })
+  } catch (error) {
+    console.error('获取出库单查询客户选项失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取出库单查询客户选项失败: ' + (error?.message || '未知错误')
+    })
+  }
+})
+
 router.get('/customer/:customerId/delivery-addresses', async (req, res) => {
   try {
     await ensureDeliveryAddressTable()
@@ -650,6 +701,8 @@ router.get('/list', async (req, res) => {
     await ensureTables()
     const {
       keyword = '',
+      customerName = '',
+      category = '',
       outboundType = '',
       sortField = '',
       sortOrder = '',
@@ -663,12 +716,28 @@ router.get('/list', async (req, res) => {
 
     const params = {}
     const where = [`(od.状态 IS NULL OR od.状态 <> N'已删除')`]
+    const categorySql = `
+      CASE
+        WHEN UPPER(LTRIM(RTRIM(ISNULL(od.项目编号, N'')))) LIKE N'JH01%' THEN N'塑胶模具'
+        WHEN UPPER(LTRIM(RTRIM(ISNULL(od.项目编号, N'')))) LIKE N'JH03%' THEN N'零件加工'
+        WHEN UPPER(LTRIM(RTRIM(ISNULL(od.项目编号, N'')))) LIKE N'JH05%' THEN N'修改模具'
+        ELSE N'其他'
+      END
+    `
 
     if (keyword) {
       where.push(`(
         od.出库单号 LIKE @kw OR od.客户名称 LIKE @kw OR od.项目编号 LIKE @kw OR od.产品名称 LIKE @kw OR od.产品图号 LIKE @kw OR od.客户模号 LIKE @kw
       )`)
       params.kw = `%${keyword}%`
+    }
+    if (customerName) {
+      where.push(`od.客户名称 LIKE @customerName`)
+      params.customerName = `%${customerName}%`
+    }
+    if (category) {
+      where.push(`${categorySql} = @category`)
+      params.category = category
     }
     if (outboundType) {
       where.push('od.出库类型 = @outboundType')
@@ -681,6 +750,7 @@ router.get('/list', async (req, res) => {
       出库单号: '出库单号',
       出库日期: '出库日期',
       客户名称: '客户名称',
+      分类: '分类',
       出库类型: '出库类型',
       经办人: '经办人',
       创建时间: '创建时间',
@@ -694,6 +764,7 @@ router.get('/list', async (req, res) => {
     const allSql = `
       SELECT
         od.*,
+        ${categorySql} AS 分类,
         p.模具穴数,
         p.产品材质,
         p.模具尺寸,
@@ -716,6 +787,7 @@ router.get('/list', async (req, res) => {
           出库日期: row.出库日期,
           客户ID: row.客户ID,
           客户名称: row.客户名称,
+          分类: row.分类 || getCategoryFromProjectCode(row.项目编号),
           出库类型: row.出库类型,
           仓库: row.仓库,
           经办人: row.经办人,

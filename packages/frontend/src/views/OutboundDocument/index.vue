@@ -36,6 +36,38 @@
           :style="{ width: isMobile ? '100%' : '280px' }"
         />
       </el-form-item>
+      <el-form-item label="客户名称">
+        <el-select
+          v-model="queryForm.customerName"
+          placeholder="请选择客户名称"
+          clearable
+          filterable
+          :reserve-keyword="false"
+          :style="{ width: isMobile ? '100%' : '180px' }"
+        >
+          <el-option
+            v-for="customerName in queryCustomerOptions"
+            :key="customerName"
+            :label="customerName"
+            :value="customerName"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="queryForm.category"
+          placeholder="请选择"
+          clearable
+          :style="{ width: isMobile ? '100%' : '160px' }"
+        >
+          <el-option
+            v-for="item in categoryOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="出库类型">
         <el-select
           v-model="queryForm.outboundType"
@@ -1625,6 +1657,7 @@ import {
   getOutboundDocumentStatisticsApi,
   getOutboundInventoryListApi,
   getOutboundCustomerOptionsApi,
+  getOutboundQueryCustomerOptionsApi,
   getOutboundCustomerDeliveryAddressesApi,
   getOutboundDocumentItemAttachmentsApi,
   getOutboundDocumentAttachmentsSummaryApi,
@@ -1690,7 +1723,12 @@ const paginationLayout = computed(() =>
 // 分页组件页码数量：手机端减少显示的数字页数，避免横向挤压
 const paginationPagerCount = computed(() => (isMobile.value || viewMode.value === 'card' ? 5 : 7))
 
-const queryForm = reactive({ keyword: '', outboundType: '' })
+const queryForm = reactive({ keyword: '', customerName: '', category: '', outboundType: '' })
+const categoryOptions = [
+  { label: '塑胶模具', value: '塑胶模具' },
+  { label: '零件加工', value: '零件加工' },
+  { label: '修改模具', value: '修改模具' }
+]
 const outboundTypeOptions = [
   { label: '销售出库', value: '销售出库' },
   { label: '生产出库', value: '生产出库' },
@@ -2403,6 +2441,7 @@ const handleSubmitCreate = async () => {
     createDialogVisible.value = false
     loadData()
     loadStatistics()
+    loadQueryCustomerOptions()
   } catch (error: any) {
     ElMessage.error('创建失败: ' + (error.message || '未知错误'))
   } finally {
@@ -2470,6 +2509,7 @@ const warehouseOptions = [
 
 // 客户列表
 const customerList = ref<OutboundCustomerOption[]>([])
+const queryCustomerOptions = ref<string[]>([])
 
 // 收货地址相关
 const deliveryAddressList = ref<OutboundCustomerDeliveryAddress[]>([])
@@ -2557,6 +2597,19 @@ const loadCustomerList = async () => {
   }
 }
 
+const loadQueryCustomerOptions = async () => {
+  try {
+    const response = await getOutboundQueryCustomerOptionsApi()
+    const list = response?.data?.list || response?.data || []
+    queryCustomerOptions.value = Array.isArray(list)
+      ? list.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : []
+  } catch (error) {
+    console.error('加载出库单查询客户选项失败:', error)
+    queryCustomerOptions.value = []
+  }
+}
+
 const updateViewQuery = (mode: PcViewMode) => {
   const query = { ...route.query, view: mode }
   router.replace({ path: route.path, query })
@@ -2594,6 +2647,8 @@ const loadData = async () => {
       pageSize: pagination.size
     }
     if (queryForm.keyword) params.keyword = queryForm.keyword
+    if (queryForm.customerName) params.customerName = queryForm.customerName
+    if (queryForm.category) params.category = queryForm.category
     if (queryForm.outboundType) params.outboundType = queryForm.outboundType
     if (sortState.prop && sortState.order) {
       params.sortField = sortState.prop
@@ -2662,6 +2717,8 @@ const handleSearch = () => {
 
 const handleReset = () => {
   queryForm.keyword = ''
+  queryForm.customerName = ''
+  queryForm.category = ''
   queryForm.outboundType = ''
   handleSearch()
 }
@@ -3000,6 +3057,7 @@ const handleDelete = async (row: Partial<OutboundDocument>) => {
         }
         await loadData()
         await loadStatistics()
+        await loadQueryCustomerOptions()
       } catch (error: any) {
         console.error('删除出库单失败:', error)
         ElMessage.error('删除失败: ' + (error?.message || '未知错误'))
@@ -3860,6 +3918,7 @@ const handleSubmitEdit = async () => {
     editDialogVisible.value = false
     await loadData()
     await loadStatistics()
+    await loadQueryCustomerOptions()
   } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {
@@ -3891,6 +3950,7 @@ onMounted(() => {
   loadData()
   loadStatistics()
   loadCustomerList()
+  loadQueryCustomerOptions()
 })
 </script>
 

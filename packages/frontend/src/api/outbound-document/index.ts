@@ -5,6 +5,7 @@ export interface OutboundDocument {
   出库单号: string
   出库日期?: string
   客户名称?: string
+  分类?: string
   客户ID?: number
   项目编号?: string
   产品名称?: string
@@ -108,6 +109,8 @@ export interface OutboundCustomerDeliveryAddress {
 // 出库单查询参数
 export interface OutboundDocumentQueryParams {
   keyword?: string // 出库单号/客户名称/项目编号
+  customerName?: string // 客户名称
+  category?: string // 分类
   outboundType?: string // 出库类型
   startDate?: string // 开始日期
   endDate?: string // 结束日期
@@ -171,6 +174,12 @@ export const getOutboundCustomerOptionsApi = (
   return request.get<{ list: OutboundCustomerOption[] }>({
     url: '/api/outbound-document/customer-options',
     params
+  })
+}
+
+export const getOutboundQueryCustomerOptionsApi = () => {
+  return request.get<{ list: string[] }>({
+    url: '/api/outbound-document/query-customer-options'
   })
 }
 

@@ -662,9 +662,8 @@ router.get('/list', async (req, res) => {
     }
 
     if (customerName) {
-      // 暂时注释掉客户名称查询，因为数据库中可能没有这个字段
-      // whereConditions.push(`客户名称 LIKE @customerName`)
-      // params.customerName = `%${customerName}%`
+      whereConditions.push(`c.客户名称 LIKE @customerName`)
+      params.customerName = `%${customerName}%`
     }
 
     if (category) {
