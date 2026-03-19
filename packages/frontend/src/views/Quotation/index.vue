@@ -1,5 +1,21 @@
 <template>
   <div class="quotation-page p-4 space-y-4">
+    <section class="qt-workbench" :class="{ 'qt-workbench--mobile': isMobile }">
+      <div class="qt-workbench__hero">
+        <div class="qt-workbench__hero-copy">
+          <div class="qt-workbench__eyebrow">Quotation Workspace</div>
+          <div class="qt-workbench__title-row">
+            <h2 class="qt-workbench__title">报价工作台</h2>
+            <el-tag type="warning" effect="dark" round>报价 / 立项 / 跟进</el-tag>
+          </div>
+        </div>
+
+        <div class="qt-workbench__hero-actions">
+          <el-button type="primary" size="large" @click="handleCreate()">新增报价单</el-button>
+        </div>
+      </div>
+    </section>
+
     <div v-if="isMobile" class="mobile-top-bar">
       <div class="mobile-top-bar-left">
         <el-button text type="primary" @click="showMobileFilters = !showMobileFilters">
@@ -16,70 +32,71 @@
     </div>
 
     <!-- 查询表单 -->
-    <el-form
-      :model="queryForm"
-      :inline="!isMobile"
-      :label-width="isMobile ? 'auto' : '90px'"
-      :label-position="isMobile ? 'top' : 'right'"
-      class="query-form rounded-lg bg-[var(--el-bg-color-overlay)] p-4 shadow-sm"
-      :class="{ 'query-form--mobile': isMobile }"
+    <section
+      class="qt-search-shell"
+      :class="{ 'qt-search-shell--mobile': isMobile }"
       v-show="!isMobile || showMobileFilters"
     >
-      <el-form-item label="模糊查询">
-        <el-input
-          v-model="queryForm.keyword"
-          placeholder="请输入报价单号 / 客户名称 / 更改通知单号 / 模具编号 / 加工零件名称"
-          clearable
-          :style="{ width: isMobile ? '100%' : '220px' }"
-          @keyup.enter="handleSearch"
-        />
-      </el-form-item>
-      <el-form-item label="报价类型">
-        <el-select
-          v-model="queryForm.quotationType"
-          placeholder="请选择报价类型"
-          clearable
-          :style="{ width: isMobile ? '100%' : '160px' }"
-        >
-          <el-option label="改模报价单" value="mold" />
-          <el-option label="零件报价单" value="part" />
-          <el-option label="塑胶模具" value="塑胶模具" />
-          <el-option label="修改模具" value="修改模具" />
-          <el-option label="零件加工" value="零件加工" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="立项状态">
-        <el-select
-          v-model="queryForm.initiationStatus"
-          placeholder="请选择立项状态"
-          clearable
-          :style="{ width: isMobile ? '100%' : '160px' }"
-        >
-          <el-option
-            v-for="status in initiationStatusOptions"
-            :key="status"
-            :label="status"
-            :value="status"
+      <el-form
+        :model="queryForm"
+        :inline="!isMobile"
+        :label-width="isMobile ? 'auto' : '90px'"
+        :label-position="isMobile ? 'top' : 'right'"
+        class="query-form"
+        :class="{ 'query-form--mobile': isMobile }"
+      >
+        <el-form-item label="模糊查询">
+          <el-input
+            v-model="queryForm.keyword"
+            placeholder="请输入报价单号 / 客户名称 / 更改通知单号 / 模具编号 / 加工零件名称"
+            clearable
+            :style="{ width: isMobile ? '100%' : '220px' }"
+            @keyup.enter="handleSearch"
           />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="最终项目编号" label-width="110px">
-        <el-input
-          v-model="queryForm.finalProjectCode"
-          placeholder="请输入最终项目编号"
-          clearable
-          :style="{ width: isMobile ? '100%' : '180px' }"
-          @keyup.enter="handleSearch"
-        />
-      </el-form-item>
-      <el-form-item class="query-form__actions">
-        <div class="query-actions">
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleCreate">新增报价单</el-button>
-        </div>
-      </el-form-item>
-    </el-form>
+        </el-form-item>
+        <el-form-item label="报价类型">
+          <el-select
+            v-model="queryForm.quotationType"
+            placeholder="请选择报价类型"
+            clearable
+            :style="{ width: isMobile ? '100%' : '160px' }"
+          >
+            <el-option label="改模报价单" value="mold" />
+            <el-option label="零件报价单" value="part" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="立项状态">
+          <el-select
+            v-model="queryForm.initiationStatus"
+            placeholder="请选择立项状态"
+            clearable
+            :style="{ width: isMobile ? '100%' : '160px' }"
+          >
+            <el-option
+              v-for="status in initiationStatusOptions"
+              :key="status"
+              :label="status"
+              :value="status"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="最终项目编号" label-width="110px">
+          <el-input
+            v-model="queryForm.finalProjectCode"
+            placeholder="请输入最终项目编号"
+            clearable
+            :style="{ width: isMobile ? '100%' : '180px' }"
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+        <el-form-item class="query-form__actions">
+          <div class="query-actions">
+            <el-button type="primary" @click="handleSearch">查询</el-button>
+            <el-button @click="handleReset">重置</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+    </section>
 
     <!-- 报价单列表 -->
     <!-- 手机端卡片视图 -->
@@ -791,23 +808,54 @@
     <!-- 新增报价单：选择弹窗（报价单号 / 报价日期 / 客户名称） -->
     <el-dialog
       v-model="preCreateDialogVisible"
-      title="新增报价单"
-      :width="isMobile ? '100%' : '620px'"
+      :title="selectedPreCreateTypeMeta.dialogTitle"
+      :width="isMobile ? '100%' : '820px'"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
+      class="qt-create-dialog"
     >
+      <div class="qt-create-dialog__hero">
+        <div>
+          <div class="qt-create-dialog__eyebrow">Create New Quotation</div>
+          <div class="qt-create-dialog__title">{{ selectedPreCreateTypeMeta.title }}</div>
+          <div class="qt-create-dialog__description">{{
+            selectedPreCreateTypeMeta.description
+          }}</div>
+        </div>
+        <el-tag :type="preCreateForm.quotationType === 'part' ? 'success' : 'warning'" round>
+          {{ selectedPreCreateTypeMeta.badge }}
+        </el-tag>
+      </div>
+
+      <div class="qt-create-type-grid">
+        <label
+          v-for="option in preCreateTypeOptions"
+          :key="option.value"
+          class="qt-create-type-card"
+          :class="{
+            'qt-create-type-card--active': preCreateForm.quotationType === option.value,
+            'qt-create-type-card--part': option.value === 'part'
+          }"
+        >
+          <input v-model="preCreateForm.quotationType" type="radio" :value="option.value" />
+          <span class="qt-create-type-card__title">{{ option.title }}</span>
+          <span class="qt-create-type-card__desc">{{ option.description }}</span>
+          <span class="qt-create-type-card__foot">{{ option.footnote }}</span>
+        </label>
+      </div>
+
       <el-form
         ref="preCreateFormRef"
         :model="preCreateForm"
         :rules="preCreateRules"
         :label-width="isMobile ? 'auto' : '110px'"
         :label-position="isMobile ? 'top' : 'right'"
+        class="qt-create-form"
       >
         <el-form-item label="报价类型" prop="quotationType">
-          <el-radio-group v-model="preCreateForm.quotationType">
-            <el-radio-button value="mold">改模报价单</el-radio-button>
-            <el-radio-button value="part">零件报价单</el-radio-button>
-          </el-radio-group>
+          <el-tag :type="preCreateForm.quotationType === 'part' ? 'success' : 'warning'">
+            {{ selectedPreCreateTypeMeta.title }}
+          </el-tag>
         </el-form-item>
         <el-row :gutter="12">
           <el-col :span="isMobile ? 24 : 14">
@@ -861,7 +909,10 @@
       :fullscreen="isMobile"
       :class="[
         'qt-edit-dialog',
-        { 'qt-edit-dialog--part': quotationForm.quotationType === 'part' }
+        {
+          'qt-edit-dialog--part': quotationForm.quotationType === 'part',
+          'qt-edit-dialog--mold': quotationForm.quotationType === 'mold'
+        }
       ]"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
@@ -994,92 +1045,142 @@
           </template>
 
           <template v-else>
-            <!-- 改模报价单：使用与零件报价单一致的布局结构 -->
-            <div class="quotation-top-part">
-              <div class="quotation-top-part__row">
-                <el-form-item
-                  prop="customerName"
-                  class="quotation-top-field quotation-top-field--inline quotation-top-part__customer"
-                  :show-message="false"
-                >
-                  <span class="field-required">*</span>
-                  <span class="field-label-inline">客户名称：</span>
-                  <el-select
-                    v-model="quotationForm.customerName"
-                    placeholder="请选择客户名称"
-                    :disabled="isViewMode || dialogMode === 'create'"
-                    filterable
-                    clearable
-                    :loading="customerLoading"
-                    class="field-input-inline field-input-customer-name"
+            <div class="qm-topbar">
+              <div class="qm-topbar__intro">
+                <div class="qm-topbar__header">
+                  <div>
+                    <div class="qm-topbar__eyebrow">Mold Change Workspace</div>
+                    <div class="qm-topbar__title-row">
+                      <h3 class="qm-topbar__title">
+                        {{
+                          isViewMode
+                            ? '查看改模报价单'
+                            : dialogMode === 'edit'
+                              ? '编辑改模报价单'
+                              : '新建改模报价单'
+                        }}
+                      </h3>
+                      <el-tag type="warning" effect="dark" round>修改模具</el-tag>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="qm-topbar__meta-grid">
+                  <div class="qm-meta-card qm-meta-card--wide">
+                    <div class="qm-meta-card__label">客户名称</div>
+                    <el-form-item
+                      prop="customerName"
+                      class="qm-meta-card__field"
+                      :show-message="false"
+                    >
+                      <el-select
+                        v-model="quotationForm.customerName"
+                        placeholder="请选择客户名称"
+                        :disabled="isViewMode || dialogMode === 'create'"
+                        filterable
+                        clearable
+                        :loading="customerLoading"
+                      >
+                        <el-option
+                          v-for="customer in customerList"
+                          :key="customer.id"
+                          :label="customer.customerName"
+                          :value="customer.customerName"
+                        />
+                      </el-select>
+                    </el-form-item>
+                  </div>
+
+                  <div class="qm-meta-card">
+                    <div class="qm-meta-card__label">来源项目编号</div>
+                    <div class="qm-meta-card__field">
+                      <el-input
+                        v-model="quotationForm.sourceProjectCode"
+                        :disabled="isViewMode"
+                        placeholder="来源项目编号"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="qm-meta-card qm-meta-card--compact">
+                    <div class="qm-meta-card__label">报价单号</div>
+                    <div class="qm-meta-card__field">
+                      <el-input v-model="quotationForm.quotationNo" :disabled="true" />
+                    </div>
+                  </div>
+
+                  <div class="qm-meta-card qm-meta-card--compact">
+                    <div class="qm-meta-card__label">报价日期</div>
+                    <el-form-item
+                      prop="quotationDate"
+                      class="qm-meta-card__field"
+                      :show-message="false"
+                    >
+                      <el-date-picker
+                        v-model="quotationForm.quotationDate"
+                        type="date"
+                        value-format="YYYY-MM-DD"
+                        placeholder="请选择报价日期"
+                        :disabled="isViewMode"
+                        clearable
+                        style="width: 100%"
+                      />
+                    </el-form-item>
+                  </div>
+
+                  <div class="qm-meta-card qm-meta-card--compact">
+                    <div class="qm-meta-card__label">经办人</div>
+                    <div class="qm-meta-card__field">
+                      <el-input
+                        v-model="quotationForm.operator"
+                        :disabled="isViewMode"
+                        placeholder="经办人"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="qm-topbar__aside">
+                <div class="qm-action-cluster">
+                  <el-button @click="handleCancelQuotationDialog">取消</el-button>
+                  <el-button v-if="!isViewMode" type="primary" @click="handleSubmit"
+                    >保存</el-button
                   >
-                    <el-option
-                      v-for="customer in customerList"
-                      :key="customer.id"
-                      :label="customer.customerName"
-                      :value="customer.customerName"
-                    />
-                  </el-select>
-                </el-form-item>
-
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
-                  <span class="field-label-inline">来源项目编号：</span>
-                  <el-input
-                    v-model="quotationForm.sourceProjectCode"
-                    :disabled="isViewMode"
-                    placeholder="来源项目编号"
-                    class="field-input-inline field-input-contact"
-                  />
-                </el-form-item>
-              </div>
-
-              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
-                <el-form-item
-                  prop="quotationNo"
-                  class="quotation-top-field quotation-top-field--inline"
-                >
-                  <span class="field-label-inline">报价单号：</span>
-                  <el-input
-                    v-model="quotationForm.quotationNo"
-                    :disabled="true"
-                    placeholder="报价单号"
-                    class="field-input-inline field-input-quotation-no"
-                  />
-                </el-form-item>
-
-                <el-form-item
-                  prop="quotationDate"
-                  class="quotation-top-field quotation-top-field--inline"
-                  :show-message="false"
-                >
-                  <span class="field-label-inline">报价日期：</span>
-                  <el-date-picker
-                    v-model="quotationForm.quotationDate"
-                    type="date"
-                    value-format="YYYY-MM-DD"
-                    placeholder="请选择报价日期"
-                    :disabled="isViewMode"
-                    clearable
-                    class="field-input-inline field-input-quotation-date"
-                    style="width: 140px !important"
-                  />
-                </el-form-item>
-
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
-                  <span class="field-label-inline">经办人：</span>
-                  <el-input
-                    v-model="quotationForm.operator"
-                    :disabled="isViewMode"
-                    placeholder="经办人"
-                    class="field-input-inline field-input-contact"
-                    style="width: 140px !important"
-                  />
-                </el-form-item>
-              </div>
+                  <el-button
+                    v-if="!isViewMode"
+                    type="primary"
+                    plain
+                    :loading="importingProject"
+                    :disabled="importingProject"
+                    @click="handleImportFromProject"
+                  >
+                    项目代入
+                  </el-button>
+                  <el-button
+                    v-if="isViewMode && quotationForm.id"
+                    type="success"
+                    :loading="downloading"
+                    :disabled="downloading"
+                    @click="handleDownloadQuotationPdf"
+                  >
+                    {{ downloading ? '正在生成 PDF...' : '报价单下载' }}
+                  </el-button>
+                  <el-button
+                    v-if="isViewMode && quotationForm.id"
+                    type="primary"
+                    :loading="downloading"
+                    :disabled="downloading"
+                    @click="handleDownloadCompletionPdf"
+                  >
+                    完工单下载
+                  </el-button>
+                </div>
+              </aside>
             </div>
           </template>
           <!-- 操作按钮 -->
-          <div class="qt-dialog-actions">
+          <div v-if="quotationForm.quotationType === 'part'" class="qt-dialog-actions">
             <el-button size="small" @click="handleCancelQuotationDialog">取消</el-button>
             <el-button v-if="!isViewMode" size="small" type="primary" @click="handleSubmit">
               保存
@@ -1118,13 +1219,19 @@
           </div>
         </div>
 
-        <div v-if="quotationForm.quotationType === 'mold'" class="quotation-sheet">
-          <table class="qs-table">
-            <tbody>
-              <!-- 加工日期 / 更改通知单号 -->
-              <tr>
-                <td class="qs-label" colspan="2">加工日期</td>
-                <td class="qs-input qs-manual" colspan="2">
+        <div v-if="quotationForm.quotationType === 'mold'" class="quotation-sheet qm-sheet">
+          <section class="qm-grid qm-grid--intro">
+            <div class="qm-panel">
+              <div class="qm-panel__header">
+                <div>
+                  <div class="qm-panel__eyebrow">Change Info</div>
+                  <div class="qm-panel__title">变更信息与申请备注</div>
+                </div>
+                <div class="qm-panel__badge">定位改模背景、申请来源与补充说明</div>
+              </div>
+              <div class="qm-fields">
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">加工日期</div>
                   <el-date-picker
                     v-model="quotationForm.processingDate"
                     type="date"
@@ -1133,215 +1240,205 @@
                     :disabled="isViewMode"
                     style="width: 100%"
                   />
-                </td>
-                <td class="qs-label" colspan="2">更改通知单号</td>
-                <td class="qs-input qs-manual">
+                </div>
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">更改通知单号</div>
                   <el-input
                     v-model="quotationForm.changeOrderNo"
                     :disabled="isViewMode"
                     placeholder="请输入更改通知单号"
                     maxlength="50"
                   />
-                </td>
-              </tr>
-
-              <!-- 加工零件名称 / 模具编号 -->
-              <tr>
-                <td class="qs-label" colspan="2">加工零件名称</td>
-                <td class="qs-input qs-manual" colspan="2">
+                </div>
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">加工零件名称</div>
                   <el-input
                     v-model="quotationForm.partName"
                     :disabled="isViewMode"
                     placeholder="请输入加工零件名称"
                   />
-                </td>
-                <td class="qs-label" colspan="2">模具编号</td>
-                <td class="qs-input qs-manual">
+                </div>
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">模具编号</div>
                   <el-input
                     v-model="quotationForm.moldNo"
                     :disabled="isViewMode"
                     placeholder="请输入模具编号"
                   />
-                </td>
-              </tr>
-
-              <!-- 申请更改部门 / 申请更改人 -->
-              <tr>
-                <td class="qs-label" colspan="2">申请更改部门</td>
-                <td class="qs-input qs-manual" colspan="2">
+                </div>
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">申请更改部门</div>
                   <el-input
                     v-model="quotationForm.department"
                     :disabled="isViewMode"
                     placeholder="请输入申请更改部门"
                   />
-                </td>
-                <td class="qs-label" colspan="2">申请更改人</td>
-                <td class="qs-input qs-manual">
+                </div>
+                <div class="qm-field qm-field--half">
+                  <div class="qm-field__label">申请更改人</div>
                   <el-input
                     v-model="quotationForm.applicant"
                     :disabled="isViewMode"
                     placeholder="请输入申请更改人"
                   />
-                </td>
-              </tr>
+                </div>
+              </div>
+            </div>
+          </section>
 
-              <!-- 单位材料费表头 -->
-              <tr>
-                <td class="qs-label qs-vert-header" :rowspan="quotationForm.materials.length + 1">
-                  单位材料费
-                </td>
-                <td class="qs-label">材料名称</td>
-                <td class="qs-label">单价</td>
-                <td class="qs-label">用量</td>
-                <td class="qs-label">费用</td>
-                <td class="qs-label" colspan="2">总价</td>
-              </tr>
+          <section class="qm-cost-stack">
+            <div class="qm-panel">
+              <div class="qm-panel__header">
+                <div>
+                  <div class="qm-panel__eyebrow">Material</div>
+                  <div class="qm-panel__title">单位材料费</div>
+                </div>
+                <div class="qm-panel__badge">总计 ¥{{ formatAmount(materialsTotal) }}</div>
+              </div>
+              <el-table :data="quotationForm.materials" border class="qm-cost-table" size="small">
+                <el-table-column prop="name" label="材料名称" min-width="120">
+                  <template #default="{ row }">
+                    <el-input v-model="row.name" :disabled="isViewMode" placeholder="材料名称" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="单价" width="96" align="right">
+                  <template #default="{ row }">
+                    <el-input-number
+                      v-model="row.unitPrice"
+                      :disabled="isViewMode"
+                      :min="0"
+                      :precision="2"
+                      :controls="false"
+                      style="width: 100%"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="用量" width="88" align="right">
+                  <template #default="{ row }">
+                    <el-input-number
+                      v-model="row.quantity"
+                      :disabled="isViewMode"
+                      :min="0"
+                      :precision="0"
+                      :controls="false"
+                      style="width: 100%"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="费用" width="100" align="right">
+                  <template #default="{ row }">
+                    {{ formatAmount(row.unitPrice * row.quantity) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
 
-              <!-- 单位材料费明细 -->
-              <tr
-                v-for="(item, index) in quotationForm.materials"
-                :key="`material-${index}`"
-                class="qs-row-material"
-              >
-                <td class="qs-input qs-manual">
-                  <el-input v-model="item.name" :disabled="isViewMode" placeholder="材料名称" />
-                </td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="item.unitPrice"
-                    :disabled="isViewMode"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
-                    placeholder="单价"
-                    style="width: 100%"
-                  />
-                </td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="item.quantity"
-                    :disabled="isViewMode"
-                    :min="0"
-                    :precision="0"
-                    :controls="false"
-                    placeholder="用量"
-                    style="width: 100%"
-                  />
-                </td>
-                <td class="qs-total qs-number">
-                  {{ formatAmount(item.unitPrice * item.quantity) }}
-                </td>
-                <td
-                  v-if="index === 0"
-                  class="qs-total qs-number"
-                  :rowspan="quotationForm.materials.length"
-                  colspan="2"
+            <div class="qm-panel">
+              <div class="qm-panel__header">
+                <div>
+                  <div class="qm-panel__eyebrow">Process</div>
+                  <div class="qm-panel__title">加工费用</div>
+                </div>
+                <div class="qm-panel__badge">加工费 ¥{{ formatAmount(processingTotal) }}</div>
+              </div>
+              <div class="qm-process-table-shell">
+                <table class="qm-process-compact-table">
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in moldProcessTableRows" :key="`row-${rowIndex}`">
+                      <template
+                        v-for="(item, colIndex) in row"
+                        :key="item?.key || `empty-${rowIndex}-${colIndex}`"
+                      >
+                        <template v-if="item">
+                          <td class="qm-process-compact-table__name">{{ item.name }}</td>
+                          <td class="qm-process-compact-table__unit">{{ item.unitPriceLabel }}</td>
+                          <td class="qm-process-compact-table__hours">
+                            <el-input-number
+                              v-model="item.hours"
+                              :disabled="isViewMode"
+                              :min="0"
+                              :precision="1"
+                              :controls="false"
+                              style="width: 100%"
+                            />
+                          </td>
+                          <td class="qm-process-compact-table__total">
+                            {{ formatAmount(item.unitPrice * item.hours) }}
+                          </td>
+                        </template>
+                        <template v-else>
+                          <td class="qm-process-compact-table__placeholder" colspan="4"></td>
+                        </template>
+                      </template>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="qm-panel qm-panel--summary">
+              <div class="qm-panel__header">
+                <div>
+                  <div class="qm-panel__eyebrow">Total</div>
+                  <div class="qm-panel__title">总价</div>
+                </div>
+                <div class="qm-panel__badge"
+                  >含税 ¥{{ formatAmount(effectiveTaxIncludedPrice) }}</div
                 >
-                  {{ formatAmount(materialsTotal) }}
-                </td>
-              </tr>
-
-              <!-- 加工费用表头 -->
-              <tr>
-                <td class="qs-label qs-vert-header" :rowspan="quotationForm.processes.length + 1">
-                  加工费用
-                </td>
-                <td class="qs-label">加工形工/工种</td>
-                <td class="qs-label">含税单价</td>
-                <td class="qs-label">用时（H）</td>
-                <td class="qs-label">合计费用</td>
-                <td class="qs-label" colspan="2">总价</td>
-              </tr>
-
-              <!-- 加工费用明细 -->
-              <tr
-                v-for="(item, index) in quotationForm.processes"
-                :key="item.key"
-                class="qs-row-process"
-              >
-                <td>{{ item.name }}</td>
-                <td>{{ item.unitPriceLabel }}</td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="item.hours"
-                    :disabled="isViewMode"
-                    :min="0"
-                    :precision="1"
-                    :controls="false"
-                    placeholder="用时"
-                    style="width: 100%"
-                  />
-                </td>
-                <td class="qs-total qs-number">
-                  {{ formatAmount(item.unitPrice * item.hours) }}
-                </td>
-                <td
-                  v-if="index === 0"
-                  class="qs-total qs-number"
-                  :rowspan="quotationForm.processes.length"
-                  colspan="2"
-                >
-                  {{ formatAmount(processingTotal) }}
-                </td>
-              </tr>
-
-              <!-- 其他费用 -->
-              <tr>
-                <td class="qs-label" colspan="5">其他费用（焊、合模机、试模等）</td>
-                <td class="qs-label">含税</td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="quotationForm.otherFee"
-                    :disabled="isViewMode"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
-                    placeholder="请输入其他费用"
-                    style="width: 100%"
-                  />
-                </td>
-              </tr>
-
-              <!-- 运输费用 -->
-              <tr>
-                <td class="qs-label">运输费用</td>
-                <td colspan="3">单价300元/吨</td>
-                <td></td>
-                <td class="qs-label">合计来回运输费用</td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="quotationForm.transportFee"
-                    :disabled="isViewMode"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
-                    placeholder="运输费用"
-                    style="width: 100%"
-                  />
-                </td>
-              </tr>
-
-              <!-- 含税价格 -->
-              <tr>
-                <td class="qs-label">加工数量</td>
-                <td class="qs-input qs-manual qs-number">
-                  <el-input-number
-                    v-model="quotationForm.quantity"
-                    :disabled="isViewMode"
-                    :min="1"
-                    :precision="0"
-                    :controls="false"
-                    style="width: 100%"
-                  />
-                </td>
-                <td colspan="3"></td>
-                <td class="qs-label">含税价格</td>
-                <td class="qs-total qs-number">
-                  {{ formatAmount(effectiveTaxIncludedPrice) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </div>
+              <div class="qm-summary-list">
+                <div class="qm-summary-row">
+                  <div class="qm-summary-item qm-summary-item--inline">
+                    <span class="qm-summary-item__label">材料费</span>
+                    <strong>{{ formatAmount(materialsTotal) }}</strong>
+                  </div>
+                  <div class="qm-summary-item qm-summary-item--inline">
+                    <span class="qm-summary-item__label">加工费</span>
+                    <strong>{{ formatAmount(processingTotal) }}</strong>
+                  </div>
+                </div>
+                <div class="qm-summary-row qm-summary-row--triple">
+                  <div class="qm-summary-item">
+                    <span class="qm-summary-item__label">其他费用</span>
+                    <el-input-number
+                      v-model="quotationForm.otherFee"
+                      :disabled="isViewMode"
+                      :min="0"
+                      :precision="2"
+                      :controls="false"
+                      style="width: 100%"
+                    />
+                  </div>
+                  <div class="qm-summary-item">
+                    <span class="qm-summary-item__label">运输费用</span>
+                    <el-input-number
+                      v-model="quotationForm.transportFee"
+                      :disabled="isViewMode"
+                      :min="0"
+                      :precision="2"
+                      :controls="false"
+                      style="width: 100%"
+                    />
+                  </div>
+                  <div class="qm-summary-item">
+                    <span class="qm-summary-item__label">加工数量</span>
+                    <el-input-number
+                      v-model="quotationForm.quantity"
+                      :disabled="isViewMode"
+                      :min="1"
+                      :precision="0"
+                      :controls="false"
+                      style="width: 100%"
+                    />
+                  </div>
+                </div>
+                <div class="qm-summary-total">
+                  <span>含税价格</span>
+                  <strong>¥{{ formatAmount(effectiveTaxIncludedPrice) }}</strong>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div v-else class="quotation-sheet quotation-sheet--part">
@@ -2229,6 +2326,31 @@ const preCreateForm = reactive({
   customerName: ''
 })
 
+const preCreateTypeOptions = [
+  {
+    value: 'mold' as const,
+    title: '改模报价单',
+    badge: '模具更改',
+    dialogTitle: '新增改模报价单',
+    description: '适用于修改模具、返修、改料与结构变更等场景，先确认基础信息后进入完整报价表。',
+    footnote: '包含加工日期、更改通知单号、材料费与加工费结构。'
+  },
+  {
+    value: 'part' as const,
+    title: '零件报价单',
+    badge: '零件加工',
+    dialogTitle: '新增零件报价单',
+    description: '适用于多行零件明细报价，可直接进入带图示与行项目金额汇总的零件报价界面。',
+    footnote: '包含明细行、图片图示、附加费用与运输费。'
+  }
+]
+
+const selectedPreCreateTypeMeta = computed(
+  () =>
+    preCreateTypeOptions.find((item) => item.value === preCreateForm.quotationType) ||
+    preCreateTypeOptions[0]
+)
+
 const preCreateRules: FormRules = {
   quotationType: [{ required: true, message: '请选择报价类型', trigger: 'change' }],
   quotationNo: [{ required: true, message: '报价单号不能为空', trigger: 'blur' }],
@@ -2271,6 +2393,20 @@ const effectiveTaxIncludedPrice = computed(() => {
     return partItemsTotal.value + otherFee + transportFee
   }
   return taxIncludedPrice.value
+})
+
+const moldProcessTableRows = computed(() => {
+  const items = quotationForm.processes || []
+  const columnCount = 3
+  const rowCount = Math.ceil(items.length / columnCount)
+  if (!rowCount) return []
+
+  return Array.from({ length: rowCount }, (_, rowIndex) =>
+    Array.from({ length: columnCount }, (_, colIndex) => {
+      const itemIndex = colIndex * rowCount + rowIndex
+      return items[itemIndex] || null
+    })
+  )
 })
 
 const calcMaterialsTotal = (row: QuotationRecord) =>
@@ -3020,10 +3156,10 @@ const handleReset = () => {
 }
 
 // 新增
-const handleCreate = async () => {
+const handleCreate = async (initialType: 'mold' | 'part' = 'mold') => {
   try {
     dialogMode.value = 'create'
-    dialogTitle.value = '新增报价单'
+    dialogTitle.value = initialType === 'part' ? '新增零件报价单' : '新增改模报价单'
     Object.assign(quotationForm, createEmptyForm())
 
     // 生成新的报价单编号
@@ -3040,7 +3176,7 @@ const handleCreate = async () => {
     await fetchCustomerList()
 
     // 先打开选择弹窗：报价单号 / 报价日期 / 客户名称
-    preCreateForm.quotationType = 'mold'
+    preCreateForm.quotationType = initialType
     preCreateForm.quotationNo = newQuotationNo
     preCreateForm.customerName = ''
     const today = new Date()
@@ -3082,6 +3218,7 @@ const handleConfirmPreCreate = async () => {
   quotationForm.quotationDate = preCreateForm.quotationDate
   quotationForm.customerName = typedCustomerName
   quotationForm.quotationType = preCreateForm.quotationType === 'part' ? 'part' : 'mold'
+  dialogTitle.value = quotationForm.quotationType === 'part' ? '新增零件报价单' : '新增改模报价单'
   quotationForm.enableImage = quotationForm.quotationType === 'part'
 
   preCreateDialogVisible.value = false
@@ -4319,6 +4456,55 @@ onMounted(() => {
 }
 
 @media (width <= 768px) {
+  .qt-workbench__hero {
+    flex-direction: column;
+  }
+
+  .qm-topbar,
+  .qm-grid,
+  .qm-grid--intro,
+  .qm-fields,
+  .qm-topbar__meta-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .qm-field--wide {
+    grid-column: span 1;
+  }
+
+  .qm-field--half,
+  .qm-field--remark,
+  .qm-meta-card--wide {
+    grid-column: span 1;
+  }
+
+  .qm-topbar__aside {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .qm-summary-row {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .qt-workbench__hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .qt-workbench__hero-actions :deep(.el-button) {
+    flex: 1 1 auto;
+  }
+
+  .qt-workbench__stats,
+  .qt-create-type-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .qt-create-form {
+    padding: 12px;
+  }
+
   .quotation-top-fields {
     flex-direction: column;
     gap: 12px;
@@ -4349,6 +4535,84 @@ onMounted(() => {
   position: relative;
 }
 
+.qt-workbench {
+  position: relative;
+  padding: 22px 22px 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgb(255 191 73 / 24%), transparent 28%),
+    radial-gradient(circle at top right, rgb(60 114 255 / 14%), transparent 24%),
+    linear-gradient(135deg, #fffdf8 0%, #fff 42%, #f6f9ff 100%);
+  border: 1px solid rgb(196 173 120 / 28%);
+  border-radius: 20px;
+  box-shadow: 0 18px 48px rgb(102 88 54 / 8%);
+}
+
+.qt-workbench--mobile {
+  padding: 18px 16px 14px;
+}
+
+.qt-workbench__hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.qt-workbench__hero-copy {
+  max-width: 760px;
+}
+
+.qt-workbench__eyebrow {
+  font-family: 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #9f6b12;
+  text-transform: uppercase;
+}
+
+.qt-workbench__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.qt-workbench__title {
+  margin: 0;
+  font-family: Baskerville, 'Times New Roman', STSong, serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: #1c2434;
+}
+
+.qt-workbench__summary {
+  max-width: 620px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #596273;
+}
+
+.qt-workbench__hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.qt-button--soft {
+  color: #6b4b00;
+  background: rgb(255 244 220 / 90%);
+  border-color: rgb(215 177 88 / 45%);
+}
+
 .mobile-top-bar {
   display: flex;
   align-items: center;
@@ -4374,6 +4638,20 @@ onMounted(() => {
   color: #606266;
 }
 
+.qt-search-shell {
+  padding: 16px 18px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(250 251 255 / 96%)),
+    var(--el-bg-color-overlay);
+  border: 1px solid rgb(204 213 227 / 70%);
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgb(104 119 152 / 8%);
+}
+
+.qt-search-shell--mobile {
+  padding: 14px 12px;
+}
+
 .query-form {
   display: flex;
   align-items: center;
@@ -4385,7 +4663,7 @@ onMounted(() => {
 }
 
 .query-form--mobile {
-  padding: 12px;
+  padding: 0;
 }
 
 :deep(.query-form--mobile .el-form-item) {
@@ -4417,6 +4695,117 @@ onMounted(() => {
 :deep(.query-form .el-form-item:not(.query-form__actions)) {
   margin-right: 18px;
   margin-bottom: 0;
+}
+
+.qt-create-dialog__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 2px 2px 14px;
+}
+
+.qt-create-dialog__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #9f6b12;
+  text-transform: uppercase;
+}
+
+.qt-create-dialog__title {
+  margin-top: 8px;
+  font-family: Baskerville, 'Times New Roman', STSong, serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.qt-create-dialog__description {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #667085;
+}
+
+.qt-create-type-grid {
+  display: grid;
+  margin-bottom: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.qt-create-type-card {
+  position: relative;
+  display: flex;
+  min-height: 140px;
+  padding: 16px;
+  cursor: pointer;
+  background: linear-gradient(145deg, rgb(255 250 240 / 92%), rgb(255 255 255 / 98%));
+  border: 1px solid rgb(217 181 105 / 36%);
+  border-radius: 18px;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 8px;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.qt-create-type-card input {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.qt-create-type-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgb(138 110 52 / 12%);
+}
+
+.qt-create-type-card--part {
+  background: linear-gradient(145deg, rgb(242 250 245 / 94%), rgb(255 255 255 / 98%));
+  border-color: rgb(112 183 128 / 34%);
+}
+
+.qt-create-type-card--active {
+  border-color: #cf8d11;
+  box-shadow: 0 18px 36px rgb(173 126 36 / 18%);
+}
+
+.qt-create-type-card--active.qt-create-type-card--part {
+  border-color: #4e9f66;
+  box-shadow: 0 18px 36px rgb(68 133 86 / 16%);
+}
+
+.qt-create-type-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.qt-create-type-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #596273;
+}
+
+.qt-create-type-card__foot {
+  margin-top: auto;
+  font-size: 12px;
+  color: #8a6e35;
+}
+
+.qt-create-type-card--part .qt-create-type-card__foot {
+  color: #43765a;
+}
+
+.qt-create-form {
+  padding: 16px;
+  background: linear-gradient(180deg, rgb(250 251 255 / 95%), rgb(255 255 255 / 95%));
+  border: 1px solid rgb(218 223 235 / 72%);
+  border-radius: 18px;
 }
 
 .qt-table-wrapper {
@@ -4742,6 +5131,353 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.qm-topbar {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1.95fr) 220px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.qm-topbar__intro {
+  padding: 14px 16px;
+  background:
+    radial-gradient(circle at top left, rgb(255 206 129 / 22%), transparent 28%),
+    linear-gradient(135deg, #fffdf8 0%, #fff 55%, #f6f8fc 100%);
+  border: 1px solid rgb(214 187 136 / 40%);
+  border-radius: 20px;
+  box-shadow: 0 12px 28px rgb(116 99 59 / 8%);
+}
+
+.qm-topbar__header {
+  display: block;
+}
+
+.qm-topbar__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #a86f13;
+  text-transform: uppercase;
+}
+
+.qm-topbar__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.qm-topbar__title {
+  margin: 0;
+  font-family: Baskerville, 'Times New Roman', STSong, serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #1f2d3d;
+}
+
+.qm-topbar__meta-grid {
+  display: grid;
+  margin-top: 12px;
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 0.88fr));
+  gap: 10px;
+}
+
+.qm-meta-card {
+  padding: 10px 12px;
+  background: rgb(255 255 255 / 76%);
+  border: 1px solid rgb(219 224 236 / 80%);
+  border-radius: 16px;
+}
+
+.qm-meta-card--wide {
+  grid-column: span 2;
+}
+
+.qm-meta-card--compact {
+  min-width: 0;
+}
+
+.qm-meta-card__label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #667284;
+}
+
+.qm-meta-card__field {
+  margin-bottom: 0;
+}
+
+.qm-meta-card__field :deep(.el-form-item__content) {
+  margin-left: 0 !important;
+}
+
+.qm-topbar__aside {
+  display: flex;
+  padding: 12px;
+  background: linear-gradient(180deg, rgb(255 251 244 / 98%), rgb(255 255 255 / 98%));
+  border: 1px solid rgb(227 205 166 / 70%);
+  border-radius: 20px;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 12px 28px rgb(116 99 59 / 6%);
+  justify-content: center;
+}
+
+.qm-action-cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qm-action-cluster :deep(.el-button) {
+  width: 100%;
+  margin-left: 0;
+}
+
+.qm-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 0;
+}
+
+.qm-panel__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #9d6911;
+  text-transform: uppercase;
+}
+
+.qm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.qm-grid--intro {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.qm-cost-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qm-panel {
+  padding: 14px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(249 251 255 / 98%));
+  border: 1px solid rgb(219 224 236 / 90%);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgb(110 123 152 / 6%);
+}
+
+.qm-panel--summary {
+  background: linear-gradient(180deg, rgb(255 250 238 / 98%), rgb(255 255 255 / 98%)), #fff;
+  border-color: rgb(225 205 164 / 70%);
+}
+
+.qm-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.qm-panel__title {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #243244;
+}
+
+.qm-panel__badge {
+  display: inline-flex;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a5200;
+  background: #fff6e4;
+  border: 1px solid #ebd19d;
+  border-radius: 999px;
+  align-items: center;
+}
+
+.qm-panel__badge--subtle {
+  color: #6a778a;
+  background: #f5f7fb;
+  border-color: #dde3ef;
+}
+
+.qm-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qm-field--half {
+  grid-column: span 1;
+}
+
+.qm-field--wide {
+  grid-column: span 2;
+}
+
+.qm-field--note {
+  grid-column: span 1;
+}
+
+.qm-field--remark {
+  grid-column: span 4;
+}
+
+.qm-field__label {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #657183;
+}
+
+.qm-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qm-summary-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.qm-summary-row--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.qm-summary-item {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.qm-summary-item--inline {
+  grid-template-columns: 56px 1fr;
+  padding: 10px 12px;
+  background: #f8f9fc;
+  border: 1px solid #e2e7f0;
+  border-radius: 12px;
+}
+
+.qm-summary-item__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #657183;
+}
+
+.qm-summary-total {
+  display: flex;
+  padding: 10px 12px;
+  margin-top: 2px;
+  color: #1f2d3d;
+  background: linear-gradient(135deg, #fff2cb 0%, #fff8ea 100%);
+  border: 1px solid #edd9a5;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qm-summary-total strong {
+  font-size: 18px;
+}
+
+.qm-panel--summary {
+  position: sticky;
+  top: 0;
+}
+
+.qm-process-table-shell {
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.qm-process-compact-table {
+  width: 100%;
+  background: #fff;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.qm-process-compact-table td {
+  padding: 8px 10px;
+  border: 1px solid #e2e7f0;
+  box-sizing: border-box;
+}
+
+.qm-process-compact-table__name {
+  width: 12%;
+  font-weight: 700;
+  color: #2a3748;
+  background: #fafbfd;
+}
+
+.qm-process-compact-table__unit {
+  width: 16%;
+  color: #6f7b8d;
+}
+
+.qm-process-compact-table__hours {
+  width: 16%;
+}
+
+.qm-process-compact-table__hours :deep(.el-input-number .el-input__inner) {
+  text-align: right;
+}
+
+.qm-process-compact-table__total {
+  width: 12%;
+  font-weight: 600;
+  color: #223044;
+  text-align: right;
+  background: #fffdf5;
+}
+
+.qm-process-compact-table__placeholder {
+  background: #fcfcfd;
+}
+
+:deep(.qt-edit-dialog--mold.el-dialog),
+:deep(.qt-edit-dialog--mold .el-dialog) {
+  display: flex;
+  max-height: min(88vh, 920px);
+  margin-top: 4vh;
+  flex-direction: column;
+}
+
+:deep(.qt-edit-dialog--mold.el-dialog .el-dialog__body),
+:deep(.qt-edit-dialog--mold .el-dialog__body) {
+  min-height: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+
+.qm-cost-table :deep(.el-table__header-wrapper th) {
+  font-weight: 700;
+  color: #556274;
+  background: #f7f9fd;
+}
+
+.qm-cost-table :deep(.el-input-number .el-input__inner) {
+  text-align: right;
 }
 
 .qt-part-items__toolbar {
