@@ -177,6 +177,16 @@ app.use('/uploads/_temp/project-images', express.static(PROJECT_TEMP_IMAGES_DIR)
 // 路由
 // 认证接口保持匿名访问（登录/自动登录）
 app.use('/api/auth', authRoutes)
+// 图示预览使用浏览器原生 <img> 请求，无法附带前端 Authorization 头；
+// 这两个只读接口需在统一 /api 鉴权前挂载。
+app.use('/api/project', (req, res, next) => {
+  if (req.path === '/part-image') return projectRoutes(req, res, next)
+  return next()
+})
+app.use('/api/quotation', (req, res, next) => {
+  if (req.path === '/part-item-image') return quotationRoutes(req, res, next)
+  return next()
+})
 
 // 其他 API 统一要求携带认证 token
 app.use('/api', authenticateRequest)
