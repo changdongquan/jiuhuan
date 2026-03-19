@@ -44,6 +44,18 @@ const DEFAULT_DOMAIN = process.env.DEFAULT_DOMAIN || 'jiuhuan.local'
 // 本地账号白名单（这些账号优先作为本地账号处理，不使用域验证）
 const LOCAL_ACCOUNTS = ['admin']
 
+const nowMs = () => Number(process.hrtime.bigint()) / 1e6
+
+const logAutoLoginTiming = (stage, startedAt, extra = {}) => {
+  const durationMs = Math.round((nowMs() - startedAt) * 100) / 100
+  console.log('[SSO][auto-login]', {
+    stage,
+    durationMs,
+    ...extra
+  })
+  return durationMs
+}
+
 /**
  * 解析用户名格式
  * 支持：
@@ -536,31 +548,51 @@ const resolveUserPermissions = async ({ username, isDomainUser }) => {
  * GET /api/auth/auto-login
  */
 router.get('/auto-login', async (req, res) => {
+  const requestStartedAt = nowMs()
   // 开发环境：返回模拟数据
   if (isDev) {
     console.log('[DEV] 模拟自动登录，返回测试用户')
     const username = 'dev-user'
     const displayName = '开发测试用户'
-    let permissions = []
-    try {
-      permissions = await resolveUserPermissions({
-        username,
-        isDomainUser: false
-      })
-      if (!permissions.length) {
-        permissions = await getAllPermissionNames()
+    const permissionsPromise = (async () => {
+      const stageStartedAt = nowMs()
+      try {
+        const resolved = await resolveUserPermissions({
+          username,
+          isDomainUser: false
+        })
+        const permissions = resolved.length
+          ? resolved
+          : await getAllPermissionNames().catch(() => [])
+        logAutoLoginTiming('dev.permissions', stageStartedAt, { username, count: permissions.length })
+        return permissions
+      } catch (error) {
+        console.warn('[DEV] 查询页面权限失败，回退到全页面权限:', error?.message || error)
+        const fallback = await getAllPermissionNames().catch(() => [])
+        logAutoLoginTiming('dev.permissions.fallback', stageStartedAt, {
+          username,
+          count: fallback.length
+        })
+        return fallback
       }
-    } catch (error) {
-      console.warn('[DEV] 查询页面权限失败，回退到全页面权限:', error?.message || error)
-      permissions = await getAllPermissionNames().catch(() => [])
-    }
-    let capabilities = []
-    try {
-      capabilities = await getEffectiveCapabilityKeys(username)
-    } catch (error) {
-      console.warn('[DEV] 查询模块能力失败:', error?.message || error)
-      capabilities = []
-    }
+    })()
+    const capabilitiesPromise = (async () => {
+      const stageStartedAt = nowMs()
+      try {
+        const capabilities = await getEffectiveCapabilityKeys(username)
+        logAutoLoginTiming('dev.capabilities', stageStartedAt, {
+          username,
+          count: capabilities.length
+        })
+        return capabilities
+      } catch (error) {
+        console.warn('[DEV] 查询模块能力失败:', error?.message || error)
+        logAutoLoginTiming('dev.capabilities.error', stageStartedAt, { username })
+        return []
+      }
+    })()
+    const [permissions, capabilities] = await Promise.all([permissionsPromise, capabilitiesPromise])
+    res.setHeader('X-Auto-Login-Duration-Ms', String(Math.round((nowMs() - requestStartedAt) * 100) / 100))
     return res.json({
       code: 0,
       success: true,
@@ -607,40 +639,57 @@ router.get('/auto-login', async (req, res) => {
 
   // 解析用户名
   const parsed = parseUsername(remoteUser)
-
-  // 查询用户权限（自动登录也包含组权限）
-  let permissions = []
-  try {
-    permissions = await resolveUserPermissions({
-      username: parsed.username,
-      isDomainUser: true
-    })
-  } catch (error) {
-    console.error('查询用户权限失败:', error)
-    permissions = []
-  }
-  let capabilities = []
-  try {
-    capabilities = await getEffectiveCapabilityKeys(parsed.username)
-  } catch (error) {
-    console.error('查询用户模块能力失败:', error)
-    capabilities = []
-  }
-
-  // 尝试从 AD 获取显示名称和邮箱
-  let displayName = parsed.username
-  let mail = null
-  try {
-    const profile = await fetchAdUserProfile(parsed.username)
-    if (profile?.displayName) {
-      displayName = profile.displayName
+  const username = parsed.username
+  const permissionsPromise = (async () => {
+    const stageStartedAt = nowMs()
+    try {
+      const permissions = await resolveUserPermissions({
+        username,
+        isDomainUser: true
+      })
+      logAutoLoginTiming('prod.permissions', stageStartedAt, { username, count: permissions.length })
+      return permissions
+    } catch (error) {
+      console.error('查询用户权限失败:', error)
+      logAutoLoginTiming('prod.permissions.error', stageStartedAt, { username })
+      return []
     }
-    if (profile?.mail) {
-      mail = profile.mail
+  })()
+  const capabilitiesPromise = (async () => {
+    const stageStartedAt = nowMs()
+    try {
+      const capabilities = await getEffectiveCapabilityKeys(username)
+      logAutoLoginTiming('prod.capabilities', stageStartedAt, { username, count: capabilities.length })
+      return capabilities
+    } catch (error) {
+      console.error('查询用户模块能力失败:', error)
+      logAutoLoginTiming('prod.capabilities.error', stageStartedAt, { username })
+      return []
     }
-  } catch (e) {
-    console.warn('[SSO] 获取 AD 显示名称失败（使用用户名作为显示名）:', e.message || e)
-  }
+  })()
+  const profilePromise = (async () => {
+    const stageStartedAt = nowMs()
+    try {
+      const profile = await fetchAdUserProfile(username)
+      logAutoLoginTiming('prod.ad-profile', stageStartedAt, {
+        username,
+        hasDisplayName: !!profile?.displayName,
+        hasMail: !!profile?.mail
+      })
+      return profile
+    } catch (e) {
+      console.warn('[SSO] 获取 AD 显示名称失败（使用用户名作为显示名）:', e.message || e)
+      logAutoLoginTiming('prod.ad-profile.error', stageStartedAt, { username })
+      return null
+    }
+  })()
+  const [permissions, capabilities, profile] = await Promise.all([
+    permissionsPromise,
+    capabilitiesPromise,
+    profilePromise
+  ])
+  const displayName = profile?.displayName || parsed.username
+  const mail = profile?.mail || null
 
   const token = issueAuthToken({
     username: parsed.username,
@@ -650,6 +699,16 @@ router.get('/auto-login', async (req, res) => {
     domain: parsed.domain || null
   })
 
+  const totalDurationMs = Math.round((nowMs() - requestStartedAt) * 100) / 100
+  res.setHeader('X-Auto-Login-Duration-Ms', String(totalDurationMs))
+  console.log('[SSO][auto-login]', {
+    stage: 'prod.complete',
+    username,
+    permissionCount: permissions.length,
+    capabilityCount: capabilities.length,
+    hasDisplayName: !!profile?.displayName,
+    totalDurationMs
+  })
   res.json({
     code: 0,
     success: true,

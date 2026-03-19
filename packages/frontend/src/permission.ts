@@ -8,10 +8,20 @@ import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { resolveAccessibleRouteNames } from '@/utils/routeAccess'
+import { reportFrontendPerfEvent } from '@/utils/perfTelemetry'
 
 const { start, done } = useNProgress()
 
 const { loadStart, loadDone } = usePageLoading()
+
+const nowMs = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now()
+
+const SLOW_ROUTE_THRESHOLD_MS = 1200
+let routeNavigationStartedAt = 0
+let routeNavigationTarget = ''
 
 // 开发模式下保持“权限为空时放行”，方便调试；
 // 生产构建（如 pro 模式）启用严格权限控制。
@@ -137,6 +147,8 @@ const autoLoginByIframe = (timeoutMs = 5000): Promise<AutoLoginResponse | null> 
 }
 
 router.beforeEach(async (to, from, next) => {
+  routeNavigationStartedAt = nowMs()
+  routeNavigationTarget = String(to.fullPath || to.path || '')
   start()
   loadStart()
   const permissionStore = usePermissionStoreWithOut()
@@ -342,6 +354,29 @@ router.beforeEach(async (to, from, next) => {
 })
 
 router.afterEach((to) => {
+  const durationMs =
+    routeNavigationStartedAt > 0 ? Math.round((nowMs() - routeNavigationStartedAt) * 100) / 100 : 0
+  if (durationMs >= SLOW_ROUTE_THRESHOLD_MS) {
+    console.warn('[perf][route] slow navigation detected', {
+      route: routeNavigationTarget || String(to.fullPath || to.path || ''),
+      title: String(to?.meta?.title || ''),
+      durationMs
+    })
+    reportFrontendPerfEvent({
+      eventType: 'slow-route',
+      level: 'warn',
+      route: routeNavigationTarget || String(to.fullPath || to.path || ''),
+      title: String(to?.meta?.title || ''),
+      durationMs
+    })
+  } else if (import.meta.env.DEV) {
+    console.debug('[perf][route]', {
+      route: routeNavigationTarget || String(to.fullPath || to.path || ''),
+      durationMs
+    })
+  }
+  routeNavigationStartedAt = 0
+  routeNavigationTarget = ''
   useTitle(to?.meta?.title as string)
   done() // 结束Progress
   loadDone()

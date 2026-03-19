@@ -51,6 +51,7 @@ const gameRoutes = require('./routes/game')
 const bmoRoutes = require('./routes/bmo')
 const financeRoutes = require('./routes/finance')
 const comprehensiveQueryRoutes = require('./routes/comprehensive-query')
+const telemetryRoutes = require('./routes/telemetry')
 const { startBmoAutoSyncLoop } = require('./services/bmoAutoSync')
 const { startBmoRelayAuthSyncLoop } = require('./services/bmoRelayAuthSync')
 
@@ -191,6 +192,7 @@ app.use('/api/quotation', (req, res, next) => {
 // 其他 API 统一要求携带认证 token
 app.use('/api', authenticateRequest)
 
+app.use('/api/telemetry', telemetryRoutes)
 app.use('/api/goods', goodsRoutes)
 app.use(
   '/api/customer',
