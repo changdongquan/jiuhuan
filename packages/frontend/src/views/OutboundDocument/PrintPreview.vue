@@ -24,7 +24,7 @@
 
           <div v-else class="paper__content">
             <div class="doc-header">
-              <div class="doc-title">出库单</div>
+              <div class="doc-title">送货单</div>
               <div class="doc-subtitle">客户名称：{{ documentData.客户名称 || '-' }}</div>
             </div>
 
