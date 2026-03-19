@@ -30,7 +30,7 @@
           v-model="queryForm.keyword"
           placeholder="请输入报价单号 / 客户名称 / 更改通知单号 / 模具编号 / 加工零件名称"
           clearable
-          :style="{ width: isMobile ? '100%' : '320px' }"
+          :style="{ width: isMobile ? '100%' : '220px' }"
           @keyup.enter="handleSearch"
         />
       </el-form-item>
