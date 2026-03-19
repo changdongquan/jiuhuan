@@ -584,9 +584,9 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const rightMergedStartCol = Math.max(1, colCount - 2)
   const rightMergedEndCol = colCount
 
-  const applyBottomBorderForRange = (rowNo, startCol, endCol) => {
+  const applyBottomBorderForRange = (targetSheet, rowNo, startCol, endCol) => {
     for (let c = startCol; c <= endCol; c += 1) {
-      sheet.getRow(rowNo).getCell(c).border = { bottom: borderThin }
+      targetSheet.getRow(rowNo).getCell(c).border = { bottom: borderThin }
     }
   }
 
@@ -687,17 +687,30 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   // ===== Table header =====
   const headerRow = 7 // 表格表头从第7行开始（基本信息区域到数据表的间距为14px）
   const headerTitles = cols.map((c) => c.header)
-  sheet.getRow(headerRow).values = headerTitles
-  sheet.getRow(headerRow).height = 24
-  sheet.getRow(headerRow).font = { size: 11 }
-  sheet.getRow(headerRow).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
-  for (let c = 1; c <= colCount; c += 1) {
-    const cell = sheet.getRow(headerRow).getCell(c)
-    setBorderAll(cell)
-    cell.fill = fillSolid(colorHeaderBg.argb)
+  const tableHeaderHeight = 24
+  const writeTableHeaderAt = (rowNo) => {
+    const targetRow = sheet.getRow(rowNo)
+    targetRow.values = headerTitles
+    targetRow.height = tableHeaderHeight
+    targetRow.font = { size: 11 }
+    targetRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    for (let c = 1; c <= colCount; c += 1) {
+      const cell = targetRow.getCell(c)
+      setBorderAll(cell)
+      cell.fill = fillSolid(colorHeaderBg.argb)
+    }
   }
+  writeTableHeaderAt(headerRow)
 
   // ===== Detail rows =====
+  const DEFAULT_ROW_HEIGHT = 15
+  const a4WidthInches = 8.27
+  const a4HeightInches = 11.69
+  const dpi = 96
+  // 无图示的零件报价单在 PDF 导出时可接受轻微缩放，实际可容纳的明细行数明显高于保守估算。
+  // 这里采用“软阈值 + 明细行数上限”双条件，优先保证常见报价单落在单页。
+  const SINGLE_PAGE_SOFT_OVERFLOW_RATIO = isEnabled ? 1.18 : 1.4
+  const SINGLE_PAGE_MAX_DETAIL_ROWS = isEnabled ? 12 : 20
   const excelColumnWidthToPixels = (width) => {
     const w = Number(width)
     if (!Number.isFinite(w) || w <= 0) return 64
@@ -707,6 +720,50 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     const p = Number(points)
     if (!Number.isFinite(p) || p <= 0) return 64
     return Math.floor((p * 4) / 3)
+  }
+  const getRowHeightPoints = (targetSheet, rowNo) => {
+    const h = Number(targetSheet.getRow(rowNo).height)
+    return Number.isFinite(h) && h > 0 ? h : DEFAULT_ROW_HEIGHT
+  }
+  const sumRowHeightsPoints = (targetSheet, startRow, endRow) => {
+    let sum = 0
+    for (let r = startRow; r <= endRow; r += 1) sum += getRowHeightPoints(targetSheet, r)
+    return sum
+  }
+  const computeSheetPrintMetrics = (targetSheet) => {
+    const margins = targetSheet.pageSetup?.margins || {
+      left: 0.35,
+      right: 0.35,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2
+    }
+    const printableWidthPx = Math.max(10, (a4WidthInches - margins.left - margins.right) * dpi)
+    let contentWidthPx = 0
+    for (let c = 1; c <= colCount; c += 1) {
+      contentWidthPx += excelColumnWidthToPixels(targetSheet.getColumn(c).width || 64)
+    }
+    const scale = contentWidthPx > 0 ? Math.min(1, printableWidthPx / contentWidthPx) : 1
+    const printableHeightPoints = Math.max(
+      10,
+      (a4HeightInches - margins.top - margins.bottom - margins.header - margins.footer) * 72
+    )
+    const capacityPoints = printableHeightPoints / (scale > 0 ? scale : 1)
+    return { scale, capacityPoints }
+  }
+  const { capacityPoints } = computeSheetPrintMetrics(sheet)
+  const detailPageCapacity =
+    partItems.length <= SINGLE_PAGE_MAX_DETAIL_ROWS
+      ? capacityPoints * SINGLE_PAGE_SOFT_OVERFLOW_RATIO
+      : capacityPoints
+  const firstPageBaseHeight = sumRowHeightsPoints(sheet, 1, headerRow)
+  const repeatedHeaderBaseHeight = getRowHeightPoints(sheet, headerRow)
+
+  for (let c = 1; c <= colCount; c += 1) {
+    const cell = sheet.getRow(headerRow).getCell(c)
+    setBorderAll(cell)
+    cell.fill = fillSolid(colorHeaderBg.argb)
   }
   const getVisualCharUnits = (text) => {
     const source = String(text || '')
@@ -836,8 +893,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   const detailRowHeight = isEnabled ? 60 : 22
   const detailTextColIndexes = [2, 3, 4, 5]
 
-  partItems.forEach((item, idx) => {
-    const r = firstDetailRow + idx
+  const buildDetailRow = (r, item, seqNo, stripeIndex) => {
     const rowObj = sheet.getRow(r)
     rowObj.font = { size: 11 }
     rowObj.alignment = { vertical: 'middle', wrapText: true }
@@ -850,7 +906,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
       safeQty !== null && safeUnitPrice !== null ? Number(safeQty) * Number(safeUnitPrice) : null
 
     const base = [
-      idx + 1,
+      seqNo,
       item?.partName || '',
       item?.drawingNo || '',
       item?.material || '',
@@ -881,7 +937,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     for (let c = 1; c <= colCount; c += 1) {
       const cell = rowObj.getCell(c)
       setBorderAll(cell)
-      if (idx % 2 === 1) cell.fill = fillSolid(colorStripeBg.argb)
+      if (stripeIndex % 2 === 1) cell.fill = fillSolid(colorStripeBg.argb)
     }
 
     // Image embed (LibreOffice-friendly twoCell anchor)
@@ -937,10 +993,66 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
         }
       }
     }
+    return { rowHeight: rowObj.height, amount }
+  }
+
+  let currentDetailRow = firstDetailRow
+  let currentPageUsed = firstPageBaseHeight
+
+  partItems.forEach((item, idx) => {
+    const previewRow = sheet.getRow(currentDetailRow)
+    const base = [
+      idx + 1,
+      item?.partName || '',
+      item?.drawingNo || '',
+      item?.material || '',
+      item?.process || ''
+    ]
+    const qty = Number(item?.quantity)
+    const unitPrice = Number(item?.unitPrice)
+    const safeQty = Number.isFinite(qty) ? qty : null
+    const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null
+    previewRow.values = isEnabled
+      ? [...base, '', safeQty ?? '', safeUnitPrice ?? '', '']
+      : [...base, safeQty ?? '', safeUnitPrice ?? '', '']
+    const previewHeight = Math.max(
+      detailRowHeight,
+      detailTextColIndexes.reduce((maxLines, colIndex) => {
+        const columnWidthPx = excelColumnWidthToPixels(sheet.getColumn(colIndex).width)
+        const lineCount = estimateWrappedLineCount(previewRow.getCell(colIndex).value, columnWidthPx)
+        return Math.max(maxLines, lineCount)
+      }, 1) * 18 + 4
+    )
+    previewRow.values = []
+
+    if (
+      idx > 0 &&
+      currentPageUsed + previewHeight > detailPageCapacity
+    ) {
+      try {
+        sheet.getRow(currentDetailRow - 1).addPageBreak()
+      } catch (e) { /* ignore */ }
+      writeTableHeaderAt(currentDetailRow)
+      currentPageUsed = repeatedHeaderBaseHeight
+      currentDetailRow += 1
+    }
+
+    const { rowHeight } = buildDetailRow(currentDetailRow, item, idx + 1, idx)
+    currentPageUsed += Number(rowHeight) || detailRowHeight
+    currentDetailRow += 1
   })
 
   // ===== Total row =====
-  const totalRow = firstDetailRow + partItems.length
+  let totalRow = currentDetailRow
+  const totalRowHeight = 24
+  if (partItems.length > 0 && currentPageUsed + totalRowHeight > detailPageCapacity) {
+    try {
+      sheet.getRow(totalRow - 1).addPageBreak()
+    } catch (e) { /* ignore */ }
+    writeTableHeaderAt(totalRow)
+    currentPageUsed = repeatedHeaderBaseHeight
+    totalRow += 1
+  }
   const totalAmount = partItems.reduce(
     (sum, item) => sum + (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0),
     0
@@ -952,7 +1064,7 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
   sheet.getCell(`${lastCol}${totalRow}`).value = totalAmount || ''
   sheet.getCell(`${lastCol}${totalRow}`).numFmt = '#,##0.00'
   sheet.getCell(`${lastCol}${totalRow}`).alignment = { horizontal: 'right', vertical: 'middle' }
-  sheet.getRow(totalRow).height = 24
+  sheet.getRow(totalRow).height = totalRowHeight
   sheet.getRow(totalRow).font = { size: 11, color: colorTextMuted }
   for (let c = 1; c <= colCount; c += 1) {
     const cell = sheet.getRow(totalRow).getCell(c)
@@ -960,21 +1072,56 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     cell.fill = fillSolid(colorHeaderBg.argb)
   }
 
-  // ===== Summary box (right-bottom, 2 cols label + 1 col value) =====
-  const sumBoxStartRow = totalRow + 2
+  const applySheetCellPadding = (targetSheet) => {
+    // 统一单元格“内边距”观感：对有边框的单元格增加轻微缩进，避免内容贴边
+    targetSheet.eachRow({ includeEmpty: false }, (rowObj) => {
+      rowObj.eachCell({ includeEmpty: false }, (cell) => {
+        if (!cell.border) return
+        const alignment = cell.alignment || {}
+        if (alignment.horizontal === 'center') return
+        if (typeof alignment.indent === 'number' && alignment.indent > 0) return
+        const horizontal =
+          !alignment.horizontal || alignment.horizontal === 'general'
+            ? typeof cell.value === 'number'
+              ? 'right'
+              : 'left'
+            : alignment.horizontal
+        cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
+      })
+    })
+
+    // 补齐“公共信息区域 / 备注区域 / 页脚信息”等非边框单元格的内边距（它们很多没有 border）
+    targetSheet.eachRow({ includeEmpty: false }, (rowObj) => {
+      rowObj.eachCell({ includeEmpty: false }, (cell) => {
+        const v = cell.value
+        if (v === null || v === undefined || v === '') return
+        const alignment = cell.alignment || {}
+        if (alignment.horizontal === 'center') return
+        if (typeof alignment.indent === 'number' && alignment.indent > 0) return
+        const horizontal =
+          !alignment.horizontal || alignment.horizontal === 'general'
+            ? typeof v === 'number'
+              ? 'right'
+              : 'left'
+            : alignment.horizontal
+        cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
+      })
+    })
+  }
+
   const sumLabelStartCol = Math.max(1, colCount - 2)
   const sumLabelEndCol = Math.max(1, colCount - 1)
   const sumValueCol = colCount
 
-  const putSummaryRow = (r, label, value, isTotal = false, isText = false) => {
-    sheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumLabelEndCol)}${r}`)
-    const labelCell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
+  const putSummaryRow = (targetSheet, r, label, value, isTotal = false, isText = false) => {
+    targetSheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumLabelEndCol)}${r}`)
+    const labelCell = targetSheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
     labelCell.value = label
     labelCell.font = { size: 11, color: colorTextMuted }
     labelCell.alignment = { horizontal: 'center', vertical: 'middle' }
     labelCell.fill = fillSolid(colorHeaderBg.argb)
 
-    const valueCell = sheet.getCell(`${colLetter(sumValueCol)}${r}`)
+    const valueCell = targetSheet.getCell(`${colLetter(sumValueCol)}${r}`)
     if (isText) {
       valueCell.value = value ? String(value) : ''
       valueCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
@@ -989,27 +1136,191 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     }
 
     for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
-      setBorderAll(sheet.getRow(r).getCell(c))
-    sheet.getRow(r).height = isText ? 28 : isTotal ? 24 : 20
+      setBorderAll(targetSheet.getRow(r).getCell(c))
+    targetSheet.getRow(r).height = isText ? 28 : isTotal ? 24 : 20
   }
 
-  const putSummaryMergedTextRow = (r, text) => {
-    sheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumValueCol)}${r}`)
-    const cell = sheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
+  const putSummaryMergedTextRow = (targetSheet, r, text) => {
+    targetSheet.mergeCells(`${colLetter(sumLabelStartCol)}${r}:${colLetter(sumValueCol)}${r}`)
+    const cell = targetSheet.getCell(`${colLetter(sumLabelStartCol)}${r}`)
     const fullText = text ? String(text) : ''
     cell.value = fullText
-    // 使用与"含税价格"标签相同的字体颜色（colorTextMuted = #606266）
     cell.font = { bold: false, size: 11, color: colorTextMuted }
     cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true }
     cell.fill = fillSolid(colorHeaderBg.argb)
 
     for (let c = sumLabelStartCol; c <= sumValueCol; c += 1)
-      setBorderAll(sheet.getRow(r).getCell(c))
+      setBorderAll(targetSheet.getRow(r).getCell(c))
 
     const threshold = 26
     const lines = Math.min(3, Math.max(1, Math.ceil(fullText.length / threshold)))
-    sheet.getRow(r).height = lines * 20
-    sheet.getRow(r).font = { bold: false, size: 11, color: colorTextMuted }
+    targetSheet.getRow(r).height = lines * 20
+    targetSheet.getRow(r).font = { bold: false, size: 11, color: colorTextMuted }
+  }
+
+  const putRemarkBox = (targetSheet, startRow, remarkLines) => {
+    const remarkTitleRow = startRow
+    const remarkStartRow = remarkTitleRow + 1
+
+    // 标题
+    for (let c = 1; c <= colCount; c += 1) {
+      const cell = targetSheet.getRow(remarkTitleRow).getCell(c)
+      cell.border = { top: borderThin, left: borderThin, right: borderThin }
+    }
+    targetSheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
+    const remarkTitleCell = targetSheet.getCell(`A${remarkTitleRow}`)
+    remarkTitleCell.value = '备注'
+    remarkTitleCell.font = { size: 11 }
+    remarkTitleCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    remarkTitleCell.fill = undefined
+    targetSheet.getRow(remarkTitleRow).height = 24
+
+    // 宽度估算（整行合并）
+    let boxWidthPx = 0
+    for (let c = 1; c <= colCount; c += 1) {
+      boxWidthPx += excelColumnWidthToPixels(targetSheet.getColumn(c).width || 64)
+    }
+
+    const lines = Array.isArray(remarkLines) ? remarkLines : []
+    const safeLines = lines.length ? lines : ['']
+    safeLines.forEach((line, idx) => {
+      const r = remarkStartRow + idx
+      targetSheet.mergeCells(`A${r}:${lastCol}${r}`)
+      const cell = targetSheet.getCell(`A${r}`)
+      cell.value = line || ''
+      cell.font = { size: 11 }
+      cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+
+      const wrappedLines = estimateWrappedLineCount(line, boxWidthPx)
+      targetSheet.getRow(r).height = Math.max(18, Math.min(200, wrappedLines * 18))
+
+      for (let c = 1; c <= colCount; c += 1) {
+        const border = { left: borderThin, right: borderThin }
+        if (idx === safeLines.length - 1) border.bottom = borderThin
+        targetSheet.getRow(r).getCell(c).border = border
+      }
+    })
+
+    return remarkStartRow + safeLines.length - 1
+  }
+
+  const buildFooterBlock = (targetSheet, startRowNo) => {
+    const footerRowHeight = 18
+    const companyInfoRowHeight = 14
+
+    const operatorLabelCol = Math.max(2, colCount - 3)
+    const confirmLabelCol = Math.max(3, colCount - 2)
+    const confirmValueCol = Math.max(3, colCount - 1)
+    const companyInfoEndCol = Math.max(1, operatorLabelCol - 1)
+
+    const companyInfo = [
+      '合肥市久环模具设备制造有限公司',
+      '地址:合肥市阜阳北路 966 号',
+      '电话:0551-65661406',
+      '邮箱:mail@jh-mold.com'
+    ]
+
+    companyInfo.forEach((line, idx) => {
+      const r = startRowNo + idx
+      targetSheet.mergeCells(`A${r}:${colLetter(companyInfoEndCol)}${r}`)
+      const cell = targetSheet.getCell(`A${r}`)
+      cell.value = line
+      cell.font = { size: 11 }
+      cell.alignment = { horizontal: 'left', vertical: 'middle' }
+      targetSheet.getRow(r).height = companyInfoRowHeight
+    })
+
+    const operatorRowNo = startRowNo + companyInfo.length + 1
+    const confirmRowNo = operatorRowNo
+
+    // 经办人（左侧）
+    targetSheet.mergeCells(`A${operatorRowNo}:B${operatorRowNo}`)
+    const operatorLabelCell = targetSheet.getRow(operatorRowNo).getCell(1)
+    const operatorText = row.operator || ''
+    const underlinePad = '\u00A0'.repeat(64)
+    operatorLabelCell.value = {
+      richText: [
+        { text: '经办人：', font: { size: 11, color: colorTextMuted } },
+        {
+          text: operatorText,
+          font: { size: 11, color: { argb: 'FF000000' }, underline: true }
+        },
+        {
+          text: underlinePad,
+          font: { size: 11, color: { argb: 'FF000000' }, underline: true }
+        }
+      ]
+    }
+    operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false }
+    targetSheet.getRow(operatorRowNo).height = footerRowHeight
+
+    // 客户确认（右侧）
+    const confirmLabelCell = targetSheet.getRow(confirmRowNo).getCell(confirmLabelCol)
+    confirmLabelCell.value = '客户确认：'
+    confirmLabelCell.font = { size: 11, color: colorTextMuted }
+    confirmLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+    const confirmValueCell = targetSheet.getRow(confirmRowNo).getCell(confirmValueCol)
+    confirmValueCell.value = ''
+    confirmValueCell.font = { size: 11 }
+    confirmValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    applyBottomBorderForRange(targetSheet, confirmRowNo, confirmValueCol, colCount)
+
+    // 印章
+    const sealImagePath = path.join(__dirname, '../templates/quotation/报价专用章.png')
+    if (fs.existsSync(sealImagePath)) {
+      try {
+        const sealBuffer = fs.readFileSync(sealImagePath)
+        const sealInfo = getImageDimensions(sealBuffer)
+        if (sealInfo?.width && sealInfo?.height) {
+          const sealImageId = workbook.addImage({ buffer: sealBuffer, extension: 'png' })
+          const sealSizePx = 151
+          const sealStartCol = 1
+          const sealStartRow = startRowNo
+          const sealRowHeight = companyInfoRowHeight * 4
+
+          const sumColsPx = (colsDef) =>
+            (colsDef || []).reduce((sum, c) => sum + excelColumnWidthToPixels(c?.width || 64), 0)
+          const refColCount = colsEnabled.length
+          const refOperatorLabelCol = Math.max(2, refColCount - 3)
+          const refCompanyInfoEndCol = Math.max(1, refOperatorLabelCol - 1)
+          let refCompanyInfoWidthPx = 0
+          for (let c = 1; c <= refCompanyInfoEndCol; c += 1) {
+            refCompanyInfoWidthPx += excelColumnWidthToPixels(colsEnabled[c - 1]?.width || 64)
+          }
+          const refCenterOffsetX = (refCompanyInfoWidthPx - sealSizePx) / 2
+          const refOffsetX = refCenterOffsetX + 100
+
+          const currentTotalWidthPx = (() => {
+            let w = 0
+            for (let c = 1; c <= colCount; c += 1) {
+              w += excelColumnWidthToPixels(targetSheet.getColumn(c).width || 64)
+            }
+            return w
+          })()
+          const refTotalWidthPx = sumColsPx(colsEnabled)
+          const scaleComp = refTotalWidthPx > 0 ? currentTotalWidthPx / refTotalWidthPx : 1
+          const offsetX = Math.max(0, refOffsetX * scaleComp)
+          const offsetY = Math.max(0, (sealRowHeight - sealSizePx) / 2)
+
+          const firstColWidth = excelColumnWidthToPixels(targetSheet.getColumn(sealStartCol).width || 64)
+          const tlCol = Math.max(0, sealStartCol - 1 + offsetX / firstColWidth - 2)
+          const tlRow = sealStartRow - 1 + offsetY / sealRowHeight
+
+          targetSheet.addImage(sealImageId, {
+            tl: { col: tlCol, row: tlRow },
+            ext: { width: sealSizePx, height: sealSizePx },
+            editAs: 'absolute'
+          })
+        }
+      } catch (e) {
+        console.error('插入印章图片失败:', e)
+      }
+    }
+
+    const endRowNo = operatorRowNo
+    const heightPoints = companyInfoRowHeight * 4 + footerRowHeight
+    return { endRowNo, heightPoints }
   }
 
   const otherFee = Number(row.otherFee || 0)
@@ -1018,56 +1329,6 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     row.taxIncludedPrice !== undefined && row.taxIncludedPrice !== null
       ? Number(row.taxIncludedPrice) || 0
       : totalAmount + otherFee + transportFee
-
-  const summaryLines = []
-  if (otherFee) summaryLines.push({ label: '其它费用', value: otherFee })
-  if (transportFee) summaryLines.push({ label: '运输费用', value: transportFee })
-  summaryLines.push({ label: '含税价格', value: computedTaxIncludedPrice, isTotal: true })
-  summaryLines.push({
-    label: '大写',
-    value: toCnMoneyUppercase(computedTaxIncludedPrice),
-    isMergedText: true
-  })
-
-  summaryLines.forEach((line, idx) => {
-    const rowNo = sumBoxStartRow + idx
-    if (line.isMergedText) {
-      putSummaryMergedTextRow(rowNo, `${line.label}：${line.value || ''}`)
-      return
-    }
-    putSummaryRow(rowNo, line.label, line.value, !!line.isTotal, !!line.isText)
-  })
-
-  // ===== Remark =====
-  const remarkTitleRow = sumBoxStartRow + summaryLines.length + 1
-  const remarkBodyRow = remarkTitleRow + 1
-  // 先设置所有单元格的边框（上、左、右），明确移除下边框
-  for (let c = 1; c <= colCount; c += 1) {
-    const cell = sheet.getRow(remarkTitleRow).getCell(c)
-    cell.border = {
-      top: borderThin,
-      left: borderThin,
-      right: borderThin,
-      bottom: { style: 'none', color: { argb: 'FFFFFFFF' } }
-    }
-    // 取消背景色
-  }
-  // 然后合并单元格
-  sheet.mergeCells(`A${remarkTitleRow}:${lastCol}${remarkTitleRow}`)
-  const remarkTitleCell = sheet.getCell(`A${remarkTitleRow}`)
-  remarkTitleCell.value = '备注'
-  remarkTitleCell.font = { size: 11 }
-  remarkTitleCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  // 再次明确设置合并后的单元格边框，确保没有下边框，并移除背景色
-  remarkTitleCell.border = {
-    top: borderThin,
-    left: borderThin,
-    right: borderThin,
-    bottom: { style: 'none', color: { argb: 'FFFFFFFF' } }
-  }
-  remarkTitleCell.fill = undefined
-  sheet.getRow(remarkTitleRow).height = 24
-  sheet.mergeCells(`A${remarkBodyRow}:${lastCol}${remarkBodyRow}`)
 
   // 构建备注内容：固定条款 + 用户自定义备注
   const deliveryTerms = String(row.deliveryTerms || '').trim() || '-'
@@ -1092,250 +1353,208 @@ const buildPartQuotationWorkbook = ({ row, partItems, enableImage }) => {
     remarkLines.push(customRemark)
   }
 
-  const remarkText = remarkLines.join('\n')
-  sheet.getCell(`A${remarkBodyRow}`).value = remarkText
-  sheet.getCell(`A${remarkBodyRow}`).font = { size: 11 }
-  sheet.getCell(`A${remarkBodyRow}`).alignment = {
-    horizontal: 'left',
-    vertical: 'top',
-    wrapText: true
-  }
-
-  // 计算行高：固定条款7行 + 顶部空行1行 + 空行（如果有自定义备注）+ 自定义备注行数
-  const fixedTermsLines = 8 // 7条固定条款 + 1行顶部空行
-  const customRemarkLines = customRemark ? Math.max(1, Math.ceil(customRemark.length / 60)) : 0
-  const totalLines = fixedTermsLines + (customRemark ? 1 : 0) + customRemarkLines
-  sheet.getRow(remarkBodyRow).height = Math.max(48, Math.min(200, totalLines * 18))
-
-  // 设置备注内容行的边框（左、右、下），去除上边框（避免与表头行下边框重叠）
-  for (let c = 1; c <= colCount; c += 1) {
-    const cell = sheet.getRow(remarkBodyRow).getCell(c)
-    cell.border = {
-      top: { style: 'none' },
-      left: borderThin,
-      right: borderThin,
-      bottom: borderThin
-    }
-  }
-
-  // ===== Company Info & Signature =====
-  // 在备注框和公司信息之间添加空行，保持适当距离
-  const gapRows = 2 // 添加2行空行作为间距
-  const footerStartRow = remarkBodyRow + gapRows + 1
-  const footerRowHeight = 18
-  const companyInfoRowHeight = 14 // 公司信息行高（减小行间距）
-
-  // 左侧：公司信息（4行）
-  // 公司信息从 A 列开始，延伸到大部分列，留出右侧空间给签名区域
-  // 签名区域放在右侧一行内：经办人 + 客户确认
-  // 每个签名占用 2 列（标签列 + 值列），从表格最右侧往左占用 4 列
-  const operatorLabelCol = Math.max(2, colCount - 3)
-  const operatorValueCol = Math.min(colCount, operatorLabelCol + 1)
-  const confirmLabelCol = Math.max(3, colCount - 2)
-  const confirmValueCol = Math.max(3, colCount - 1)
-
-  // 公司信息结束列应该在签名区域之前，留出1列作为分隔
-  const companyInfoEndCol = Math.max(1, operatorLabelCol - 1) // 公司信息结束列
-
-  const companyInfo = [
-    '合肥市久环模具设备制造有限公司',
-    '地址:合肥市阜阳北路 966 号',
-    '电话:0551-65661406',
-    '邮箱:mail@jh-mold.com'
-  ]
-
-  companyInfo.forEach((line, idx) => {
-    const row = footerStartRow + idx
-    sheet.mergeCells(`A${row}:${colLetter(companyInfoEndCol)}${row}`)
-    const cell = sheet.getCell(`A${row}`)
-    cell.value = line
-    cell.font = { size: 11 }
-    cell.alignment = { horizontal: 'left', vertical: 'middle' }
-    sheet.getRow(row).height = companyInfoRowHeight // 使用较小的行高
+  const summaryLines = []
+  if (otherFee) summaryLines.push({ label: '其它费用', value: otherFee })
+  if (transportFee) summaryLines.push({ label: '运输费用', value: transportFee })
+  summaryLines.push({ label: '含税价格', value: computedTaxIncludedPrice, isTotal: true })
+  summaryLines.push({
+    label: '大写',
+    value: toCnMoneyUppercase(computedTaxIncludedPrice),
+    isMergedText: true
   })
 
-  // 右侧：签名区域
-  // - 客户确认：移动到经办人同一行（右侧位置不变）
-  // - 经办人：移动到邮箱下一行，再向下移动一行
-  const operatorRowNo = footerStartRow + companyInfo.length + 1
-  const confirmRowNo = operatorRowNo
-
-  // 经办人（邮箱下方，左侧与邮箱左对齐）
-  // 合并 A:B，避免“经办人：”在序号列（A列）宽度较窄时被裁剪
-  sheet.mergeCells(`A${operatorRowNo}:B${operatorRowNo}`)
-  const operatorLabelCell = sheet.getRow(operatorRowNo).getCell(1) // A (A:B merged)
-  const operatorText = row.operator || ''
-  // 用“下划线 + 不断行空格”把签名线从用户名开始延伸到单元格最右侧
-  // 说明：
-  // - 仅对“用户名 + 填充”部分加下划线，避免“经办人：”被划线
-  // - 使用 NBSP 避免尾随空格被转换/渲染时裁剪
-  const underlinePad = '\u00A0'.repeat(64)
-  operatorLabelCell.value = {
-    richText: [
-      { text: '经办人：', font: { size: 11, color: colorTextMuted } },
-      {
-        text: operatorText,
-        font: { size: 11, color: { argb: 'FF000000' }, underline: true }
-      },
-      {
-        text: underlinePad,
-        font: { size: 11, color: { argb: 'FF000000' }, underline: true }
-      }
-    ]
-  }
-  operatorLabelCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false }
-  // 使用文字下划线模拟签名线，避免“经办人：”本身出现下划线
-
-  // 客户确认（与经办人同一行，左右列位置不变）
-  const confirmLabelCell = sheet.getRow(confirmRowNo).getCell(confirmLabelCol)
-  confirmLabelCell.value = '客户确认：'
-  confirmLabelCell.font = { size: 11, color: colorTextMuted }
-  confirmLabelCell.alignment = { horizontal: 'right', vertical: 'middle' }
-
-  const confirmValueCell = sheet.getRow(confirmRowNo).getCell(confirmValueCol)
-  confirmValueCell.value = ''
-  confirmValueCell.font = { size: 11 }
-  confirmValueCell.alignment = { horizontal: 'left', vertical: 'middle' }
-  applyBottomBorderForRange(confirmRowNo, confirmValueCol, colCount)
-
-  if (!sheet.getRow(operatorRowNo).height) sheet.getRow(operatorRowNo).height = footerRowHeight
-
-  // 确保所有行都有相同高度
-  const footerEndRow = Math.max(footerStartRow + companyInfo.length - 1, operatorRowNo)
-  for (let row = footerStartRow; row <= footerEndRow; row += 1) {
-    if (!sheet.getRow(row).height) sheet.getRow(row).height = footerRowHeight
-  }
-
-  // ===== 插入印章图片 =====
-  const sealImagePath = path.join(__dirname, '../templates/quotation/报价专用章.png')
-  console.log('印章图片路径:', sealImagePath)
-  console.log('文件是否存在:', fs.existsSync(sealImagePath))
-  if (fs.existsSync(sealImagePath)) {
-    try {
-      const sealBuffer = fs.readFileSync(sealImagePath)
-      const sealInfo = getImageDimensions(sealBuffer)
-      console.log('印章图片信息:', sealInfo)
-      if (sealInfo?.width && sealInfo?.height) {
-        const sealImageId = workbook.addImage({ buffer: sealBuffer, extension: 'png' })
-
-        // 4x4 厘米 = 151x151 像素（1 厘米 ≈ 37.8 像素）
-        const sealSizePx = 151 // 4 厘米对应的像素数
-
-        // 计算印章位置：覆盖在公司信息上方
-        // 公司信息从 A 列开始，到 companyInfoEndCol 列结束
-        // 印章放在公司信息区域的中心位置，覆盖在公司信息上方
-        const sealStartCol = 1 // A 列
-        const sealEndCol = companyInfoEndCol
-        const sealStartRow = footerStartRow
-
-        // 计算公司信息区域的总高度（像素）
-        const sealRowHeight = companyInfoRowHeight * 4 // 4 行的高度
-
-        // 计算偏移量：以“启用图示列”的布局为基准，补偿 fitToWidth 缩放差异，
-        // 避免关闭图示列时 PDF 中印章看起来向右漂移。
-        const sumColsPx = (colsDef) =>
-          (colsDef || []).reduce((sum, c) => sum + excelColumnWidthToPixels(c?.width || 64), 0)
-        const refColCount = colsEnabled.length
-        const refOperatorLabelCol = Math.max(2, refColCount - 3)
-        const refCompanyInfoEndCol = Math.max(1, refOperatorLabelCol - 1)
-        let refCompanyInfoWidthPx = 0
-        for (let c = 1; c <= refCompanyInfoEndCol; c += 1) {
-          refCompanyInfoWidthPx += excelColumnWidthToPixels(colsEnabled[c - 1]?.width || 64)
-        }
-        const refCenterOffsetX = (refCompanyInfoWidthPx - sealSizePx) / 2
-        // 向右移动印章：从向左移动50px改为向右移动100px，避免遮挡公司信息
-        const refOffsetX = refCenterOffsetX + 100 // 向右移动 100px（相对于中心）
-
-        const currentTotalWidthPx = (() => {
-          let w = 0
-          for (let c = 1; c <= colCount; c += 1) {
-            w += excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
-          }
-          return w
-        })()
-        const refTotalWidthPx = sumColsPx(colsEnabled)
-        const scaleComp = refTotalWidthPx > 0 ? currentTotalWidthPx / refTotalWidthPx : 1
-        const offsetX = Math.max(0, refOffsetX * scaleComp)
-        const offsetY = Math.max(0, (sealRowHeight - sealSizePx) / 2)
-
-        // 计算第一列的宽度，用于计算起始列的小数偏移
-        const firstColWidth = excelColumnWidthToPixels(sheet.getColumn(sealStartCol).width || 64)
-
-        // 转换为 Excel 坐标（列和行都是 0-based，可以有小数值）
-        // 图片从 A 列开始，加上水平偏移，然后向左移动两个单元格（减去2）
-        const tlCol = Math.max(0, sealStartCol - 1 + offsetX / firstColWidth - 2)
-        const tlRow = sealStartRow - 1 + offsetY / sealRowHeight
-
-        console.log('插入印章图片:', {
-          sealStartCol,
-          sealEndCol,
-          sealStartRow,
-          tlCol,
-          tlRow,
-          sealSizePx,
-          sealRowHeight,
-          offsetX,
-          offsetY
-        })
-
-        sheet.addImage(sealImageId, {
-          tl: { col: tlCol, row: tlRow },
-          ext: { width: sealSizePx, height: sealSizePx },
-          editAs: 'absolute' // 使用绝对定位，避免被单元格限制
-        })
-        console.log('印章图片插入成功')
+  const estimateSummaryHeight = () => {
+    // 按 putSummaryRow 的高度逻辑估算
+    let h = 0
+    summaryLines.forEach((line) => {
+      if (line.isMergedText) {
+        const fullText = `${line.label}：${line.value || ''}`
+        const threshold = 26
+        const lines = Math.min(3, Math.max(1, Math.ceil(String(fullText).length / threshold)))
+        h += lines * 20
+      } else if (line.isTotal) {
+        h += 24
       } else {
-        console.error('无法读取印章图片尺寸信息')
+        h += 20
       }
-    } catch (e) {
-      console.error('插入印章图片失败:', e)
-      console.error('错误堆栈:', e.stack)
-    }
-  } else {
-    console.error('印章图片文件不存在:', sealImagePath)
+    })
+    return h
+  }
+  const estimateRemarkHeight = () => {
+    const title = 24
+    let boxWidthPx = 0
+    for (let c = 1; c <= colCount; c += 1) boxWidthPx += excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
+    const lines = Array.isArray(remarkLines) && remarkLines.length ? remarkLines : ['']
+    const rows = lines.reduce((sum, line) => {
+      const wrapped = estimateWrappedLineCount(line, boxWidthPx)
+      return sum + Math.max(18, Math.min(200, wrapped * 18))
+    }, 0)
+    return title + rows
+  }
+  const estimateFooterHeight = () => {
+    // companyInfoRowHeight*4 + footerRowHeight
+    return 14 * 4 + 18
   }
 
-  // ===== Print helpers =====
-  sheet.views = [{ state: 'frozen', ySplit: headerRow }]
-  sheet.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`
-  sheet.pageSetup.printArea = `A1:${lastCol}${footerEndRow}`
-  sheet.headerFooter.oddHeader = `&R第 &P 页 / 共 &N 页`
-  sheet.headerFooter.oddFooter = ''
+  const tableHeight = sumRowHeightsPoints(sheet, 1, totalRow)
+  const onePageEstimate =
+    tableHeight +
+    12 + // gap
+    estimateSummaryHeight() +
+    12 + // gap
+    estimateRemarkHeight() +
+    estimateFooterHeight()
 
-  // 统一单元格“内边距”观感：对有边框的单元格增加轻微缩进，避免内容贴边
-  sheet.eachRow({ includeEmpty: false }, (rowObj) => {
-    rowObj.eachCell({ includeEmpty: false }, (cell) => {
-      if (!cell.border) return
-      const alignment = cell.alignment || {}
-      if (alignment.horizontal === 'center') return
-      if (typeof alignment.indent === 'number' && alignment.indent > 0) return
-      const horizontal =
-        !alignment.horizontal || alignment.horizontal === 'general'
-          ? typeof cell.value === 'number'
-            ? 'right'
-            : 'left'
-          : alignment.horizontal
-      cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
+  const canRenderSinglePage =
+    onePageEstimate <= capacityPoints ||
+    (partItems.length <= SINGLE_PAGE_MAX_DETAIL_ROWS &&
+      onePageEstimate <= capacityPoints * SINGLE_PAGE_SOFT_OVERFLOW_RATIO)
+
+  const renderSummaryAndRemark = (targetSheet, startRowNo) => {
+    const sumBoxStartRow = startRowNo
+    summaryLines.forEach((line, idx) => {
+      const rowNo = sumBoxStartRow + idx
+      if (line.isMergedText) {
+        putSummaryMergedTextRow(targetSheet, rowNo, `${line.label}：${line.value || ''}`)
+        return
+      }
+      putSummaryRow(targetSheet, rowNo, line.label, line.value, !!line.isTotal, !!line.isText)
     })
+    const remarkStartRow = sumBoxStartRow + summaryLines.length + 2
+    const remarkEndRow = putRemarkBox(targetSheet, remarkStartRow, remarkLines)
+    return { remarkEndRow }
+  }
+
+  const addSpacerRow = (targetSheet, rowNo, heightPoints) => {
+    const h = Number(heightPoints)
+    if (!Number.isFinite(h) || h <= 0.1) return rowNo - 1
+    targetSheet.mergeCells(`A${rowNo}:${lastCol}${rowNo}`)
+    const cell = targetSheet.getCell(`A${rowNo}`)
+    cell.value = ''
+    cell.alignment = { horizontal: 'left', vertical: 'top' }
+    targetSheet.getRow(rowNo).height = h
+    return rowNo
+  }
+
+  const finalizeDetailSheetPrint = (printEndRow, options = {}) => {
+    const { forceSinglePage = false } = options
+    sheet.views = [{ state: 'frozen', ySplit: headerRow }]
+    sheet.pageSetup.printArea = `A1:${lastCol}${printEndRow}`
+    sheet.pageSetup.fitToHeight = forceSinglePage ? 1 : 0
+    sheet.headerFooter.oddHeader = `&R第 &P 页 / 共 &N 页`
+    sheet.headerFooter.oddFooter = ''
+    applySheetCellPadding(sheet)
+  }
+
+  if (canRenderSinglePage) {
+    // 在明细页同页渲染汇总/备注/页脚，并把页脚固定在纸张底部
+    const startRowNo = totalRow + 2
+    sheet.getRow(totalRow + 1).height = 12
+    const { remarkEndRow } = renderSummaryAndRemark(sheet, startRowNo)
+
+    const footerHeight = estimateFooterHeight()
+    const usedPoints = sumRowHeightsPoints(sheet, 1, remarkEndRow)
+    const remainingPoints = Math.max(0, capacityPoints - usedPoints - footerHeight)
+    const spacerRowNo = remarkEndRow + 1
+    addSpacerRow(sheet, spacerRowNo, remainingPoints)
+
+    const footerStartRowNo = spacerRowNo + 1
+    const { endRowNo: footerEndRowNo } = buildFooterBlock(sheet, footerStartRowNo)
+
+    finalizeDetailSheetPrint(footerEndRowNo, { forceSinglePage: true })
+    return workbook
+  }
+
+  const remarkBoxWidthPx = (() => {
+    let boxWidthPx = 0
+    for (let c = 1; c <= colCount; c += 1) boxWidthPx += excelColumnWidthToPixels(sheet.getColumn(c).width || 64)
+    return boxWidthPx
+  })()
+  const putRemarkTitleRow = (targetSheet, rowNo) => {
+    for (let c = 1; c <= colCount; c += 1) {
+      const cell = targetSheet.getRow(rowNo).getCell(c)
+      cell.border = { top: borderThin, left: borderThin, right: borderThin }
+    }
+    targetSheet.mergeCells(`A${rowNo}:${lastCol}${rowNo}`)
+    const titleCell = targetSheet.getCell(`A${rowNo}`)
+    titleCell.value = '备注'
+    titleCell.font = { size: 11 }
+    titleCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    targetSheet.getRow(rowNo).height = 24
+  }
+  const putRemarkLineRow = (targetSheet, rowNo, text, isLastLine) => {
+    targetSheet.mergeCells(`A${rowNo}:${lastCol}${rowNo}`)
+    const cell = targetSheet.getCell(`A${rowNo}`)
+    cell.value = text || ''
+    cell.font = { size: 11 }
+    cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+    const wrappedLines = estimateWrappedLineCount(text, remarkBoxWidthPx)
+    targetSheet.getRow(rowNo).height = Math.max(18, Math.min(200, wrappedLines * 18))
+    for (let c = 1; c <= colCount; c += 1) {
+      const border = { left: borderThin, right: borderThin }
+      if (isLastLine) border.bottom = borderThin
+      targetSheet.getRow(rowNo).getCell(c).border = border
+    }
+  }
+
+  let contentRowNo = totalRow + 1
+  let contentPageUsed = currentPageUsed + getRowHeightPoints(sheet, totalRow)
+  const ensureContentCapacity = (nextRowHeight, prevRowNoForBreak) => {
+    if (contentPageUsed + nextRowHeight <= capacityPoints) return
+    const breakRowNo = Math.max(1, prevRowNoForBreak)
+    try {
+      sheet.getRow(breakRowNo).addPageBreak()
+    } catch (e) { /* ignore */ }
+    contentPageUsed = 0
+  }
+
+  sheet.getRow(contentRowNo).height = 12
+  ensureContentCapacity(getRowHeightPoints(sheet, contentRowNo), totalRow)
+  contentPageUsed += getRowHeightPoints(sheet, contentRowNo)
+  contentRowNo += 1
+
+  summaryLines.forEach((line) => {
+    const estH = line.isMergedText ? 40 : line.isTotal ? 24 : 20
+    ensureContentCapacity(estH, contentRowNo - 1)
+    if (line.isMergedText) {
+      putSummaryMergedTextRow(sheet, contentRowNo, `${line.label}：${line.value || ''}`)
+    } else {
+      putSummaryRow(sheet, contentRowNo, line.label, line.value, !!line.isTotal, !!line.isText)
+    }
+    contentPageUsed += getRowHeightPoints(sheet, contentRowNo)
+    contentRowNo += 1
   })
 
-  // 补齐“公共信息区域 / 备注区域 / 页脚信息”等非边框单元格的内边距（它们很多没有 border）
-  sheet.eachRow({ includeEmpty: false }, (rowObj) => {
-    rowObj.eachCell({ includeEmpty: false }, (cell) => {
-      const v = cell.value
-      if (v === null || v === undefined || v === '') return
-      const alignment = cell.alignment || {}
-      if (alignment.horizontal === 'center') return
-      if (typeof alignment.indent === 'number' && alignment.indent > 0) return
-      const horizontal =
-        !alignment.horizontal || alignment.horizontal === 'general'
-          ? typeof v === 'number'
-            ? 'right'
-            : 'left'
-          : alignment.horizontal
-      cell.alignment = { ...alignment, horizontal, indent: PRINT_CELL_INDENT }
-    })
+  sheet.getRow(contentRowNo).height = 12
+  ensureContentCapacity(getRowHeightPoints(sheet, contentRowNo), contentRowNo - 1)
+  contentPageUsed += getRowHeightPoints(sheet, contentRowNo)
+  contentRowNo += 1
+
+  ensureContentCapacity(24, contentRowNo - 1)
+  putRemarkTitleRow(sheet, contentRowNo)
+  contentPageUsed += getRowHeightPoints(sheet, contentRowNo)
+  contentRowNo += 1
+
+  remarkLines.forEach((line, idx) => {
+    const wrappedLines = estimateWrappedLineCount(line, remarkBoxWidthPx)
+    const remarkLineHeight = Math.max(18, Math.min(200, wrappedLines * 18))
+    ensureContentCapacity(remarkLineHeight, contentRowNo - 1)
+    putRemarkLineRow(sheet, contentRowNo, line, idx === remarkLines.length - 1)
+    contentPageUsed += getRowHeightPoints(sheet, contentRowNo)
+    contentRowNo += 1
   })
+
+  const footerHeight = estimateFooterHeight()
+  ensureContentCapacity(footerHeight, contentRowNo - 1)
+  const spacerRowNo = contentRowNo
+  const spacerHeight = Math.max(0, capacityPoints - contentPageUsed - footerHeight)
+  addSpacerRow(sheet, spacerRowNo, spacerHeight)
+  if (spacerHeight > 0.1) {
+    contentPageUsed += getRowHeightPoints(sheet, spacerRowNo)
+    contentRowNo += 1
+  }
+  const { endRowNo: footerEndRowNo } = buildFooterBlock(sheet, contentRowNo)
+  finalizeDetailSheetPrint(footerEndRowNo)
 
   return workbook
 }
