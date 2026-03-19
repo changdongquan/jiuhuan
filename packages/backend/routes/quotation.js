@@ -93,7 +93,20 @@ const resolveTempQuotationImagePath = (imageUrl) => {
 }
 
 const resolveStoredQuotationImagePath = (imageUrl) => {
-  const url = String(imageUrl || '')
+  let url = String(imageUrl || '').trim()
+  if (!url) return null
+
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url)
+      url = String(parsed.pathname || '').trim()
+    } catch {
+      return null
+    }
+  }
+
+  if (!url.startsWith('/')) url = `/${url}`
+
   const oldPrefix = '/uploads/quotation-images/'
   if (url.startsWith(oldPrefix)) {
     const name = decodeURIComponent(url.slice(oldPrefix.length))

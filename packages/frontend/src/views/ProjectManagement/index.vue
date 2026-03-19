@@ -2364,6 +2364,7 @@ import {
 } from '@/api/project'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
+import { buildProjectPartImageDisplayUrl } from '@/utils/imageDisplay'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import MobileUploadTrigger from '@/components/MobileUploadTrigger/MobileUploadTrigger.vue'
 import { createImageViewer } from '@/components/ImageViewer'
@@ -5217,8 +5218,7 @@ const toPartImageDisplayUrl = (imageUrl: any) => {
     console.log('[图示预览] URL为空')
     return ''
   }
-  // 所有图片都通过API预览接口访问（兼容临时和正式路径）
-  const displayUrl = `/api/project/part-image?url=${encodeURIComponent(url)}`
+  const displayUrl = buildProjectPartImageDisplayUrl(url)
   console.log('[图示预览] 原始URL:', url)
   console.log('[图示预览] 显示URL:', displayUrl)
   return displayUrl

@@ -736,8 +736,24 @@ const resolveTempPartImagePath = (imageUrl) => {
 
 // 解析正式图片路径
 const resolveStoredPartImagePath = (imageUrl) => {
-  const url = String(imageUrl || '').trim()
+  let url = String(imageUrl || '').trim()
   if (!url) return null
+
+  // 兼容历史数据：数据库里可能保存了完整 URL，先提取 pathname。
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url)
+      url = String(parsed.pathname || '').trim()
+    } catch {
+      return null
+    }
+  }
+
+  // 兼容历史数据：有些记录保存为 /uploads/... 或 uploads/...。
+  url = url.replace(/^\/+/, '')
+  if (url.startsWith('uploads/')) {
+    url = url.slice('uploads/'.length)
+  }
 
   // 相对路径格式：{分类}/{项目编号}/项目管理/零件图示/{文件名}
   const parts = url.split('/').filter(Boolean)

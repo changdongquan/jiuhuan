@@ -1831,6 +1831,7 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/store/modules/app'
+import { buildQuotationPartImageDisplayUrl } from '@/utils/imageDisplay'
 import { useUserStore } from '@/store/modules/user'
 
 const userStore = useUserStore()
@@ -2172,9 +2173,7 @@ const TEMP_PART_IMAGE_PREFIX = '/uploads/_temp/quotation-images/'
 const isTempPartImageUrl = (url: any) => String(url || '').startsWith(TEMP_PART_IMAGE_PREFIX)
 
 const toPartItemImageDisplayUrl = (imageUrl: any) => {
-  const url = String(imageUrl || '').trim()
-  if (!url) return ''
-  return `/api/quotation/part-item-image?url=${encodeURIComponent(url)}`
+  return buildQuotationPartImageDisplayUrl(imageUrl)
 }
 
 const deleteTempPartImageIfNeeded = async (imageUrl: any) => {

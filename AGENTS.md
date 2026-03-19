@@ -187,6 +187,32 @@
   - 开发环境手机端调试所需的内网来源地址，必须在后端开发环境 CORS 白名单中统一放行。
   - 不按单个页面、单个按钮、单个临时 IP 零散加例外。
 
+## 图示 / 图片预览（强约束）
+
+> 目标：统一业务“图示”显示链路，避免各页面重复手写预览 URL，避免历史 `http` / `/uploads/...` / 临时路径格式不兼容而出现“加载失败”。
+
+- 适用范围：
+  - `项目管理` 的 `零件图示URL`
+  - `生产任务` 中引用项目图示的展示位
+  - `报价单` 的零件图示 `imageUrl`
+  - 后续新增的同类“业务图示/缩略图/预览图”入口
+- 前端强制要求：
+  - 优先复用公共工具文件 [packages/frontend/src/utils/imageDisplay.ts](/Users/changun/work/jiuhuan/packages/frontend/src/utils/imageDisplay.ts)。
+  - 项目相关图示统一使用 `buildProjectPartImageDisplayUrl`。
+  - 报价单零件图示统一使用 `buildQuotationPartImageDisplayUrl`。
+  - 禁止在页面组件内再次手写 `/api/project/part-image?url=` 或 `/api/quotation/part-item-image?url=` 拼接逻辑，除非先同步抽回公共工具。
+  - 对 `data:`、`blob:`、`http/https` 地址应直接显示，不要强制改走本地预览接口。
+- 后端强制要求：
+  - 图示预览接口必须兼容历史路径格式，至少覆盖：
+    - 完整 `http/https` URL
+    - `/uploads/...`
+    - `uploads/...`
+    - 当前正式相对路径
+    - 当前临时路径
+- 开发要求：
+  - 新增图示展示入口时，先搜索仓库现有公共方法与预览接口，优先复用，不允许每个页面各写一套 `toImageDisplayUrl` 变体。
+  - 如果新增了新的图示存储类型或路径规则，必须同时补齐前端公共方法和后端解析兼容。
+
 ## 数据库迁移（执行规范）
 
 > 目标：迁移执行方式与后端一致，避免环境差异导致失败。

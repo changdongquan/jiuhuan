@@ -1423,6 +1423,7 @@ import {
 import { useAppStore } from '@/store/modules/app'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { hasUserCapability } from '@/utils/capability'
+import { buildProjectPartImageDisplayUrl } from '@/utils/imageDisplay'
 import { useUploadAuthHeaders } from '@/utils/uploadHeaders'
 import { createImageViewer } from '@/components/ImageViewer'
 import { createPdfViewer } from '@/components/PdfViewer'
@@ -1683,9 +1684,7 @@ const loadProjectProductList = async () => {
 }
 
 const toPartImageDisplayUrl = (imageUrl: string | undefined) => {
-  const url = String(imageUrl || '').trim()
-  if (!url) return ''
-  return `/api/project/part-image?url=${encodeURIComponent(url)}`
+  return buildProjectPartImageDisplayUrl(imageUrl)
 }
 
 // 零件图纸（来自项目管理）
