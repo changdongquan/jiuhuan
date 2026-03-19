@@ -1196,13 +1196,26 @@ const handleTabChange = (tab: string) => {
 <template>
   <ContentWrap>
     <div class="permission-shell">
-      <div class="permission-page-head">
-        <div class="permission-page-copy">
-          <div class="permission-page-eyebrow">Authorization Workbench</div>
-          <h2 class="permission-page-title">权限管理</h2>
-          <p class="permission-page-desc">
-            用更适合手机端的顺序组织用户、组与审核动作配置，减少横向表格依赖。
-          </p>
+      <div class="center-nav">
+        <div class="center-nav__tabs">
+          <BaseButton
+            :type="activeTab === 'user' ? 'primary' : 'default'"
+            @click="switchCenter('user')"
+          >
+            用户授权中心
+          </BaseButton>
+          <BaseButton
+            :type="activeTab === 'group' ? 'primary' : 'default'"
+            @click="switchCenter('group')"
+          >
+            组授权中心
+          </BaseButton>
+          <BaseButton
+            :type="activeTab === 'reviewAcl' ? 'primary' : 'default'"
+            @click="switchCenter('reviewAcl')"
+          >
+            审核权限中心
+          </BaseButton>
         </div>
         <BaseButton
           type="primary"
@@ -1212,27 +1225,6 @@ const handleTabChange = (tab: string) => {
           @click="handleSyncRoutes"
         >
           同步菜单权限
-        </BaseButton>
-      </div>
-
-      <div class="center-nav">
-        <BaseButton
-          :type="activeTab === 'user' ? 'primary' : 'default'"
-          @click="switchCenter('user')"
-        >
-          用户授权中心
-        </BaseButton>
-        <BaseButton
-          :type="activeTab === 'group' ? 'primary' : 'default'"
-          @click="switchCenter('group')"
-        >
-          组授权中心
-        </BaseButton>
-        <BaseButton
-          :type="activeTab === 'reviewAcl' ? 'primary' : 'default'"
-          @click="switchCenter('reviewAcl')"
-        >
-          审核权限中心
         </BaseButton>
       </div>
 
@@ -2241,77 +2233,26 @@ const handleTabChange = (tab: string) => {
   --pm-accent: #1f8a70;
 }
 
-.permission-page-head {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
-  margin-bottom: 14px;
-  overflow: hidden;
-  background: var(--pm-bg);
-  border: 1px solid var(--pm-line);
-  border-radius: 22px;
-  box-shadow: var(--pm-shadow);
-}
-
-.permission-page-head::after {
-  position: absolute;
-  top: -40px;
-  right: -20px;
-  width: 180px;
-  height: 180px;
-  pointer-events: none;
-  background:
-    radial-gradient(circle, rgb(31 138 112 / 15%) 0%, rgb(31 138 112 / 0%) 68%),
-    radial-gradient(circle, rgb(59 130 246 / 12%) 0%, rgb(59 130 246 / 0%) 62%);
-  content: '';
-}
-
-.permission-page-copy {
-  position: relative;
-  z-index: 1;
-  max-width: 620px;
-}
-
-.permission-page-eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--pm-accent);
-  text-transform: uppercase;
-}
-
-.permission-page-title {
-  margin: 6px 0 0;
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--pm-strong);
-}
-
-.permission-page-desc {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--pm-soft);
-}
-
 .permission-sync-button {
-  position: relative;
-  z-index: 1;
   flex-shrink: 0;
 }
 
 .center-nav {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 4px;
   margin-bottom: 12px;
   overflow-x: auto;
   background: rgb(244 247 250 / 95%);
   border: 1px solid #dbe4eb;
   border-radius: 16px;
+  gap: 8px;
+}
+
+.center-nav__tabs {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2739,22 +2680,16 @@ const handleTabChange = (tab: string) => {
 }
 
 @media (width <= 900px) {
-  .permission-page-head {
-    flex-direction: column;
-    padding: 16px;
-    border-radius: 18px;
-  }
-
-  .permission-page-title {
-    font-size: 22px;
-  }
-
   .center-nav {
     position: sticky;
     top: 0;
     z-index: 5;
     margin-bottom: 10px;
     backdrop-filter: blur(10px);
+  }
+
+  .center-nav__tabs {
+    width: 100%;
   }
 
   .permission-layout,
