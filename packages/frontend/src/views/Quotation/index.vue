@@ -954,11 +954,22 @@
                 </el-form-item>
 
                 <el-form-item class="quotation-top-field quotation-top-field--inline">
-                  <span class="field-label-inline">来源项目编号：</span>
+                  <span class="field-label-inline field-label-inline--project-code">
+                    来源项目编号：
+                  </span>
                   <el-input
                     v-model="quotationForm.sourceProjectCode"
                     :disabled="isViewMode"
                     placeholder="来源项目编号"
+                    class="field-input-inline field-input-project-code"
+                  />
+                </el-form-item>
+                <el-form-item class="quotation-top-field quotation-top-field--inline">
+                  <span class="field-label-inline">经办人：</span>
+                  <el-input
+                    v-model="quotationForm.operator"
+                    :disabled="isViewMode"
+                    placeholder="经办人"
                     class="field-input-inline field-input-contact"
                   />
                 </el-form-item>
@@ -1018,18 +1029,6 @@
                     v-model="quotationForm.contactPhone"
                     :disabled="isViewMode"
                     placeholder="联系电话"
-                    class="field-input-inline field-input-contact"
-                  />
-                </el-form-item>
-              </div>
-
-              <div class="quotation-top-part__row quotation-top-part__row--inline-fields">
-                <el-form-item class="quotation-top-field quotation-top-field--inline">
-                  <span class="field-label-inline">经办人：</span>
-                  <el-input
-                    v-model="quotationForm.operator"
-                    :disabled="isViewMode"
-                    placeholder="经办人"
                     class="field-input-inline field-input-contact"
                   />
                 </el-form-item>
@@ -5184,6 +5183,10 @@ onMounted(() => {
   color: var(--el-color-danger);
 }
 
+.field-label-inline--project-code {
+  width: 102px;
+}
+
 /* .field-input-inline 默认样式，具体宽度由子类定义 */
 
 /* 报价单号输入框宽度 */
@@ -5240,6 +5243,16 @@ onMounted(() => {
 .field-input-inline.field-input-contact :deep(.el-input__wrapper),
 .field-input-inline.field-input-contact :deep(.el-input) {
   width: 160px !important;
+}
+
+.field-input-inline.field-input-project-code {
+  width: 120px !important;
+  flex: 0 0 120px !important;
+}
+
+.field-input-inline.field-input-project-code :deep(.el-input__wrapper),
+.field-input-inline.field-input-project-code :deep(.el-input) {
+  width: 120px !important;
 }
 
 /* 报价单弹窗样式 */
