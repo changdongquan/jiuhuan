@@ -305,7 +305,7 @@
             :data="toDetailTableRows(getBmoSourceFields().concat(getBmoTechFields()))"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
             max-height="280"
           >
             <el-table-column prop="label1" width="140" />
@@ -325,7 +325,7 @@
             :data="toDetailTableRows(getBmoReviewFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="220" />
             <el-table-column prop="value1" min-width="220" show-overflow-tooltip />
@@ -340,12 +340,7 @@
 
         <section class="detail-section">
           <div class="detail-section__title">项目信息</div>
-          <el-table
-            :data="toDetailTableRows(getBmoProjectFields())"
-            border
-            size="small"
-            class="detail-kv-table"
-          >
+          <el-table :data="getBmoProjectRows()" border stripe size="small" class="detail-kv-table">
             <el-table-column type="index" label="#" width="56" />
             <el-table-column
               prop="projectCode"
@@ -383,6 +378,7 @@
               min-width="160"
               show-overflow-tooltip
             />
+            <el-table-column prop="remarks" label="备注" min-width="180" show-overflow-tooltip />
           </el-table>
         </section>
 
@@ -392,49 +388,21 @@
             :data="toDetailTableRows(getBmoSalesFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
-            <el-table-column type="index" label="#" width="56" />
-            <el-table-column
-              prop="projectCode"
-              label="项目编号"
-              min-width="160"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="category"
-              label="项目分类"
-              min-width="120"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="customerName"
-              label="客户名称"
-              min-width="160"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="customerModelNo"
-              label="客户模号"
-              min-width="140"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="productName"
-              label="产品名称"
-              min-width="180"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="productDrawing"
-              label="产品图号"
-              min-width="160"
-              show-overflow-tooltip
-            />
+            <el-table-column prop="label1" width="120" />
+            <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="label2" width="100" />
+            <el-table-column prop="value2" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="label3" width="100" />
+            <el-table-column prop="value3" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="label4" width="100" />
+            <el-table-column prop="value4" min-width="120" show-overflow-tooltip />
           </el-table>
           <el-table
             :data="viewRequest?.sales_order_draft?.details || []"
             border
+            stripe
             size="small"
             max-height="240"
           >
@@ -514,7 +482,7 @@
             :data="toDetailTableRows(getQuotationBaseFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="110" />
             <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
@@ -532,6 +500,7 @@
           <el-table
             :data="getQuotationProjectRows()"
             border
+            stripe
             size="small"
             class="detail-kv-table"
             max-height="280"
@@ -582,7 +551,7 @@
             :data="toDetailTableRows(getQuotationSalesFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -600,6 +569,7 @@
           <el-table
             :data="quotationViewRequest.sales_order_draft?.details || []"
             border
+            stripe
             size="small"
             max-height="240"
           >
@@ -688,7 +658,7 @@
             :data="toDetailTableRows(getCustomerCreateFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -751,7 +721,7 @@
             :data="toDetailTableRows(getSalesOrderMergeReviewFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -771,7 +741,7 @@
               :data="toDetailTableRows(getSalesOrderSourceFields())"
               border
               size="small"
-              class="detail-kv-table"
+              class="detail-kv-table detail-kv-table--labels-left"
             >
               <el-table-column prop="label1" width="72" />
               <el-table-column prop="value1" min-width="92" show-overflow-tooltip />
@@ -785,6 +755,7 @@
             <el-table
               :data="salesOrderMergeViewRow.sourceSnapshot?.details || []"
               border
+              stripe
               size="small"
               max-height="280"
             >
@@ -816,7 +787,7 @@
               :data="toDetailTableRows(getSalesOrderTargetFields())"
               border
               size="small"
-              class="detail-kv-table"
+              class="detail-kv-table detail-kv-table--labels-left"
             >
               <el-table-column prop="label1" width="72" />
               <el-table-column prop="value1" min-width="92" show-overflow-tooltip />
@@ -830,6 +801,7 @@
             <el-table
               :data="salesOrderMergeViewRow.targetSnapshot?.details || []"
               border
+              stripe
               size="small"
               max-height="280"
             >
@@ -862,7 +834,7 @@
             :data="toDetailTableRows(getSalesOrderPreviewFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -924,7 +896,7 @@
             :data="toDetailTableRows(getHardDeleteEntityFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -943,7 +915,7 @@
             :data="toDetailTableRows(getHardDeleteReviewFields())"
             border
             size="small"
-            class="detail-kv-table"
+            class="detail-kv-table detail-kv-table--labels-left"
           >
             <el-table-column prop="label1" width="80" />
             <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -967,7 +939,7 @@
               :data="toDetailTableRows(hardDeleteSnapshotFieldItems)"
               border
               size="small"
-              class="detail-kv-table"
+              class="detail-kv-table detail-kv-table--labels-left"
             >
               <el-table-column prop="label1" width="80" />
               <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
@@ -2378,15 +2350,21 @@ const getBmoReviewFields = (): FieldItem[] => [
   buildField('驳回原因', viewRequest.value?.rejected_reason, 'full')
 ]
 
-const getBmoProjectFields = (): FieldItem[] => [
-  buildField('项目编号', viewRequest.value?.goods_draft?.projectCode),
-  buildField('项目分类', viewRequest.value?.goods_draft?.category),
-  buildField('客户名称', viewRequest.value?.goods_draft?.customerName),
-  buildField('客户模号', viewRequest.value?.goods_draft?.customerModelNo),
-  buildField('产品名称', viewRequest.value?.goods_draft?.productName),
-  buildField('产品图号', viewRequest.value?.goods_draft?.productDrawing),
-  buildField('备注', viewRequest.value?.goods_draft?.remarks, 'full')
-]
+const getBmoProjectRows = () => {
+  const draft = viewRequest.value?.goods_draft
+  if (!draft) return []
+  return [
+    {
+      projectCode: draft.projectCode || '-',
+      category: draft.category || '-',
+      customerName: draft.customerName || '-',
+      customerModelNo: draft.customerModelNo || '-',
+      productName: draft.productName || '-',
+      productDrawing: draft.productDrawing || '-',
+      remarks: draft.remarks || '-'
+    }
+  ]
+}
 
 const getBmoSalesFields = (): FieldItem[] => [
   buildField('订单日期', viewRequest.value?.sales_order_draft?.orderDate),
@@ -2588,6 +2566,105 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="less">
+@media (width <= 1100px) {
+  .detail-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 900px) {
+  .review-center-page {
+    height: auto;
+    min-height: 100%;
+    gap: 10px;
+    padding: 10px;
+    overflow: visible;
+  }
+
+  .review-filter-panel,
+  .review-board,
+  .detail-section,
+  .compare-card,
+  .dialog-hero,
+  .dialog-spotlight {
+    border-radius: 12px;
+  }
+
+  .review-filter-panel,
+  .review-board {
+    padding: 14px;
+  }
+
+  .review-board,
+  .review-feed {
+    display: block;
+    min-height: auto;
+    flex: initial;
+    overflow: visible;
+  }
+
+  .dialog-head__title {
+    font-size: 22px;
+  }
+
+  .review-filter-panel__head,
+  .review-board__head,
+  .review-card__topline,
+  .dialog-hero,
+  .dialog-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .review-card__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .review-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-pagination {
+    padding-bottom: 4px;
+    overflow-x: auto;
+    justify-content: center;
+  }
+
+  .review-filter-panel__quick {
+    width: 100%;
+  }
+
+  .status-switch {
+    flex: 1 1 calc(50% - 10px);
+  }
+
+  .review-filter-form__actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .review-filter-form__actions :deep(.el-button) {
+    flex: 1 1 auto;
+  }
+
+  .review-filter-panel__quick {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .review-card {
+    padding: 18px;
+  }
+
+  .review-feed {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 .review-center-page {
   --review-bg: #f6f4ef;
   --review-panel: #fff;
@@ -3007,6 +3084,26 @@ onBeforeUnmount(() => {
   vertical-align: top;
 }
 
+/* 确保斑马线效果正常显示 */
+.detail-kv-table:not(.detail-kv-table--labels-left):deep(
+    .el-table__body .el-table__row--striped td.el-table__cell
+  ) {
+  background-color: var(--el-table-tr-bg-color);
+}
+
+/* 基础信息表格：标签列灰色背景，数据列白色背景 */
+
+/* 表格8列：label1,value1,label2,value2,label3,value3,label4,value4 */
+.detail-kv-table.detail-kv-table--labels-left :deep(.el-table__body .el-table__cell) {
+  background-color: #fff; /* 默认数据列白色 */
+}
+
+/* 标签列 (1,3,5,7) = nth-child(odd) = 灰色 */
+.detail-kv-table.detail-kv-table--labels-left
+  :deep(.el-table__body .el-table__cell:nth-child(odd)) {
+  background-color: #f5f7fa;
+}
+
 .review-pagination {
   display: flex;
   flex-shrink: 0;
@@ -3105,104 +3202,5 @@ onBeforeUnmount(() => {
 .snapshot-empty {
   font-size: 14px;
   color: var(--review-muted);
-}
-
-@media (width <= 1100px) {
-  .detail-compare {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (width <= 900px) {
-  .review-center-page {
-    height: auto;
-    min-height: 100%;
-    gap: 10px;
-    padding: 10px;
-    overflow: visible;
-  }
-
-  .review-filter-panel,
-  .review-board,
-  .detail-section,
-  .compare-card,
-  .dialog-hero,
-  .dialog-spotlight {
-    border-radius: 12px;
-  }
-
-  .review-filter-panel,
-  .review-board {
-    padding: 14px;
-  }
-
-  .review-board,
-  .review-feed {
-    display: block;
-    min-height: auto;
-    flex: initial;
-    overflow: visible;
-  }
-
-  .dialog-head__title {
-    font-size: 22px;
-  }
-
-  .review-filter-panel__head,
-  .review-board__head,
-  .review-card__topline,
-  .dialog-hero,
-  .dialog-footer {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .review-card__actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .review-card__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .review-pagination {
-    padding-bottom: 4px;
-    overflow-x: auto;
-    justify-content: center;
-  }
-
-  .review-filter-panel__quick {
-    width: 100%;
-  }
-
-  .status-switch {
-    flex: 1 1 calc(50% - 10px);
-  }
-
-  .review-filter-form__actions {
-    width: 100%;
-    align-items: stretch;
-  }
-
-  .review-filter-form__actions :deep(.el-button) {
-    flex: 1 1 auto;
-  }
-
-  .review-filter-panel__quick {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-start;
-  }
-
-  .review-card {
-    padding: 18px;
-  }
-
-  .review-feed {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
 }
 </style>
