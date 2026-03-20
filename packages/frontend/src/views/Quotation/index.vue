@@ -29,12 +29,12 @@
         class="query-form"
         :class="{ 'query-form--mobile': isMobile }"
       >
-        <el-form-item label="模糊查询">
+        <el-form-item label="关键词">
           <el-input
             v-model="queryForm.keyword"
             placeholder="请输入报价单号 / 客户名称 / 更改通知单号 / 模具编号 / 加工零件名称"
             clearable
-            :style="{ width: isMobile ? '100%' : '220px' }"
+            :style="{ width: isMobile ? '100%' : '180px' }"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -69,7 +69,7 @@
             v-model="queryForm.finalProjectCode"
             placeholder="请输入最终项目编号"
             clearable
-            :style="{ width: isMobile ? '100%' : '180px' }"
+            :style="{ width: isMobile ? '100%' : '150px' }"
             @keyup.enter="handleSearch"
           />
         </el-form-item>

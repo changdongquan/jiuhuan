@@ -2,6 +2,15 @@
   <div class="review-center-page">
     <section class="review-filter-panel">
       <el-form class="review-filter-form" :inline="!isMobile">
+        <el-form-item label="关键词" class="review-filter-form__keyword">
+          <el-input
+            v-model="query.keyword"
+            :style="fieldWidth(isMobile ? '100%' : '240px')"
+            clearable
+            placeholder="项目编号 / 名称 / 申请人 / 审核人"
+            @keydown.enter.prevent="handleSearch"
+          />
+        </el-form-item>
         <el-form-item label="审核分类">
           <el-select v-model="query.category" :style="fieldWidth(isMobile ? '100%' : '188px')">
             <el-option
@@ -21,15 +30,6 @@
               :value="option.value"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="关键词">
-          <el-input
-            v-model="query.keyword"
-            :style="fieldWidth(isMobile ? '100%' : '360px')"
-            clearable
-            placeholder="项目编号 / 名称 / 申请人 / 审核人"
-            @keydown.enter.prevent="handleSearch"
-          />
         </el-form-item>
         <el-form-item>
           <div class="review-filter-form__actions">
@@ -306,6 +306,7 @@
             border
             size="small"
             class="detail-kv-table"
+            max-height="280"
           >
             <el-table-column prop="label1" width="140" />
             <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
@@ -345,14 +346,43 @@
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label2" width="100" />
-            <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label3" width="100" />
-            <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label4" width="100" />
-            <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
+            <el-table-column type="index" label="#" width="56" />
+            <el-table-column
+              prop="projectCode"
+              label="项目编号"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="category"
+              label="项目分类"
+              min-width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerName"
+              label="客户名称"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerModelNo"
+              label="客户模号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productName"
+              label="产品名称"
+              min-width="180"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productDrawing"
+              label="产品图号"
+              min-width="160"
+              show-overflow-tooltip
+            />
           </el-table>
         </section>
 
@@ -364,14 +394,43 @@
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label2" width="100" />
-            <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label3" width="100" />
-            <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label4" width="100" />
-            <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
+            <el-table-column type="index" label="#" width="56" />
+            <el-table-column
+              prop="projectCode"
+              label="项目编号"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="category"
+              label="项目分类"
+              min-width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerName"
+              label="客户名称"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerModelNo"
+              label="客户模号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productName"
+              label="产品名称"
+              min-width="180"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productDrawing"
+              label="产品图号"
+              min-width="160"
+              show-overflow-tooltip
+            />
           </el-table>
           <el-table
             :data="viewRequest?.sales_order_draft?.details || []"
@@ -457,11 +516,11 @@
             size="small"
             class="detail-kv-table"
           >
-            <el-table-column prop="label1" width="160" />
+            <el-table-column prop="label1" width="110" />
             <el-table-column prop="value1" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="label2" width="100" />
+            <el-table-column prop="label2" width="120" />
             <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label3" width="100" />
+            <el-table-column prop="label3" width="120" />
             <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
             <el-table-column prop="label4" width="100" />
             <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
@@ -471,19 +530,49 @@
         <section class="detail-section">
           <div class="detail-section__title">项目信息</div>
           <el-table
-            :data="toDetailTableRows(getQuotationProjectFields())"
+            :data="getQuotationProjectRows()"
             border
             size="small"
             class="detail-kv-table"
+            max-height="280"
           >
-            <el-table-column prop="label1" width="100" />
-            <el-table-column prop="value1" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label2" width="100" />
-            <el-table-column prop="value2" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label3" width="100" />
-            <el-table-column prop="value3" min-width="108" show-overflow-tooltip />
-            <el-table-column prop="label4" width="100" />
-            <el-table-column prop="value4" min-width="108" show-overflow-tooltip />
+            <el-table-column type="index" label="#" width="56" />
+            <el-table-column
+              prop="projectCode"
+              label="项目编号"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="category"
+              label="项目分类"
+              min-width="120"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerName"
+              label="客户名称"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="customerModelNo"
+              label="客户模号"
+              min-width="140"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productName"
+              label="产品名称"
+              min-width="180"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="productDrawing"
+              label="产品图号"
+              min-width="160"
+              show-overflow-tooltip
+            />
           </el-table>
         </section>
 
@@ -940,6 +1029,7 @@ import {
   approveAndApplyQuotationInitiationApi,
   getQuotationInitiationReviewTasksApi,
   rejectQuotationInitiationReviewApi,
+  type QuotationInitiationProjectDetailDraft,
   type QuotationInitiationRequestRow
 } from '@/api/quotation'
 import {
@@ -1204,6 +1294,25 @@ const buildField = (label: string, value: unknown, span?: 'full'): FieldItem => 
   value: formatText(value),
   span
 })
+
+const formatQuotationProjectCodeDisplay = (
+  row: Pick<QuotationReviewRow, 'project_code_candidate' | 'project_code_final' | 'project_draft'>
+) => {
+  const projectDraft = row?.project_draft || null
+  const projectDetails = Array.isArray(projectDraft?.projectDetails)
+    ? projectDraft.projectDetails
+    : []
+  const totalCount = projectDetails.length
+  const candidate = String(row?.project_code_candidate || '').trim()
+  const fallback = String(row?.project_code_final || '').trim()
+  const projectCode = candidate || fallback
+  if (!projectCode) return '-'
+  if (totalCount <= 1) return projectCode
+
+  const match = projectCode.match(/^(.*)\/\d{2}$/)
+  if (!match) return projectCode
+  return `${match[1]}（${totalCount}项）`
+}
 
 const fieldWidth = (width: string) => ({ width })
 const toDetailTableRows = (items: FieldItem[]): DetailTableRow[] => {
@@ -1549,7 +1658,7 @@ const mapQuotationRows = (rows: QuotationReviewRow[]): UnifiedReviewRow[] => {
       sourceText: '报价单立项审核',
       status,
       statusText: normalizeStatusText(status),
-      projectCode: String(row.project_code_candidate || row.project_code_final || ''),
+      projectCode: formatQuotationProjectCodeDisplay(row),
       subject: [row.quotation_part_name, row.quotation_no].filter(Boolean).join(' / ') || '-',
       applicant: String(row.created_by || ''),
       reviewer: String(row.approved_by || ''),
@@ -2301,8 +2410,15 @@ const getQuotationBaseFields = (): FieldItem[] => {
       '立项状态',
       row?.status_text || normalizeStatusText(normalizeQuotationStatus(row?.status))
     ),
-    buildField('项目编号候选', row?.project_code_candidate),
-    buildField('最终项目编号', row?.project_code_final),
+    buildField('项目编号候选', formatQuotationProjectCodeDisplay(row || {})),
+    buildField(
+      '最终项目编号',
+      formatQuotationProjectCodeDisplay({
+        project_code_candidate: row?.project_code_final,
+        project_code_final: row?.project_code_final,
+        project_draft: row?.project_draft
+      })
+    ),
     buildField('销售订单号', row?.sales_order_no),
     buildField('申请人', row?.created_by),
     buildField('审核人', row?.approved_by),
@@ -2312,21 +2428,43 @@ const getQuotationBaseFields = (): FieldItem[] => {
     buildField('驳回时间', formatTime(row?.rejected_at || null)),
     buildField('撤回时间', formatTime(row?.withdrawn_at || null)),
     buildField('更新时间', formatTime(row?.updated_at || null)),
-    buildField('立项审核驳回原因', row?.initiation_rejected_reason, 'full'),
-    buildField('客户审核驳回原因', row?.customer_review_rejected_reason, 'full'),
-    buildField('撤回原因', row?.withdraw_reason, 'full')
+    buildField('立项审核驳回原因', row?.initiation_rejected_reason),
+    buildField('客户审核驳回原因', row?.customer_review_rejected_reason),
+    buildField('撤回原因', row?.withdraw_reason)
   ]
 }
 
-const getQuotationProjectFields = (): FieldItem[] => {
+const getQuotationProjectRows = () => {
   const row = quotationViewRequest.value
+  const projectDraft = row?.project_draft || null
+  const baseCategory = String(projectDraft?.category || '').trim() || '-'
+  const baseCustomerName =
+    String(projectDraft?.customerName || row?.quotation_customer_name || '').trim() || '-'
+  const details = Array.isArray(projectDraft?.projectDetails)
+    ? (projectDraft.projectDetails as QuotationInitiationProjectDetailDraft[])
+    : []
+
+  if (details.length) {
+    return details.map((detail) => ({
+      projectCode: String(detail?.projectCode || '').trim() || '-',
+      category: baseCategory,
+      customerName: baseCustomerName,
+      customerModelNo: String(detail?.customerModelNo || '').trim() || '-',
+      productName: String(detail?.productName || '').trim() || '-',
+      productDrawing: String(detail?.productDrawing || '').trim() || '-'
+    }))
+  }
+
   return [
-    buildField('项目编号', row?.project_draft?.projectCode || row?.project_code_candidate),
-    buildField('项目分类', row?.project_draft?.category),
-    buildField('客户名称', row?.project_draft?.customerName || row?.quotation_customer_name),
-    buildField('客户模号', row?.project_draft?.customerModelNo),
-    buildField('产品名称', row?.project_draft?.productName),
-    buildField('产品图号', row?.project_draft?.productDrawing)
+    {
+      projectCode:
+        String(projectDraft?.projectCode || row?.project_code_candidate || '').trim() || '-',
+      category: baseCategory,
+      customerName: baseCustomerName,
+      customerModelNo: String(projectDraft?.customerModelNo || '').trim() || '-',
+      productName: String(projectDraft?.productName || '').trim() || '-',
+      productDrawing: String(projectDraft?.productDrawing || '').trim() || '-'
+    }
   ]
 }
 
@@ -2527,6 +2665,23 @@ onBeforeUnmount(() => {
   :deep(.review-dialog .el-table) {
     --el-table-cell-padding: 6px 0;
   }
+
+  :deep(.review-dialog--initiation.el-dialog),
+  :deep(.review-dialog--initiation .el-dialog) {
+    display: flex;
+    height: min(88vh, 900px);
+    max-height: min(88vh, 900px);
+    margin-top: 4vh;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  :deep(.review-dialog--initiation.el-dialog .el-dialog__body),
+  :deep(.review-dialog--initiation .el-dialog__body) {
+    min-height: 0;
+    overflow: hidden auto;
+    flex: 1 1 auto;
+  }
 }
 
 .review-filter-panel,
@@ -2633,10 +2788,6 @@ onBeforeUnmount(() => {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.review-filter-form :deep(.el-form-item:last-child) {
-  margin-left: auto;
 }
 
 .review-board {
