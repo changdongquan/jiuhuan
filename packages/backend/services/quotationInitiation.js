@@ -816,6 +816,22 @@ const createSalesOrderRecords = async ({ tx, customerId, orderNo, salesOrderDraf
   }
 }
 
+const markGoodsAsNotNew = async ({ tx, projectCodes }) => {
+  const codes = [...new Set((projectCodes || []).map((code) => String(code || '').trim()).filter(Boolean))]
+  if (!codes.length) return
+
+  const req = new sql.Request(tx)
+  const placeholders = codes.map((_, index) => `@projectCode${index}`)
+  codes.forEach((code, index) => {
+    req.input(`projectCode${index}`, sql.NVarChar(50), code)
+  })
+  await req.query(`
+    UPDATE 货物信息
+    SET IsNew = 0
+    WHERE 项目编号 IN (${placeholders.join(', ')})
+  `)
+}
+
 const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
   await assertReviewPermission({
     req,
@@ -917,6 +933,10 @@ const approveAndApply = async ({ req, quotationId, resolveActorFromReq }) => {
       customerId,
       orderNo,
       salesOrderDraft
+    })
+    await markGoodsAsNotNew({
+      tx,
+      projectCodes: projectEntries.map((entry) => entry.projectCode)
     })
 
     const updateReq = new sql.Request(tx)
