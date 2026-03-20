@@ -365,407 +365,685 @@
       destroy-on-close
       class="qt-initiation-dialog"
     >
-      <div v-loading="initiationDialogLoading" class="qt-initiation-dialog__content space-y-4">
-        <el-descriptions
-          :column="isMobile ? 1 : 5"
-          border
-          size="small"
-          title="基础信息"
-          class="initiation-basic-descriptions"
-        >
-          <el-descriptions-item label="报价单号">{{
-            initiationSourceQuotation?.quotationNo || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="报价类型">{{
-            formatQuotationType(initiationSourceQuotation?.quotationType)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="立项状态">{{
-            initiationRequestRow?.status_text ||
-            initiationSourceQuotation?.initiationStatus ||
-            '未发起'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="最终项目编号">{{
-            getInitiationFinalProjectCodeDisplay()
-          }}</el-descriptions-item>
-          <el-descriptions-item label="销售订单号">{{
-            initiationRequestRow?.sales_order_no || initiationSourceQuotation?.salesOrderNo || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="申请人">{{
-            initiationRequestRow?.created_by || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="审核人">{{
-            initiationRequestRow?.approved_by || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="立项审核驳回原因" :span="isMobile ? 1 : 2">{{
-            initiationRequestRow?.initiation_rejected_reason || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="客户审核驳回原因" :span="isMobile ? 1 : 2">{{
-            initiationRequestRow?.customer_review_rejected_reason || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="撤回原因" :span="isMobile ? 1 : 2">{{
-            initiationRequestRow?.withdraw_reason || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="草稿保存时间">{{
-            formatDate(initiationRequestRow?.draft_saved_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="提交审核时间">{{
-            formatDate(initiationRequestRow?.submitted_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="审核通过时间">{{
-            formatDate(initiationRequestRow?.approved_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="驳回时间">{{
-            formatDate(initiationRequestRow?.rejected_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="撤回时间">{{
-            formatDate(initiationRequestRow?.withdrawn_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{
-            formatDate(initiationRequestRow?.created_at)
-          }}</el-descriptions-item>
-          <el-descriptions-item label="更新时间">{{
-            formatDate(initiationRequestRow?.updated_at)
-          }}</el-descriptions-item>
-        </el-descriptions>
-
-        <el-card shadow="never">
-          <template #header>
-            <div class="qt-initiation-card-header">
-              <span>项目信息</span>
-              <div class="qt-initiation-card-header__actions">
-                <div class="qt-initiation-card-header__meta">
-                  <span class="qt-initiation-card-header__label">客户名称</span>
-                  <el-input
-                    v-model="initiationForm.customerName"
-                    class="qt-initiation-card-header__customer"
-                    size="small"
-                    :disabled="isInitiationViewMode || initiationCustomerLocked"
-                    placeholder="请输入客户名称"
-                    @blur="handleInitiationCustomerBlur"
-                  />
-                </div>
-                <div
-                  class="qt-initiation-card-header__meta qt-initiation-card-header__meta--status"
-                >
-                  <span class="qt-initiation-card-header__label">客户状态</span>
-                  <el-tag size="small" :type="initiationCustomerMatched ? 'success' : 'warning'">
-                    {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
-                  </el-tag>
-                </div>
-                <el-button
-                  v-if="!isInitiationViewMode"
-                  type="primary"
-                  link
-                  :loading="initiationRecommendingCode"
-                  @click="recommendInitiationProjectCode"
-                >
-                  推荐项目编号
-                </el-button>
+      <div
+        v-loading="initiationDialogLoading"
+        class="qt-initiation-dialog__content"
+        :class="{ 'qt-initiation-dialog__content--mobile': isMobile }"
+      >
+        <template v-if="isInitiationViewMode">
+          <section class="qt-initiation-hero">
+            <div class="qt-initiation-hero__head">
+              <div class="qt-initiation-hero__copy">
+                <span class="qt-initiation-hero__eyebrow">Quotation Initiation</span>
+                <h3 class="qt-initiation-hero__title">
+                  {{ initiationSourceQuotation?.quotationNo || '未命名报价单' }}
+                </h3>
+                <p class="qt-initiation-hero__summary">
+                  只保留审批查看最需要的信息，减少来回切换和字段检索成本。
+                </p>
+              </div>
+              <el-tag
+                class="qt-initiation-hero__status"
+                size="large"
+                :type="getInitiationStatusTagType(initiationDisplayStatus)"
+              >
+                {{ initiationDisplayStatus }}
+              </el-tag>
+            </div>
+            <div class="qt-initiation-hero__meta">
+              <div class="qt-initiation-hero__meta-item">
+                <span>报价类型</span>
+                <strong>{{ formatQuotationType(initiationSourceQuotation?.quotationType) }}</strong>
+              </div>
+              <div class="qt-initiation-hero__meta-item">
+                <span>最终项目编号</span>
+                <strong>{{ getInitiationFinalProjectCodeDisplay() }}</strong>
+              </div>
+              <div class="qt-initiation-hero__meta-item">
+                <span>销售订单号</span>
+                <strong>{{
+                  initiationRequestRow?.sales_order_no ||
+                  initiationSourceQuotation?.salesOrderNo ||
+                  '-'
+                }}</strong>
+              </div>
+              <div class="qt-initiation-hero__meta-item">
+                <span>客户状态</span>
+                <strong>{{ initiationCustomerMatched ? '已匹配' : '待补齐' }}</strong>
               </div>
             </div>
-          </template>
-          <el-form :inline="false" label-width="100px">
-            <el-row :gutter="12">
-              <el-col
-                v-if="
-                  resolveBusinessCategory(initiationSourceQuotation?.quotationType) !== '零件加工'
-                "
-                :xs="24"
-                :md="8"
-              >
-                <el-form-item
-                  label="项目编号"
-                  :required="
-                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) !== '零件加工'
-                  "
-                >
-                  <el-input
-                    v-model="initiationForm.projectCode"
-                    :disabled="isInitiationViewMode"
-                    placeholder="请输入项目编号"
-                    @blur="handleInitiationProjectCodeBlur"
-                  />
-                  <div
-                    v-if="initiationProjectCodeError"
-                    class="mt-1 text-xs text-[var(--el-color-danger)]"
-                  >
-                    {{ initiationProjectCodeError }}
-                  </div>
-                </el-form-item>
-              </el-col>
-              <template
-                v-if="
-                  resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
-                "
-              >
-                <el-col :xs="24">
-                  <div
-                    v-if="initiationDuplicateProjectCodeError"
-                    class="mb-2 text-xs text-[var(--el-color-danger)]"
-                  >
-                    {{ initiationDuplicateProjectCodeError }}
-                  </div>
-                  <div
-                    v-if="initiationProjectCodeFormatError"
-                    class="mb-2 text-xs text-[var(--el-color-danger)]"
-                  >
-                    {{ initiationProjectCodeFormatError }}
-                  </div>
-                  <el-table
-                    :data="initiationProjectDetails"
-                    border
-                    size="small"
-                    class="mt-1"
-                    empty-text="暂无项目信息"
-                  >
-                    <el-table-column label="序号" type="index" width="70" align="center" />
-                    <el-table-column label="项目编号" min-width="180">
-                      <template #default="{ row }">
-                        <el-input
-                          v-model="row.projectCode"
-                          :disabled="isInitiationViewMode"
-                          placeholder="请输入项目编号"
-                        />
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="产品名称" min-width="180">
-                      <template #default="{ row }">
-                        <el-input
-                          v-model="row.productName"
-                          :disabled="isInitiationViewMode"
-                          placeholder="请输入产品名称"
-                        />
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="产品图号" min-width="160">
-                      <template #default="{ row }">
-                        <el-input
-                          v-model="row.productDrawing"
-                          :disabled="isInitiationViewMode"
-                          placeholder="请输入产品图号"
-                        />
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="客户模号" min-width="180">
-                      <template #default="{ row }">
-                        <el-input
-                          v-model="row.customerModelNo"
-                          :disabled="isInitiationViewMode"
-                          placeholder="请输入客户模号"
-                        />
-                      </template>
-                    </el-table-column>
-                    <el-table-column
-                      v-if="!isInitiationViewMode"
-                      label="操作"
-                      width="90"
-                      fixed="right"
+          </section>
+
+          <div class="qt-initiation-tab-shell">
+            <el-tabs v-model="initiationActiveTab" class="qt-initiation-tabs">
+              <el-tab-pane label="基础信息" name="basic">
+                <div class="qt-initiation-view-grid">
+                  <el-card shadow="never" class="qt-initiation-panel">
+                    <template #header>
+                      <div class="qt-initiation-section-head">
+                        <div>
+                          <div class="qt-initiation-section-head__title">摘要速览</div>
+                          <div class="qt-initiation-section-head__desc"
+                            >优先展示审批判断最常用的只读信息</div
+                          >
+                        </div>
+                      </div>
+                    </template>
+                    <div class="qt-initiation-stat-grid">
+                      <div class="qt-initiation-stat">
+                        <span class="qt-initiation-stat__label">客户名称</span>
+                        <strong class="qt-initiation-stat__value">{{
+                          initiationForm.customerName || '-'
+                        }}</strong>
+                      </div>
+                      <div class="qt-initiation-stat">
+                        <span class="qt-initiation-stat__label">申请人</span>
+                        <strong class="qt-initiation-stat__value">{{
+                          initiationRequestRow?.created_by || '-'
+                        }}</strong>
+                      </div>
+                      <div class="qt-initiation-stat">
+                        <span class="qt-initiation-stat__label">审核人</span>
+                        <strong class="qt-initiation-stat__value">{{
+                          initiationRequestRow?.approved_by || '-'
+                        }}</strong>
+                      </div>
+                      <div class="qt-initiation-stat">
+                        <span class="qt-initiation-stat__label">更新时间</span>
+                        <strong class="qt-initiation-stat__value">{{
+                          formatDate(initiationRequestRow?.updated_at)
+                        }}</strong>
+                      </div>
+                    </div>
+                  </el-card>
+
+                  <el-card shadow="never" class="qt-initiation-panel">
+                    <template #header>
+                      <div class="qt-initiation-section-head">
+                        <div>
+                          <div class="qt-initiation-section-head__title">单据与节点</div>
+                          <div class="qt-initiation-section-head__desc"
+                            >只保留有值的时间节点和审核反馈</div
+                          >
+                        </div>
+                      </div>
+                    </template>
+                    <div v-if="initiationViewNotes.length" class="qt-initiation-note-grid">
+                      <div
+                        v-for="item in initiationViewNotes"
+                        :key="item.label"
+                        class="qt-initiation-note-card"
+                      >
+                        <span class="qt-initiation-note-card__label">{{ item.label }}</span>
+                        <p class="qt-initiation-note-card__value">{{ item.value }}</p>
+                      </div>
+                    </div>
+                    <el-descriptions
+                      :column="isMobile ? 1 : 2"
+                      border
+                      size="small"
+                      class="initiation-basic-descriptions qt-initiation-data-sheet"
                     >
-                      <template #default="{ $index }">
-                        <el-button type="danger" link @click="removeInitiationProjectDetail($index)"
-                          >删除</el-button
-                        >
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </el-col>
-              </template>
-              <template v-else>
-                <el-col :xs="24" :md="8">
-                  <el-form-item label="产品名称">
-                    <el-input
-                      v-model="initiationForm.productName"
-                      :disabled="isInitiationViewMode"
-                      placeholder="可为空"
-                    />
-                  </el-form-item>
-                </el-col>
-                <el-col :xs="24" :md="8">
-                  <el-form-item label="产品图号">
-                    <el-input
-                      v-model="initiationForm.productDrawing"
-                      :disabled="isInitiationViewMode"
-                      placeholder="可为空"
-                    />
-                  </el-form-item>
-                </el-col>
-                <el-col :xs="24" :md="8">
-                  <el-form-item label="客户模号">
-                    <el-input
-                      v-model="initiationForm.customerModelNo"
-                      :disabled="isInitiationViewMode"
-                      placeholder="可为空"
-                    />
-                  </el-form-item>
-                </el-col>
-              </template>
-            </el-row>
-          </el-form>
-        </el-card>
+                      <el-descriptions-item
+                        v-for="item in initiationViewMilestones"
+                        :key="item.label"
+                        :label="item.label"
+                      >
+                        {{ item.value }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-card>
+                </div>
+              </el-tab-pane>
 
-        <el-card shadow="never">
-          <template #header>
-            <div class="qt-initiation-card-header">
-              <span>销售订单</span>
-              <div class="qt-initiation-card-header__actions">
-                <div class="qt-initiation-card-header__meta">
-                  <span class="qt-initiation-card-header__label">订单日期</span>
-                  <el-date-picker
-                    v-model="initiationSalesForm.orderDate"
-                    class="qt-initiation-card-header__date"
-                    type="date"
-                    value-format="YYYY-MM-DD"
-                    size="small"
-                    :disabled="isInitiationViewMode"
-                    placeholder="请选择订单日期"
-                  />
+              <el-tab-pane label="项目信息" name="project">
+                <div class="qt-initiation-stack">
+                  <el-card shadow="never" class="qt-initiation-panel">
+                    <template #header>
+                      <div class="qt-initiation-section-head">
+                        <div>
+                          <div class="qt-initiation-section-head__title">项目资料</div>
+                          <div class="qt-initiation-section-head__desc"
+                            >先看摘要，再看核心四列项目表</div
+                          >
+                        </div>
+                        <el-tag :type="initiationCustomerMatched ? 'success' : 'warning'">
+                          {{ initiationCustomerMatched ? '客户已匹配' : '客户未匹配' }}
+                        </el-tag>
+                      </div>
+                    </template>
+                    <div class="qt-initiation-inline-meta">
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>主要项目编号</span>
+                        <strong>{{ getInitiationFinalProjectCodeDisplay() }}</strong>
+                      </div>
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>来源项目编号</span>
+                        <strong>{{ initiationForm.sourceProjectCode || '-' }}</strong>
+                      </div>
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>业务分类</span>
+                        <strong>{{ initiationForm.category || '-' }}</strong>
+                      </div>
+                    </div>
+                    <el-table
+                      :data="initiationViewProjectRows"
+                      border
+                      stripe
+                      size="small"
+                      class="qt-initiation-table qt-initiation-table--view"
+                      empty-text="暂无项目信息"
+                    >
+                      <el-table-column label="序号" type="index" width="70" align="center" />
+                      <el-table-column label="项目编号" min-width="170">
+                        <template #default="{ row }">
+                          <el-tag size="small" type="success" effect="plain">
+                            {{ row.projectCode || '-' }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="productName" label="产品名称" min-width="180" />
+                      <el-table-column prop="productDrawing" label="产品图号" min-width="160" />
+                      <el-table-column prop="customerModelNo" label="客户模号" min-width="160" />
+                    </el-table>
+                  </el-card>
+
+                  <el-card shadow="never" class="qt-initiation-panel">
+                    <template #header>
+                      <div class="qt-initiation-section-head">
+                        <div>
+                          <div class="qt-initiation-section-head__title">销售订单</div>
+                          <div class="qt-initiation-section-head__desc"
+                            >订单头信息精简成摘要，明细保持紧凑表格</div
+                          >
+                        </div>
+                      </div>
+                    </template>
+                    <div class="qt-initiation-inline-meta">
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>订单日期</span>
+                        <strong>{{ initiationSalesForm.orderDate || '-' }}</strong>
+                      </div>
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>签订日期</span>
+                        <strong>{{ initiationSalesForm.signDate || '-' }}</strong>
+                      </div>
+                      <div class="qt-initiation-inline-meta__item">
+                        <span>合同号</span>
+                        <strong>{{ initiationSalesForm.contractNo || '-' }}</strong>
+                      </div>
+                    </div>
+                    <el-table
+                      :data="initiationSalesForm.details"
+                      border
+                      stripe
+                      size="small"
+                      class="qt-initiation-table qt-initiation-table--view"
+                    >
+                      <el-table-column type="index" label="序号" width="60" align="center" />
+                      <el-table-column prop="itemCode" label="项目编号" min-width="140" />
+                      <el-table-column prop="productName" label="产品名称" min-width="140" />
+                      <el-table-column prop="productDrawingNo" label="产品图号" min-width="120" />
+                      <el-table-column prop="customerPartNo" label="客户模号" min-width="120" />
+                      <el-table-column label="数量" width="70">
+                        <template #default="{ row }">
+                          <span>{{ row.quantity ?? '-' }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="单价(元)" width="100">
+                        <template #default="{ row }">
+                          <span>{{ formatAmount(row.unitPrice) }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="金额(元)" width="90">
+                        <template #default="{ row }">
+                          <span>{{ formatAmount(row.totalAmount) }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="交付日期" width="150">
+                        <template #default="{ row }">
+                          <span>{{ formatDate(row.deliveryDate) }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column
+                        v-if="showInitiationViewOrderRemark"
+                        label="备注"
+                        min-width="140"
+                      >
+                        <template #default="{ row }">
+                          <span>{{ row.remark || '-' }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column
+                        v-if="showInitiationViewOrderCostSource"
+                        label="费用出处"
+                        min-width="120"
+                      >
+                        <template #default="{ row }">
+                          <span>{{ row.costSource || '-' }}</span>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </el-card>
                 </div>
-                <div class="qt-initiation-card-header__meta">
-                  <span class="qt-initiation-card-header__label">签订日期</span>
-                  <el-date-picker
-                    v-model="initiationSalesForm.signDate"
-                    class="qt-initiation-card-header__date"
-                    type="date"
-                    value-format="YYYY-MM-DD"
-                    size="small"
-                    :disabled="isInitiationViewMode"
-                    placeholder="可为空"
-                  />
+              </el-tab-pane>
+
+              <el-tab-pane label="审核记录" name="audit">
+                <el-card shadow="never" class="qt-initiation-panel">
+                  <template #header>
+                    <div class="qt-initiation-section-head">
+                      <div>
+                        <div class="qt-initiation-section-head__title">审核记录</div>
+                        <div class="qt-initiation-section-head__desc"
+                          >按时间顺序回看整条审批链路</div
+                        >
+                      </div>
+                    </div>
+                  </template>
+                  <div class="qt-initiation-inline-meta">
+                    <div class="qt-initiation-inline-meta__item">
+                      <span>当前状态</span>
+                      <strong>{{ initiationDisplayStatus }}</strong>
+                    </div>
+                    <div class="qt-initiation-inline-meta__item">
+                      <span>最后更新时间</span>
+                      <strong>{{ formatDate(initiationRequestRow?.updated_at) }}</strong>
+                    </div>
+                    <div class="qt-initiation-inline-meta__item">
+                      <span>申请人</span>
+                      <strong>{{ initiationRequestRow?.created_by || '-' }}</strong>
+                    </div>
+                  </div>
+                  <el-timeline class="qt-initiation-timeline">
+                    <template v-for="item in initiationAuditTimeline" :key="item.key">
+                      <el-timeline-item
+                        v-if="item"
+                        :type="item.type"
+                        :timestamp="item.time"
+                        :hollow="item.type === 'info'"
+                      >
+                        <div class="qt-initiation-timeline__title">{{ item.title }}</div>
+                        <div class="qt-initiation-timeline__content">{{ item.content }}</div>
+                      </el-timeline-item>
+                    </template>
+                  </el-timeline>
+                </el-card>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="qt-initiation-stack">
+            <el-card shadow="hover" class="qt-initiation-panel">
+              <template #header>
+                <div class="qt-initiation-section-head">
+                  <div>
+                    <div class="qt-initiation-section-head__title">基础信息</div>
+                    <div class="qt-initiation-section-head__desc"
+                      >报价单来源、立项状态与审核反馈</div
+                    >
+                  </div>
+                  <div class="qt-initiation-section-head__tags">
+                    <el-tag :type="getInitiationStatusTagType(initiationDisplayStatus)">
+                      {{ initiationDisplayStatus }}
+                    </el-tag>
+                    <el-tag type="info">
+                      {{ formatQuotationType(initiationSourceQuotation?.quotationType) }}
+                    </el-tag>
+                  </div>
                 </div>
-                <div class="qt-initiation-card-header__meta">
-                  <span class="qt-initiation-card-header__label">合同号</span>
-                  <el-input
-                    v-model="initiationSalesForm.contractNo"
-                    class="qt-initiation-card-header__contract"
-                    size="small"
-                    :disabled="isInitiationViewMode"
-                    placeholder="可为空"
-                  />
+              </template>
+              <el-descriptions
+                :column="isMobile ? 1 : 4"
+                border
+                size="small"
+                class="initiation-basic-descriptions"
+              >
+                <el-descriptions-item label="报价单号">{{
+                  initiationSourceQuotation?.quotationNo || '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="最终项目编号">{{
+                  getInitiationFinalProjectCodeDisplay()
+                }}</el-descriptions-item>
+                <el-descriptions-item label="销售订单号">{{
+                  initiationRequestRow?.sales_order_no ||
+                  initiationSourceQuotation?.salesOrderNo ||
+                  '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="申请人">{{
+                  initiationRequestRow?.created_by || '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="审核人">{{
+                  initiationRequestRow?.approved_by || '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="草稿保存时间">{{
+                  formatDate(initiationRequestRow?.draft_saved_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item label="提交审核时间">{{
+                  formatDate(initiationRequestRow?.submitted_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item label="审核通过时间">{{
+                  formatDate(initiationRequestRow?.approved_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item label="立项审核驳回原因" :span="isMobile ? 1 : 2">{{
+                  initiationRequestRow?.initiation_rejected_reason || '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="客户审核驳回原因" :span="isMobile ? 1 : 2">{{
+                  initiationRequestRow?.customer_review_rejected_reason || '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item label="撤回原因" :span="isMobile ? 1 : 2">{{
+                  initiationRequestRow?.withdraw_reason || '-'
+                }}</el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
+            <el-card shadow="hover" class="qt-initiation-panel">
+              <template #header>
+                <div class="qt-initiation-section-head">
+                  <div>
+                    <div class="qt-initiation-section-head__title">项目信息</div>
+                    <div class="qt-initiation-section-head__desc"
+                      >客户信息、项目编号与产品资料维护</div
+                    >
+                  </div>
+                  <div class="qt-initiation-card-header__actions">
+                    <div class="qt-initiation-card-header__meta">
+                      <span class="qt-initiation-card-header__label">客户状态</span>
+                      <el-tag
+                        size="small"
+                        :type="initiationCustomerMatched ? 'success' : 'warning'"
+                      >
+                        {{ initiationCustomerMatched ? '已匹配并锁定' : '未匹配客户档案' }}
+                      </el-tag>
+                    </div>
+                    <el-button
+                      type="primary"
+                      link
+                      :loading="initiationRecommendingCode"
+                      @click="recommendInitiationProjectCode"
+                    >
+                      推荐项目编号
+                    </el-button>
+                  </div>
                 </div>
-                <el-button
-                  v-if="!isInitiationViewMode"
-                  type="primary"
-                  plain
-                  size="small"
-                  @click="addInitiationDetail"
-                  >新增明细</el-button
-                >
-              </div>
-            </div>
-          </template>
-          <el-table :data="initiationSalesForm.details" border size="small">
-            <el-table-column type="index" label="序号" width="60" align="center" />
-            <el-table-column label="项目编号" min-width="140">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.itemCode"
-                  :disabled="
-                    isInitiationViewMode ||
-                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
-                  "
-                  placeholder="请输入项目编号"
-                />
               </template>
-            </el-table-column>
-            <el-table-column label="产品名称" min-width="140">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.productName"
-                  :disabled="
-                    isInitiationViewMode ||
-                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
-                  "
-                  placeholder="请输入产品名称"
-                />
+              <el-form
+                :inline="false"
+                :label-width="isMobile ? 'auto' : '100px'"
+                :label-position="isMobile ? 'top' : 'right'"
+              >
+                <div class="qt-initiation-form-meta">
+                  <el-form-item label="客户名称" class="qt-initiation-form-meta__customer">
+                    <el-input
+                      v-model="initiationForm.customerName"
+                      :disabled="initiationCustomerLocked"
+                      placeholder="请输入客户名称"
+                      @blur="handleInitiationCustomerBlur"
+                    />
+                  </el-form-item>
+                </div>
+                <el-row :gutter="12">
+                  <el-col
+                    v-if="
+                      resolveBusinessCategory(initiationSourceQuotation?.quotationType) !==
+                      '零件加工'
+                    "
+                    :xs="24"
+                    :md="8"
+                  >
+                    <el-form-item
+                      label="项目编号"
+                      :required="
+                        resolveBusinessCategory(initiationSourceQuotation?.quotationType) !==
+                        '零件加工'
+                      "
+                    >
+                      <el-input
+                        v-model="initiationForm.projectCode"
+                        placeholder="请输入项目编号"
+                        @blur="handleInitiationProjectCodeBlur"
+                      />
+                      <div v-if="initiationProjectCodeError" class="qt-initiation-inline-error">
+                        {{ initiationProjectCodeError }}
+                      </div>
+                    </el-form-item>
+                  </el-col>
+                  <template
+                    v-if="
+                      resolveBusinessCategory(initiationSourceQuotation?.quotationType) ===
+                      '零件加工'
+                    "
+                  >
+                    <el-col :xs="24">
+                      <div
+                        v-if="initiationDuplicateProjectCodeError"
+                        class="qt-initiation-error-banner"
+                      >
+                        {{ initiationDuplicateProjectCodeError }}
+                      </div>
+                      <div
+                        v-if="initiationProjectCodeFormatError"
+                        class="qt-initiation-error-banner"
+                      >
+                        {{ initiationProjectCodeFormatError }}
+                      </div>
+                      <el-table
+                        :data="initiationProjectDetails"
+                        border
+                        size="small"
+                        class="qt-initiation-table"
+                        empty-text="暂无项目信息"
+                      >
+                        <el-table-column label="序号" type="index" width="70" align="center" />
+                        <el-table-column label="项目编号" min-width="180">
+                          <template #default="{ row }">
+                            <el-input v-model="row.projectCode" placeholder="请输入项目编号" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="产品名称" min-width="180">
+                          <template #default="{ row }">
+                            <el-input v-model="row.productName" placeholder="请输入产品名称" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="产品图号" min-width="160">
+                          <template #default="{ row }">
+                            <el-input v-model="row.productDrawing" placeholder="请输入产品图号" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="客户模号" min-width="180">
+                          <template #default="{ row }">
+                            <el-input v-model="row.customerModelNo" placeholder="请输入客户模号" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="90" fixed="right">
+                          <template #default="{ $index }">
+                            <el-button
+                              type="danger"
+                              link
+                              @click="removeInitiationProjectDetail($index)"
+                              >删除</el-button
+                            >
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                    </el-col>
+                  </template>
+                  <template v-else>
+                    <el-col :xs="24" :md="8">
+                      <el-form-item label="产品名称">
+                        <el-input v-model="initiationForm.productName" placeholder="可为空" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="8">
+                      <el-form-item label="产品图号">
+                        <el-input v-model="initiationForm.productDrawing" placeholder="可为空" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :md="8">
+                      <el-form-item label="客户模号">
+                        <el-input v-model="initiationForm.customerModelNo" placeholder="可为空" />
+                      </el-form-item>
+                    </el-col>
+                  </template>
+                </el-row>
+              </el-form>
+            </el-card>
+
+            <el-card shadow="hover" class="qt-initiation-panel">
+              <template #header>
+                <div class="qt-initiation-section-head">
+                  <div>
+                    <div class="qt-initiation-section-head__title">销售订单信息</div>
+                    <div class="qt-initiation-section-head__desc">维护订单头字段与立项销售明细</div>
+                  </div>
+                  <div class="qt-initiation-card-header__actions">
+                    <div class="qt-initiation-card-header__meta">
+                      <span class="qt-initiation-card-header__label">订单日期</span>
+                      <el-date-picker
+                        v-model="initiationSalesForm.orderDate"
+                        class="qt-initiation-card-header__date"
+                        type="date"
+                        value-format="YYYY-MM-DD"
+                        size="small"
+                        placeholder="请选择订单日期"
+                      />
+                    </div>
+                    <div class="qt-initiation-card-header__meta">
+                      <span class="qt-initiation-card-header__label">签订日期</span>
+                      <el-date-picker
+                        v-model="initiationSalesForm.signDate"
+                        class="qt-initiation-card-header__date"
+                        type="date"
+                        value-format="YYYY-MM-DD"
+                        size="small"
+                        placeholder="可为空"
+                      />
+                    </div>
+                    <div class="qt-initiation-card-header__meta">
+                      <span class="qt-initiation-card-header__label">合同号</span>
+                      <el-input
+                        v-model="initiationSalesForm.contractNo"
+                        class="qt-initiation-card-header__contract"
+                        size="small"
+                        placeholder="可为空"
+                      />
+                    </div>
+                    <el-button type="primary" plain size="small" @click="addInitiationDetail"
+                      >新增明细</el-button
+                    >
+                  </div>
+                </div>
               </template>
-            </el-table-column>
-            <el-table-column label="产品图号" min-width="120">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.productDrawingNo"
-                  :disabled="
-                    isInitiationViewMode ||
-                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
-                  "
-                  placeholder="请输入产品图号"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="客户模号" min-width="120">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.customerPartNo"
-                  :disabled="
-                    isInitiationViewMode ||
-                    resolveBusinessCategory(initiationSourceQuotation?.quotationType) === '零件加工'
-                  "
-                  placeholder="请输入客户模号"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="数量" width="70">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity"
-                  :disabled="isInitiationViewMode"
-                  :min="0"
-                  :precision="0"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="recalcInitiationDetailTotal(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="单价(元)" width="100">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unitPrice"
-                  :disabled="isInitiationViewMode"
-                  :min="0"
-                  :precision="2"
-                  :controls="false"
-                  style="width: 100%"
-                  @change="recalcInitiationDetailTotal(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="金额(元)" width="90">
-              <template #default="{ row }">
-                <span>{{ formatAmount(row.totalAmount) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="交付日期" width="150">
-              <template #default="{ row }">
-                <el-date-picker
-                  v-model="row.deliveryDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  :disabled="isInitiationViewMode"
-                  placeholder="请选择交付日期"
-                  style="width: 100%"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="备注" min-width="140">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.remark"
-                  :disabled="isInitiationViewMode"
-                  placeholder="选填"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="费用出处" min-width="120">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.costSource"
-                  :disabled="isInitiationViewMode"
-                  placeholder="选填"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
+              <el-table
+                :data="initiationSalesForm.details"
+                border
+                size="small"
+                class="qt-initiation-table"
+              >
+                <el-table-column type="index" label="序号" width="60" align="center" />
+                <el-table-column label="项目编号" min-width="140">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.itemCode"
+                      :disabled="
+                        resolveBusinessCategory(initiationSourceQuotation?.quotationType) ===
+                        '零件加工'
+                      "
+                      placeholder="请输入项目编号"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="产品名称" min-width="140">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.productName"
+                      :disabled="
+                        resolveBusinessCategory(initiationSourceQuotation?.quotationType) ===
+                        '零件加工'
+                      "
+                      placeholder="请输入产品名称"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="产品图号" min-width="120">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.productDrawingNo"
+                      :disabled="
+                        resolveBusinessCategory(initiationSourceQuotation?.quotationType) ===
+                        '零件加工'
+                      "
+                      placeholder="请输入产品图号"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="客户模号" min-width="120">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.customerPartNo"
+                      :disabled="
+                        resolveBusinessCategory(initiationSourceQuotation?.quotationType) ===
+                        '零件加工'
+                      "
+                      placeholder="请输入客户模号"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="数量" width="70">
+                  <template #default="{ row }">
+                    <el-input-number
+                      v-model="row.quantity"
+                      :min="0"
+                      :precision="0"
+                      :controls="false"
+                      style="width: 100%"
+                      @change="recalcInitiationDetailTotal(row)"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="单价(元)" width="100">
+                  <template #default="{ row }">
+                    <el-input-number
+                      v-model="row.unitPrice"
+                      :min="0"
+                      :precision="2"
+                      :controls="false"
+                      style="width: 100%"
+                      @change="recalcInitiationDetailTotal(row)"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="金额(元)" width="90">
+                  <template #default="{ row }">
+                    <span>{{ formatAmount(row.totalAmount) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="交付日期" width="150">
+                  <template #default="{ row }">
+                    <el-date-picker
+                      v-model="row.deliveryDate"
+                      type="date"
+                      value-format="YYYY-MM-DD"
+                      placeholder="请选择交付日期"
+                      style="width: 100%"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="备注" min-width="140">
+                  <template #default="{ row }">
+                    <el-input v-model="row.remark" placeholder="选填" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="费用出处" min-width="120">
+                  <template #default="{ row }">
+                    <el-input v-model="row.costSource" placeholder="选填" />
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-card>
+          </div>
+        </template>
       </div>
 
       <template #footer>
@@ -2141,6 +2419,7 @@ const initiationSalesForm = reactive<InitiationSalesFormModel>({
   details: []
 })
 const initiationProjectDetails = ref<QuotationInitiationProjectDetailDraft[]>([])
+const initiationActiveTab = ref<'basic' | 'project' | 'audit'>('basic')
 
 // 项目代入对话框 & 查询状态
 const projectImportDialogVisible = ref(false)
@@ -2587,6 +2866,16 @@ const getCategoryFromProjectCode = (projectCode: string) => {
 }
 
 const normalizeInitiationStatus = (value: unknown) => String(value || '').trim() || '未发起'
+const getInitiationStatusTagType = (
+  value: unknown
+): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined => {
+  const status = normalizeInitiationStatus(value)
+  if (status === '已通过') return 'success'
+  if (status === '审核中' || status === '待客户审核') return 'warning'
+  if (status === '已驳回') return 'danger'
+  if (status === '草稿') return 'info'
+  return undefined
+}
 
 type RowActionKey =
   | 'initiate'
@@ -3584,6 +3873,7 @@ const recommendInitiationProjectCode = async () => {
 
 const openInitiationDialog = async (row: QuotationRecord, mode: InitiationDialogMode) => {
   initiationDialogMode.value = mode
+  initiationActiveTab.value = 'basic'
   initiationSourceQuotation.value = { ...row }
   initiationDialogVisible.value = true
   initiationDialogLoading.value = true
@@ -3703,6 +3993,159 @@ const recalcInitiationDetailTotal = (detail: QuotationInitiationSalesOrderDetail
 }
 
 const isInitiationViewMode = computed(() => initiationDialogMode.value === 'view')
+const initiationDisplayStatus = computed(() =>
+  normalizeInitiationStatus(
+    initiationRequestRow.value?.status_text || initiationSourceQuotation.value?.initiationStatus
+  )
+)
+const initiationViewProjectRows = computed(() => {
+  if (resolveBusinessCategory(initiationSourceQuotation.value?.quotationType) === '零件加工') {
+    return initiationProjectDetails.value.map((detail) => ({
+      projectCode: detail.projectCode || '-',
+      sourceProjectCode: initiationForm.sourceProjectCode || '-',
+      productName: detail.productName || '-',
+      productDrawing: detail.productDrawing || '-',
+      customerModelNo: detail.customerModelNo || '-',
+      category: initiationForm.category || '-'
+    }))
+  }
+
+  return [
+    {
+      projectCode: initiationForm.projectCode || '-',
+      sourceProjectCode: initiationForm.sourceProjectCode || '-',
+      productName: initiationForm.productName || '-',
+      productDrawing: initiationForm.productDrawing || '-',
+      customerModelNo: initiationForm.customerModelNo || '-',
+      category: initiationForm.category || '-'
+    }
+  ]
+})
+const initiationViewNotes = computed(() =>
+  [
+    {
+      label: '立项驳回原因',
+      value: String(initiationRequestRow.value?.initiation_rejected_reason || '').trim()
+    },
+    {
+      label: '客户审核驳回原因',
+      value: String(initiationRequestRow.value?.customer_review_rejected_reason || '').trim()
+    },
+    { label: '撤回原因', value: String(initiationRequestRow.value?.withdraw_reason || '').trim() }
+  ].filter((item) => item.value)
+)
+const showInitiationViewOrderRemark = computed(() =>
+  initiationSalesForm.details.some((item) => String(item.remark || '').trim())
+)
+const showInitiationViewOrderCostSource = computed(() =>
+  initiationSalesForm.details.some((item) => String(item.costSource || '').trim())
+)
+const initiationViewMilestones = computed(() =>
+  [
+    { label: '报价单号', value: initiationSourceQuotation.value?.quotationNo || '-' },
+    {
+      label: '草稿保存时间',
+      value: formatDate(initiationRequestRow.value?.draft_saved_at)
+    },
+    {
+      label: '提交审核时间',
+      value: formatDate(initiationRequestRow.value?.submitted_at)
+    },
+    {
+      label: '审核通过时间',
+      value: formatDate(initiationRequestRow.value?.approved_at)
+    },
+    {
+      label: '驳回时间',
+      value: formatDate(initiationRequestRow.value?.rejected_at)
+    },
+    {
+      label: '撤回时间',
+      value: formatDate(initiationRequestRow.value?.withdrawn_at)
+    },
+    {
+      label: '更新时间',
+      value: formatDate(initiationRequestRow.value?.updated_at)
+    }
+  ].filter((item) => item.value && item.value !== '-')
+)
+const initiationAuditTimeline = computed(() => {
+  const row = initiationRequestRow.value
+  const items: Array<{
+    key: string
+    title: string
+    time: string
+    type: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+    content: string
+  } | null> = [
+    {
+      key: 'created',
+      title: '创建申请',
+      time: formatDate(row?.created_at),
+      type: 'primary' as const,
+      content: `申请人：${row?.created_by || '-'}`
+    },
+    row?.draft_saved_at
+      ? {
+          key: 'draft',
+          title: '保存草稿',
+          time: formatDate(row?.draft_saved_at),
+          type: 'info' as const,
+          content: '立项信息已保存为草稿。'
+        }
+      : null,
+    row?.submitted_at
+      ? {
+          key: 'submitted',
+          title: '提交审核',
+          time: formatDate(row?.submitted_at),
+          type: 'warning' as const,
+          content: '申请已提交审核流程。'
+        }
+      : null,
+    row?.approved_at
+      ? {
+          key: 'approved',
+          title: '审核通过',
+          time: formatDate(row?.approved_at),
+          type: 'success' as const,
+          content: `审核人：${row?.approved_by || '-'}`
+        }
+      : null,
+    row?.rejected_at
+      ? {
+          key: 'rejected',
+          title: '审核驳回',
+          time: formatDate(row?.rejected_at),
+          type: 'danger' as const,
+          content:
+            String(
+              row?.initiation_rejected_reason || row?.customer_review_rejected_reason || ''
+            ).trim() || '未填写驳回原因'
+        }
+      : null,
+    row?.withdrawn_at
+      ? {
+          key: 'withdrawn',
+          title: '申请撤回',
+          time: formatDate(row?.withdrawn_at),
+          type: 'info' as const,
+          content: String(row?.withdraw_reason || '').trim() || '未填写撤回原因'
+        }
+      : null,
+    row?.updated_at
+      ? {
+          key: 'updated',
+          title: '最近更新',
+          time: formatDate(row?.updated_at),
+          type: 'info' as const,
+          content: '申请记录已更新。'
+        }
+      : null
+  ]
+
+  return items.filter((item): item is NonNullable<typeof item> => item !== null)
+})
 const canShowCustomerReviewAction = computed(() => {
   if (isInitiationViewMode.value) return false
   return !initiationCustomerMatched.value && !!String(initiationForm.customerName || '').trim()
@@ -4612,6 +5055,69 @@ onMounted(() => {
   :deep(.qt-initiation-dialog.el-dialog .el-dialog__body),
   :deep(.qt-initiation-dialog .el-dialog__body) {
     overflow: visible;
+  }
+}
+
+@media (width <= 900px) {
+  .qt-initiation-view-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qt-initiation-hero__meta,
+  .qt-initiation-inline-meta,
+  .qt-initiation-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 768px) {
+  .qt-initiation-hero {
+    padding: 14px;
+  }
+
+  .qt-initiation-hero__title {
+    font-size: 20px;
+  }
+
+  .qt-initiation-hero__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .qt-initiation-panel :deep(.el-card__header),
+  .qt-initiation-panel :deep(.el-card__body) {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .qt-initiation-tabs :deep(.el-tabs__header) {
+    margin-bottom: 10px;
+  }
+
+  .qt-initiation-tabs :deep(.el-tabs__nav-scroll) {
+    padding-bottom: 2px;
+    overflow-x: auto;
+  }
+
+  .qt-initiation-tabs :deep(.el-tabs__nav) {
+    width: max-content;
+  }
+
+  .qt-initiation-tabs :deep(.el-tabs__item) {
+    height: 32px;
+    padding: 0 12px;
+  }
+
+  .qt-initiation-hero__meta,
+  .qt-initiation-inline-meta,
+  .qt-initiation-stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qt-initiation-table--view :deep(.el-table td.el-table__cell),
+  .qt-initiation-table--view :deep(.el-table th.el-table__cell) {
+    padding-top: 6px;
+    padding-bottom: 6px;
   }
 }
 
@@ -6215,6 +6721,333 @@ onMounted(() => {
   padding: 8px 10px;
 }
 
+.qt-initiation-dialog__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.qt-initiation-hero {
+  padding: 18px 20px 16px;
+  background: linear-gradient(180deg, #fcfdff 0%, #f8fafc 100%);
+  border: 1px solid #e4e9f1;
+  border-radius: 18px;
+}
+
+.qt-initiation-hero__copy {
+  min-width: 0;
+}
+
+.qt-initiation-hero__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #7a8698;
+  text-transform: uppercase;
+}
+
+.qt-initiation-hero__title {
+  margin: 8px 0 0;
+  font-family: Baskerville, 'Times New Roman', STSong, serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #223044;
+}
+
+.qt-initiation-hero__summary {
+  max-width: 560px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #738093;
+}
+
+.qt-initiation-hero__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.qt-initiation-hero__status {
+  margin-left: auto;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+
+.qt-initiation-hero__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.qt-initiation-hero__meta-item {
+  padding: 11px 13px;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+}
+
+.qt-initiation-hero__meta-item span {
+  display: block;
+  font-size: 10px;
+  color: #7f8a9c;
+}
+
+.qt-initiation-hero__meta-item strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #223044;
+  word-break: break-word;
+}
+
+.qt-initiation-tab-shell {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__header) {
+  margin: 0 0 12px;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__nav-wrap::after),
+.qt-initiation-tabs :deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__nav) {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: #f6f8fb;
+  border: 1px solid #e8edf4;
+  border-radius: 999px;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__item) {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #667386;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__item:hover) {
+  color: #223044;
+}
+
+.qt-initiation-tabs :deep(.el-tabs__item.is-active) {
+  color: #223044;
+  background: #fff;
+  border-color: #d7dde7;
+  box-shadow: 0 1px 2px rgb(34 48 68 / 6%);
+}
+
+.qt-initiation-view-grid,
+.qt-initiation-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.qt-initiation-view-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qt-initiation-panel {
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.qt-initiation-panel :deep(.el-card__header) {
+  padding: 13px 15px 9px;
+  background: #fff;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.qt-initiation-panel :deep(.el-card__body) {
+  padding: 13px 15px 15px;
+  background: #fff;
+}
+
+.qt-initiation-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qt-initiation-section-head__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #223044;
+}
+
+.qt-initiation-section-head__desc {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #7f8b9d;
+}
+
+.qt-initiation-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qt-initiation-stat {
+  padding: 11px 12px;
+  background: #fafbfd;
+  border: 1px solid #e8ecf3;
+  border-radius: 12px;
+}
+
+.qt-initiation-stat__label {
+  display: block;
+  font-size: 10px;
+  color: #7f8a9c;
+}
+
+.qt-initiation-stat__value {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #223044;
+  word-break: break-word;
+}
+
+.qt-initiation-note-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qt-initiation-note-card {
+  padding: 11px 12px;
+  background: #fafbfd;
+  border: 1px solid #e8ecf3;
+  border-radius: 12px;
+}
+
+.qt-initiation-note-card__label {
+  display: block;
+  font-size: 10px;
+  color: #7f8a9c;
+}
+
+.qt-initiation-note-card__value {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #384659;
+}
+
+.qt-initiation-data-sheet {
+  margin-top: 0;
+}
+
+.qt-initiation-inline-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qt-initiation-inline-meta__item {
+  padding: 11px 12px;
+  background: #fafbfd;
+  border: 1px solid #e8ecf3;
+  border-radius: 12px;
+}
+
+.qt-initiation-inline-meta__item span {
+  display: block;
+  font-size: 10px;
+  color: #7f8a9c;
+}
+
+.qt-initiation-inline-meta__item strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #223044;
+  word-break: break-word;
+}
+
+.qt-initiation-table--view {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.qt-initiation-table--view :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.qt-initiation-table--view :deep(.el-table__header-wrapper th.el-table__cell) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f6f83;
+  background: #f7f9fc;
+}
+
+.qt-initiation-table--view :deep(.el-table td.el-table__cell),
+.qt-initiation-table--view :deep(.el-table th.el-table__cell) {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.qt-initiation-table--view :deep(.cell) {
+  line-height: 1.45;
+}
+
+.qt-initiation-table--view :deep(.el-tag) {
+  border-radius: 999px;
+}
+
+.qt-initiation-table--view :deep(.el-table__body .el-table__row--striped td.el-table__cell) {
+  background-color: var(--el-table-tr-bg-color);
+}
+
+.qt-initiation-timeline {
+  padding: 4px 2px 0;
+}
+
+.qt-initiation-timeline__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #223044;
+}
+
+.qt-initiation-timeline__content {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #69758a;
+}
+
+.qt-initiation-dialog__content--mobile {
+  gap: 10px;
+}
+
 :deep(.qt-initiation-dialog.el-dialog),
 :deep(.qt-initiation-dialog .el-dialog) {
   display: flex;
@@ -6225,15 +7058,18 @@ onMounted(() => {
   flex-direction: column;
 }
 
+:deep(.qt-initiation-dialog.el-dialog.is-fullscreen),
+:deep(.qt-initiation-dialog .el-dialog.is-fullscreen) {
+  height: 100vh;
+  max-height: 100vh;
+  margin-top: 0;
+}
+
 :deep(.qt-initiation-dialog.el-dialog .el-dialog__body),
 :deep(.qt-initiation-dialog .el-dialog__body) {
   min-height: 0;
   padding: 0 16px 16px;
   overflow: hidden auto;
   flex: 1 1 auto;
-}
-
-.qt-initiation-dialog__content {
-  display: block;
 }
 </style>
