@@ -709,7 +709,7 @@
     <el-dialog
       v-model="editDialogVisible"
       :title="editTitle"
-      :width="isMobile ? '100%' : '1200px'"
+      :width="editDialogWidth"
       :fullscreen="isMobile"
       :close-on-click-modal="false"
       class="pm-edit-dialog"
@@ -1410,6 +1410,18 @@
                     <el-col v-if="isPlasticMould" :xs="0" :sm="0" :lg="8" />
                   </el-row>
                 </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="bom">
+                <template #label>
+                  <el-icon class="pm-edit-tab-icon"><Tickets /></el-icon>
+                  BOM
+                </template>
+                <ProjectBomWorkspace
+                  v-model="projectBomDraft"
+                  :project-code="String(currentProjectCode || editForm.项目编号 || '')"
+                  :readonly="editSubmitting"
+                />
               </el-tab-pane>
 
               <el-tab-pane name="machine">
@@ -2356,11 +2368,14 @@ import {
   generateSealSampleXlsxApi,
   uploadProjectPartImageApi,
   deleteProjectTempPartImageApi,
+  getProjectBomSheetsApi,
+  saveProjectBomSheetsApi,
   type ProjectInfo,
   type ProjectAttachment,
   type ProjectAttachment2File,
   type ProjectAttachmentType,
-  type ProjectInspectionReportAttachment
+  type ProjectInspectionReportAttachment,
+  type ProjectBomSheet
 } from '@/api/project'
 import type { GoodsInfo } from '@/api/goods'
 import { useAppStore } from '@/store/modules/app'
@@ -2373,7 +2388,8 @@ import InspectionReportDrawer from '@/components/InspectionReportDrawer/Inspecti
 import PartDrawingDrawer from '@/components/PartDrawingDrawer/PartDrawingDrawer.vue'
 import { ElMessageBox } from 'element-plus'
 import ExternalImportDialog from './components/ExternalImportDialog.vue'
-import { Document, Box, Setting, Cpu, Folder, Paperclip } from '@element-plus/icons-vue'
+import ProjectBomWorkspace from './components/ProjectBomWorkspace.vue'
+import { Document, Box, Setting, Tickets, Cpu, Folder, Paperclip } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const tableData = ref<Partial<ProjectInfo>[]>([])
@@ -2611,14 +2627,26 @@ const viewData = ref<Partial<ProjectInfo>>({})
 const editDialogVisible = ref(false)
 const editTitle = ref('编辑项目')
 const editActiveTab = ref<
-  'basic' | 'part' | 'mould' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2'
+  'basic' | 'part' | 'mould' | 'bom' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2'
 >('basic')
 const preferredEditTabOnOpen = ref<
-  'basic' | 'part' | 'mould' | 'machine' | 'trialProcess' | 'attachments' | 'attachments2' | ''
+  | 'basic'
+  | 'part'
+  | 'mould'
+  | 'bom'
+  | 'machine'
+  | 'trialProcess'
+  | 'attachments'
+  | 'attachments2'
+  | ''
 >('')
 const editFormRef = ref<FormInstance>()
 const editForm = reactive<Partial<ProjectInfo>>({})
 const editSubmitting = ref(false)
+const editDialogWidth = computed(() =>
+  isMobile.value ? '100%' : editActiveTab.value === 'bom' ? '1400px' : '1200px'
+)
+const projectBomDraft = ref<ProjectBomSheet[]>([])
 
 const stableStringify = (input: any) => {
   const seen = new WeakSet()
@@ -3803,7 +3831,7 @@ const setEditDialogBaseHeight = () => {
   const bodyEl = editDialogBodyRef.value
   if (!bodyEl) return
 
-  const viewportLimit = Math.max(window.innerHeight - 80, 320)
+  const viewportLimit = Math.max(window.innerHeight - 60, 320)
   const contentHeight = bodyEl.scrollHeight
   editDialogBaseHeight.value = Math.min(contentHeight, viewportLimit)
 }
@@ -4961,6 +4989,7 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
   editTitle.value = '编辑项目'
   const projectCode = row.项目编号 || ''
   currentProjectCode.value = projectCode
+  projectBomDraft.value = []
 
   // 先用列表行数据填充，避免弹窗打开前无内容
   Object.assign(editForm, row)
@@ -5017,6 +5046,16 @@ const handleEdit = async (row: Partial<ProjectInfo>) => {
 
     // 编辑时自动加载货物信息（用于分类/产品信息等）
     await handleProjectCodeBlur()
+
+    try {
+      const bomResponse: any = await getProjectBomSheetsApi(projectCode)
+      projectBomDraft.value = (bomResponse?.data?.data ||
+        bomResponse?.data ||
+        []) as ProjectBomSheet[]
+    } catch (e) {
+      console.warn('[编辑项目] 加载 BOM 失败:', e)
+      projectBomDraft.value = []
+    }
   }
 
   // 若已有吨位，则自动补齐设备参数（不覆盖已填定位圈）
@@ -5038,6 +5077,7 @@ const projectQueryTabList = [
   'basic',
   'part',
   'mould',
+  'bom',
   'machine',
   'trialProcess',
   'attachments',
@@ -6712,6 +6752,7 @@ const handleSubmitEdit = async () => {
   // 保存前记录当前图片URL，如果保存失败则清理临时图片
   const currentImageUrl = editForm.零件图示URL
   try {
+    let bomProjectCode = String(currentProjectCode.value || editForm.项目编号 || '').trim()
     if (currentProjectCode.value) {
       // 过滤掉 productName 和 productDrawing，这两个字段不属于项目管理表
       // 同时过滤掉"分类"，它属于货物信息表，不应回写到项目管理表
@@ -6735,6 +6776,7 @@ const handleSubmitEdit = async () => {
       }
 
       await updateProjectApi(currentProjectCode.value, updateData)
+      bomProjectCode = currentProjectCode.value
       ElMessage.success('更新成功')
 
       // 更新成功后，再执行检验报告迁移（避免保存失败导致附件错误移动）
@@ -6781,8 +6823,17 @@ const handleSubmitEdit = async () => {
       }
 
       await createProjectApi(createData as ProjectInfo)
+      bomProjectCode = String(editForm.项目编号 || '').trim()
       ElMessage.success('创建成功')
     }
+
+    try {
+      await saveProjectBomSheetsApi(bomProjectCode, projectBomDraft.value || [])
+    } catch (bomError: any) {
+      ElMessage.error(`项目已保存，但 BOM 保存失败: ${bomError?.message || '未知错误'}`)
+      return
+    }
+
     editDialogVisible.value = false
     await Promise.all([loadData(), loadStatistics()])
     if (
@@ -7148,9 +7199,9 @@ watch(viewMode, (val) => {
 @media (width >= 769px) {
   :deep(.pm-edit-dialog) {
     display: flex;
-    height: 900px;
-    max-height: 900px;
-    min-height: 900px;
+    height: 920px;
+    max-height: 920px;
+    min-height: 920px;
     margin: auto;
     flex-direction: column;
   }

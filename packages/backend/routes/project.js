@@ -43,6 +43,16 @@ const MAX_ATTACHMENT_SIZE_BYTES = parseInt(
   process.env.PROJECT_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
   10
 )
+const BOM_ATTACHMENT_MAX_SIZE_BYTES = parseInt(
+  process.env.PROJECT_BOM_ATTACHMENT_MAX_SIZE || String(200 * 1024 * 1024),
+  10
+)
+const BOM_CATEGORY_LABEL_MAP = {
+  RAW_MATERIAL: '原材料',
+  HOT_RUNNER: '热流道',
+  MOULD_BASE: '模架',
+  ACCESSORY: '配件'
+}
 
 const TRIPARTITE_TEMPLATE_PATH = path.join(
   __dirname,
@@ -894,6 +904,32 @@ const ensureDirSync = (dirPath) => {
   }
 }
 
+const normalizeBomCategory = (value) => {
+  const key = String(value || '').trim().toUpperCase()
+  return Object.prototype.hasOwnProperty.call(BOM_CATEGORY_LABEL_MAP, key) ? key : null
+}
+
+const getBomCategoryLabel = (category) => BOM_CATEGORY_LABEL_MAP[normalizeBomCategory(category)] || 'BOM'
+
+const normalizePathSegment = (value, fallback = '未命名') => {
+  const normalized = safeFileName(String(value || '').trim())
+  return normalized || fallback
+}
+
+const buildBomItemDirName = (lineNo, itemName, itemId) => {
+  const linePrefix = Number.isFinite(Number(lineNo)) && Number(lineNo) > 0
+    ? `${String(Math.trunc(Number(lineNo))).padStart(2, '0')}-`
+    : ''
+  const readableName = normalizePathSegment(itemName, '')
+  if (readableName) {
+    return `${linePrefix}${readableName}`
+  }
+  if (linePrefix) {
+    return `${linePrefix}明细`
+  }
+  return normalizePathSegment(itemId, '明细')
+}
+
 // 确保零件图示临时目录存在（必须在ensureDirSync定义之后调用）
 // 注意：如果挂载点未就绪，这里可能失败，但不影响服务启动
 ensureDirSync(PROJECT_PART_IMAGE_TEMP_DIR_ROOT)
@@ -962,6 +998,51 @@ const uploadSingleAttachment = (req, res, next) => {
     const message =
       err?.code === 'LIMIT_FILE_SIZE'
         ? `上传失败：单个附件不能超过 ${Math.round(MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024)}MB`
+        : err?.message || '上传失败'
+    res.status(400).json({ code: 400, success: false, message })
+  })
+}
+
+const bomAttachmentStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    try {
+      const tempRelativeDir = path.posix.join(
+        '_temp',
+        'project-bom',
+        String(Date.now()),
+        String(Math.random().toString(36).slice(2, 8))
+      )
+      const fullDir = path.join(FILE_ROOT, tempRelativeDir)
+      ensureDirSync(fullDir)
+      req._tempBomAttachmentDir = tempRelativeDir
+      req._tempBomAttachmentFullDir = fullDir
+      cb(null, fullDir)
+    } catch (err) {
+      cb(err)
+    }
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname)
+    const baseName = normalizeAttachmentFileName(path.basename(file.originalname, ext))
+    const safeBaseName = safeFileName(baseName)
+    req._bomAttachmentStoredFileName = `${safeBaseName}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`
+    cb(null, req._bomAttachmentStoredFileName)
+  }
+})
+
+const uploadBomAttachment = multer({
+  storage: bomAttachmentStorage,
+  limits: {
+    fileSize: BOM_ATTACHMENT_MAX_SIZE_BYTES
+  }
+})
+
+const uploadSingleBomAttachment = (req, res, next) => {
+  uploadBomAttachment.single('file')(req, res, (err) => {
+    if (!err) return next()
+    const message =
+      err?.code === 'LIMIT_FILE_SIZE'
+        ? `上传失败：单个附件不能超过 ${Math.round(BOM_ATTACHMENT_MAX_SIZE_BYTES / 1024 / 1024)}MB`
         : err?.message || '上传失败'
     res.status(400).json({ code: 400, success: false, message })
   })
@@ -1219,6 +1300,67 @@ const ensureProjectAttachmentsTable = async () => {
         ALTER TABLE dbo.项目管理附件 ADD 删除时间 DATETIME2 NULL;
       IF COL_LENGTH(N'dbo.项目管理附件', N'删除人') IS NULL
         ALTER TABLE dbo.项目管理附件 ADD 删除人 NVARCHAR(100) NULL;
+    END
+  `)
+}
+
+const ensureProjectBomTables = async () => {
+  await query(`
+    IF OBJECT_ID(N'dbo.项目BOM子表', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.项目BOM子表 (
+        子表ID NVARCHAR(80) NOT NULL PRIMARY KEY,
+        项目编号 NVARCHAR(50) NOT NULL,
+        BOM分类 NVARCHAR(30) NOT NULL,
+        子表名称 NVARCHAR(120) NOT NULL,
+        状态 NVARCHAR(30) NOT NULL CONSTRAINT DF_项目BOM子表_状态 DEFAULT (N'DRAFT'),
+        创建时间 DATETIME2 NOT NULL CONSTRAINT DF_项目BOM子表_创建时间 DEFAULT (SYSDATETIME()),
+        创建人 NVARCHAR(100) NULL,
+        更新时间 DATETIME2 NOT NULL CONSTRAINT DF_项目BOM子表_更新时间 DEFAULT (SYSDATETIME()),
+        更新人 NVARCHAR(100) NULL
+      );
+      CREATE INDEX IX_项目BOM子表_项目编号 ON dbo.项目BOM子表 (项目编号, BOM分类, 更新时间 DESC);
+    END
+
+    IF OBJECT_ID(N'dbo.项目BOM明细', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.项目BOM明细 (
+        明细ID NVARCHAR(80) NOT NULL PRIMARY KEY,
+        子表ID NVARCHAR(80) NOT NULL,
+        项目编号 NVARCHAR(50) NOT NULL,
+        行序号 INT NOT NULL,
+        名称 NVARCHAR(200) NULL,
+        尺寸 NVARCHAR(200) NULL,
+        材质 NVARCHAR(200) NULL,
+        数量 FLOAT NOT NULL CONSTRAINT DF_项目BOM明细_数量 DEFAULT (0),
+        技术要求 NVARCHAR(1000) NULL,
+        备注 NVARCHAR(1000) NULL,
+        采购状态 NVARCHAR(30) NOT NULL CONSTRAINT DF_项目BOM明细_采购状态 DEFAULT (N'OPEN'),
+        创建时间 DATETIME2 NOT NULL CONSTRAINT DF_项目BOM明细_创建时间 DEFAULT (SYSDATETIME()),
+        创建人 NVARCHAR(100) NULL,
+        更新时间 DATETIME2 NOT NULL CONSTRAINT DF_项目BOM明细_更新时间 DEFAULT (SYSDATETIME()),
+        更新人 NVARCHAR(100) NULL
+      );
+      CREATE INDEX IX_项目BOM明细_项目编号 ON dbo.项目BOM明细 (项目编号, 子表ID, 行序号);
+      CREATE INDEX IX_项目BOM明细_子表ID ON dbo.项目BOM明细 (子表ID, 行序号);
+    END
+
+    IF OBJECT_ID(N'dbo.项目BOM明细附件', N'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.项目BOM明细附件 (
+        附件ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        项目编号 NVARCHAR(50) NOT NULL,
+        子表ID NVARCHAR(80) NOT NULL,
+        明细ID NVARCHAR(80) NOT NULL,
+        原始文件名 NVARCHAR(255) NOT NULL,
+        存储文件名 NVARCHAR(255) NOT NULL,
+        相对路径 NVARCHAR(500) NOT NULL,
+        文件大小 BIGINT NOT NULL,
+        内容类型 NVARCHAR(120) NULL,
+        上传时间 DATETIME2 NOT NULL CONSTRAINT DF_项目BOM明细附件_上传时间 DEFAULT (SYSDATETIME()),
+        上传人 NVARCHAR(100) NULL
+      );
+      CREATE INDEX IX_项目BOM明细附件_项目编号 ON dbo.项目BOM明细附件 (项目编号, 子表ID, 明细ID, 上传时间 DESC, 附件ID DESC);
     END
   `)
 }
@@ -3129,6 +3271,513 @@ router.post(
   }
   }
 )
+
+// === 项目 BOM 相关接口 ===
+
+router.get('/:projectCode(*)/bom/sheets', requireProjectRead, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const [sheetRows, itemRows, attachmentRows] = await Promise.all([
+      query(
+        `
+        SELECT 子表ID AS [id], 项目编号 AS [projectCode], BOM分类 AS [category], 子表名称 AS [name], 状态 AS [status]
+        FROM 项目BOM子表
+        WHERE 项目编号 = @projectCode
+        ORDER BY BOM分类 ASC, 更新时间 ASC, 子表ID ASC
+        `,
+        { projectCode }
+      ),
+      query(
+        `
+        SELECT 明细ID AS [id], 子表ID AS [sheetId], 项目编号 AS [projectCode], 行序号 AS [lineNo],
+               名称 AS [name], 尺寸 AS [size], 材质 AS [material], 数量 AS [quantity],
+               技术要求 AS [technicalRequirement], 备注 AS [remark], 采购状态 AS [procurementState]
+        FROM 项目BOM明细
+        WHERE 项目编号 = @projectCode
+        ORDER BY 子表ID ASC, 行序号 ASC, 明细ID ASC
+        `,
+        { projectCode }
+      ),
+      query(
+        `
+        SELECT 附件ID AS [id], 项目编号 AS [projectCode], 子表ID AS [sheetId], 明细ID AS [itemId],
+               原始文件名 AS [originalName], 存储文件名 AS [storedFileName], 相对路径 AS [relativePath],
+               文件大小 AS [fileSize], 内容类型 AS [contentType], 上传时间 AS [uploadedAt], 上传人 AS [uploadedBy]
+        FROM 项目BOM明细附件
+        WHERE 项目编号 = @projectCode
+        ORDER BY 上传时间 ASC, 附件ID ASC
+        `,
+        { projectCode }
+      )
+    ])
+
+    const attachmentsByItemId = new Map()
+    for (const row of attachmentRows) {
+      const key = String(row.itemId)
+      if (!attachmentsByItemId.has(key)) attachmentsByItemId.set(key, [])
+      attachmentsByItemId.get(key).push(row)
+    }
+
+    const itemsBySheetId = new Map()
+    for (const row of itemRows) {
+      const key = String(row.sheetId)
+      if (!itemsBySheetId.has(key)) itemsBySheetId.set(key, [])
+      itemsBySheetId.get(key).push({
+        id: String(row.id),
+        name: String(row.name || ''),
+        size: String(row.size || ''),
+        material: String(row.material || ''),
+        quantity: Number(row.quantity || 0),
+        technicalRequirement: String(row.technicalRequirement || ''),
+        remark: String(row.remark || ''),
+        procurementState: String(row.procurementState || 'OPEN'),
+        attachments: attachmentsByItemId.get(String(row.id)) || []
+      })
+    }
+
+    const data = sheetRows.map((row) => ({
+      id: String(row.id),
+      category: normalizeBomCategory(row.category),
+      name: String(row.name || ''),
+      status: String(row.status || 'DRAFT'),
+      items: itemsBySheetId.get(String(row.id)) || []
+    }))
+
+    return res.json({ code: 0, success: true, data })
+  } catch (error) {
+    console.error('获取项目 BOM 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取项目 BOM 失败',
+      error: error.message
+    })
+  }
+})
+
+router.put('/:projectCode(*)/bom/sheets', requireProjectUpdate, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const projectCode = String(req.params.projectCode || '').trim()
+    if (!projectCode) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号不能为空' })
+    }
+
+    const projectRows = await query(
+      `SELECT TOP 1 项目编号 FROM 项目管理 WHERE 项目编号 = @projectCode`,
+      { projectCode }
+    )
+    if (!projectRows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '项目不存在' })
+    }
+
+    const rawSheets = Array.isArray(req.body?.sheets) ? req.body.sheets : []
+    const actor = resolveActorFromReq(req)
+    const normalizedSheets = rawSheets.map((sheet, sheetIndex) => {
+      const category = normalizeBomCategory(sheet?.category)
+      const sheetId = String(sheet?.id || '').trim()
+      if (!category || !sheetId) return null
+      const items = Array.isArray(sheet?.items) ? sheet.items : []
+      return {
+        id: sheetId,
+        category,
+        name: String(sheet?.name || `${getBomCategoryLabel(category)}-${sheetIndex + 1}`).trim(),
+        status: String(sheet?.status || 'DRAFT').trim() || 'DRAFT',
+        items: items.map((item, itemIndex) => ({
+          id: String(item?.id || '').trim(),
+          lineNo: itemIndex + 1,
+          name: String(item?.name || '').trim(),
+          size: String(item?.size || '').trim(),
+          material: String(item?.material || '').trim(),
+          quantity: Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 0,
+          technicalRequirement: String(item?.technicalRequirement || '').trim(),
+          remark: String(item?.remark || '').trim(),
+          procurementState: String(item?.procurementState || 'OPEN').trim() || 'OPEN'
+        })).filter((item) => item.id)
+      }
+    }).filter(Boolean)
+
+    const pool = await getPool()
+    const tx = new sql.Transaction(pool)
+    await tx.begin()
+
+    try {
+      const existingAttachments = await new sql.Request(tx)
+        .input('projectCode', sql.NVarChar, projectCode)
+        .query(`
+          SELECT 附件ID as id, 存储文件名 as storedFileName, 相对路径 as relativePath, 子表ID as sheetId, 明细ID as itemId
+          FROM 项目BOM明细附件
+          WHERE 项目编号 = @projectCode
+        `)
+
+      const sheetIds = new Set(normalizedSheets.map((sheet) => sheet.id))
+      const itemIds = new Set(normalizedSheets.flatMap((sheet) => sheet.items.map((item) => item.id)))
+      const attachmentRows = existingAttachments.recordset || []
+
+      const removedAttachmentRows = attachmentRows.filter(
+        (row) => !sheetIds.has(String(row.sheetId)) || !itemIds.has(String(row.itemId))
+      )
+
+      for (const attachment of removedAttachmentRows) {
+        const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+        try {
+          if (fs.existsSync(fullPath)) {
+            await fsp.unlink(fullPath)
+          }
+        } catch (e) {
+          console.warn('删除项目 BOM 旧附件文件失败:', e)
+        }
+      }
+
+      for (const attachment of removedAttachmentRows) {
+        await new sql.Request(tx)
+          .input('attachmentId', sql.Int, Number(attachment.id))
+          .query(`DELETE FROM 项目BOM明细附件 WHERE 附件ID = @attachmentId`)
+      }
+      await new sql.Request(tx)
+        .input('projectCode', sql.NVarChar, projectCode)
+        .query(`DELETE FROM 项目BOM明细 WHERE 项目编号 = @projectCode`)
+      await new sql.Request(tx)
+        .input('projectCode', sql.NVarChar, projectCode)
+        .query(`DELETE FROM 项目BOM子表 WHERE 项目编号 = @projectCode`)
+
+      for (const sheet of normalizedSheets) {
+        await new sql.Request(tx)
+          .input('id', sql.NVarChar, sheet.id)
+          .input('projectCode', sql.NVarChar, projectCode)
+          .input('category', sql.NVarChar, sheet.category)
+          .input('name', sql.NVarChar, sheet.name)
+          .input('status', sql.NVarChar, sheet.status)
+          .input('actor', sql.NVarChar, actor)
+          .query(`
+            INSERT INTO 项目BOM子表 (子表ID, 项目编号, BOM分类, 子表名称, 状态, 创建人, 更新人)
+            VALUES (@id, @projectCode, @category, @name, @status, @actor, @actor)
+          `)
+
+        for (const item of sheet.items) {
+          await new sql.Request(tx)
+            .input('id', sql.NVarChar, item.id)
+            .input('sheetId', sql.NVarChar, sheet.id)
+            .input('projectCode', sql.NVarChar, projectCode)
+            .input('lineNo', sql.Int, item.lineNo)
+            .input('name', sql.NVarChar, item.name)
+            .input('size', sql.NVarChar, item.size)
+            .input('material', sql.NVarChar, item.material)
+            .input('quantity', sql.Float, item.quantity)
+            .input('technicalRequirement', sql.NVarChar(sql.MAX), item.technicalRequirement)
+            .input('remark', sql.NVarChar(sql.MAX), item.remark)
+            .input('procurementState', sql.NVarChar, item.procurementState)
+            .input('actor', sql.NVarChar, actor)
+            .query(`
+              INSERT INTO 项目BOM明细 (
+                明细ID, 子表ID, 项目编号, 行序号, 名称, 尺寸, 材质, 数量, 技术要求, 备注, 采购状态, 创建人, 更新人
+              )
+              VALUES (
+                @id, @sheetId, @projectCode, @lineNo, @name, @size, @material, @quantity, @technicalRequirement, @remark, @procurementState, @actor, @actor
+              )
+            `)
+        }
+      }
+
+      await tx.commit()
+      return res.json({ code: 0, success: true, message: '保存 BOM 成功' })
+    } catch (error) {
+      await tx.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('保存项目 BOM 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '保存项目 BOM 失败',
+      error: error.message
+    })
+  }
+})
+
+router.get('/bom/items/:itemId/attachments', requireProjectRead, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const projectCode = String(req.query.projectCode || '').trim()
+    const itemId = String(req.params.itemId || '').trim()
+    if (!projectCode || !itemId) {
+      return res.status(400).json({ code: 400, success: false, message: '项目编号或明细ID不能为空' })
+    }
+
+    const rows = await query(
+      `
+      SELECT 附件ID as id, 项目编号 as projectCode, 子表ID as sheetId, 明细ID as itemId,
+             原始文件名 as originalName, 存储文件名 as storedFileName, 相对路径 as relativePath,
+             文件大小 as fileSize, 内容类型 as contentType, 上传时间 as uploadedAt, 上传人 as uploadedBy
+      FROM 项目BOM明细附件
+      WHERE 项目编号 = @projectCode AND 明细ID = @itemId
+      ORDER BY 上传时间 ASC, 附件ID ASC
+      `,
+      { projectCode, itemId }
+    )
+
+    return res.json({ code: 0, success: true, data: rows })
+  } catch (error) {
+    console.error('获取项目 BOM 附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '获取项目 BOM 附件失败',
+      error: error.message
+    })
+  }
+})
+
+router.post(
+  '/:projectCode(*)/bom/items/:itemId/attachments',
+  requireProjectUpload,
+  uploadSingleBomAttachment,
+  async (req, res) => {
+    try {
+      await ensureProjectBomTables()
+      const projectCode = String(req.params.projectCode || '').trim()
+      const itemId = String(req.params.itemId || '').trim()
+      if (!projectCode || !itemId) {
+        return res.status(400).json({ code: 400, success: false, message: '项目编号或明细ID不能为空' })
+      }
+
+      const itemRows = await query(
+        `
+        SELECT TOP 1 i.明细ID AS [itemId], i.子表ID AS [sheetId], i.行序号 AS [lineNo], i.名称 AS [itemName],
+                     s.BOM分类 AS [category], s.子表名称 AS [sheetName]
+        FROM 项目BOM明细 i
+        INNER JOIN 项目BOM子表 s ON s.子表ID = i.子表ID
+        WHERE i.项目编号 = @projectCode AND i.明细ID = @itemId
+        `,
+        { projectCode, itemId }
+      )
+      if (!itemRows.length) {
+        return res.status(404).json({ code: 404, success: false, message: '当前明细尚未保存，请先保存 BOM' })
+      }
+
+      const itemInfo = itemRows[0]
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({ code: 400, success: false, message: '未找到上传文件' })
+      }
+
+      const originalName = normalizeAttachmentFileName(file.originalname)
+      const category = getCategoryFromProjectCode(projectCode)
+      const safeProjectCode = safeProjectCodeForPath(projectCode)
+      const bomCategoryLabel = getBomCategoryLabel(itemInfo.category)
+      const sheetDirName = normalizePathSegment(itemInfo.sheetName, normalizePathSegment(itemInfo.sheetId, '子表'))
+      const itemDirName = buildBomItemDirName(itemInfo.lineNo, itemInfo.itemName, itemId)
+      const finalRelativeDir = path.posix.join(
+        category,
+        safeProjectCode,
+        '项目管理',
+        'BOM',
+        bomCategoryLabel,
+        sheetDirName,
+        itemDirName
+      )
+      const finalFullDir = path.join(FILE_ROOT, finalRelativeDir)
+      ensureDirSync(finalFullDir)
+
+      const safeStoredFileName = ensureUniqueFileName(
+        finalFullDir,
+        safeFileName(originalName)
+      )
+
+      const tempFile = path.join(
+        req._tempBomAttachmentFullDir || FILE_ROOT,
+        req._bomAttachmentStoredFileName || file.filename
+      )
+      const finalFile = path.join(finalFullDir, safeStoredFileName)
+      await moveFileWithFallback(tempFile, finalFile)
+
+      const actor = resolveActorFromReq(req)
+      const inserted = await query(
+        `
+        INSERT INTO 项目BOM明细附件 (
+          项目编号, 子表ID, 明细ID, 原始文件名, 存储文件名, 相对路径, 文件大小, 内容类型, 上传人
+        )
+        OUTPUT INSERTED.附件ID as id, INSERTED.上传时间 as uploadedAt
+        VALUES (
+          @projectCode, @sheetId, @itemId, @originalName, @storedFileName, @relativePath, @fileSize, @contentType, @uploadedBy
+        )
+        `,
+        {
+          projectCode,
+          sheetId: itemInfo.sheetId,
+          itemId,
+          originalName,
+          storedFileName: safeStoredFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedBy: actor
+        }
+      )
+
+      return res.json({
+        code: 0,
+        success: true,
+        message: '上传 BOM 附件成功',
+        data: {
+          id: inserted?.[0]?.id,
+          projectCode,
+          sheetId: String(itemInfo.sheetId),
+          itemId,
+          originalName,
+          storedFileName: safeStoredFileName,
+          relativePath: finalRelativeDir,
+          fileSize: file.size,
+          contentType: file.mimetype || null,
+          uploadedAt: inserted?.[0]?.uploadedAt,
+          uploadedBy: actor
+        }
+      })
+    } catch (error) {
+      console.error('上传项目 BOM 附件失败:', error)
+      return res.status(500).json({
+        code: 500,
+        success: false,
+        message: '上传项目 BOM 附件失败',
+        error: error.message
+      })
+    }
+  }
+)
+
+router.get('/bom/attachments/:attachmentId/download', requireProjectRead, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1 附件ID as id, 原始文件名 as originalName, 存储文件名 as storedFileName, 相对路径 as relativePath
+      FROM 项目BOM明细附件
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+    return res.download(fullPath, attachment.originalName)
+  } catch (error) {
+    console.error('下载项目 BOM 附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '下载项目 BOM 附件失败',
+      error: error.message
+    })
+  }
+})
+
+router.get('/bom/attachments/:attachmentId/preview-pdf', requireProjectRead, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1 原始文件名 as originalName, 存储文件名 as storedFileName, 相对路径 as relativePath, 内容类型 as contentType
+      FROM 项目BOM明细附件
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const isPdf =
+      String(attachment.contentType || '').toLowerCase() === 'application/pdf' ||
+      /\.pdf$/i.test(String(attachment.originalName || '')) ||
+      /\.pdf$/i.test(String(attachment.storedFileName || ''))
+    if (!isPdf) {
+      return res.status(400).json({ code: 400, success: false, message: '当前附件不是 PDF' })
+    }
+
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ code: 404, success: false, message: '附件文件不存在' })
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(String(attachment.originalName || 'preview.pdf'))}"`)
+    return res.sendFile(fullPath)
+  } catch (error) {
+    console.error('预览项目 BOM PDF 失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '预览项目 BOM PDF 失败',
+      error: error.message
+    })
+  }
+})
+
+router.delete('/bom/attachments/:attachmentId', requireProjectDelete, async (req, res) => {
+  try {
+    await ensureProjectBomTables()
+    const attachmentId = parseInt(req.params.attachmentId, 10)
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ code: 400, success: false, message: '附件ID不合法' })
+    }
+
+    const rows = await query(
+      `
+      SELECT TOP 1 存储文件名 as storedFileName, 相对路径 as relativePath
+      FROM 项目BOM明细附件
+      WHERE 附件ID = @attachmentId
+      `,
+      { attachmentId }
+    )
+    if (!rows.length) {
+      return res.status(404).json({ code: 404, success: false, message: '附件不存在' })
+    }
+
+    const attachment = rows[0]
+    const fullPath = getFileFullPath(attachment.relativePath, attachment.storedFileName)
+    await query(`DELETE FROM 项目BOM明细附件 WHERE 附件ID = @attachmentId`, { attachmentId })
+    try {
+      if (fs.existsSync(fullPath)) {
+        await fsp.unlink(fullPath)
+      }
+    } catch (e) {
+      console.warn('删除项目 BOM 附件文件失败:', e)
+    }
+
+    return res.json({ code: 0, success: true, message: '删除 BOM 附件成功' })
+  } catch (error) {
+    console.error('删除项目 BOM 附件失败:', error)
+    return res.status(500).json({
+      code: 500,
+      success: false,
+      message: '删除项目 BOM 附件失败',
+      error: error.message
+    })
+  }
+})
 
 // === 项目管理附件相关接口 ===
 

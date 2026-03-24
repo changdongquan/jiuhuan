@@ -195,6 +195,44 @@ export interface ProjectAttachment2File {
   uploadedBy?: string
 }
 
+export type ProjectBomCategory = 'RAW_MATERIAL' | 'HOT_RUNNER' | 'MOULD_BASE' | 'ACCESSORY'
+export type ProjectBomSheetStatus = 'DRAFT' | 'REQUESTED' | 'PARTIAL_PUSHED' | 'PUSHED'
+export type ProjectBomItemState = 'OPEN' | 'IN_REQUEST' | 'PUSHED_TO_PROCUREMENT'
+
+export interface ProjectBomAttachment {
+  id: number
+  projectCode: string
+  sheetId: string
+  itemId: string
+  originalName: string
+  storedFileName: string
+  relativePath: string
+  fileSize: number
+  contentType?: string
+  uploadedAt: string
+  uploadedBy?: string
+}
+
+export interface ProjectBomItem {
+  id: string
+  name: string
+  size: string
+  material: string
+  quantity: number
+  technicalRequirement: string
+  remark: string
+  procurementState: ProjectBomItemState
+  attachments: ProjectBomAttachment[]
+}
+
+export interface ProjectBomSheet {
+  id: string
+  category: ProjectBomCategory
+  name: string
+  status: ProjectBomSheetStatus
+  items: ProjectBomItem[]
+}
+
 // 获取项目管理附件列表
 export const getProjectAttachmentsApi = (projectCode: string, type?: ProjectAttachmentType) => {
   return request.get<{
@@ -222,6 +260,81 @@ export const getProjectAttachment2FilesApi = (projectCode: string) => {
     data: ProjectAttachment2File[]
   }>({
     url: `/api/project/${encodeURIComponent(projectCode)}/attachments-2/files`
+  })
+}
+
+export const getProjectBomSheetsApi = (projectCode: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectBomSheet[]
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/bom/sheets`
+  })
+}
+
+export const saveProjectBomSheetsApi = (projectCode: string, sheets: ProjectBomSheet[]) => {
+  return request.put<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/bom/sheets`,
+    data: { sheets }
+  })
+}
+
+export const getProjectBomItemAttachmentsApi = (projectCode: string, itemId: string) => {
+  return request.get<{
+    code: number
+    success: boolean
+    data: ProjectBomAttachment[]
+  }>({
+    url: `/api/project/bom/items/${encodeURIComponent(itemId)}/attachments`,
+    params: { projectCode }
+  })
+}
+
+export const uploadProjectBomItemAttachmentApi = (
+  projectCode: string,
+  itemId: string,
+  file: File
+) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<{
+    code: number
+    success: boolean
+    message?: string
+    data?: ProjectBomAttachment
+  }>({
+    url: `/api/project/${encodeURIComponent(projectCode)}/bom/items/${encodeURIComponent(itemId)}/attachments`,
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export const downloadProjectBomAttachmentApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/bom/attachments/${attachmentId}/download`,
+    responseType: 'blob'
+  })
+}
+
+export const previewProjectBomAttachmentPdfApi = (attachmentId: number) => {
+  return request.get<Blob>({
+    url: `/api/project/bom/attachments/${attachmentId}/preview-pdf`,
+    responseType: 'blob'
+  })
+}
+
+export const deleteProjectBomAttachmentApi = (attachmentId: number) => {
+  return request.delete<{
+    code: number
+    success: boolean
+    message?: string
+  }>({
+    url: `/api/project/bom/attachments/${attachmentId}`
   })
 }
 
